@@ -377,19 +377,26 @@ static inline int precise_br_compat(struct perf_event *event)
 	return m == b;
 }
 
+static int x86_get_precise(void)
+{
+	int precise = 0;
+
+	/* Support for constant skid */
+	if (x86_pmu.pebs_active && !x86_pmu.pebs_broken) {
+		precise++;
+
+		/* Support for IP fixup */
+		if (x86_pmu.lbr_nr)
+			precise++;
+	}
+
+	return precise;
+}
+
 int x86_pmu_hw_config(struct perf_event *event)
 {
 	if (event->attr.precise_ip) {
-		int precise = 0;
-
-		/* Support for constant skid */
-		if (x86_pmu.pebs_active && !x86_pmu.pebs_broken) {
-			precise++;
-
-			/* Support for IP fixup */
-			if (x86_pmu.lbr_nr)
-				precise++;
-		}
+		int precise = x86_get_precise();
 
 		if (event->attr.precise_ip > precise)
 			return -EOPNOTSUPP;
@@ -1734,6 +1741,13 @@ static int x86_pmu_event_init(struct perf_event *event)
 	return err;
 }
 
+static ssize_t get_attr_precise(struct device *cdev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	return snprintf(buf, 10, "%d\n", x86_get_precise());
+}
+
 static int x86_pmu_event_idx(struct perf_event *event)
 {
 	int idx = event->hw.idx;
@@ -1786,9 +1800,11 @@ static ssize_t set_attr_rdpmc(struct device *cdev,
 }
 
 static DEVICE_ATTR(rdpmc, S_IRUSR | S_IWUSR, get_attr_rdpmc, set_attr_rdpmc);
+static DEVICE_ATTR(precise, S_IRUGO, get_attr_precise, NULL);
 
 static struct attribute *x86_pmu_attrs[] = {
 	&dev_attr_rdpmc.attr,
+	&dev_attr_precise.attr,
 	NULL,
 };
 
