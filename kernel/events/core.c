@@ -2843,7 +2843,7 @@ retry:
 			goto errout;
 
 		err = 0;
-		mutex_lock(&task->perf_event_mutex);
+		mutex_lock(&task->perf_event_owner_mutex);
 		/*
 		 * If it has already passed perf_event_exit_task().
 		 * we must see PF_EXITING, it takes this mutex too.
@@ -2857,7 +2857,7 @@ retry:
 			++ctx->pin_count;
 			rcu_assign_pointer(task->perf_event_ctxp[ctxn], ctx);
 		}
-		mutex_unlock(&task->perf_event_mutex);
+		mutex_unlock(&task->perf_event_owner_mutex);
 
 		if (unlikely(err)) {
 			put_ctx(ctx);
@@ -2981,7 +2981,7 @@ static void put_event(struct perf_event *event)
 	 * Matches the smp_wmb() in perf_event_exit_task(). If we observe
 	 * !owner it means the list deletion is complete and we can indeed
 	 * free this event, otherwise we need to serialize on
-	 * owner->perf_event_mutex.
+	 * owner->perf_event_owner_mutex.
 	 */
 	smp_read_barrier_depends();
 	if (owner) {
@@ -2995,7 +2995,7 @@ static void put_event(struct perf_event *event)
 	rcu_read_unlock();
 
 	if (owner) {
-		mutex_lock(&owner->perf_event_mutex);
+		mutex_lock(&owner->perf_event_owner_mutex);
 		/*
 		 * We have to re-check the event->owner field, if it is cleared
 		 * we raced with perf_event_exit_task(), acquiring the mutex
@@ -3004,7 +3004,7 @@ static void put_event(struct perf_event *event)
 		 */
 		if (event->owner)
 			list_del_init(&event->owner_entry);
-		mutex_unlock(&owner->perf_event_mutex);
+		mutex_unlock(&owner->perf_event_owner_mutex);
 		put_task_struct(owner);
 	}
 
@@ -3344,10 +3344,10 @@ int perf_event_task_enable(void)
 {
 	struct perf_event *event;
 
-	mutex_lock(&current->perf_event_mutex);
-	list_for_each_entry(event, &current->perf_event_list, owner_entry)
+	mutex_lock(&current->perf_event_owner_mutex);
+	list_for_each_entry(event, &current->perf_event_owner_list, owner_entry)
 		perf_event_for_each_child(event, perf_event_enable);
-	mutex_unlock(&current->perf_event_mutex);
+	mutex_unlock(&current->perf_event_owner_mutex);
 
 	return 0;
 }
@@ -3356,10 +3356,10 @@ int perf_event_task_disable(void)
 {
 	struct perf_event *event;
 
-	mutex_lock(&current->perf_event_mutex);
-	list_for_each_entry(event, &current->perf_event_list, owner_entry)
+	mutex_lock(&current->perf_event_owner_mutex);
+	list_for_each_entry(event, &current->perf_event_owner_list, owner_entry)
 		perf_event_for_each_child(event, perf_event_disable);
-	mutex_unlock(&current->perf_event_mutex);
+	mutex_unlock(&current->perf_event_owner_mutex);
 
 	return 0;
 }
@@ -6627,9 +6627,9 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	event->owner = current;
 
-	mutex_lock(&current->perf_event_mutex);
-	list_add_tail(&event->owner_entry, &current->perf_event_list);
-	mutex_unlock(&current->perf_event_mutex);
+	mutex_lock(&current->perf_event_owner_mutex);
+	list_add_tail(&event->owner_entry, &current->perf_event_owner_list);
+	mutex_unlock(&current->perf_event_owner_mutex);
 
 	/*
 	 * Precalculate sample_data sizes
@@ -6892,20 +6892,20 @@ void perf_event_exit_task(struct task_struct *child)
 	struct perf_event *event, *tmp;
 	int ctxn;
 
-	mutex_lock(&child->perf_event_mutex);
-	list_for_each_entry_safe(event, tmp, &child->perf_event_list,
+	mutex_lock(&child->perf_event_owner_mutex);
+	list_for_each_entry_safe(event, tmp, &child->perf_event_owner_list,
 				 owner_entry) {
 		list_del_init(&event->owner_entry);
 
 		/*
 		 * Ensure the list deletion is visible before we clear
 		 * the owner, closes a race against perf_release() where
-		 * we need to serialize on the owner->perf_event_mutex.
+		 * we need to serialize on the owner->perf_event_owner_mutex.
 		 */
 		smp_wmb();
 		event->owner = NULL;
 	}
-	mutex_unlock(&child->perf_event_mutex);
+	mutex_unlock(&child->perf_event_owner_mutex);
 
 	for_each_task_context_nr(ctxn)
 		perf_event_exit_task_context(child, ctxn);
@@ -7225,8 +7225,8 @@ int perf_event_init_task(struct task_struct *child)
 	int ctxn, ret;
 
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
-	mutex_init(&child->perf_event_mutex);
-	INIT_LIST_HEAD(&child->perf_event_list);
+	mutex_init(&child->perf_event_owner_mutex);
+	INIT_LIST_HEAD(&child->perf_event_owner_list);
 
 	for_each_task_context_nr(ctxn) {
 		ret = perf_event_init_context(child, ctxn);
