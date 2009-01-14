@@ -386,6 +386,8 @@ struct perf_event {
 	struct list_head		owner_entry;
 	struct task_struct		*owner;
 
+	struct list_head		target_entry;
+
 	/* mmap bits */
 	struct mutex			mmap_mutex;
 	atomic_t			mmap_count;
