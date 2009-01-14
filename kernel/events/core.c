@@ -3000,7 +3000,7 @@ EXPORT_SYMBOL_GPL(perf_event_release_kernel);
  */
 static void put_event(struct perf_event *event)
 {
-	struct task_struct *owner;
+	struct task_struct *owner, *target;
 
 	if (!atomic_long_dec_and_test(&event->refcount))
 		return;
@@ -3036,6 +3036,16 @@ static void put_event(struct perf_event *event)
 			list_del_init(&event->owner_entry);
 		mutex_unlock(&owner->perf_event_owner_mutex);
 		put_task_struct(owner);
+	}
+
+	/* We have task reference held by ctx. */
+	target = event->ctx->task;
+	if (target) {
+		mutex_lock(&target->perf_event_target_mutex);
+		/* Could be already cleaned up by perf_event_exit_task */
+		if (!list_empty(&event->target_entry))
+			list_del(&event->target_entry);
+		mutex_unlock(&target->perf_event_target_mutex);
 	}
 
 	perf_event_release_kernel(event);
@@ -6578,11 +6588,6 @@ SYSCALL_DEFINE5(perf_event_open,
 		goto err_alloc;
 	}
 
-	if (task) {
-		put_task_struct(task);
-		task = NULL;
-	}
-
 	/*
 	 * Look up the group leader (we will attach this event to it):
 	 */
@@ -6680,6 +6685,16 @@ SYSCALL_DEFINE5(perf_event_open,
 	 */
 	perf_event__header_size(event);
 	perf_event__id_header_size(event);
+
+	if (task) {
+		mutex_lock(&task->perf_event_target_mutex);
+		list_add_tail(&event->target_entry,
+			      &task->perf_event_target_list);
+		mutex_unlock(&task->perf_event_target_mutex);
+
+		put_task_struct(task);
+		task = NULL;
+	}
 
 	/*
 	 * Drop the reference on the group_event after placing the
@@ -6951,6 +6966,13 @@ void perf_event_exit_task(struct task_struct *child)
 	}
 	mutex_unlock(&child->perf_event_owner_mutex);
 
+	mutex_lock(&child->perf_event_target_mutex);
+	list_for_each_entry_safe(event, tmp, &child->perf_event_target_list,
+				 target_entry) {
+		list_del_init(&event->target_entry);
+	}
+	mutex_unlock(&child->perf_event_target_mutex);
+
 	for_each_task_context_nr(ctxn)
 		perf_event_exit_task_context(child, ctxn);
 }
@@ -7085,6 +7107,9 @@ inherit_event(struct perf_event *parent_event,
 	 */
 	perf_event__header_size(child_event);
 	perf_event__id_header_size(child_event);
+
+	list_add_tail(&child_event->target_entry,
+		      &child->perf_event_target_list);
 
 	/*
 	 * Link it up in the child's context:
@@ -7271,6 +7296,8 @@ int perf_event_init_task(struct task_struct *child)
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
 	mutex_init(&child->perf_event_owner_mutex);
 	INIT_LIST_HEAD(&child->perf_event_owner_list);
+	mutex_init(&child->perf_event_target_mutex);
+	INIT_LIST_HEAD(&child->perf_event_target_list);
 
 	for_each_task_context_nr(ctxn) {
 		ret = perf_event_init_context(child, ctxn);
