@@ -5522,6 +5522,20 @@ static int perf_tp_event_init(struct perf_event *event)
 	return 0;
 }
 
+#ifdef CONFIG_PERF_EVENTS_PROC
+static void perf_tp_event_proc(struct seq_file *m, struct perf_event *event,
+			       bool display_header)
+{
+	struct ftrace_event_call *tp_event = event->tp_event;
+
+	if (display_header)
+		seq_printf(m, "%44s %-10s %-s\n",
+			   " ", "Flags", "Name");
+	else
+		seq_printf(m, "0x%-8x %-s", tp_event->flags, tp_event->name);
+}
+#endif
+
 static struct pmu perf_tracepoint = {
 	.task_ctx_nr	= perf_sw_context,
 
@@ -5533,6 +5547,10 @@ static struct pmu perf_tracepoint = {
 	.read		= perf_swevent_read,
 
 	.event_idx	= perf_swevent_event_idx,
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+	.proc_event	= perf_tp_event_proc,
+#endif
 };
 
 static inline void perf_tp_register(void)
@@ -7702,6 +7720,7 @@ static noinline int proc_task_show(struct seq_file *m, void *v)
 		seq_printf(m, "%-18s %-4s %-20s %-s\n",
 			      "Id", "Cpu", "Pmu name",
 			      "Pmu specific info");
+
 		iter->display_header = false;
 	}
 
