@@ -44,6 +44,7 @@
 #include <linux/list.h>
 #include <linux/cpu.h>
 #include <linux/smp.h>
+#include <linux/seq_file.h>
 
 #include <linux/hw_breakpoint.h>
 
@@ -635,6 +636,23 @@ static int hw_breakpoint_event_idx(struct perf_event *bp)
 	return 0;
 }
 
+#ifdef CONFIG_PERF_EVENTS_PROC
+static void hw_breakpoint_event_proc(struct seq_file *m,
+				     struct perf_event *event,
+				     bool display_header)
+{
+	struct arch_hw_breakpoint *info = &event->hw.info;
+
+	if (display_header)
+		seq_printf(m, "%44s %-18s %-4s %-6s\n",
+			   " ", "Address", "Len", "Type");
+
+	else
+		seq_printf(m, "0x%-16lx %-4d 0x%-4x",
+			   info->address, info->len, info->type);
+}
+#endif
+
 static struct pmu perf_breakpoint = {
 	.task_ctx_nr	= perf_sw_context, /* could eventually get its own */
 
@@ -646,6 +664,11 @@ static struct pmu perf_breakpoint = {
 	.read		= hw_breakpoint_pmu_read,
 
 	.event_idx	= hw_breakpoint_event_idx,
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+	.proc_event	= hw_breakpoint_event_proc,
+#endif
+
 };
 
 int __init init_hw_breakpoint(void)
