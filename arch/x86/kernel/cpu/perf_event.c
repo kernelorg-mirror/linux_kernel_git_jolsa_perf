@@ -25,6 +25,7 @@
 #include <linux/cpu.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
+#include <linux/seq_file.h>
 
 #include <asm/apic.h>
 #include <asm/stacktrace.h>
@@ -1816,6 +1817,22 @@ void perf_check_microcode(void)
 }
 EXPORT_SYMBOL_GPL(perf_check_microcode);
 
+#ifdef CONFIG_PERF_EVENTS_PROC
+static void x86_pmu_event_proc(struct seq_file *m, struct perf_event *event,
+			       bool display_header)
+{
+	struct hw_perf_event *hw = &event->hw;
+
+	if (display_header)
+		seq_printf(m, "%44s %-4s %-4s %-18s %-10s\n",
+			   " ", "Idx", "Lcpu", "Event base", "EB rdpmc");
+	else
+		seq_printf(m, "%-4d %-4d 0x%-16lx 0x%-8x",
+			   hw->idx, hw->last_cpu,
+			   hw->event_base, hw->event_base_rdpmc);
+}
+#endif
+
 static struct pmu pmu = {
 	.pmu_enable		= x86_pmu_enable,
 	.pmu_disable		= x86_pmu_disable,
@@ -1836,6 +1853,10 @@ static struct pmu pmu = {
 
 	.event_idx		= x86_pmu_event_idx,
 	.flush_branch_stack	= x86_pmu_flush_branch_stack,
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+	.proc_event		= x86_pmu_event_proc,
+#endif
 };
 
 void arch_perf_update_userpage(struct perf_event_mmap_page *userpg, u64 now)
