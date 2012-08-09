@@ -5979,6 +5979,13 @@ free_dev:
 	goto out;
 }
 
+#ifdef CONFIG_PERF_EVENTS_PROC
+static void perf_proc_event(struct seq_file *m, struct perf_event *event,
+			   bool display_header)
+{
+}
+#endif
+
 static struct lock_class_key cpuctx_mutex;
 static struct lock_class_key cpuctx_lock;
 
@@ -6057,6 +6064,11 @@ got_cpu_context:
 		pmu->pmu_enable  = perf_pmu_nop_void;
 		pmu->pmu_disable = perf_pmu_nop_void;
 	}
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+	if (!pmu->proc_event)
+		pmu->proc_event = perf_proc_event;
+#endif
 
 	if (!pmu->event_idx)
 		pmu->event_idx = perf_event_idx_default;
@@ -7558,6 +7570,7 @@ struct cgroup_subsys perf_subsys = {
 struct task_iter {
 	struct pid *pid;
 	bool display_header;
+	int last_pmu;
 
 	/*
 	 * Set/cleared for each successful/failed task_iter_get
@@ -7686,13 +7699,22 @@ static noinline int proc_task_show(struct seq_file *m, void *v)
 	pmu = event->pmu;
 
 	if (iter->display_header) {
-		seq_printf(m, "%-18s %-4s %-20s\n",
-			      "Id", "Cpu", "Pmu name");
+		seq_printf(m, "%-18s %-4s %-20s %-s\n",
+			      "Id", "Cpu", "Pmu name",
+			      "Pmu specific info");
 		iter->display_header = false;
 	}
 
-	seq_printf(m, "0x%-16llx %-4d %-20s\n",
+	if (iter->last_pmu != pmu->type) {
+		pmu->proc_event(m, event, true);
+		iter->last_pmu = pmu->type;
+	}
+
+	seq_printf(m, "0x%-16llx %-4d %-20s ",
 		   event->id, event->cpu, pmu->name);
+
+	pmu->proc_event(m, event, false);
+	seq_printf(m, "\n");
 	return 0;
 }
 
@@ -7712,6 +7734,7 @@ static int proc_task_open(struct inode *inode, struct file *file)
 	if (iter) {
 		iter->pid = PROC_I(inode)->pid;
 		iter->display_header = true;
+		iter->last_pmu = -1;
 	}
 
 	return iter ? 0 : -ENOMEM;

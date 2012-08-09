@@ -264,6 +264,15 @@ struct pmu {
 	 * flush branch stack on context-switches (needed in cpu-wide mode)
 	 */
 	void (*flush_branch_stack)	(void);
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+	/*
+	 * Display PMU specific proc event info.
+	 */
+	void (*proc_event)		(struct seq_file *m,
+					 struct perf_event *event,
+					 bool display_header);
+#endif
 };
 
 /**
