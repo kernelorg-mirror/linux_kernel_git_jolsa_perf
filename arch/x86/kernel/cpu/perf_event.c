@@ -36,6 +36,8 @@
 #include <asm/desc.h>
 #include <asm/ldt.h>
 
+#define CREATE_TRACE_POINTS
+#include "trace.h"
 #include "perf_event.h"
 
 struct x86_pmu x86_pmu __read_mostly;
@@ -513,6 +515,8 @@ static void x86_pmu_disable(struct pmu *pmu)
 	if (!cpuc->enabled)
 		return;
 
+	trace_x86_pmu_disable(cpuc->n_events, cpuc->active_mask);
+
 	cpuc->n_added = 0;
 	cpuc->enabled = 0;
 	barrier();
@@ -913,6 +917,8 @@ static void x86_pmu_enable(struct pmu *pmu)
 	barrier();
 
 	x86_pmu.enable_all(added);
+
+	trace_x86_pmu_enable(cpuc->n_events, cpuc->active_mask);
 }
 
 static DEFINE_PER_CPU(u64 [X86_PMC_IDX_MAX], pmc_prev_left);

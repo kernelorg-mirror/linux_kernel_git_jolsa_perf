@@ -397,6 +397,22 @@ ftrace_print_hex_seq(struct trace_seq *p, const unsigned char *buf, int buf_len)
 }
 EXPORT_SYMBOL(ftrace_print_hex_seq);
 
+const char *
+ftrace_print_bitmap_bits_seq(struct trace_seq *p, const unsigned long *bm,
+			     int bm_size)
+{
+	unsigned bit, n = 0;
+	const char *ret = p->buffer + p->len;
+
+	for_each_set_bit(bit, bm, bm_size)
+		trace_seq_printf(p, "%s%u", n++ ? "," : "", bit);
+
+	trace_seq_putc(p, 0);
+
+	return ret;
+}
+EXPORT_SYMBOL(ftrace_print_bitmap_bits_seq);
+
 #ifdef CONFIG_KRETPROBES
 static inline const char *kretprobed(const char *name)
 {

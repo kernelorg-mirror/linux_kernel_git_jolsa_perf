@@ -221,6 +221,9 @@
 #undef __print_hex
 #define __print_hex(buf, buf_len) ftrace_print_hex_seq(p, buf, buf_len)
 
+#undef __print_bitmap
+#define __print_bitmap_bits(bm, bm_size) ftrace_print_bitmap_bits_seq(p, bm, bm_size)
+
 #undef DECLARE_EVENT_CLASS
 #define DECLARE_EVENT_CLASS(call, proto, args, tstruct, assign, print)	\
 static notrace enum print_line_t					\
