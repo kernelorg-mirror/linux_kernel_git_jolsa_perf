@@ -59,6 +59,7 @@ static inc_group_count(struct list_head *list,
 %type <str> PE_MODIFIER_BP
 %type <str> PE_EVENT_NAME
 %type <num> value_sym
+%type <head> event_config_optional
 %type <head> event_config
 %type <term> event_term
 %type <head> event_pmu
@@ -199,6 +200,17 @@ event_def: event_pmu |
 	   event_legacy_numeric sep_dc |
 	   event_legacy_raw sep_dc
 
+event_config_optional:
+'/' event_config '/'
+{
+	$$ = $2;
+}
+|
+sep_slash_dc
+{
+	$$ = NULL;
+}
+
 event_pmu:
 PE_NAME '/' event_config '/'
 {
@@ -217,30 +229,18 @@ PE_VALUE_SYM_HW
 PE_VALUE_SYM_SW
 
 event_legacy_symbol:
-value_sym '/' event_config '/'
+value_sym event_config_optional
 {
 	struct parse_events_evlist *data = _data;
 	struct list_head *list;
+	struct list_head *terms = $2;
 	int type = $1 >> 16;
 	int config = $1 & 255;
 
 	ALLOC_LIST(list);
 	ABORT_ON(parse_events_add_numeric(list, &data->idx,
-					  type, config, $3));
-	parse_events__free_terms($3);
-	$$ = list;
-}
-|
-value_sym sep_slash_dc
-{
-	struct parse_events_evlist *data = _data;
-	struct list_head *list;
-	int type = $1 >> 16;
-	int config = $1 & 255;
-
-	ALLOC_LIST(list);
-	ABORT_ON(parse_events_add_numeric(list, &data->idx,
-					  type, config, NULL));
+					  type, config, terms));
+	parse_events__free_terms(terms);
 	$$ = list;
 }
 
