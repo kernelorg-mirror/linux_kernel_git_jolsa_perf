@@ -42,6 +42,9 @@
 
 #include "internal.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/perf.h>
+
 #include <asm/irq_regs.h>
 
 struct remote_function_call {
@@ -1179,6 +1182,8 @@ event_sched_out(struct perf_event *event,
 	event->pmu->del(event, 0);
 	event->oncpu = -1;
 
+	trace_event_sched_out(event->id);
+
 	if (!is_software_event(event))
 		cpuctx->active_oncpu--;
 	ctx->nr_active--;
@@ -1343,6 +1348,8 @@ void perf_event_disable(struct perf_event *event)
 	struct perf_event_context *ctx = event->ctx;
 	struct task_struct *task = ctx->task;
 
+	trace_perf_event_disable(event->id);
+
 	if (!task) {
 		/*
 		 * Disable the event on the cpu that it's on
@@ -1453,6 +1460,8 @@ event_sched_in(struct perf_event *event,
 		event->oncpu = -1;
 		return -EAGAIN;
 	}
+
+	trace_event_sched_in(event->id);
 
 	event->tstamp_running += tstamp - event->tstamp_stopped;
 
@@ -1815,6 +1824,8 @@ void perf_event_enable(struct perf_event *event)
 {
 	struct perf_event_context *ctx = event->ctx;
 	struct task_struct *task = ctx->task;
+
+	trace_perf_event_enable(event->id);
 
 	if (!task) {
 		/*
@@ -2608,6 +2619,8 @@ static int event_enable_on_exec(struct perf_event *event,
 {
 	if (!event->attr.enable_on_exec)
 		return 0;
+
+	trace_event_enable_on_exec(event->id);
 
 	event->attr.enable_on_exec = 0;
 	if (event->state >= PERF_EVENT_STATE_INACTIVE)
@@ -4308,6 +4321,8 @@ static void perf_event_output(struct perf_event *event,
 {
 	struct perf_output_handle handle;
 	struct perf_event_header header;
+
+	trace_perf_event_output(event->id);
 
 	/* protect the callchain buffers */
 	rcu_read_lock();
@@ -6737,6 +6752,10 @@ SYSCALL_DEFINE5(perf_event_open,
 	 */
 	fdput(group);
 	fd_install(event_fd, event_file);
+
+	trace_sys_perf_event_open(event->id, event_fd, pid, cpu,
+				  group_fd, flags);
+
 	return event_fd;
 
 err_context:
