@@ -817,21 +817,35 @@ static int get_group_fd(struct perf_evsel *evsel, int cpu, int thread)
 	return fd;
 }
 
+static int evsel_open(struct perf_evsel *evsel,
+		      struct thread_map *threads, struct cpu_map *cpus,
+		      int thread, int cpu)
+{
+	int group_fd, pid = -1;
+	unsigned long flags = 0;
+
+	/* cgroup config */
+	if (evsel->cgrp) {
+		flags = PERF_FLAG_PID_CGROUP;
+		pid = evsel->cgrp->fd;
+	} else
+		pid = threads->map[thread];
+
+	/* group config */
+	group_fd = get_group_fd(evsel, cpu, thread);
+
+	return sys_perf_event_open(&evsel->attr, pid, cpus->map[cpu],
+				   group_fd, flags);
+}
+
 static int __perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 			      struct thread_map *threads)
 {
-	int cpu, thread;
-	unsigned long flags = 0;
-	int pid = -1, err;
+	int cpu, thread, err;
 
 	if (evsel->fd == NULL &&
 	    perf_evsel__alloc_fd(evsel, cpus->nr, threads->nr) < 0)
 		return -ENOMEM;
-
-	if (evsel->cgrp) {
-		flags = PERF_FLAG_PID_CGROUP;
-		pid = evsel->cgrp->fd;
-	}
 
 fallback_missing_features:
 	if (perf_missing_features.exclude_guest)
@@ -843,17 +857,11 @@ retry_sample_id:
 	for (cpu = 0; cpu < cpus->nr; cpu++) {
 
 		for (thread = 0; thread < threads->nr; thread++) {
-			int group_fd;
 
-			if (!evsel->cgrp)
-				pid = threads->map[thread];
+			FD(evsel, cpu, thread) = evsel_open(evsel,
+							    threads, cpus,
+							    thread, cpu);
 
-			group_fd = get_group_fd(evsel, cpu, thread);
-
-			FD(evsel, cpu, thread) = sys_perf_event_open(&evsel->attr,
-								     pid,
-								     cpus->map[cpu],
-								     group_fd, flags);
 			if (FD(evsel, cpu, thread) < 0) {
 				err = -errno;
 				goto try_fallback;
