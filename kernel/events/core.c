@@ -1382,14 +1382,15 @@ event_sched_out(struct perf_event *event,
 	if (event->state != PERF_EVENT_STATE_ACTIVE)
 		return;
 
+	event->tstamp_stopped = tstamp;
+	event->pmu->del(event, 0);
+	event->oncpu = -1;
 	event->state = PERF_EVENT_STATE_INACTIVE;
+
 	if (event->pending_disable) {
 		event->pending_disable = 0;
 		event->state = PERF_EVENT_STATE_OFF;
 	}
-	event->tstamp_stopped = tstamp;
-	event->pmu->del(event, 0);
-	event->oncpu = -1;
 
 	if (!is_software_event(event))
 		cpuctx->active_oncpu--;
@@ -1642,9 +1643,6 @@ event_sched_in(struct perf_event *event,
 	if (event->state <= PERF_EVENT_STATE_OFF)
 		return 0;
 
-	event->state = PERF_EVENT_STATE_ACTIVE;
-	event->oncpu = smp_processor_id();
-
 	/*
 	 * Unthrottle events, since we scheduled we might have missed several
 	 * ticks already, also for a heavily scheduling task there is little
@@ -1665,6 +1663,9 @@ event_sched_in(struct perf_event *event,
 		event->oncpu = -1;
 		return -EAGAIN;
 	}
+
+	event->state = PERF_EVENT_STATE_ACTIVE;
+	event->oncpu = smp_processor_id();
 
 	event->tstamp_running += tstamp - event->tstamp_stopped;
 
