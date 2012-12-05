@@ -1,8 +1,10 @@
 #ifndef __PERF_PARSE_OPTIONS_H
 #define __PERF_PARSE_OPTIONS_H
 
+#include <unistd.h>
 #include <linux/kernel.h>
 #include <stdbool.h>
+#include "util.h"
 
 enum parse_opt_type {
 	/* special types */
