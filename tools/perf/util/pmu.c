@@ -217,6 +217,13 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
 	return ret;
 }
 
+__attribute__((weak))
+int arch_pmu_aliases(char *name __maybe_unused,
+		     struct list_head *head __maybe_unused)
+{
+	return 0;
+}
+
 /*
  * Reading the pmu event aliases definition, which should be located at:
  * /sys/bus/event_source/devices/<dev>/events as sysfs group attributes.
@@ -234,13 +241,12 @@ static int pmu_aliases(char *name, struct list_head *head)
 	snprintf(path, PATH_MAX,
 		 "%s/bus/event_source/devices/%s/events", sysfs, name);
 
-	if (stat(path, &st) < 0)
-		return 0;	 /* no error if 'events' does not exist */
-
-	if (pmu_aliases_parse(path, head))
+	/* no error if 'events' does not exist */
+	if (!stat(path, &st) &&
+	    pmu_aliases_parse(path, head))
 		return -1;
 
-	return 0;
+	return arch_pmu_aliases(name, head);
 }
 
 static int pmu_alias_terms(struct perf_pmu_alias *alias,
