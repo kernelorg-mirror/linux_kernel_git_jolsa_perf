@@ -40,5 +40,7 @@ int perf_pmu__format_parse(char *dir, struct list_head *head);
 
 struct perf_pmu *perf_pmu__scan(struct perf_pmu *pmu);
 
+int pmu_aliases_parse_multi(char *path, struct list_head *head);
+
 int perf_pmu__test(void);
 #endif /* __PMU_H */

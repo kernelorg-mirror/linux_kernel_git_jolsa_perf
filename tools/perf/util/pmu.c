@@ -144,9 +144,32 @@ static int perf_pmu__new_alias(struct list_head *list, char *name, char *data)
 		}
 	}
 
+	pr_debug3("adding alias '%s' => '%s'\n", name, data);
+
 	alias->name = strdup(name);
 	list_add_tail(&alias->list, list);
 	return 0;
+}
+
+int pmu_aliases_parse_multi(char *path, struct list_head *head)
+{
+	FILE *file;
+	char *data = NULL;
+	size_t len;
+	int ret = -EINVAL;
+
+	file = fopen(path, "r");
+	if (!file)
+		return -EINVAL;
+
+	while ((getline(&data, &len, file)) != -1) {
+		ret = perf_pmu__new_alias(head, NULL, data);
+		free(data);
+		data = NULL;
+	}
+
+	fclose(file);
+	return ret;
 }
 
 /*
