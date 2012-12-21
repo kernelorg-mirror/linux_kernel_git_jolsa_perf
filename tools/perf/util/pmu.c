@@ -95,23 +95,17 @@ static int pmu_format(char *name, struct list_head *format)
 	return 0;
 }
 
-static int perf_pmu__new_alias(struct list_head *list, char *name, FILE *file)
+static int perf_pmu__new_alias(struct list_head *list, char *name, char *data)
 {
 	struct perf_pmu_alias *alias;
-	char buf[256];
 	int ret;
-
-	ret = fread(buf, 1, sizeof(buf), file);
-	if (ret == 0)
-		return -EINVAL;
-	buf[ret] = 0;
 
 	alias = malloc(sizeof(*alias));
 	if (!alias)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&alias->terms);
-	ret = parse_events_terms(&alias->terms, buf);
+	ret = parse_events_terms(&alias->terms, data);
 	if (ret) {
 		free(alias);
 		return ret;
@@ -137,7 +131,7 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
 		return -EINVAL;
 
 	while (!ret && (evt_ent = readdir(event_dir))) {
-		char path[PATH_MAX];
+		char path[PATH_MAX], buf[256];
 		char *name = evt_ent->d_name;
 		FILE *file;
 
@@ -150,7 +144,16 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
 		file = fopen(path, "r");
 		if (!file)
 			break;
-		ret = perf_pmu__new_alias(head, name, file);
+
+		ret = fread(buf, 1, sizeof(buf), file);
+		if (ret == 0) {
+			ret = -EINVAL;
+			break;
+		}
+
+		buf[ret] = 0;
+
+		ret = perf_pmu__new_alias(head, name, buf);
 		fclose(file);
 	}
 
