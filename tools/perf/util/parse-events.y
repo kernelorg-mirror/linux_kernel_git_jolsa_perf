@@ -408,7 +408,7 @@ PE_TERM
 {
 	struct parse_events_term *term;
 
-	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1));
+	ABORT_ON(parse_events_term__num_default(&term, (int)$1, NULL));
 	$$ = term;
 }
 

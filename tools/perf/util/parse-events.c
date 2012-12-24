@@ -570,9 +570,14 @@ do {								\
 		break;
 	case PARSE_EVENTS__TERM_TYPE_PRECISE:
 		CHECK_TYPE_VAL(NUM);
-		if ((unsigned)term->val.num > 2)
-			return -EINVAL;
-		attr->precise_ip = term->val.num;
+		/* No value specified, try to get it from sysfs. */
+		if (term->val.num == (u64) -1)
+			attr->precise_ip = perf_precise__get();
+		else {
+			if ((unsigned)term->val.num > 2)
+				return -EINVAL;
+			attr->precise_ip = term->val.num;
+		}
 		break;
 	default:
 		return -EINVAL;
@@ -1199,6 +1204,24 @@ static int new_term(struct parse_events_term **_term, int type_val,
 int parse_events_term__num(struct parse_events_term **term,
 			   int type_term, char *config, u64 num)
 {
+	return new_term(term, PARSE_EVENTS__TERM_TYPE_NUM, type_term,
+			config, NULL, num);
+}
+
+int parse_events_term__num_default(struct parse_events_term **term,
+				   int type_term, char *config)
+{
+	/*
+	 * If no value is specified for term, we use 1 as default.
+	 * The PRECISE term is an exception, because we force special
+	 * functionality when there's no value specified for it,
+	 * so we need to recognize it.
+	 */
+	u64 num = 1;
+
+	if (type_term == PARSE_EVENTS__TERM_TYPE_PRECISE)
+		num = (u64) -1;
+
 	return new_term(term, PARSE_EVENTS__TERM_TYPE_NUM, type_term,
 			config, NULL, num);
 }

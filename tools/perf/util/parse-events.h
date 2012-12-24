@@ -75,6 +75,8 @@ struct parse_events_terms {
 int parse_events__is_hardcoded_term(struct parse_events_term *term);
 int parse_events_term__num(struct parse_events_term **_term,
 			   int type_term, char *config, u64 num);
+int parse_events_term__num_default(struct parse_events_term **term,
+				   int type_term, char *config);
 int parse_events_term__str(struct parse_events_term **_term,
 			   int type_term, char *config, char *str);
 int parse_events_term__sym_hw(struct parse_events_term **term,
