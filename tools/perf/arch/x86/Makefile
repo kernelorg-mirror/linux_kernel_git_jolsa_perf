@@ -13,3 +13,7 @@ $(OUTPUT)arch/$(ARCH)/util/pmu.o: $(OUTPUT)arch/$(ARCH)/util/pmu.c $(OUTPUT)PERF
 	 '-DPERF_EXEC_PATH="$(perfexecdir_SQ)"' \
 	 '-DPREFIX="$(prefix_SQ)"' \
 	 $<
+
+install:
+	$(INSTALL) -d -m 755 '$(DESTDIR_SQ)$(perfexec_instdir_SQ)/events/x86/intel/'
+	$(INSTALL) -m 644 arch/$(ARCH)/events/intel/* $(DESTDIR_SQ)$(perfexec_instdir_SQ)/events/x86/intel/

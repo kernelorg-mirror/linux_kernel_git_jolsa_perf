@@ -56,8 +56,10 @@ static int intel_aliases(struct list_head *head, unsigned model)
 		return -1;
 
 	switch (model) {
+	case 42: /* Sandy Bridge (Core i7 26xx, 25xx) */
+	case 45: /* Sandy Bridge EP */
+		ADD_ALIASES("snb");
 	default:
-		ADD_ALIASES("");
 		break;
 	}
 
