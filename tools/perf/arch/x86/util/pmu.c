@@ -58,7 +58,7 @@ static int intel_aliases(struct list_head *head, unsigned model)
 	switch (model) {
 	case 42: /* Sandy Bridge (Core i7 26xx, 25xx) */
 	case 45: /* Sandy Bridge EP */
-		ADD_ALIASES("snb");
+		ADD_ALIASES("snb", "snb-offcore");
 	case 58: /* IvyBridge */
 		ADD_ALIASES("ivb");
 	default:
