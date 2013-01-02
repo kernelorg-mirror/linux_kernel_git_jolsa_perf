@@ -60,7 +60,7 @@ static int intel_aliases(struct list_head *head, unsigned model)
 	case 45: /* Sandy Bridge EP */
 		ADD_ALIASES("snb", "snb-offcore");
 	case 58: /* IvyBridge */
-		ADD_ALIASES("ivb");
+		ADD_ALIASES("ivb", "snb-offcore");
 	default:
 		break;
 	}
