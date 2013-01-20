@@ -177,6 +177,35 @@ int perf_formula__load(struct perf_formula *f, char *path)
 	return ret;
 }
 
+int perf_formula__load_dir(struct perf_formula *f, char *path)
+{
+	struct dirent *ent;
+	DIR *dir;
+	int ret = 0;
+
+	dir = opendir(path);
+	if (!dir) {
+		pr_err("formula: can't open dir '%s' - %s\n",
+		       path, strerror(errno));
+		return -1;
+	}
+
+	while (!ret && (ent = readdir(dir))) {
+		char file[PATH_MAX];
+
+		if (!strcmp(ent->d_name, ".") ||
+		    !strcmp(ent->d_name, ".."))
+			continue;
+
+		scnprintf(file, PATH_MAX, "%s/%s", path, ent->d_name);
+
+		ret = perf_formula__load(f, file);
+	}
+
+	closedir(dir);
+	return ret;
+}
+
 int perf_formula__free(struct perf_formula *f)
 {
 	struct perf_formula_file *file;
@@ -819,4 +848,27 @@ int perf_formula__print(FILE *file,
 		eval_set(set, &expr);
 
 	return 0;
+}
+
+__attribute__((weak))
+int perf_formula__preload_arch(struct perf_formula *f __maybe_unused)
+{
+	return 0;
+}
+
+int perf_formula__preload(struct perf_formula *f)
+{
+	struct stat st;
+	int ret = 0;
+
+	if (!lstat("./formulas", &st))
+		ret = perf_formula__load_dir(f, (char *) "./formulas");
+	else {
+		char path[PATH_MAX];
+
+		scnprintf(path, PATH_MAX, "%s/%s/formulas/", PREFIX, PERF_EXEC_PATH);
+		ret = perf_formula__load_dir(f, path);
+	}
+
+	return ret ? ret : perf_formula__preload_arch(f);
 }
