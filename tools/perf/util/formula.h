@@ -126,6 +126,7 @@ void perf_formula__init(struct perf_formula *f);
 int perf_formula__free(struct perf_formula *f);
 
 int perf_formula__load(struct perf_formula *f, char *path);
+int perf_formula__load_dir(struct perf_formula *f, char *path);
 
 struct perf_formula_set*
 perf_formula__set(struct perf_formula *f, char *name);
@@ -182,5 +183,8 @@ int perf_formula__print(FILE *file,
 			struct perf_evlist *evlist,
 			struct perf_formula_value **values,
 			bool system_wide);
+
+int perf_formula__preload(struct perf_formula *f);
+int perf_formula__preload_arch(struct perf_formula *f);
 
 #endif /* __PERF_FORMULA */

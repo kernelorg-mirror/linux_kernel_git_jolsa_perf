@@ -505,6 +505,8 @@ endif
 		$(INSTALL) tests/attr.py '$(DESTDIR_SQ)$(perfexec_instdir_SQ)/tests'; \
 		$(INSTALL) -d -m 755 '$(DESTDIR_SQ)$(perfexec_instdir_SQ)/tests/attr'; \
 		$(INSTALL) tests/attr/* '$(DESTDIR_SQ)$(perfexec_instdir_SQ)/tests/attr'
+		$(INSTALL) -d -m 755 '$(DESTDIR_SQ)$(perfexec_instdir_SQ)/formulas'
+		$(INSTALL) -m 644 formulas/* $(DESTDIR_SQ)$(perfexec_instdir_SQ)/formulas
 
 install: install-bin try-install-man install-traceevent-plugins
 
