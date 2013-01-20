@@ -106,6 +106,7 @@ struct perf_formula_config {
 void perf_formula__init(struct perf_formula *f);
 
 int perf_formula__load(struct perf_formula *f, char *path);
+int perf_formula__load_dir(struct perf_formula *f, char *path);
 int perf_formula__free(struct perf_formula *f);
 
 struct perf_formula_set*
@@ -134,4 +135,6 @@ perf_formula_set__new(char *name, struct list_head *head);
 double perf_formula_expr__resolve(struct perf_formula_expr *expr,
 				  char *name);
 
+int perf_formula__preload(struct perf_formula *f);
+int perf_formula__preload_arch(struct perf_formula *f);
 #endif /* __PERF_FORMULA */
