@@ -810,7 +810,14 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->attr.exclude_user   = mod.eu;
 		evsel->attr.exclude_kernel = mod.ek;
 		evsel->attr.exclude_hv     = mod.eh;
-		evsel->attr.precise_ip     = mod.precise;
+
+		/*
+		 * Change precise only if it's defined, so we don't
+		 * overwrite 'precise' term if there's no 'p' modifier.
+		 */
+		if (mod.precise)
+			evsel->attr.precise_ip = mod.precise;
+
 		evsel->attr.exclude_host   = mod.eH;
 		evsel->attr.exclude_guest  = mod.eG;
 		evsel->exclude_GH          = mod.exclude_GH;
