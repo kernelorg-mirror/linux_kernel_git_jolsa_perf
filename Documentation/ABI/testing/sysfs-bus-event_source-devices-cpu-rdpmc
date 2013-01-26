@@ -1,0 +1,8 @@
+Where:		/sys/bus/event_source/devices/cpu/rdpmc
+Date:		January 2013
+Kernel Version:	3.7
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+		X86 specific attribute
+
+		Attribute to enable/disable user space RDPMC instruction.
