@@ -1,0 +1,10 @@
+Where:		/sys/bus/event_source/devices/cpu/precise
+Date:		January 2013
+Kernel Version:	3.7
+Contact:	Jiri Olsa <jolsa@redhat.com>
+		Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+		X86 specific attribute
+
+		Attribute to specify the maximum allowed value
+		for perf_event_attr:precise_ip field.
