@@ -133,6 +133,9 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *he);
 void hists__match(struct hists *leader, struct hists *other);
 int hists__link(struct hists *leader, struct hists *other);
 
+/* Taken from diff 'formula' column width. */
+#define PERF_HISTS__MAX_COL_WIDTH 100
+
 struct perf_hpp {
 	char *buf;
 	size_t size;

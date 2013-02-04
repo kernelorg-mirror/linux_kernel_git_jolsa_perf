@@ -90,7 +90,7 @@ static int compute_2_hpp[COMPUTE_MAX] = {
 	[COMPUTE_WEIGHTED_DIFF]	= PERF_HPP_DIFF__WEIGHTED_DIFF,
 };
 
-#define MAX_COL_WIDTH 70
+#define MAX_COL_WIDTH (PERF_HISTS__MAX_COL_WIDTH - 1)
 
 static struct header_column {
 	const char *name;

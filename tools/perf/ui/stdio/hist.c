@@ -308,45 +308,51 @@ static size_t hist_entry__callchain_fprintf(struct hist_entry *he,
 	return hist_entry_callchain__fprintf(he, total_period, left_margin, fp);
 }
 
-static inline void advance_hpp(struct perf_hpp *hpp, int inc)
-{
-	hpp->buf  += inc;
-	hpp->size -= inc;
-}
-
-static int hist_entry__period_snprintf(struct perf_hpp *hpp,
-				       struct hist_entry *he,
+static int hist_entry__period_snprintf(struct hist_entry *he,
+				       FILE *fp, size_t size,
 				       bool color)
 {
 	const char *sep = symbol_conf.field_sep;
 	struct perf_hpp_fmt *fmt;
-	char *start = hpp->buf;
-	int ret;
+	int ret_total = 0;
 	bool first = true;
 
 	if (symbol_conf.exclude_other && !he->parent)
 		return 0;
 
 	perf_hpp__for_each_format(fmt) {
+		char bf[PERF_HISTS__MAX_COL_WIDTH];
+		struct perf_hpp hpp = {
+			.buf	= bf,
+			.size	= PERF_HISTS__MAX_COL_WIDTH,
+		};
+		int ret = 0;
+
+		if (size && (size < PERF_HISTS__MAX_COL_WIDTH))
+			hpp.size = size;
+
 		/*
 		 * If there's no field_sep, we still need
 		 * to display initial '  '.
 		 */
-		if (!sep || !first) {
-			ret = scnprintf(hpp->buf, hpp->size, "%s", sep ?: "  ");
-			advance_hpp(hpp, ret);
-		} else
+		if (!sep || !first)
+			ret = fprintf(fp, "%s", sep ?: "  ");
+		else
 			first = false;
 
 		if (color && fmt->color)
-			ret = fmt->color(fmt, hpp, he);
+			fmt->color(fmt, &hpp, he);
 		else
-			ret = fmt->entry(fmt, hpp, he);
+			fmt->entry(fmt, &hpp, he);
 
-		advance_hpp(hpp, ret);
+		ret += fprintf(fp, "%s", bf);
+
+		ret_total += ret;
+		if (size)
+			size -= ret;
 	}
 
-	return hpp->buf - start;
+	return ret_total;
 }
 
 static int hist_entry__fprintf(struct hist_entry *he, size_t size,
@@ -354,19 +360,26 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 {
 	char bf[512];
 	int ret;
-	struct perf_hpp hpp = {
-		.buf		= bf,
-		.size		= size,
-	};
 	bool color = !symbol_conf.field_sep;
 
-	if (size == 0 || size > sizeof(bf))
-		size = hpp.size = sizeof(bf);
+	ret = hist_entry__period_snprintf(he, fp, size, color);
 
-	ret = hist_entry__period_snprintf(&hpp, he, color);
-	hist_entry__sort_snprintf(he, bf + ret, size - ret, hists);
+	if (size) {
+		/*
+		 * We were called with size specified,
+		 * adjust it accordingly.
+		 */
+		size -= ret;
+		if (size > sizeof(bf))
+			size = sizeof(bf);
+	} else {
+		/* No size specified, get all we can. */
+		size = sizeof(bf);
+	}
 
-	ret = fprintf(fp, "%s\n", bf);
+	hist_entry__sort_snprintf(he, bf, size, hists);
+
+	ret += fprintf(fp, "%s\n", bf);
 
 	if (symbol_conf.use_callchain)
 		ret += hist_entry__callchain_fprintf(he, hists, fp);
@@ -385,7 +398,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 	const char *sep = symbol_conf.field_sep;
 	const char *col_width = symbol_conf.col_width_list_str;
 	int nr_rows = 0;
-	char bf[96];
+	char bf[PERF_HISTS__MAX_COL_WIDTH];
 	struct perf_hpp dummy_hpp = {
 		.buf	= bf,
 		.size	= sizeof(bf),
