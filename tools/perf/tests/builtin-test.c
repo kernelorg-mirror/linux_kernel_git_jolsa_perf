@@ -98,6 +98,10 @@ static struct test {
 		.func = test__vw_single_shot_overflow,
 	},
 	{
+		.desc = "[vw] Test enable vs refresh signal types",
+		.func = test__vw_single_shot_w_enable,
+	},
+	{
 		.func = NULL,
 	},
 };
