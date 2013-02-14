@@ -114,6 +114,10 @@ static struct test {
 		.func = test__vw_overflow_requires_wakeup,
 	},
 	{
+		.desc = "[vw] Test overflow on leaders",
+		.func = test__vw_simple_overflow_leader,
+	},
+	{
 		.func = NULL,
 	},
 };

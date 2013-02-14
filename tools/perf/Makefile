@@ -532,6 +532,7 @@ LIB_OBJS += $(OUTPUT)tests/vw/overflow/single_shot_w_enable.o
 LIB_OBJS += $(OUTPUT)tests/vw/overflow/simultaneous_overflow.o
 LIB_OBJS += $(OUTPUT)tests/vw/overflow/simulate_oneshot_group_overflow.o
 LIB_OBJS += $(OUTPUT)tests/vw/overflow/overflow_requires_wakeup.o
+LIB_OBJS += $(OUTPUT)tests/vw/overflow/simple_overflow_leader.o
 
 BUILTIN_OBJS += $(OUTPUT)builtin-annotate.o
 BUILTIN_OBJS += $(OUTPUT)builtin-bench.o

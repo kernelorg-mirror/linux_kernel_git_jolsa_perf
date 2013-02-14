@@ -34,5 +34,6 @@ int test__vw_single_shot_w_enable(void);
 int test__vw_simultaneous_overflow(void);
 int test__vw_simulate_oneshot_group_overflow(void);
 int test__vw_overflow_requires_wakeup(void);
+int test__vw_simple_overflow_leader(void);
 
 #endif /* TESTS_H */
