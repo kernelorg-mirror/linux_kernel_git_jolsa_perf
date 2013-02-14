@@ -31,5 +31,6 @@ int test__sw_clock_freq(void);
 /* vw tests */
 int test__vw_single_shot_overflow(void);
 int test__vw_single_shot_w_enable(void);
+int test__vw_simultaneous_overflow(void);
 
 #endif /* TESTS_H */

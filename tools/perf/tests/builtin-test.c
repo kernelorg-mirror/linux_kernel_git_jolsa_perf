@@ -102,6 +102,10 @@ static struct test {
 		.func = test__vw_single_shot_w_enable,
 	},
 	{
+		.desc = "[vw] Test multiple event overflow",
+		.func = test__vw_simultaneous_overflow,
+	},
+	{
 		.func = NULL,
 	},
 };

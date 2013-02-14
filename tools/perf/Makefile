@@ -529,6 +529,7 @@ LIB_OBJS += $(OUTPUT)tests/vw/lib/instructions_testcode.o
 LIB_OBJS += $(OUTPUT)tests/vw/lib/matrix_multiply.o
 LIB_OBJS += $(OUTPUT)tests/vw/overflow/single_shot_overflow.o
 LIB_OBJS += $(OUTPUT)tests/vw/overflow/single_shot_w_enable.o
+LIB_OBJS += $(OUTPUT)tests/vw/overflow/simultaneous_overflow.o
 
 BUILTIN_OBJS += $(OUTPUT)builtin-annotate.o
 BUILTIN_OBJS += $(OUTPUT)builtin-bench.o
