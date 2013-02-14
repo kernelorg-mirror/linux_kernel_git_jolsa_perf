@@ -110,6 +110,10 @@ static struct test {
 		.func = test__vw_simulate_oneshot_group_overflow,
 	},
 	{
+		.desc = "[vw] Test if we overflow w/o setting wakeup",
+		.func = test__vw_overflow_requires_wakeup,
+	},
+	{
 		.func = NULL,
 	},
 };
