@@ -118,6 +118,10 @@ static struct test {
 		.func = test__vw_simple_overflow_leader,
 	},
 	{
+		.desc = "[vw] Test overflows on sibling",
+		.func = test__vw_simple_overflow_sibling,
+	},
+	{
 		.func = NULL,
 	},
 };
