@@ -50,6 +50,27 @@ include config/utilities.mak
 #
 # Define NO_LIBNUMA if you do not want numa perf benchmark
 
+# CHK-detected config file
+CONFIG_DETECTED := .config-detected
+.PHONY: $(CONFIG_DETECTED)
+
+# disable CHK config for clean and tags
+ifneq ($(filter clean tags,$(MAKECMDGOALS)),)
+CONFIG_OK := 1
+endif
+
+ifeq ($(CONFIG_OK),)
+$(CONFIG_DETECTED):
+	@$(MAKE) $(PRINT_DIR) -f config/Makefile CONFIG=$(CONFIG_DETECTED)
+
+all: $(CONFIG_DETECTED)
+	@$(MAKE) $(PRINT_DIR) CONFIG_OK=1 $(MAKECMDGOALS)
+
+else # CONFIG_OK=1 entry point
+
+# Including detected config values
+include $(CONFIG_DETECTED)
+
 $(OUTPUT)PERF-VERSION-FILE: .FORCE-PERF-VERSION-FILE
 	@$(SHELL_PATH) util/PERF-VERSION-GEN $(OUTPUT)
 
@@ -1204,3 +1225,5 @@ clean: $(LIBTRACEEVENT)-clean $(LIBLK)-clean
 .PHONY: all install clean strip $(LIBTRACEEVENT) $(LIBLK)
 .PHONY: shell_compatibility_test please_set_SHELL_PATH_to_a_more_modern_shell
 .PHONY: .FORCE-PERF-VERSION-FILE TAGS tags cscope .FORCE-PERF-CFLAGS
+
+endif # CONFIG_OK
