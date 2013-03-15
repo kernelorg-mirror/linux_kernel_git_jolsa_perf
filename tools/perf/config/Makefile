@@ -1,3 +1,6 @@
+include config/feature-tests.mak
+include config/utilities.mak
+
 CONFIG ?= .config-detected
 
 CC      = $(CROSS_COMPILE)gcc
@@ -48,6 +51,106 @@ ifeq ($(ARCH),x86_64)
 	LIBUNWIND_LIBS = -lunwind -lunwind-x86_64
 endif
 
+# sparse is architecture-neutral, which means that we need to tell it
+# explicitly what architecture to check for. Fix this up for yours..
+SPARSE_FLAGS = -D__BIG_ENDIAN__ -D__powerpc__
+
+ifeq ($(srctree),)
+srctree := $(patsubst %/,%,$(dir $(shell pwd)))
+srctree := $(patsubst %/,%,$(dir $(srctree)))
+#$(info Determined 'srctree' to be $(srctree))
+endif
+
+ifneq ($(objtree),)
+#$(info Determined 'objtree' to be $(objtree))
+endif
+
+ifneq ($(OUTPUT),)
+#$(info Determined 'OUTPUT' to be $(OUTPUT))
+endif
+
+LK_DIR          = ../lib/lk/
+TRACE_EVENT_DIR = ../lib/traceevent/
+
+CFLAGS += -fno-omit-frame-pointer -ggdb3 -funwind-tables -Wall -Wextra -std=gnu99 $(CFLAGS_WERROR) $(CFLAGS_OPTIMIZE) $(EXTRA_WARNINGS) $(EXTRA_CFLAGS) $(PARSER_DEBUG_CFLAGS)
+
+BASIC_CFLAGS = \
+	-Iutil/include \
+	-Iarch/$(ARCH)/include \
+	$(if $(objtree),-I$(objtree)/arch/$(ARCH)/include/generated/uapi) \
+	-I$(srctree)/arch/$(ARCH)/include/uapi \
+	-I$(srctree)/arch/$(ARCH)/include \
+	$(if $(objtree),-I$(objtree)/include/generated/uapi) \
+	-I$(srctree)/include/uapi \
+	-I$(srctree)/include \
+	-I$(OUTPUT)util \
+	-Iutil \
+	-I. \
+	-I$(TRACE_EVENT_DIR) \
+	-I../lib/ \
+	-D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
+
+BASIC_LDFLAGS =
+ALL_CFLAGS    = $(CFLAGS) -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
+ALL_LDFLAGS   = $(LDFLAGS)
+EXTLIBS       = -lpthread -lrt -lelf -lm
+
+# Treat warnings as errors unless directed not to
+ifneq ($(WERROR),0)
+	CFLAGS_WERROR := -Werror
+endif
+
+ifeq ("$(origin DEBUG)", "command line")
+	PERF_DEBUG = $(DEBUG)
+endif
+
+ifndef PERF_DEBUG
+	CFLAGS_OPTIMIZE = -O6
+endif
+
+ifeq ($(call get-executable,$(FLEX)),)
+	dummy := $(error Error: $(FLEX) is missing on this system, please install it)
+endif
+
+ifeq ($(call get-executable,$(BISON)),)
+	dummy := $(error Error: $(BISON) is missing on this system, please install it)
+endif
+
+ifeq ($(call try-cc,$(SOURCE_HELLO),$(CFLAGS) -Werror -fstack-protector-all,-fstack-protector-all),y)
+	CFLAGS := $(CFLAGS) -fstack-protector-all
+endif
+
+ifeq ($(call try-cc,$(SOURCE_HELLO),$(CFLAGS) -Werror -Wstack-protector,-Wstack-protector),y)
+	CFLAGS := $(CFLAGS) -Wstack-protector
+endif
+
+ifeq ($(call try-cc,$(SOURCE_HELLO),$(CFLAGS) -Werror -Wvolatile-register-var,-Wvolatile-register-var),y)
+	CFLAGS := $(CFLAGS) -Wvolatile-register-var
+endif
+
+ifndef PERF_DEBUG
+	ifeq ($(call try-cc,$(SOURCE_HELLO),$(CFLAGS) -D_FORTIFY_SOURCE=2,-D_FORTIFY_SOURCE=2),y)
+		CFLAGS := $(CFLAGS) -D_FORTIFY_SOURCE=2
+	endif
+endif
+
+ifdef PARSER_DEBUG
+	PARSER_DEBUG_BISON  := -t
+	PARSER_DEBUG_FLEX   := -d
+	PARSER_DEBUG_CFLAGS := -DPARSER_DEBUG
+endif
+
+ifneq ($(OUTPUT),)
+	BASIC_CFLAGS += -I$(OUTPUT)
+endif
+
+ifeq ($(call try-cc,$(SOURCE_BIONIC),$(CFLAGS),bionic),y)
+	BIONIC := 1
+	EXTLIBS := $(filter-out -lrt,$(EXTLIBS))
+	EXTLIBS := $(filter-out -lpthread,$(EXTLIBS))
+	BASIC_CFLAGS += -I.
+endif
+
 store = @echo "$(1)=$($(1))" >> $(CONFIG)
 
 config-detect:
@@ -69,3 +172,17 @@ config-detect:
 	$(call store,ARCH_CFLAGS)
 	$(call store,ARCH_INCLUDE)
 	$(call store,LIBUNWIND_LIBS)
+	$(call store,CFLAGS)
+	$(call store,BASIC_CFLAGS)
+	$(call store,ALL_CFLAGS)
+	$(call store,ALL_LDFLAGS)
+	$(call store,FLEX)
+	$(call store,BISON)
+	$(call store,BIONIC)
+	$(call store,EXTLIBS)
+	$(call store,PARSER_DEBUG_BISON)
+	$(call store,PARSER_DEBUG_FLEX)
+	$(call store,PARSER_DEBUG_CFLAGS)
+	$(call store,LK_DIR)
+	$(call store,TRACE_EVENT_DIR)
+	$(call store,SPARSE_FLAGS)
