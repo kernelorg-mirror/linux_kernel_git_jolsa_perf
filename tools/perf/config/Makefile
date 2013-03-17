@@ -417,6 +417,17 @@ ifndef NO_BACKTRACE
        endif
 endif
 
+ifndef NO_LIBNUMA
+	FLAGS_LIBNUMA = $(ALL_CFLAGS) $(ALL_LDFLAGS) -lnuma
+	ifneq ($(call try-cc,$(SOURCE_LIBNUMA),$(FLAGS_LIBNUMA),libnuma),y)
+		msg := $(warning No numa.h found, disables 'perf bench numa mem' benchmark, please install numa-libs-devel or libnuma-dev);
+		NO_LIBNUMA := 1
+	else
+		BASIC_CFLAGS += -DLIBNUMA_SUPPORT
+		EXTLIBS += -lnuma
+	endif
+endif
+
 store = @echo "$(1)=$($(1))" >> $(CONFIG)
 
 config-detect:
@@ -465,3 +476,4 @@ config-detect:
 	$(call store,NO_LIBPYTHON)
 	$(call store,LANG_BINDINGS)
 	$(call store,PYTHON_EMBED_CCOPTS)
+	$(call store,NO_LIBNUMA)
