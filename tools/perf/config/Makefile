@@ -250,6 +250,19 @@ ifndef NO_LIBAUDIT
 	endif
 endif
 
+ifndef NO_NEWT
+	FLAGS_NEWT=$(ALL_CFLAGS) $(ALL_LDFLAGS) $(EXTLIBS) -lnewt
+	ifneq ($(call try-cc,$(SOURCE_NEWT),$(FLAGS_NEWT),libnewt),y)
+		msg := $(warning newt not found, disables TUI support. Please install newt-devel or libnewt-dev);
+		NO_NEWT := 1
+	else
+		# Fedora has /usr/include/slang/slang.h, but ubuntu /usr/include/slang.h
+		BASIC_CFLAGS += -I/usr/include/slang
+		BASIC_CFLAGS += -DNEWT_SUPPORT
+		EXTLIBS += -lnewt -lslang
+	endif
+endif
+
 store = @echo "$(1)=$($(1))" >> $(CONFIG)
 
 config-detect:
@@ -290,3 +303,4 @@ config-detect:
 	$(call store,NO_DEMANGLE)
 	$(call store,NO_LIBUNWIND)
 	$(call store,NO_LIBAUDIT)
+	$(call store,NO_NEWT)
