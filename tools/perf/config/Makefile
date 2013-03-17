@@ -1,6 +1,9 @@
 include config/feature-tests.mak
 include config/utilities.mak
 
+grep-libs = $(filter -l%,$(1))
+strip-libs = $(filter-out -l%,$(1))
+
 CONFIG ?= .config-detected
 
 CC      = $(CROSS_COMPILE)gcc
@@ -278,6 +281,23 @@ ifndef NO_GTK2
 	endif
 endif
 
+ifdef NO_LIBPERL
+	BASIC_CFLAGS += -DNO_LIBPERL
+else
+	PERL_EMBED_LDOPTS = $(shell perl -MExtUtils::Embed -e ldopts 2>/dev/null)
+	PERL_EMBED_LDFLAGS = $(call strip-libs,$(PERL_EMBED_LDOPTS))
+	PERL_EMBED_LIBADD = $(call grep-libs,$(PERL_EMBED_LDOPTS))
+	PERL_EMBED_CCOPTS = `perl -MExtUtils::Embed -e ccopts 2>/dev/null`
+	FLAGS_PERL_EMBED=$(PERL_EMBED_CCOPTS) $(PERL_EMBED_LDOPTS)
+
+	ifneq ($(call try-cc,$(SOURCE_PERL_EMBED),$(FLAGS_PERL_EMBED),perl),y)
+		BASIC_CFLAGS += -DNO_LIBPERL
+		NO_LIBPERL := 1
+	else
+		ALL_LDFLAGS += $(PERL_EMBED_LDFLAGS)
+		EXTLIBS += $(PERL_EMBED_LIBADD)
+	endif
+endif
 
 store = @echo "$(1)=$($(1))" >> $(CONFIG)
 
@@ -321,3 +341,5 @@ config-detect:
 	$(call store,NO_LIBAUDIT)
 	$(call store,NO_NEWT)
 	$(call store,NO_GTK2)
+	$(call store,PERL_EMBED_CCOPTS)
+	$(call store,NO_LIBPERL)
