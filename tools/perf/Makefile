@@ -83,9 +83,6 @@ ARCH ?= $(shell echo $(uname_M) | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 				  -e s/sh[234].*/sh/ -e s/aarch64.*/arm64/ )
 NO_PERF_REGS := 1
 
-CC = $(CROSS_COMPILE)gcc
-AR = $(CROSS_COMPILE)ar
-
 # Additional ARCH settings for x86
 ifeq ($(ARCH),i386)
 	override ARCH := x86
@@ -129,7 +126,6 @@ CFLAGS = -fno-omit-frame-pointer -ggdb3 -funwind-tables -Wall -Wextra -std=gnu99
 EXTLIBS = -lpthread -lrt -lelf -lm
 ALL_CFLAGS = $(CFLAGS) -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
 ALL_LDFLAGS = $(LDFLAGS)
-STRIP ?= strip
 
 # Among the variables below, these:
 #   perfexecdir
@@ -165,13 +161,6 @@ endif
 lib = lib
 
 export prefix bindir sharedir sysconfdir
-
-RM = rm -f
-MKDIR = mkdir
-FIND = find
-INSTALL = install
-FLEX = flex
-BISON= bison
 
 # sparse is architecture-neutral, which means that we need to tell it
 # explicitly what architecture to check for. Fix this up for yours..
@@ -318,14 +307,6 @@ ALL_PROGRAMS = $(PROGRAMS) $(SCRIPTS)
 
 # what 'all' will build but not install in perfexecdir
 OTHER_PROGRAMS = $(OUTPUT)perf
-
-# Set paths to tools early so that they can be used for version tests.
-ifndef SHELL_PATH
-	SHELL_PATH = /bin/sh
-endif
-ifndef PERL_PATH
-	PERL_PATH = /usr/bin/perl
-endif
 
 export PERL_PATH
 
