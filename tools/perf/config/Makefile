@@ -51,6 +51,9 @@ ifeq ($(ARCH),x86_64)
 	LIBUNWIND_LIBS = -lunwind -lunwind-x86_64
 endif
 
+# include ARCH specific config
+-include arch/$(ARCH)/Makefile
+
 # sparse is architecture-neutral, which means that we need to tell it
 # explicitly what architecture to check for. Fix this up for yours..
 SPARSE_FLAGS = -D__BIG_ENDIAN__ -D__powerpc__
@@ -188,6 +191,18 @@ else
 		NO_DWARF := 1
 	endif # Dwarf support
 endif # SOURCE_LIBELF
+
+ifndef NO_DWARF
+ifeq ($(origin PERF_HAVE_DWARF_REGS), undefined)
+	msg := $(warning DWARF register mappings have not been defined for architecture $(ARCH), DWARF support disabled);
+	NO_DWARF := 1
+else
+	BASIC_CFLAGS := -DDWARF_SUPPORT $(LIBDW_CFLAGS) $(BASIC_CFLAGS)
+	BASIC_LDFLAGS := $(LIBDW_LDFLAGS) $(BASIC_LDFLAGS)
+	EXTLIBS += -ldw
+endif # PERF_HAVE_DWARF_REGS
+endif # NO_DWARF
+
 endif # NO_LIBELF
 
 ifndef NO_LIBELF
