@@ -94,6 +94,10 @@ static struct test {
 		.func = test__sw_clock_freq,
 	},
 	{
+		.desc = "Test formula interface",
+		.func = test__formula,
+	},
+	{
 		.func = NULL,
 	},
 };
