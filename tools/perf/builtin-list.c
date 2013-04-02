@@ -15,6 +15,7 @@
 #include "util/cache.h"
 #include "util/pmu.h"
 #include "util/parse-options.h"
+#include "util/formula.h"
 
 int cmd_list(int argc, const char **argv, const char *prefix __maybe_unused)
 {
