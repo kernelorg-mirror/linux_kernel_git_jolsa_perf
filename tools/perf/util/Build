@@ -52,6 +52,9 @@ libperf-y += parse-events-bison.o
 libperf-y += pmu.o
 libperf-y += pmu-flex.o
 libperf-y += pmu-bison.o
+libperf-y += formula.o
+libperf-y += formula-flex.o
+libperf-y += formula-bison.o
 libperf-y += trace-event-read.o
 libperf-y += trace-event-info.o
 libperf-y += trace-event-scripting.o
@@ -115,18 +118,30 @@ $(OUTPUT)util/pmu-bison.c: util/pmu.y
 	$(call rule_mkdir)
 	@$(call echo-cmd,bison)$(BISON) -v util/pmu.y -d -o $@ -p perf_pmu_
 
+$(OUTPUT)util/formula-flex.c: util/formula.l $(OUTPUT)util/formula-bison.c
+	$(call rule_mkdir)
+	@$(call echo-cmd,flex)$(FLEX) -o $@ --header-file=$(OUTPUT)util/formula-flex.h $(PARSER_DEBUG_FLEX) util/formula.l
+
+$(OUTPUT)util/formula-bison.c: util/formula.y
+	$(call rule_mkdir)
+	@$(call echo-cmd,bison)$(BISON) -v util/formula.y -d $(PARSER_DEBUG_BISON) -o $@ -p perf_formula_
+
 CFLAGS_parse-events-flex.o  += -w
 CFLAGS_pmu-flex.o           += -w
+CFLAGS_formula-flex.o       += -w
 CFLAGS_parse-events-bison.o += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
 CFLAGS_pmu-bison.o          += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
+CFLAGS_formula-bison.o      += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
 
 $(OUTPUT)util/parse-events.o: $(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-bison.c
 $(OUTPUT)util/pmu.o: $(OUTPUT)util/pmu-flex.c $(OUTPUT)util/pmu-bison.c
+$(OUTPUT)util/formula.o: $(OUTPUT)util/formula-flex.c $(OUTPUT)util/formula-bison.c
 
 CFLAGS_find_next_bit.o += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_rbtree.o        += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_hweight.o       += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_parse-events.o  += -Wno-redundant-decls
+CFLAGS_formula.o       += -Wno-redundant-decls
 
 $(OUTPUT)util/kallsyms.o: ../lib/symbol/kallsyms.c FORCE
 	$(call rule_mkdir)
