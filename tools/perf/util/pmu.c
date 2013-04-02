@@ -95,6 +95,26 @@ static int pmu_format(char *name, struct list_head *format)
 	return 0;
 }
 
+static int is_alias_name_term(struct parse_events_term *term)
+{
+	return term->type_term == PARSE_EVENTS__TERM_TYPE_NAME_ALIAS;
+}
+
+static char *alias_name(struct list_head *head_terms)
+{
+	struct parse_events_term *term;
+
+	list_for_each_entry(term, head_terms, list)
+		if (is_alias_name_term(term)) {
+			char *name = term->val.str;
+			list_del(&term->list);
+			free(term);
+			return name;
+		}
+
+	return NULL;
+}
+
 static int perf_pmu__new_alias(struct list_head *list, char *name, char *data)
 {
 	struct perf_pmu_alias *alias;
@@ -109,6 +129,19 @@ static int perf_pmu__new_alias(struct list_head *list, char *name, char *data)
 	if (ret) {
 		free(alias);
 		return ret;
+	}
+
+	/*
+	 * Use NAME term to get alias name. In case there's no name
+	 * at all, bail out. In case we find NAME term, remove it
+	 * not to mangle with event term name.
+	 */
+	if (!name) {
+		name = alias_name(&alias->terms);
+		if (!name) {
+			free(alias);
+			return -EINVAL;
+		}
 	}
 
 	alias->name = strdup(name);

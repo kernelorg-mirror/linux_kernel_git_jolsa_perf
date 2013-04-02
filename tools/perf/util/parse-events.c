@@ -566,6 +566,7 @@ do {								\
 		 */
 		break;
 	case PARSE_EVENTS__TERM_TYPE_NAME:
+	case PARSE_EVENTS__TERM_TYPE_NAME_ALIAS:
 		CHECK_TYPE_VAL(STR);
 		break;
 	default:
