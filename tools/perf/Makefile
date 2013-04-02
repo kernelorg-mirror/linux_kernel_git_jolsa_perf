@@ -218,6 +218,8 @@ BASIC_CFLAGS = \
 	-I$(srctree)/include/uapi \
 	-I$(srctree)/include \
 	-I$(OUTPUT)util \
+	-Itests \
+	-Itests/vw/include \
 	-Iutil \
 	-I. \
 	-I$(TRACE_EVENT_DIR) \
@@ -521,6 +523,10 @@ LIB_OBJS += $(OUTPUT)tests/bp_signal.o
 LIB_OBJS += $(OUTPUT)tests/bp_signal_overflow.o
 LIB_OBJS += $(OUTPUT)tests/task-exit.o
 LIB_OBJS += $(OUTPUT)tests/sw-clock.o
+
+LIB_OBJS += $(OUTPUT)tests/vw/lib/perf_helpers.o
+LIB_OBJS += $(OUTPUT)tests/vw/lib/instructions_testcode.o
+LIB_OBJS += $(OUTPUT)tests/vw/lib/matrix_multiply.o
 
 BUILTIN_OBJS += $(OUTPUT)builtin-annotate.o
 BUILTIN_OBJS += $(OUTPUT)builtin-bench.o
