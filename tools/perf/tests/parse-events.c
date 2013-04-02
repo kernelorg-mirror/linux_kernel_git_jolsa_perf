@@ -5,6 +5,7 @@
 #include "sysfs.h"
 #include <lk/debugfs.h>
 #include "tests.h"
+#include "util.h"
 #include <linux/hw_breakpoint.h>
 
 #define TEST_ASSERT_VAL(text, cond) \
@@ -443,6 +444,68 @@ static int test__checkevent_pmu_name(struct perf_evlist *evlist)
 	TEST_ASSERT_VAL("wrong config",  2 == evsel->attr.config);
 	TEST_ASSERT_VAL("wrong name",
 			!strcmp(perf_evsel__name(evsel), "cpu/config=2/u"));
+
+	return 0;
+}
+
+static int test__checkevent_pmu_precise(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	/* cpu/cycles,precise/ */
+	TEST_ASSERT_VAL("wrong number of entries", 1 == evlist->nr_entries);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_RAW == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong exclude_user", !evsel->attr.exclude_user);
+	TEST_ASSERT_VAL("wrong exclude_kernel", !evsel->attr.exclude_kernel);
+	TEST_ASSERT_VAL("wrong exclude_hv", !evsel->attr.exclude_hv);
+	TEST_ASSERT_VAL("wrong exclude guest", evsel->attr.exclude_guest);
+	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
+	/* precise is driven by sysfs precise attribute */
+	TEST_ASSERT_VAL("wrong precise_ip",
+		evsel->attr.precise_ip == perf_precise__get());
+	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
+	TEST_ASSERT_VAL("wrong leader", perf_evsel__is_group_leader(evsel));
+
+	return 0;
+}
+
+static int test__checkevent_pmu_precise1(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	/* cpu/cycles,precise/p */
+	TEST_ASSERT_VAL("wrong number of entries", 1 == evlist->nr_entries);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_RAW == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong exclude_user", !evsel->attr.exclude_user);
+	TEST_ASSERT_VAL("wrong exclude_kernel", !evsel->attr.exclude_kernel);
+	TEST_ASSERT_VAL("wrong exclude_hv", !evsel->attr.exclude_hv);
+	TEST_ASSERT_VAL("wrong exclude guest", evsel->attr.exclude_guest);
+	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
+	/* precise is driven by 'p' modifier */
+	TEST_ASSERT_VAL("wrong precise_ip", evsel->attr.precise_ip == 1);
+	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
+	TEST_ASSERT_VAL("wrong leader", perf_evsel__is_group_leader(evsel));
+
+	return 0;
+}
+
+static int test__checkevent_pmu_precise2(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	/* cpu/cycles,precise/u */
+	TEST_ASSERT_VAL("wrong number of entries", 1 == evlist->nr_entries);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_RAW == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong exclude_user", !evsel->attr.exclude_user);
+	TEST_ASSERT_VAL("wrong exclude_kernel", evsel->attr.exclude_kernel);
+	TEST_ASSERT_VAL("wrong exclude_hv", evsel->attr.exclude_hv);
+	TEST_ASSERT_VAL("wrong exclude guest", !evsel->attr.exclude_guest);
+	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
+	/* precise is driven by sysfs precise attribute */
+	TEST_ASSERT_VAL("wrong precise_ip",
+		evsel->attr.precise_ip == perf_precise__get());
+	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
+	TEST_ASSERT_VAL("wrong leader", perf_evsel__is_group_leader(evsel));
 
 	return 0;
 }
@@ -1197,6 +1260,18 @@ static struct evlist_test test__events_pmu[] = {
 	[1] = {
 		.name  = "cpu/config=1,name=krava/u,cpu/config=2/u",
 		.check = test__checkevent_pmu_name,
+	},
+	[2] = {
+		.name  = "cpu/cycles,precise/",
+		.check = test__checkevent_pmu_precise,
+	},
+	[3] = {
+		.name  = "cpu/cycles,precise/p",
+		.check = test__checkevent_pmu_precise1,
+	},
+	[4] = {
+		.name  = "cpu/cycles,precise/u",
+		.check = test__checkevent_pmu_precise2,
 	},
 };
 
