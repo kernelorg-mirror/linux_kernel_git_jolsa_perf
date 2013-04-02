@@ -1340,3 +1340,35 @@ void parse_events__free_terms(struct list_head *terms)
 	list_for_each_entry_safe(term, h, terms, list)
 		free(term);
 }
+
+static int
+__parse_events_config_process(struct parse_events_evlist *data,
+			      struct parse_events_config *cfg)
+{
+	switch (cfg->type) {
+	case PARSE_EVENTS_CONFIG_EVENTS:
+		parse_events_update_lists(cfg->events, &data->list);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+int parse_events_config_process(struct parse_events_evlist *data,
+				struct list_head *head)
+{
+	struct parse_events_config *cfg, *h;
+	int err = 0;
+
+	list_for_each_entry_safe(cfg, h, head, list) {
+		if (!err)
+			err = __parse_events_config_process(data, cfg);
+
+		list_del(&cfg->list);
+		free(cfg);
+	}
+
+	return err;
+}
