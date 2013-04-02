@@ -276,4 +276,7 @@ extern unsigned int page_size;
 
 struct winsize;
 void get_term_dimensions(struct winsize *ws);
+
+int perf_precise__get(void);
+
 #endif /* GIT_COMPAT_UTIL_H */

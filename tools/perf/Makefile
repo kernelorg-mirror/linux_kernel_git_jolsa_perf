@@ -374,6 +374,7 @@ LIB_OBJS += $(OUTPUT)util/stat.o
 LIB_OBJS += $(OUTPUT)util/formula.o
 LIB_OBJS += $(OUTPUT)util/formula-flex.o
 LIB_OBJS += $(OUTPUT)util/formula-bison.o
+LIB_OBJS += $(OUTPUT)util/precise.o
 
 LIB_OBJS += $(OUTPUT)ui/setup.o
 LIB_OBJS += $(OUTPUT)ui/helpline.o
