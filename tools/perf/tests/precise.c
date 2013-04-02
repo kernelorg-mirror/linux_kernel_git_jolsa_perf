@@ -36,13 +36,10 @@ int test__precise(void)
 	int precise = perf_precise__get();
 	int i;
 
-	if (!precise) {
+	if (precise <= 0) {
 		pr_debug("no precise info or support\n");
 		return TEST_SKIP;
 	}
-
-	if (precise < 0)
-		return TEST_FAIL;
 
 	for (i = 1; i <= precise; i++)
 		if (event_open_precise(i))
