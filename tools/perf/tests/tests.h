@@ -15,6 +15,15 @@ enum {
 	TEST_SKIP = -2,
 };
 
+#define TEST_ASSERT_VAL(text, cond) \
+do { \
+	if (!(cond)) { \
+		pr_debug("FAILED %s:%d %s\n", __FILE__, __LINE__, text); \
+		return -1; \
+	} \
+} while (0)
+
+
 /* Tests */
 int test__vmlinux_matches_kallsyms(void);
 int test__open_syscall_event(void);
@@ -40,5 +49,6 @@ int test__code_reading(void);
 int test__sample_parsing(void);
 int test__keep_tracking(void);
 int test__parse_no_sample_id_all(void);
+int test__formula(void);
 
 #endif /* TESTS_H */
