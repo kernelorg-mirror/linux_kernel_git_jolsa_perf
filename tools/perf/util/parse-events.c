@@ -15,6 +15,7 @@
 #define YY_EXTRA_TYPE int
 #include "parse-events-flex.h"
 #include "pmu.h"
+#include "formula.h"
 
 #define MAX_NAME_LEN 100
 
@@ -1132,6 +1133,8 @@ void print_events(const char *event_glob, bool name_only)
 			    event_symbols_sw, PERF_COUNT_SW_MAX, name_only);
 
 	print_hwcache_events(event_glob, name_only);
+
+	print_formulas();
 
 	if (event_glob != NULL)
 		return;
