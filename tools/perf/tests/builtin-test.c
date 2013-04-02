@@ -98,6 +98,10 @@ static struct test {
 		.func = test__formula,
 	},
 	{
+		.desc = "Test precise event attribute",
+		.func = test__precise,
+	},
+	{
 		.func = NULL,
 	},
 };

@@ -37,5 +37,6 @@ int test__bp_signal_overflow(void);
 int test__task_exit(void);
 int test__sw_clock_freq(void);
 int test__formula(void);
+int test__precise(void);
 
 #endif /* TESTS_H */
