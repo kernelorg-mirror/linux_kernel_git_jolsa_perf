@@ -64,6 +64,7 @@ struct parse_events_term {
 
 struct parse_events_evlist {
 	struct list_head list;
+	char **formulas;
 	int idx;
 	int nr_groups;
 };
@@ -74,6 +75,7 @@ struct parse_events_terms {
 
 enum parse_events_config_type {
 	PARSE_EVENTS_CONFIG_EVENTS,
+	PARSE_EVENTS_CONFIG_FORMULA,
 };
 
 struct parse_events_config {
@@ -81,6 +83,7 @@ struct parse_events_config {
 
 	union {
 		struct list_head *events;
+		char *formula;
 		void *val;
 	};
 
