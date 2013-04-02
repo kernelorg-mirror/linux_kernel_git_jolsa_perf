@@ -18,6 +18,7 @@
 #include "pmu.h"
 #include "thread_map.h"
 #include "strlist.h"
+#include "formula.h"
 
 #define MAX_NAME_LEN 100
 
@@ -1426,6 +1427,8 @@ void print_events(const char *event_glob, bool name_only)
 	print_hwcache_events(event_glob, name_only);
 
 	print_pmu_events(event_glob, name_only);
+
+	print_formulas();
 
 	if (event_glob != NULL)
 		return;

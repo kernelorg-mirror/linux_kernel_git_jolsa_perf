@@ -921,3 +921,37 @@ int perf_formula__preload(struct perf_formula *f)
 
 	return ret ? ret : perf_formula__preload_arch(f);
 }
+
+static int print_set_cb(struct perf_formula_set *set, void *data)
+{
+	bool *printed = (bool *) data;
+	char name[100];
+
+	scnprintf(name, 100, "formula-%s", set->name);
+	printf("  %-50s [Formula counter]\n", name);
+
+	if (!*printed)
+		*printed = true;
+
+	return CB_NEXT;
+}
+
+void print_formulas(void)
+{
+	struct perf_formula f;
+	bool printed = false;
+
+	perf_formula__init(&f);
+
+	if (perf_formula__preload(&f)) {
+		pr_err("formula: failed to preload formulas\n");
+		return;
+	}
+
+	printf("\n");
+
+	for_each_set(&f, print_set_cb, &printed);
+
+	if (printed)
+		printf("\n");
+}
