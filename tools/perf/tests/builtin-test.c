@@ -171,6 +171,10 @@ static struct test {
 		.func = test__kmod_path__parse,
 	},
 	{
+		.desc = "Test formula interface",
+		.func = test__formula,
+	},
+	{
 		.func = NULL,
 	},
 };
