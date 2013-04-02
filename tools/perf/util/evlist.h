@@ -42,6 +42,7 @@ struct perf_evlist {
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
+	char		 **formulas;
 };
 
 struct perf_evsel_str_handler {
@@ -164,4 +165,8 @@ static inline void perf_mmap__write_tail(struct perf_mmap *md,
 	pc->data_tail = tail;
 }
 
+static inline bool perf_evlist__has_formulas(struct perf_evlist *evlist)
+{
+	return evlist->formulas != NULL;
+}
 #endif /* __PERF_EVLIST_H */
