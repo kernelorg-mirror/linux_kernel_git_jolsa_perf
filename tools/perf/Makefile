@@ -527,6 +527,7 @@ LIB_OBJS += $(OUTPUT)tests/sw-clock.o
 LIB_OBJS += $(OUTPUT)tests/vw/lib/perf_helpers.o
 LIB_OBJS += $(OUTPUT)tests/vw/lib/instructions_testcode.o
 LIB_OBJS += $(OUTPUT)tests/vw/lib/matrix_multiply.o
+LIB_OBJS += $(OUTPUT)tests/vw/overflow/single_shot_overflow.o
 
 BUILTIN_OBJS += $(OUTPUT)builtin-annotate.o
 BUILTIN_OBJS += $(OUTPUT)builtin-bench.o

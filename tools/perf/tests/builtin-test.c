@@ -94,6 +94,10 @@ static struct test {
 		.func = test__sw_clock_freq,
 	},
 	{
+		.desc = "[vw] Test single shot overflow",
+		.func = test__vw_single_shot_overflow,
+	},
+	{
 		.func = NULL,
 	},
 };
