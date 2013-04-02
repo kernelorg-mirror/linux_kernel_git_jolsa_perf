@@ -58,6 +58,7 @@
 #include "util/cpumap.h"
 #include "util/thread.h"
 #include "util/thread_map.h"
+#include "util/formula.h"
 
 #include <stdlib.h>
 #include <sys/prctl.h>
@@ -108,6 +109,9 @@ enum {
 };
 
 static struct perf_evlist	*evsel_list;
+
+static struct perf_formula	 formula;
+static bool			 formula_no_preload;
 
 static struct target target = {
 	.uid	= UINT_MAX,
@@ -556,6 +560,12 @@ static void print_interval(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
 	sprintf(prefix, "%6lu.%09lu%s", rs.tv_sec, rs.tv_nsec, csv_sep);
+
+	if (perf_formula__is_loaded(&formula)) {
+		perf_formula__print(output, &formula, evsel_list, NULL,
+				    aggr_mode != AGGR_GLOBAL);
+		return;
+	}
 
 	if (num_print_interval == 0 && !csv_output) {
 		switch (aggr_mode) {
@@ -1708,6 +1718,53 @@ static int add_default_attributes(void)
 	return perf_evlist__add_default_attrs(evsel_list, very_very_detailed_attrs);
 }
 
+static int formula_option(const struct option *opt __maybe_unused,
+			  const char *str, int unset __maybe_unused)
+{
+	if (perf_formula__load(&formula, (char *) str)) {
+		pr_err("formula: failed to load formula file '%s'\n", str);
+		return -1;
+	}
+
+	formula_no_preload = true;
+
+	pr_debug("formula file '%s'\n", str);
+	return 0;
+}
+
+static int formula_resolve(struct perf_evlist *evlist)
+{
+	struct strlist *formulas = evlist->formulas;
+	struct str_node *pos;
+
+	if (!formula_no_preload && perf_formula__preload(&formula)) {
+		pr_err("formula: failed to preload default formulas\n");
+		return -1;
+	}
+
+	strlist__for_each(pos, formulas) {
+		struct perf_formula_set	*set;
+
+		set = perf_formula__set(&formula, (char *) pos->s);
+		if (!set) {
+			pr_err("formula: failed to find formula '%s'\n",
+			       pos->s);
+			return -1;
+		}
+
+		if (perf_formula__evlist(&formula, set, evlist)) {
+			pr_err("formula: failed to load formula events for %s\n",
+			       pos->s);
+			return -1;
+		}
+
+		perf_formula__loaded(&formula, set);
+		pr_debug("loaded formula '%s'\n", pos->s);
+	}
+
+	return 0;
+}
+
 int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool append_file = false;
@@ -1721,6 +1778,9 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		     parse_events_option),
 	OPT_CALLBACK(0, "filter", &evsel_list, "filter",
 		     "event filter", parse_filter),
+	OPT_CALLBACK('f', "formula", NULL, "formula",
+		     "counters formula file",
+		     formula_option),
 	OPT_BOOLEAN('i', "no-inherit", &no_inherit,
 		    "child tasks do not inherit counters"),
 	OPT_STRING('p', "pid", &target.pid, "pid",
@@ -1784,8 +1844,14 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (evsel_list == NULL)
 		return -ENOMEM;
 
+	perf_formula__init(&formula);
+
 	argc = parse_options(argc, argv, options, stat_usage,
 		PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (perf_evlist__has_formulas(evsel_list) &&
+	    formula_resolve(evsel_list))
+		usage_with_options(stat_usage, options);
 
 	output = stderr;
 	if (output_name && strcmp(output_name, "-"))
@@ -1925,11 +1991,17 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		}
 	}
 
-	if (!forever && status != -1 && !interval)
+	if (!forever && status != -1 && !interval) {
 		print_stat(argc, argv);
+
+		if (perf_formula__is_loaded(&formula))
+			perf_formula__print(output, &formula, evsel_list, NULL,
+					    aggr_mode != AGGR_GLOBAL);
+	}
 
 	perf_evlist__free_stats(evsel_list);
 out:
 	perf_evlist__delete(evsel_list);
+	perf_formula__free(&formula);
 	return status;
 }
