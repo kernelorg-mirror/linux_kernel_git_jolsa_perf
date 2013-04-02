@@ -637,6 +637,9 @@ int parse_events_add_pmu(struct list_head **list, int *idx,
 	if (perf_pmu__check_alias(pmu, head_config))
 		return -EINVAL;
 
+	if (perf_pmu__check_list_terms(pmu, head_config))
+		return -EINVAL;
+
 	/*
 	 * Configure hardcoded terms first, no need to check
 	 * return value when called with fail == 0 ;)
@@ -1163,7 +1166,7 @@ int parse_events__is_hardcoded_term(struct parse_events_term *term)
 
 static int new_term(struct parse_events_term **_term, int type_val,
 		    int type_term, char *config,
-		    char *str, u64 num)
+		    char *str, u64 num, struct list_head *list)
 {
 	struct parse_events_term *term;
 
@@ -1183,6 +1186,9 @@ static int new_term(struct parse_events_term **_term, int type_val,
 	case PARSE_EVENTS__TERM_TYPE_STR:
 		term->val.str = str;
 		break;
+	case PARSE_EVENTS__TERM_TYPE_LIST:
+		term->val.list = list;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1195,14 +1201,14 @@ int parse_events_term__num(struct parse_events_term **term,
 			   int type_term, char *config, u64 num)
 {
 	return new_term(term, PARSE_EVENTS__TERM_TYPE_NUM, type_term,
-			config, NULL, num);
+			config, NULL, num, NULL);
 }
 
 int parse_events_term__str(struct parse_events_term **term,
 			   int type_term, char *config, char *str)
 {
 	return new_term(term, PARSE_EVENTS__TERM_TYPE_STR, type_term,
-			config, str, 0);
+			config, str, 0, NULL);
 }
 
 int parse_events_term__sym_hw(struct parse_events_term **term,
@@ -1216,18 +1222,42 @@ int parse_events_term__sym_hw(struct parse_events_term **term,
 	if (config)
 		return new_term(term, PARSE_EVENTS__TERM_TYPE_STR,
 				PARSE_EVENTS__TERM_TYPE_USER, config,
-				(char *) sym->symbol, 0);
+				(char *) sym->symbol, 0, NULL);
 	else
 		return new_term(term, PARSE_EVENTS__TERM_TYPE_STR,
 				PARSE_EVENTS__TERM_TYPE_USER,
-				(char *) "event", (char *) sym->symbol, 0);
+				(char *) "event", (char *) sym->symbol,
+				0, NULL);
+}
+
+int parse_events__term_value_list(struct parse_events_term **term,
+				  int type_term, char *config,
+				  char *prefix, struct list_head *head)
+{
+	if (prefix) {
+		struct parse_events__term_value *v;
+
+		list_for_each_entry(v, head, list) {
+			char buf[256];
+
+			if (v->type_val != PARSE_EVENTS__TERM_TYPE_STR)
+				continue;
+
+			scnprintf(buf, 256, "%s%s", prefix, v->val.str);
+			free(v->val.str);
+			v->val.str = strdup(buf);
+		}
+	}
+
+	return new_term(term, PARSE_EVENTS__TERM_TYPE_LIST, type_term,
+			config, NULL, 0, head);
 }
 
 int parse_events_term__clone(struct parse_events_term **new,
 			     struct parse_events_term *term)
 {
 	return new_term(new, term->type_val, term->type_term, term->config,
-			term->val.str, term->val.num);
+			term->val.str, term->val.num, term->val.list);
 }
 
 void parse_events__free_terms(struct list_head *terms)
@@ -1238,4 +1268,27 @@ void parse_events__free_terms(struct list_head *terms)
 		free(term);
 
 	free(terms);
+}
+
+int parse_event__term_value(struct parse_events__term_value **value,
+			    int is_num, u64 num, char *str)
+{
+	struct parse_events__term_value *v;
+
+	v = zalloc(sizeof(*v));
+	if (!v)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&v->list);
+
+	if (is_num) {
+		v->type_val = PARSE_EVENTS__TERM_TYPE_NUM;
+		v->val.num = num;
+	} else {
+		v->type_val = PARSE_EVENTS__TERM_TYPE_STR;
+		v->val.str = strdup(str);
+	}
+
+	*value = v;
+	return 0;
 }

@@ -187,6 +187,9 @@ r{num_raw_hex}		{ return raw(yyscanner); }
 "{"			{ BEGIN(event); return '{'; }
 "}"			{ return '}'; }
 =			{ return '='; }
+"|"			{ return '|'; }
+"("			{ return '('; }
+")"			{ return ')'; }
 \n			{ }
 
 <mem>{

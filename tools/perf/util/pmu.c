@@ -474,6 +474,21 @@ static __u64 pmu_format_value(unsigned long *format, __u64 value)
 	return v;
 }
 
+static const char* format_name(int val)
+{
+	switch (val) {
+	case PERF_PMU_FORMAT_VALUE_CONFIG:
+		return "config";
+	case PERF_PMU_FORMAT_VALUE_CONFIG1:
+		return "config1";
+	case PERF_PMU_FORMAT_VALUE_CONFIG2:
+		return "config2";
+	default:
+		BUG_ON(1);
+	}
+	return "";
+}
+
 /*
  * Setup one of config[12] attr members based on the
  * user input data - temr parameter.
@@ -499,6 +514,10 @@ static int pmu_config_term(struct list_head *formats,
 	format = pmu_find_format(formats, term->config);
 	if (!format)
 		return -EINVAL;
+
+	pr_debug("  %s = 0x%lx (%s)\n",
+		 term->config, term->val.num,
+		 format_name(format->value));
 
 	switch (format->value) {
 	case PERF_PMU_FORMAT_VALUE_CONFIG:
@@ -528,6 +547,8 @@ int perf_pmu__config_terms(struct list_head *formats,
 			   struct list_head *head_terms)
 {
 	struct parse_events_term *term;
+
+	pr_debug("attr config:\n");
 
 	list_for_each_entry(term, head_terms, list)
 		if (pmu_config_term(formats, attr, term))
@@ -599,6 +620,87 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct list_head *head_terms)
 		free(term);
 	}
 	return 0;
+}
+
+static struct perf_pmu_alias* find_alias(struct perf_pmu *pmu, char *name)
+{
+	struct perf_pmu_alias *alias;
+
+	list_for_each_entry(alias, &pmu->aliases, list) {
+		if (!strcmp(alias->name, name))
+			return alias;
+	}
+
+	return NULL;
+}
+
+static int get_alias_num(u64 *num, struct perf_pmu *pmu,
+			 char *config, char *str)
+{
+	struct perf_pmu_alias *alias;
+	struct parse_events_term *term;
+
+	alias = find_alias(pmu, str);
+	if (!alias)
+		return -1;
+
+	list_for_each_entry(term, &alias->terms, list) {
+		if (term->type_term != PARSE_EVENTS__TERM_TYPE_USER)
+			continue;
+
+		if (!strcmp(config, term->config)) {
+			*num = term->val.num;
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+static int check_list_term(struct perf_pmu *pmu,
+			   struct parse_events_term *term)
+{
+	struct parse_events__term_value *v, *h;
+	u64 num = 0, na;
+
+	list_for_each_entry_safe(v, h, term->val.list, list) {
+		switch (v->type_val) {
+		case PARSE_EVENTS__TERM_TYPE_NUM:
+			num |= v->val.num;
+			break;
+		case PARSE_EVENTS__TERM_TYPE_STR:
+			if (get_alias_num(&na, pmu, term->config, v->val.str))
+				return -1;
+			num |= na;
+			break;
+		default:
+			BUG_ON(-1);
+		}
+		list_del(&v->list);
+		free(v);
+	}
+
+	term->type_val = PARSE_EVENTS__TERM_TYPE_NUM;
+	term->val.num = num;
+	return 0;
+}
+
+int perf_pmu__check_list_terms(struct perf_pmu *pmu,
+			       struct list_head *head_terms)
+{
+	struct parse_events_term *term;
+	int ret = 0;
+
+	list_for_each_entry(term, head_terms, list) {
+		if (term->type_val != PARSE_EVENTS__TERM_TYPE_LIST)
+			continue;
+
+		ret = check_list_term(pmu, term);
+		if (ret)
+			break;
+	}
+
+	return ret;
 }
 
 int perf_pmu__new_format(struct list_head *list, char *name,

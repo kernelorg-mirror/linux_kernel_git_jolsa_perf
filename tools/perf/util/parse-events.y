@@ -54,6 +54,8 @@ static inc_group_count(struct list_head *list,
 %type <num> value_sym
 %type <head> event_config
 %type <term> event_term
+%type <head> event_term_value_list
+%type <value> event_term_value
 %type <head> event_pmu
 %type <head> event_legacy_symbol
 %type <head> event_legacy_cache
@@ -76,6 +78,7 @@ static inc_group_count(struct list_head *list,
 	u64 num;
 	struct list_head *head;
 	struct parse_events_term *term;
+	struct parse_events__term_value *value;
 }
 %%
 
@@ -370,6 +373,28 @@ PE_NAME '=' PE_VALUE_SYM_HW
 	$$ = term;
 }
 |
+PE_NAME '=' event_term_value_list
+{
+	struct parse_events_term *term;
+	struct list_head *head = $3;
+
+	ABORT_ON(parse_events__term_value_list(&term,
+					       PARSE_EVENTS__TERM_TYPE_USER,
+					       $1, NULL, head));
+	$$ = term;
+}
+|
+PE_NAME '=' PE_NAME '(' event_term_value_list ')'
+{
+	struct parse_events_term *term;
+	struct list_head *head = $5;
+
+	ABORT_ON(parse_events__term_value_list(&term,
+					       PARSE_EVENTS__TERM_TYPE_USER,
+					       $1, $3, head));
+	$$ = term;
+}
+|
 PE_NAME
 {
 	struct parse_events_term *term;
@@ -404,12 +429,71 @@ PE_TERM '=' PE_VALUE
 	$$ = term;
 }
 |
+PE_TERM '=' event_term_value_list
+{
+	struct parse_events_term *term;
+	struct list_head *head = $3;
+
+	ABORT_ON(parse_events__term_value_list(&term, (int)$1, NULL, NULL, head));
+	$$ = term;
+}
+|
+PE_TERM '=' PE_NAME '(' event_term_value_list ')'
+{
+	struct parse_events_term *term;
+	struct list_head *head = $5;
+
+	ABORT_ON(parse_events__term_value_list(&term,
+					       (int)$1, NULL, $3, head));
+	$$ = term;
+}
+|
 PE_TERM
 {
 	struct parse_events_term *term;
 
 	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1));
 	$$ = term;
+}
+
+event_term_value_list:
+event_term_value_list '|' event_term_value
+{
+	struct list_head *head = $1;
+	struct parse_events__term_value *value = $3;
+
+	list_add_tail(&value->list, head);
+	$$ = head;
+}
+|
+event_term_value '|' event_term_value
+{
+	struct list_head *head = malloc(sizeof(*head));
+	struct parse_events__term_value *v1 = $1;
+	struct parse_events__term_value *v2 = $3;
+
+	ABORT_ON(!head);
+	INIT_LIST_HEAD(head);
+	list_add_tail(&v1->list, head);
+	list_add_tail(&v2->list, head);
+	$$ = head;
+}
+
+event_term_value:
+PE_VALUE
+{
+	struct parse_events__term_value *value;
+
+	ABORT_ON(parse_event__term_value_num(&value, $1));
+	$$ = value;
+}
+|
+PE_NAME
+{
+	struct parse_events__term_value *value;
+
+	ABORT_ON(parse_event__term_value_str(&value, $1));
+	$$ = value;
 }
 
 sep_dc: ':' |

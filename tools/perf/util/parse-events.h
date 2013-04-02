@@ -38,6 +38,7 @@ extern int parse_filter(const struct option *opt, const char *str, int unset);
 enum {
 	PARSE_EVENTS__TERM_TYPE_NUM,
 	PARSE_EVENTS__TERM_TYPE_STR,
+	PARSE_EVENTS__TERM_TYPE_LIST,
 };
 
 enum {
@@ -56,10 +57,20 @@ struct parse_events_term {
 	union {
 		char *str;
 		u64  num;
+		struct list_head *list;
 	} val;
 	int type_val;
 	int type_term;
 	struct list_head list;
+};
+
+struct parse_events__term_value {
+	struct list_head list;
+	union {
+		char *str;
+		u64  num;
+	} val;
+	int type_val;
 };
 
 struct parse_events_evlist {
@@ -81,7 +92,19 @@ int parse_events_term__sym_hw(struct parse_events_term **term,
 			      char *config, unsigned idx);
 int parse_events_term__clone(struct parse_events_term **new,
 			     struct parse_events_term *term);
+int parse_events__term_value_list(struct parse_events_term **term,
+				  int type_term, char *config,
+				  char *prefix, struct list_head *head);
 void parse_events__free_terms(struct list_head *terms);
+int parse_event__term_value(struct parse_events__term_value **value,
+			    int is_num, u64 num, char *str);
+
+#define parse_event__term_value_num(value, num) \
+	parse_event__term_value(value, 1, num, NULL)
+
+#define parse_event__term_value_str(value, str) \
+	parse_event__term_value(value, 0, 0, str)
+
 int parse_events__modifier_event(struct list_head *list, char *str, bool add);
 int parse_events__modifier_group(struct list_head *list, char *event_mod);
 int parse_events_name(struct list_head *list, char *name);
