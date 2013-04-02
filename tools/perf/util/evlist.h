@@ -169,4 +169,8 @@ static inline bool perf_evlist__has_formulas(struct perf_evlist *evlist)
 {
 	return evlist->formulas != NULL;
 }
+
+struct perf_evsel*
+perf_evlist__find_evsel_name(struct perf_evlist *evlist, char *name);
+
 #endif /* __PERF_EVLIST_H */
