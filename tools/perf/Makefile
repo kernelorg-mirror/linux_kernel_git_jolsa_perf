@@ -194,8 +194,15 @@ $(OUTPUT)util/pmu-flex.c: util/pmu.l $(OUTPUT)util/pmu-bison.c
 $(OUTPUT)util/pmu-bison.c: util/pmu.y
 	$(QUIET_BISON)$(BISON) -v util/pmu.y -d -o $(OUTPUT)util/pmu-bison.c -p perf_pmu_
 
+$(OUTPUT)util/formula-flex.c: util/formula.l util/formula.y $(OUTPUT)util/formula-bison.c
+	$(QUIET_FLEX)$(FLEX) --header-file=$(OUTPUT)util/formula-flex.h $(PARSER_DEBUG_FLEX) -t util/formula.l > $(OUTPUT)util/formula-flex.c
+
+$(OUTPUT)util/formula-bison.c: util/formula.y
+	$(QUIET_BISON)$(BISON) -v util/formula.y -d $(PARSER_DEBUG_BISON) -o $(OUTPUT)util/formula-bison.c
+
 $(OUTPUT)util/parse-events.o: $(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-bison.c
 $(OUTPUT)util/pmu.o: $(OUTPUT)util/pmu-flex.c $(OUTPUT)util/pmu-bison.c
+$(OUTPUT)util/formula.o: $(OUTPUT)util/formula-flex.c $(OUTPUT)util/formula-bison.c
 
 LIB_FILE=$(OUTPUT)libperf.a
 
@@ -288,6 +295,7 @@ LIB_H += util/intlist.h
 LIB_H += util/perf_regs.h
 LIB_H += util/unwind.h
 LIB_H += util/vdso.h
+LIB_H += util/formula.h
 LIB_H += ui/helpline.h
 LIB_H += ui/progress.h
 LIB_H += ui/util.h
@@ -360,6 +368,9 @@ LIB_OBJS += $(OUTPUT)util/rblist.o
 LIB_OBJS += $(OUTPUT)util/intlist.o
 LIB_OBJS += $(OUTPUT)util/vdso.o
 LIB_OBJS += $(OUTPUT)util/stat.o
+LIB_OBJS += $(OUTPUT)util/formula.o
+LIB_OBJS += $(OUTPUT)util/formula-flex.o
+LIB_OBJS += $(OUTPUT)util/formula-bison.o
 
 LIB_OBJS += $(OUTPUT)ui/setup.o
 LIB_OBJS += $(OUTPUT)ui/helpline.o

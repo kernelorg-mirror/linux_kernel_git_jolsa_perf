@@ -869,3 +869,16 @@ size_t perf_evlist__fprintf(struct perf_evlist *evlist, FILE *fp)
 
 	return printed + fprintf(fp, "\n");;
 }
+
+struct perf_evsel*
+perf_evlist__find_evsel_name(struct perf_evlist *evlist, char *name)
+{
+	struct perf_evsel *evsel;
+
+	list_for_each_entry(evsel, &evlist->entries, node) {
+		if (strstr(perf_evsel__name(evsel), name))
+			return evsel;
+	}
+
+	return NULL;
+}
