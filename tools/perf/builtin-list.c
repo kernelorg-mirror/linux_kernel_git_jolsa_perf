@@ -14,6 +14,7 @@
 #include "util/parse-events.h"
 #include "util/cache.h"
 #include "util/pmu.h"
+#include "util/formula.h"
 
 int cmd_list(int argc, const char **argv, const char *prefix __maybe_unused)
 {
@@ -40,6 +41,8 @@ int cmd_list(int argc, const char **argv, const char *prefix __maybe_unused)
 				print_hwcache_events(NULL, false);
 			else if (strcmp(argv[i], "pmu") == 0)
 				print_pmu_events(NULL, false);
+			else if (strcmp(argv[i], "formulas") == 0)
+				print_formulas();
 			else if (strcmp(argv[i], "--raw-dump") == 0)
 				print_events(NULL, true);
 			else {
