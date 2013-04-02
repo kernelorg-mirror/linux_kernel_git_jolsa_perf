@@ -187,4 +187,6 @@ int perf_formula__print(FILE *file,
 int perf_formula__preload(struct perf_formula *f);
 int perf_formula__preload_arch(struct perf_formula *f);
 
+void print_formulas(void);
+
 #endif /* __PERF_FORMULA */
