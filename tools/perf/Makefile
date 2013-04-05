@@ -394,6 +394,10 @@ ifeq ($(ARCH),x86)
 LIB_OBJS += $(OUTPUT)tests/perf-time-to-tsc.o
 endif
 LIB_OBJS += $(OUTPUT)tests/code-reading.o
+LIB_OBJS += $(OUTPUT)tests/toggle-event-raw.o
+ifeq ($(RAW_ARCH),x86_64)
+LIB_OBJS += $(OUTPUT)arch/x86/tests/toggle-event-raw-64.o
+endif
 
 BUILTIN_OBJS += $(OUTPUT)builtin-annotate.o
 BUILTIN_OBJS += $(OUTPUT)builtin-bench.o
