@@ -125,6 +125,39 @@ void __perf_evlist__set_leader(struct list_head *list)
 	}
 }
 
+static struct perf_evsel *
+find_evsel_by_name(struct perf_evlist *evlist, char *name)
+{
+	struct perf_evsel *evsel;
+
+	list_for_each_entry(evsel, &evlist->entries, node)
+	if (strstr(perf_evsel__name(evsel), name))
+		return evsel;
+
+	return NULL;
+}
+
+int perf_evlist__config_toggle(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	list_for_each_entry(evsel, &evlist->entries, node) {
+		struct perf_evsel *toggle;
+
+		if (!evsel->toggle_name)
+			continue;
+
+		toggle = find_evsel_by_name(evlist, evsel->toggle_name);
+		if (!toggle)
+			return -EINVAL;
+
+		evsel->toggle = toggle;
+		toggle->toggled = true;
+	}
+
+	return 0;
+}
+
 void perf_evlist__set_leader(struct perf_evlist *evlist)
 {
 	if (evlist->nr_entries) {

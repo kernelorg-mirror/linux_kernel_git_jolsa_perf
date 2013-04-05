@@ -257,6 +257,9 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 		attr->enable_on_exec = 1;
 	}
 
+	if (evsel->toggled)
+		attr->paused = 1;
+
 	return perf_evsel__open_per_thread(evsel, evsel_list->threads);
 }
 
@@ -443,6 +446,11 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	if (group)
 		perf_evlist__set_leader(evsel_list);
+
+	if (perf_evlist__config_toggle(evsel_list)) {
+		pr_err("failed to set toggle events\n");
+		return -1;
+	}
 
 	list_for_each_entry(counter, &evsel_list->entries, node) {
 		if (create_perf_stat_counter(counter) < 0) {

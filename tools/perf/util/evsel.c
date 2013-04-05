@@ -818,6 +818,20 @@ static int get_group_fd(struct perf_evsel *evsel, int cpu, int thread)
 	return fd;
 }
 
+static int get_toggle_fd(struct perf_evsel *evsel, unsigned long *flags,
+			 int cpu, int thread)
+{
+	struct perf_evsel *toggle = evsel->toggle;
+	int fd;
+
+	fd = FD(toggle, cpu, thread);
+	BUG_ON(fd == -1);
+
+	*flags |= evsel->toggle_flag;
+
+	return fd;
+}
+
 static int __perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 			      struct thread_map *threads)
 {
@@ -850,6 +864,15 @@ retry_sample_id:
 				pid = threads->map[thread];
 
 			group_fd = get_group_fd(evsel, cpu, thread);
+
+			/* toggle config */
+			if (evsel->toggle) {
+				/* It's either group or toggle, not both. */
+				if (group_fd >= 0)
+					return -EINVAL;
+
+				group_fd = get_toggle_fd(evsel, &flags, cpu, thread);
+			}
 
 			FD(evsel, cpu, thread) = sys_perf_event_open(&evsel->attr,
 								     pid,
