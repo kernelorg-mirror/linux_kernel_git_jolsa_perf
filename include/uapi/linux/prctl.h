@@ -87,6 +87,7 @@
 
 #define PR_TASK_PERF_EVENTS_DISABLE		31
 #define PR_TASK_PERF_EVENTS_ENABLE		32
+#define PR_TASK_PERF_EVENTS_SELF		1
 
 /*
  * Set early/late kill mode for hwpoison memory corruption.
