@@ -6920,6 +6920,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 
 	event->state		= PERF_EVENT_STATE_INACTIVE;
 
+	if (attr->paused)
+		event->paused = true;
+
 	if (task) {
 		event->attach_state = PERF_ATTACH_TASK;
 
