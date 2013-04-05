@@ -3413,6 +3413,28 @@ int perf_event_task_disable(void)
 	return 0;
 }
 
+int perf_event_task_self_disable(void)
+{
+	struct perf_event *event;
+
+	mutex_lock(&current->perf_event_target_mutex);
+	list_for_each_entry(event, &current->perf_event_target_list, target_entry)
+		perf_event_for_each_child(event, perf_event_disable);
+	mutex_unlock(&current->perf_event_target_mutex);
+	return 0;
+}
+
+int perf_event_task_self_enable(void)
+{
+	struct perf_event *event;
+
+	mutex_lock(&current->perf_event_target_mutex);
+	list_for_each_entry(event, &current->perf_event_target_list, target_entry)
+		perf_event_for_each_child(event, perf_event_enable);
+	mutex_unlock(&current->perf_event_target_mutex);
+	return 0;
+}
+
 static int perf_event_index(struct perf_event *event)
 {
 	if (event->hw.state & PERF_HES_STOPPED)

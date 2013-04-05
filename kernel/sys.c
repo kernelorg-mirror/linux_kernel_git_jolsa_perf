@@ -2168,9 +2168,13 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		break;
 	case PR_TASK_PERF_EVENTS_DISABLE:
 		error = perf_event_task_disable();
+		error = arg2 ? perf_event_task_self_disable() :
+			       perf_event_task_disable();
 		break;
 	case PR_TASK_PERF_EVENTS_ENABLE:
 		error = perf_event_task_enable();
+		error = arg2 ? perf_event_task_self_enable() :
+			       perf_event_task_enable();
 		break;
 	case PR_GET_TIMERSLACK:
 		error = current->timer_slack_ns;
