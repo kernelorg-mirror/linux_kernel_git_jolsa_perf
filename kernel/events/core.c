@@ -1155,7 +1155,7 @@ static void __perf_event_toggle_detach(struct perf_event *event)
 
 static void perf_event_toggle_detach(struct perf_event *event)
 {
-	if (event->toggle_flag != PERF_TOGGLE_NONE)
+	if (event->toggle_flag > PERF_TOGGLE_NONE)
 		__perf_event_toggle_detach(event);
 }
 
@@ -4918,9 +4918,6 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 static void perf_event_toggle(struct perf_event *event,
 			      enum perf_event_toggle_flag flag)
 {
-	if (WARN_ON(flag == PERF_TOGGLE_NONE))
-		return;
-
 	if (event->state != PERF_EVENT_STATE_ACTIVE)
 		return;
 
@@ -4949,12 +4946,22 @@ static void perf_event_toggle(struct perf_event *event,
 	}
 }
 
+static void perf_event_toggle_disable(struct perf_event *event)
+{
+	event->toggle_flag = PERF_TOGGLE_DISABLED;
+	event->overflow_handler = NULL;
+}
+
 static void
 perf_event_toggle_overflow(struct perf_event *event,
 			   struct perf_sample_data *data,
 			   struct pt_regs *regs)
 {
 	struct perf_event *toggle_event;
+	enum perf_event_toggle_flag flag = event->toggle_flag;
+
+	if (flag <= PERF_TOGGLE_DISABLED)
+		return;
 
 	toggle_event = event->toggle_event;
 
@@ -4964,7 +4971,7 @@ perf_event_toggle_overflow(struct perf_event *event,
 	if (atomic_long_read(&toggle_event->refcount) > 1)
 		perf_event_toggle(toggle_event, event->toggle_flag);
 	else
-		__perf_event_toggle_detach(event);
+		perf_event_toggle_disable(event);
 
 	perf_event_output(event, data, regs);
 }

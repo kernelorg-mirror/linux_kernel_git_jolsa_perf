@@ -424,10 +424,11 @@ struct perf_event {
 #endif
 
 enum perf_event_toggle_flag {
-	PERF_TOGGLE_NONE = 0,
-	PERF_TOGGLE_ON,
-	PERF_TOGGLE_OFF,
-	PERF_TOGGLE_BOTH,
+	PERF_TOGGLE_NONE	= -1
+	PERF_TOGGLE_DISABLED	=  0,
+	PERF_TOGGLE_ON		=  1,
+	PERF_TOGGLE_OFF		=  2,
+	PERF_TOGGLE_BOTH	=  3,
 };
 
 #ifdef CONFIG_CGROUP_PERF
