@@ -44,6 +44,8 @@
 
 #include <asm/irq_regs.h>
 
+#define PERF_FLAG_TOGGLE (PERF_FLAG_TOGGLE_ON | PERF_FLAG_TOGGLE_OFF)
+
 struct remote_function_call {
 	struct task_struct	*p;
 	int			(*func)(void *info);
@@ -119,7 +121,9 @@ static int cpu_function_call(int cpu, int (*func) (void *info), void *info)
 
 #define PERF_FLAG_ALL (PERF_FLAG_FD_NO_GROUP |\
 		       PERF_FLAG_FD_OUTPUT  |\
-		       PERF_FLAG_PID_CGROUP)
+		       PERF_FLAG_PID_CGROUP |\
+		       PERF_FLAG_TOGGLE_ON  |\
+		       PERF_FLAG_TOGGLE_OFF)
 
 /*
  * branch priv levels that need permission checks
@@ -1355,6 +1359,25 @@ out:
 		perf_event__header_size(tmp);
 }
 
+static void put_event(struct perf_event *event);
+
+static void __perf_event_toggle_detach(struct perf_event *event)
+{
+	struct perf_event *toggled_event = event->toggled_event;
+
+	event->toggle_flag      = PERF_TOGGLE_NONE;
+	event->overflow_handler = NULL;
+	event->toggled_event    = NULL;
+
+	put_event(toggled_event);
+}
+
+static void perf_event_toggle_detach(struct perf_event *event)
+{
+	if (event->toggle_flag > PERF_TOGGLE_NONE)
+		__perf_event_toggle_detach(event);
+}
+
 static inline int
 event_filter_match(struct perf_event *event)
 {
@@ -1642,6 +1665,7 @@ event_sched_in(struct perf_event *event,
 		 struct perf_event_context *ctx)
 {
 	u64 tstamp = perf_event_time(event);
+	int add_flags = PERF_EF_START;
 
 	if (event->state <= PERF_EVENT_STATE_OFF)
 		return 0;
@@ -1661,7 +1685,10 @@ event_sched_in(struct perf_event *event,
 	 */
 	smp_wmb();
 
-	if (event->pmu->add(event, PERF_EF_START)) {
+	if (event->paused)
+		add_flags = 0;
+
+	if (event->pmu->add(event, add_flags)) {
 		event->state = PERF_EVENT_STATE_INACTIVE;
 		event->oncpu = -1;
 		return -EAGAIN;
@@ -3213,7 +3240,7 @@ int perf_event_release_kernel(struct perf_event *event)
 	raw_spin_unlock_irq(&ctx->lock);
 	perf_remove_from_context(event);
 	mutex_unlock(&ctx->mutex);
-
+	perf_event_toggle_detach(event);
 	free_event(event);
 
 	return 0;
@@ -5147,6 +5174,54 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 	perf_output_end(&handle);
 }
 
+static void perf_event_toggle(struct perf_event *event,
+			      enum perf_event_toggle_flag flag)
+{
+	/* Could be out of HW counter. */
+	if (event->state != PERF_EVENT_STATE_ACTIVE)
+		return;
+
+	switch (flag) {
+	case PERF_TOGGLE_ON:
+		if (!event->paused)
+			break;
+		event->pmu->start(event, PERF_EF_RELOAD);
+		event->paused = false;
+		break;
+	case PERF_TOGGLE_OFF:
+		if (event->paused)
+			break;
+		event->pmu->stop(event, PERF_EF_UPDATE);
+		event->paused = true;
+		break;
+	case PERF_TOGGLE_NONE:
+		break;
+	}
+}
+
+static void
+perf_event_toggle_overflow(struct perf_event *event,
+			   struct perf_sample_data *data,
+			   struct pt_regs *regs)
+{
+	struct perf_event *toggled_event;
+
+	if (!event->toggle_flag)
+		return;
+
+	toggled_event = event->toggled_event;
+
+	if (WARN_ON_ONCE(!toggled_event))
+		return;
+
+	if (atomic_long_read(&toggled_event->refcount) > 1)
+		perf_event_toggle(toggled_event, event->toggle_flag);
+	else
+		__perf_event_toggle_detach(event);
+
+	perf_event_output(event, data, regs);
+}
+
 /*
  * Generic event overflow handling, sampling.
  */
@@ -6779,6 +6854,43 @@ out:
 	return ret;
 }
 
+static enum perf_event_toggle_flag get_toggle_flag(unsigned long flags)
+{
+	if ((flags & PERF_FLAG_TOGGLE) == PERF_FLAG_TOGGLE_ON)
+		return PERF_TOGGLE_ON;
+	else if ((flags & PERF_FLAG_TOGGLE) == PERF_FLAG_TOGGLE_OFF)
+		return PERF_TOGGLE_OFF;
+
+	return PERF_TOGGLE_NONE;
+}
+
+static int
+perf_event_set_toggle(struct perf_event *event,
+		      struct perf_event *toggled_event,
+		      struct perf_event_context *ctx,
+		      unsigned long flags)
+{
+	if (WARN_ON(!(flags & PERF_FLAG_TOGGLE)))
+		return -EINVAL;
+
+	/* It's either ON or OFF. */
+	if ((flags & PERF_FLAG_TOGGLE) == PERF_FLAG_TOGGLE)
+		return -EINVAL;
+
+	/* Allow only same cpu, */
+	if (toggled_event->cpu != event->cpu)
+		return -EINVAL;
+
+	/* or same task. */
+	if (toggled_event->ctx->task != ctx->task)
+		return -EINVAL;
+
+	event->overflow_handler = perf_event_toggle_overflow;
+	event->toggle_flag      = get_toggle_flag(flags);
+	event->toggled_event    = toggled_event;
+	return 0;
+}
+
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
  *
@@ -6792,6 +6904,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		pid_t, pid, int, cpu, int, group_fd, unsigned long, flags)
 {
 	struct perf_event *group_leader = NULL, *output_event = NULL;
+	struct perf_event *toggled_event = NULL;
 	struct perf_event *event, *sibling;
 	struct perf_event_attr attr;
 	struct perf_event_context *ctx;
@@ -6841,7 +6954,9 @@ SYSCALL_DEFINE5(perf_event_open,
 		group_leader = group.file->private_data;
 		if (flags & PERF_FLAG_FD_OUTPUT)
 			output_event = group_leader;
-		if (flags & PERF_FLAG_FD_NO_GROUP)
+		if (flags & PERF_FLAG_TOGGLE)
+			toggled_event = group_leader;
+		if (flags & (PERF_FLAG_FD_NO_GROUP|PERF_FLAG_TOGGLE))
 			group_leader = NULL;
 	}
 
@@ -6955,10 +7070,20 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
+	if (toggled_event) {
+		err = -EINVAL;
+		if (!atomic_long_inc_not_zero(&toggled_event->refcount))
+			goto err_context;
+
+		err = perf_event_set_toggle(event, toggled_event, ctx, flags);
+		if (err)
+			goto err_toggle;
+	}
+
 	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event, O_RDWR);
 	if (IS_ERR(event_file)) {
 		err = PTR_ERR(event_file);
-		goto err_context;
+		goto err_toggle;
 	}
 
 	if (move_group) {
@@ -7026,6 +7151,9 @@ SYSCALL_DEFINE5(perf_event_open,
 	fd_install(event_fd, event_file);
 	return event_fd;
 
+err_toggle:
+	if (toggled_event)
+		put_event(toggled_event);
 err_context:
 	perf_unpin_context(ctx);
 	put_ctx(ctx);
