@@ -100,6 +100,10 @@ static struct test {
 	},
 #endif
 	{
+		.desc = "toggle event raw",
+		.func = test__toggle_event_raw,
+	},
+	{
 		.func = NULL,
 	},
 };
