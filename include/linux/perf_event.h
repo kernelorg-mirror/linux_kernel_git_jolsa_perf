@@ -423,6 +423,13 @@ struct perf_event {
 #endif
 #endif
 
+enum perf_event_toggle_flag {
+	PERF_TOGGLE_NONE = 0,
+	PERF_TOGGLE_ON,
+	PERF_TOGGLE_OFF,
+	PERF_TOGGLE_BOTH,
+};
+
 #ifdef CONFIG_CGROUP_PERF
 	struct perf_cgroup		*cgrp; /* cgroup event is attach to */
 	int				cgrp_defer_enabled;
