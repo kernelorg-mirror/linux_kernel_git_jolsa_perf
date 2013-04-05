@@ -104,6 +104,10 @@ static struct test {
 		.func = test__code_reading,
 	},
 	{
+		.desc = "toggle event raw",
+		.func = test__toggle_event_raw,
+	},
+	{
 		.func = NULL,
 	},
 };
