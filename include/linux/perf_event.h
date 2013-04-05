@@ -312,6 +312,12 @@ struct swevent_hlist {
 struct perf_cgroup;
 struct ring_buffer;
 
+enum perf_event_toggle_flag {
+	PERF_TOGGLE_NONE	= 0,
+	PERF_TOGGLE_ON		= 1,
+	PERF_TOGGLE_OFF		= 2,
+};
+
 /**
  * struct perf_event - performance event kernel representation:
  */
@@ -437,6 +443,9 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
+	struct perf_event		*toggled_event;
+	enum perf_event_toggle_flag	toggle_flag;
+	int				paused;
 #endif /* CONFIG_PERF_EVENTS */
 };
 
