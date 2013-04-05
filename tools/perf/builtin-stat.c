@@ -99,6 +99,7 @@ static FILE			*output				= NULL;
 static const char		*pre_cmd			= NULL;
 static const char		*post_cmd			= NULL;
 static bool			sync_run			= false;
+static bool			disabled			= false;
 static unsigned int		interval			= 0;
 static bool			forever				= false;
 static struct timespec		ref_time;
@@ -251,8 +252,11 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 	if (perf_target__has_cpu(&target))
 		return perf_evsel__open_per_cpu(evsel, perf_evsel__cpus(evsel));
 
-	if (!perf_target__has_task(&target) &&
-	    perf_evsel__is_group_leader(evsel)) {
+	if (disabled) {
+		attr->disabled = 1;
+		attr->enable_on_exec = 0;
+	} else if (!perf_target__has_task(&target) &&
+		   perf_evsel__is_group_leader(evsel)) {
 		attr->disabled = 1;
 		attr->enable_on_exec = 1;
 	}
@@ -1372,6 +1376,8 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "detailed run - start a lot of events"),
 	OPT_BOOLEAN('S', "sync", &sync_run,
 		    "call sync() before starting a run"),
+	OPT_BOOLEAN('D', "disabled", &disabled,
+		    "Do not enable counters, just create them."),
 	OPT_CALLBACK_NOOPT('B', "big-num", NULL, NULL, 
 			   "print large numbers with thousands\' separators",
 			   stat__set_big_num),
