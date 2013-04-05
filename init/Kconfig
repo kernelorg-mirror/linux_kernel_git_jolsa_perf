@@ -1430,6 +1430,12 @@ config PERF_EVENTS
 
 	  Say Y if unsure.
 
+config PERF_EVENTS_PROC
+	bool "perf events proc"
+	depends on PERF_EVENTS && PROC_FS
+	help
+	  Support 'events' file under task proc directory.
+
 config DEBUG_PERF_USE_VMALLOC
 	default n
 	bool "Debug: use vmalloc to back perf mmap() buffers"

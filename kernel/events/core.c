@@ -38,6 +38,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/mm_types.h>
 #include <linux/cgroup.h>
+#include <linux/proc_fs.h>
 
 #include "internal.h"
 
@@ -7552,3 +7553,174 @@ struct cgroup_subsys perf_subsys = {
 	.broken_hierarchy = true,
 };
 #endif /* CONFIG_CGROUP_PERF */
+
+#ifdef CONFIG_PERF_EVENTS_PROC
+struct task_iter {
+	struct pid *pid;
+	bool display_header;
+
+	/*
+	 * Set/cleared for each successful/failed task_iter_get
+	 * respectively.
+	 */
+	struct perf_event_context *ctx;
+	int ctxn;
+	struct list_head *event;
+};
+
+static noinline void task_iter_put(struct task_iter *iter)
+{
+	struct perf_event_context *ctx = iter->ctx;
+
+	if (ctx) {
+		mutex_unlock(&ctx->mutex);
+		put_ctx(ctx);
+	}
+}
+
+static struct perf_event_context *get_pid_ctx(struct pid *pid, int ctxn)
+{
+	struct perf_event_context *ctx = NULL;
+	struct task_struct *task;
+
+	rcu_read_lock();
+	task = pid_task(pid, PIDTYPE_PID);
+	if (!task)
+		goto out;
+
+	ctx = rcu_dereference(task->perf_event_ctxp[ctxn]);
+	if (ctx && !atomic_inc_not_zero(&ctx->refcount))
+		ctx = NULL;
+
+ out:
+	rcu_read_unlock();
+	return ctx;
+}
+
+static noinline struct task_iter*
+task_iter_get(struct task_iter *iter, int ctxn)
+{
+	struct perf_event_context *ctx;
+
+	iter->ctx   = NULL;
+	iter->ctxn  = 0;
+	iter->event = NULL;
+
+	if (ctxn >= perf_nr_task_contexts)
+		return NULL;
+
+	ctx = get_pid_ctx(iter->pid, ctxn);
+	if (!ctx)
+		return NULL;
+
+	mutex_lock(&ctx->mutex);
+
+	if (list_empty(&ctx->event_list)) {
+		mutex_unlock(&ctx->mutex);
+		put_ctx(ctx);
+		return NULL;
+	}
+
+	iter->ctx   = ctx;
+	iter->ctxn  = ctxn;
+	iter->event = ctx->event_list.next;
+	return iter;
+}
+
+static noinline void *task_iter_next(struct task_iter *iter)
+{
+	struct perf_event_context *ctx = iter->ctx;
+	struct list_head *event = iter->event;
+
+	if (list_is_last(event, &ctx->event_list)) {
+		task_iter_put(iter);
+		return task_iter_get(iter, iter->ctxn + 1);
+	}
+
+	iter->event = event->next;
+	return iter;
+}
+
+static noinline void *proc_task_start(struct seq_file *m, loff_t *ppos)
+{
+	struct task_iter *iter;
+	loff_t pos = *ppos;
+	int ctxn;
+
+	for_each_task_context_nr(ctxn) {
+		iter = task_iter_get(m->private, ctxn);
+		if (iter)
+			break;
+	}
+
+	while (iter && pos) {
+		if (!task_iter_next(iter))
+			return NULL;
+		pos--;
+	}
+
+	return iter;
+}
+
+static noinline void proc_task_stop(struct seq_file *m, void *v)
+{
+	struct task_iter *iter = m->private;
+	task_iter_put(iter);
+}
+
+static noinline void *proc_task_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct task_iter *iter = m->private;
+
+	(*pos)++;
+	return task_iter_next(iter);
+}
+
+static noinline int proc_task_show(struct seq_file *m, void *v)
+{
+	struct task_iter *iter = m->private;
+	struct perf_event *event;
+	struct pmu *pmu;
+
+	event = list_entry(iter->event, struct perf_event, event_entry);
+	pmu = event->pmu;
+
+	if (iter->display_header) {
+		seq_printf(m, "%-18s %-4s %-20s\n",
+			      "Id", "Cpu", "Pmu name");
+		iter->display_header = false;
+	}
+
+	seq_printf(m, "0x%-16llx %-4d %-20s\n",
+		   event->id, event->cpu, pmu->name);
+	return 0;
+}
+
+static const struct seq_operations proc_task_seq_ops = {
+	.start = proc_task_start,
+	.next  = proc_task_next,
+	.stop  = proc_task_stop,
+	.show  = proc_task_show,
+};
+
+static int proc_task_open(struct inode *inode, struct file *file)
+{
+	struct task_iter *iter;
+
+	iter = __seq_open_private(file, &proc_task_seq_ops,
+				  sizeof(struct task_iter));
+	if (iter) {
+		iter->pid = PROC_I(inode)->pid;
+		iter->display_header = true;
+	}
+
+	return iter ? 0 : -ENOMEM;
+}
+
+const struct file_operations perf_event_proc_operations = {
+	.open		= proc_task_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release_private,
+};
+#endif /* CONFIG_PERF_EVENTS_PROC */

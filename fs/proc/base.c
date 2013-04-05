@@ -75,6 +75,7 @@
 #include <linux/tracehook.h>
 #include <linux/printk.h>
 #include <linux/cgroup.h>
+#include <linux/perf_event.h>
 #include <linux/cpuset.h>
 #include <linux/audit.h>
 #include <linux/poll.h>
@@ -2583,6 +2584,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
 #endif
+#ifdef CONFIG_PERF_EVENTS
+	REG("events",  S_IRUGO, perf_event_proc_operations),
+#endif
 };
 
 static int proc_tgid_base_readdir(struct file * filp,
@@ -2924,6 +2928,9 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("uid_map",    S_IRUGO|S_IWUSR, proc_uid_map_operations),
 	REG("gid_map",    S_IRUGO|S_IWUSR, proc_gid_map_operations),
 	REG("projid_map", S_IRUGO|S_IWUSR, proc_projid_map_operations),
+#endif
+#ifdef CONFIG_PERF_EVENTS
+	REG("events",  S_IRUGO, perf_event_proc_operations),
 #endif
 };
 
