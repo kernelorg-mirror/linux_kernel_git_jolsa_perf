@@ -188,7 +188,7 @@ event_def: event_pmu |
 	   event_legacy_symbol |
 	   event_legacy_cache sep_dc |
 	   event_legacy_mem |
-	   event_legacy_tracepoint sep_dc |
+	   event_legacy_tracepoint |
 	   event_legacy_numeric sep_dc |
 	   event_legacy_raw sep_dc
 
