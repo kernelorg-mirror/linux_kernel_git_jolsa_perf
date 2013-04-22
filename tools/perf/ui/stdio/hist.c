@@ -308,24 +308,78 @@ static size_t hist_entry__callchain_fprintf(struct hist_entry *he,
 	return hist_entry_callchain__fprintf(he, total_period, left_margin, fp);
 }
 
+static int hist_entry__period_snprintf(struct hist_entry *he,
+				       FILE *fp, size_t size,
+				       bool color)
+{
+	const char *sep = symbol_conf.field_sep;
+	struct perf_hpp_fmt *fmt;
+	int ret_total = 0;
+	bool first = true;
+
+	if (symbol_conf.exclude_other && !he->parent)
+		return 0;
+
+	perf_hpp__for_each_format(fmt) {
+		char bf[PERF_HISTS__MAX_COL_WIDTH];
+		struct perf_hpp hpp = {
+			.buf	= bf,
+			.size	= PERF_HISTS__MAX_COL_WIDTH,
+		};
+		int ret = 0;
+
+		if (size && (size < PERF_HISTS__MAX_COL_WIDTH))
+			hpp.size = size;
+
+		/*
+		 * If there's no field_sep, we still need
+		 * to display initial '  '.
+		 */
+		if (!sep || !first)
+			ret = fprintf(fp, "%s", sep ?: "  ");
+		else
+			first = false;
+
+		if (color && fmt->color)
+			fmt->color(fmt, &hpp, he);
+		else
+			fmt->entry(fmt, &hpp, he);
+
+		ret += fprintf(fp, "%s", bf);
+
+		ret_total += ret;
+		if (size)
+			size -= ret;
+	}
+
+	return ret_total;
+}
+
 static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 			       struct hists *hists, FILE *fp)
 {
 	char bf[512];
 	int ret;
-	struct perf_hpp hpp = {
-		.buf		= bf,
-		.size		= size,
-	};
 	bool color = !symbol_conf.field_sep;
 
-	if (size == 0 || size > sizeof(bf))
-		size = hpp.size = sizeof(bf);
+	ret = hist_entry__period_snprintf(he, fp, size, color);
 
-	ret = hist_entry__period_snprintf(&hpp, he, color);
-	hist_entry__sort_snprintf(he, bf + ret, size - ret, hists);
+	if (size) {
+		/*
+		 * We were called with size specified,
+		 * adjust it accordingly.
+		 */
+		size -= ret;
+		if (size > sizeof(bf))
+			size = sizeof(bf);
+	} else {
+		/* No size specified, get all we can. */
+		size = sizeof(bf);
+	}
 
-	ret = fprintf(fp, "%s\n", bf);
+	hist_entry__sort_snprintf(he, bf, size, hists);
+
+	ret += fprintf(fp, "%s\n", bf);
 
 	if (symbol_conf.use_callchain)
 		ret += hist_entry__callchain_fprintf(he, hists, fp);
@@ -344,7 +398,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 	const char *sep = symbol_conf.field_sep;
 	const char *col_width = symbol_conf.col_width_list_str;
 	int nr_rows = 0;
-	char bf[96];
+	char bf[PERF_HISTS__MAX_COL_WIDTH];
 	struct perf_hpp dummy_hpp = {
 		.buf	= bf,
 		.size	= sizeof(bf),
@@ -365,7 +419,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		else
 			first = false;
 
-		fmt->header(&dummy_hpp);
+		fmt->header(fmt, &dummy_hpp);
 		fprintf(fp, "%s", bf);
 	}
 
@@ -410,7 +464,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		else
 			first = false;
 
-		width = fmt->width(&dummy_hpp);
+		width = fmt->width(fmt, &dummy_hpp);
 		for (i = 0; i < width; i++)
 			fprintf(fp, ".");
 	}
