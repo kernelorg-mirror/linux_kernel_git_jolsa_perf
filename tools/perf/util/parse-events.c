@@ -533,6 +533,26 @@ int parse_events_add_breakpoint(struct list_head **list, int *idx,
 	return add_event(list, idx, &attr, NULL);
 }
 
+static int precise_default(void)
+{
+	int precise = perf_precise__get();
+	static int warned;
+
+	/*
+	 * Precise info not supported by by this kernel,
+	 * set 1 as the precise value.
+	 */
+	if (precise == -1)
+		precise = 1;
+
+	/* PEBS is not supported here, display warning. */
+	if (precise == 0 && !warned++)
+		pr_warning("warning: no precise support, "
+			   "using non-precise event(s)\n");
+
+	return precise;
+}
+
 static int config_term(struct perf_event_attr *attr,
 		       struct parse_events_term *term)
 {
@@ -572,7 +592,7 @@ do {								\
 		CHECK_TYPE_VAL(NUM);
 		/* No value specified, try to get it from sysfs. */
 		if (term->val.num == (u64) -1)
-			attr->precise_ip = perf_precise__get();
+			attr->precise_ip = precise_default();
 		else {
 			if ((unsigned)term->val.num > 2)
 				return -EINVAL;
@@ -815,8 +835,12 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		 * Change precise only if it's defined, so we don't
 		 * overwrite 'precise' term if there's no 'p' modifier.
 		 */
-		if (mod.precise)
-			evsel->attr.precise_ip = mod.precise;
+		if (mod.precise) {
+			if (mod.precise > 1)
+				evsel->attr.precise_ip = mod.precise;
+			else
+				evsel->attr.precise_ip = precise_default();
+		}
 
 		evsel->attr.exclude_host   = mod.eH;
 		evsel->attr.exclude_guest  = mod.eG;
