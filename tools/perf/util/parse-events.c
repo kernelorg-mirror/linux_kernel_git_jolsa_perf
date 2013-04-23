@@ -821,8 +821,12 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		 * Change precise only if it's defined, so we don't
 		 * overwrite 'precise' term if there's no 'p' modifier.
 		 */
-		if (mod.precise)
-			evsel->attr.precise_ip = mod.precise;
+		if (mod.precise) {
+			if (mod.precise > 1)
+				evsel->attr.precise_ip = mod.precise;
+			else
+				evsel->attr.precise_ip = perf_precise__get();
+		}
 
 		evsel->attr.exclude_host   = mod.eH;
 		evsel->attr.exclude_guest  = mod.eG;
