@@ -15,6 +15,7 @@
 #define YY_EXTRA_TYPE int
 #include "parse-events-flex.h"
 #include "pmu.h"
+#include "formula.h"
 
 #define MAX_NAME_LEN 100
 
@@ -883,6 +884,7 @@ int parse_events(struct perf_evlist *evlist, const char *str)
 		int entries = data.idx - evlist->nr_entries;
 		perf_evlist__splice_list_tail(evlist, &data.list, entries);
 		evlist->nr_groups += data.nr_groups;
+		evlist->formulas = data.formulas;
 		return 0;
 	}
 
@@ -1138,6 +1140,8 @@ void print_events(const char *event_glob, bool name_only)
 
 	print_hwcache_events(event_glob, name_only);
 
+	print_formulas();
+
 	if (event_glob != NULL)
 		return;
 
@@ -1243,4 +1247,56 @@ void parse_events__free_terms(struct list_head *terms)
 		free(term);
 
 	free(terms);
+}
+
+static char **formula_add(char **f, char *new)
+{
+	int i;
+#define FORMULAS_CNT 20
+
+	if (!f) {
+		f = zalloc(sizeof(char *) * FORMULAS_CNT + 1);
+		if (!f)
+			return NULL;
+	}
+
+	for (i = 0; f[i] && (i < FORMULAS_CNT); i++);
+
+	if (i == FORMULAS_CNT) {
+		pr_err("Too many formula defined, max = %d\n",
+		       FORMULAS_CNT);
+		return NULL;
+	}
+
+	pr_debug("parse events: formula %s\n", new);
+
+	f[i] = new;
+	return f;
+}
+
+int parse_events_config_process(struct parse_events_evlist *data,
+				struct list_head *head)
+{
+	struct parse_events_config *cfg, *h;
+
+	list_for_each_entry_safe(cfg, h, head, list) {
+		switch (cfg->type) {
+		case PARSE_EVENTS_CONFIG_EVENTS:
+			parse_events_update_lists(cfg->events, &data->list);
+			break;
+		case PARSE_EVENTS_CONFIG_FORMULA:
+			data->formulas = formula_add(data->formulas,
+						     cfg->formula);
+			if (!data->formulas)
+				return -1;
+			break;
+		default:
+			break;
+		}
+
+		list_del(&cfg->list);
+		free(cfg);
+	}
+
+	return 0;
 }

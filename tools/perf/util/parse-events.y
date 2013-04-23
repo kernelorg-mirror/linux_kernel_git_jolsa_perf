@@ -30,6 +30,21 @@ static inc_group_count(struct list_head *list,
 		data->nr_groups++;
 }
 
+#define CONFIG(t, v) ({						\
+	struct parse_events_config *c = zalloc(sizeof(*c));	\
+	ABORT_ON(!c);						\
+	c->type = PARSE_EVENTS_CONFIG_ ## t;			\
+	c->val = v;						\
+	c;							\
+})
+
+#define HEAD() ({					\
+	struct list_head *h = zalloc(sizeof(*h));	\
+	ABORT_ON(!h);					\
+	INIT_LIST_HEAD(h);				\
+	h;						\
+})
+
 %}
 
 %token PE_START_EVENTS PE_START_TERMS
@@ -40,6 +55,7 @@ static inc_group_count(struct list_head *list,
 %token PE_NAME_CACHE_TYPE PE_NAME_CACHE_OP_RESULT
 %token PE_PREFIX_MEM PE_PREFIX_RAW PE_PREFIX_GROUP
 %token PE_ERROR
+%token PE_FORMULA PE_FORMULA_NAME
 %type <num> PE_VALUE
 %type <num> PE_VALUE_SYM_HW
 %type <num> PE_VALUE_SYM_SW
@@ -51,6 +67,7 @@ static inc_group_count(struct list_head *list,
 %type <str> PE_MODIFIER_EVENT
 %type <str> PE_MODIFIER_BP
 %type <str> PE_EVENT_NAME
+%type <str> PE_FORMULA_NAME
 %type <num> value_sym
 %type <head> event_config
 %type <term> event_term
@@ -69,6 +86,9 @@ static inc_group_count(struct list_head *list,
 %type <head> group_def
 %type <head> group
 %type <head> groups
+%type <cfg> groups_config
+%type <cfg> groups_formula
+%type <str> formula
 
 %union
 {
@@ -76,6 +96,7 @@ static inc_group_count(struct list_head *list,
 	u64 num;
 	struct list_head *head;
 	struct parse_events_term *term;
+	struct parse_events_config *cfg;
 }
 %%
 
@@ -88,31 +109,56 @@ start_events: groups
 {
 	struct parse_events_evlist *data = _data;
 
-	parse_events_update_lists($1, &data->list);
+	ABORT_ON(parse_events_config_process(data, $1));
 }
 
 groups:
-groups ',' group
+groups ',' groups_config
 {
-	struct list_head *list  = $1;
-	struct list_head *group = $3;
+	struct list_head *head = $1;
+	struct parse_events_config *cfg = $3;
 
-	parse_events_update_lists(group, list);
-	$$ = list;
+	list_add_tail(&cfg->list, head);
+	$$ = head;
 }
 |
-groups ',' event
+groups ',' groups_formula
 {
-	struct list_head *list  = $1;
-	struct list_head *event = $3;
+	struct list_head *head = $1;
+	struct parse_events_config *cfg = $3;
 
-	parse_events_update_lists(event, list);
-	$$ = list;
+	list_add_tail(&cfg->list, head);
+	$$ = head;
 }
 |
+groups_config
+{
+	struct list_head *head = HEAD();
+	struct parse_events_config *cfg = $1;
+
+	list_add_tail(&cfg->list, head);
+	$$ = head;
+}
+|
+groups_formula
+{
+	struct list_head *head = HEAD();
+	struct parse_events_config *cfg = $1;
+
+	list_add_tail(&cfg->list, head);
+	$$ = head;
+}
+
+groups_config:
 group
+{
+	$$ = CONFIG(EVENTS, $1);
+}
 |
 event
+{
+	$$ = CONFIG(EVENTS, $1);
+}
 
 group:
 group_def ':' PE_MODIFIER_EVENT
@@ -410,6 +456,18 @@ PE_TERM
 
 	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1));
 	$$ = term;
+}
+
+groups_formula:
+formula
+{
+	$$ = CONFIG(FORMULA, $1);
+}
+
+formula:
+PE_FORMULA '-' PE_FORMULA_NAME
+{
+	$$ = strdup($3);
 }
 
 sep_dc: ':' |

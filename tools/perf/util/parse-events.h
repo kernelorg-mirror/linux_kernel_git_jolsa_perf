@@ -63,6 +63,7 @@ struct parse_events_term {
 
 struct parse_events_evlist {
 	struct list_head list;
+	char **formulas;
 	int idx;
 	int nr_groups;
 };
@@ -71,6 +72,25 @@ struct parse_events_terms {
 	struct list_head *terms;
 };
 
+enum parse_events_config_type {
+	PARSE_EVENTS_CONFIG_EVENTS,
+	PARSE_EVENTS_CONFIG_FORMULA,
+};
+
+struct parse_events_config {
+	enum parse_events_config_type type;
+
+	union {
+		struct list_head *events;
+		char *formula;
+		void *val;
+	};
+
+	struct list_head list;
+};
+
+int parse_events_config_process(struct parse_events_evlist *data,
+				struct list_head *head);
 int parse_events__is_hardcoded_term(struct parse_events_term *term);
 int parse_events_term__num(struct parse_events_term **_term,
 			   int type_term, char *config, u64 num);
