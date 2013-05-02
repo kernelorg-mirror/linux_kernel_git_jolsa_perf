@@ -940,6 +940,8 @@ const struct option record_options[] = {
 		    "do not update the buildid cache"),
 	OPT_BOOLEAN('B', "no-buildid", &record.no_buildid,
 		    "do not collect buildids in perf.data"),
+	OPT_BOOLEAN('E', "disabled", &record.opts.disabled,
+		    "Do not enable counters, just create them."),
 	OPT_CALLBACK('G', "cgroup", &record.evlist, "name",
 		     "monitor event in cgroup name only",
 		     parse_cgroups),

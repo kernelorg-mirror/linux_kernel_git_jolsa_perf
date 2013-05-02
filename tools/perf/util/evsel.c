@@ -572,21 +572,28 @@ void perf_evsel__config(struct perf_evsel *evsel,
 	attr->mmap = track;
 	attr->comm = track;
 
-	/*
-	 * XXX see the function comment above
-	 *
-	 * Disabling only independent events or group leaders,
-	 * keeping group members enabled.
-	 */
-	if (perf_evsel__is_group_leader(evsel))
+	if (opts->disabled) {
 		attr->disabled = 1;
+		attr->aux = 1;
+		attr->enable_on_exec = 0;
+	} else {
+		/*
+		 * XXX see the function comment above
+		 *
+		 * Disabling only independent events or group leaders,
+		 * keeping group members enabled.
+		 */
+		if (perf_evsel__is_group_leader(evsel))
+			attr->disabled = 1;
 
-	/*
-	 * Setting enable_on_exec for independent events and
-	 * group leaders for traced executed by perf.
-	 */
-	if (perf_target__none(&opts->target) && perf_evsel__is_group_leader(evsel))
-		attr->enable_on_exec = 1;
+		/*
+		 * Setting enable_on_exec for independent events and
+		 * group leaders for traced executed by perf.
+		 */
+		if (perf_target__none(&opts->target) &&
+		    perf_evsel__is_group_leader(evsel))
+			attr->enable_on_exec = 1;
+	}
 }
 
 int perf_evsel__alloc_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
