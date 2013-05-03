@@ -145,11 +145,7 @@ void __show_regs(struct pt_regs *regs)
 {
 	int i;
 
-	printk("CPU: %d    %s  (%s %.*s)\n",
-		raw_smp_processor_id(), print_tainted(),
-		init_utsname()->release,
-		(int)strcspn(init_utsname()->version, " "),
-		init_utsname()->version);
+	show_regs_print_info(KERN_DEFAULT);
 	print_symbol("PC is at %s\n", instruction_pointer(regs));
 	print_symbol("LR is at %s\n", regs->regs[30]);
 	printk("pc : [<%016llx>] lr : [<%016llx>] pstate: %08llx\n",
@@ -166,7 +162,6 @@ void __show_regs(struct pt_regs *regs)
 void show_regs(struct pt_regs * regs)
 {
 	printk("\n");
-	printk("Pid: %d, comm: %20s\n", task_pid_nr(current), current->comm);
 	__show_regs(regs);
 }
 
@@ -278,11 +273,17 @@ struct task_struct *__switch_to(struct task_struct *prev,
 	fpsimd_thread_switch(next);
 	tls_thread_switch(next);
 	hw_breakpoint_thread_switch(next);
+	contextidr_thread_switch(next);
+
+	/*
+	 * Complete any pending TLB or cache maintenance on this CPU in case
+	 * the thread migrates to a different CPU.
+	 */
+	dsb();
 
 	/* the actual thread switch */
 	last = cpu_switch_to(prev, next);
 
-	contextidr_thread_switch(next);
 	return last;
 }
 
