@@ -1,0 +1,7 @@
+[config]
+command = record -E
+args    = kill >/dev/null 2>&1
+
+[event:base-record]
+aux=1
+disabled=1
