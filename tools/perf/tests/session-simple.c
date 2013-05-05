@@ -11,6 +11,7 @@
 #include "header.h"
 #include "util.h"
 #include "evlist.h"
+#include "data.h"
 
 #define EVENTS_MMAP 5
 #define EVENTS_LOST 6
@@ -448,15 +449,19 @@ static int store_event(int fd, union perf_event *event, size_t *size)
 	return write(fd, event, event->header.size) > 0 ? 0 : -1;
 }
 
-static int session_write(char *file)
+static int session_write(char *path)
 {
+	struct perf_data_file file = {
+		.mode = PERF_DATA_MODE_WRITE,
+		.path = path,
+	};
 	struct perf_session *session;
 	struct perf_evlist *evlist;
 	size_t size = 0;
-	int feat, fd;
+	int feat;
 
-	fd = open(file, O_RDWR);
-	TEST_ASSERT_VAL("failed to open data file", fd >= 0);
+	file.fd = open(file.path, O_RDWR);
+	TEST_ASSERT_VAL("failed to open data file", file.fd >= 0);
 
 	evlist = perf_evlist__new_default();
 	TEST_ASSERT_VAL("failed to get evlist", evlist);
@@ -465,11 +470,10 @@ static int session_write(char *file)
 
 	pr_debug("session writing start\n");
 
-	session = perf_session__new(file, O_WRONLY, true, false, NULL);
+	session = perf_session__new(&file, false, NULL);
 	TEST_ASSERT_VAL("failed to create session", session);
 
 	session->evlist = evlist;
-	session->fd     = fd;
 
 	for (feat = HEADER_FIRST_FEATURE; feat < HEADER_LAST_FEATURE; feat++)
 		perf_header__set_feat(&session->header, feat);
@@ -479,14 +483,14 @@ static int session_write(char *file)
 	perf_header__clear_feat(&session->header, HEADER_BRANCH_STACK);
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__prepare_header(fd));
+		!perf_session__prepare_header(file.fd));
 
 #define STORE_EVENTS(str, func, cnt)				\
 do {								\
 	int i;							\
 	for (i = 0; i < cnt; i++) {				\
 		TEST_ASSERT_VAL(str,				\
-			!store_event(fd, func(), &size));	\
+			!store_event(file.fd, func(), &size));	\
 	}							\
 } while (0)
 
@@ -519,7 +523,7 @@ do {								\
 	session->header.data_size += size;
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__write_header(session, evlist, fd));
+		!perf_session__write_header(session, evlist, file.fd));
 
 	perf_session__delete(session);
 	perf_evlist__delete(evlist);
@@ -528,7 +532,7 @@ do {								\
 	return 0;
 }
 
-static int __session_read(char *file)
+static int __session_read(char *path)
 {
 	struct perf_session *session;
 	struct perf_tool tool = {
@@ -541,10 +545,14 @@ static int __session_read(char *file)
 		.unthrottle = process_unthrottle,
 		.sample = process_sample,
 	};
+	struct perf_data_file file = {
+		.mode = PERF_DATA_MODE_READ,
+		.path = path,
+	};
 
 	pr_debug("session reading start\n");
 
-	session = perf_session__new(file, O_RDONLY, false, false, &tool);
+	session = perf_session__new(&file, false, &tool);
 	TEST_ASSERT_VAL("failed to create session", session);
 
 	TEST_ASSERT_VAL("failed to process events",
