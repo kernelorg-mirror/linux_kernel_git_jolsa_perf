@@ -18,30 +18,37 @@ static void sig_handler(int sig)
 }
 
 /*
- * This test will start a workload that does nothing then it checks
- * if the number of exit event reported by the kernel is 1 or not
- * in order to check the kernel returns correct number of event.
+ * This test will start a workload (for givem cpu and thread maps)
+ * that does nothing then it checks if the number of exit event
+ * reported by the kernel is 1 or not in order to check the kernel
+ * returns correct number of event.
  */
-int test__task_exit(void)
+static int run_test(struct cpu_map *cpus, struct thread_map *threads,
+		    bool match_pid, bool system_wide)
 {
-	int err = -1;
-	union perf_event *event;
+	int i, err = -1;
 	struct perf_evsel *evsel;
 	struct perf_evlist *evlist;
 	struct perf_target target = {
 		.uid		= UINT_MAX,
 		.uses_mmap	= true,
+		.system_wide	= system_wide,
 	};
 	const char *argv[] = { "true", NULL };
 
 	signal(SIGCHLD, sig_handler);
 	signal(SIGUSR1, sig_handler);
+	signal(SIGTERM, sig_handler);
+	signal(SIGINT, sig_handler);
 
 	evlist = perf_evlist__new();
 	if (evlist == NULL) {
 		pr_debug("perf_evlist__new\n");
 		return -1;
 	}
+
+	perf_evlist__set_maps(evlist, cpus, threads);
+
 	/*
 	 * We need at least one evsel in the evlist, use the default
 	 * one: "cycles".
@@ -50,20 +57,6 @@ int test__task_exit(void)
 	if (err < 0) {
 		pr_debug("Not enough memory to create evsel\n");
 		goto out_free_evlist;
-	}
-
-	/*
-	 * Create maps of threads and cpus to monitor. In this case
-	 * we start with all threads and cpus (-1, -1) but then in
-	 * perf_evlist__prepare_workload we'll fill in the only thread
-	 * we're monitoring, the one forked there.
-	 */
-	evlist->cpus = cpu_map__dummy_new();
-	evlist->threads = thread_map__new_by_tid(-1);
-	if (!evlist->cpus || !evlist->threads) {
-		err = -ENOMEM;
-		pr_debug("Not enough memory to create thread/cpu maps\n");
-		goto out_delete_maps;
 	}
 
 	err = perf_evlist__prepare_workload(evlist, &target, argv, false, true);
@@ -94,23 +87,40 @@ int test__task_exit(void)
 
 	perf_evlist__start_workload(evlist);
 
+	pr_debug("workload pid %d\n", evlist->workload.pid);
+
 retry:
-	while ((event = perf_evlist__mmap_read(evlist, 0)) != NULL) {
+	pr_debug("received %d EXIT records\n", nr_exit);
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		struct comm_event *comm;
+		union perf_event *event;
+
+		event = perf_evlist__mmap_read(evlist, i);
+		if (!event)
+			continue;
+
 		if (event->header.type != PERF_RECORD_EXIT)
 			continue;
 
-		nr_exit++;
+		comm = (struct comm_event *) event;
+
+		pr_debug("received EXIT event, pid %d, map idx %d\n",
+			  comm->pid, i);
+
+		if (!match_pid || ((pid_t) comm->pid == evlist->workload.pid))
+			nr_exit++;
 	}
 
 	if (!exited || !nr_exit) {
-		poll(evlist->pollfd, evlist->nr_fds, -1);
+		poll(evlist->pollfd, evlist->nr_fds, 100);
 		goto retry;
 	}
 
-	if (nr_exit != 1) {
-		pr_debug("received %d EXIT records\n", nr_exit);
+	pr_debug("received %d EXIT records\n", nr_exit);
+
+	if (nr_exit != 1)
 		err = -1;
-	}
 
 	perf_evlist__munmap(evlist);
 out_close_evlist:
@@ -120,4 +130,48 @@ out_delete_maps:
 out_free_evlist:
 	perf_evlist__delete(evlist);
 	return err;
+}
+
+/*
+ * Testing pid based event to get proper number of EXIT
+ * auxiliary events.
+ */
+int test__task_exit_task(void)
+{
+	/*
+	 * Create maps of threads and cpus to monitor. In this case
+	 * we start with all threads and cpus (-1, -1) but then in
+	 * perf_evlist__prepare_workload we'll fill in the only thread
+	 * we're monitoring, the one forked there.
+	 */
+	struct cpu_map *cpus = cpu_map__dummy_new();
+	struct thread_map *threads = thread_map__new_by_tid(-1);
+
+	if (!cpus || !threads) {
+		pr_debug("Not enough memory to create thread/cpu maps\n");
+		return TEST_FAIL;
+	}
+
+	return run_test(cpus, threads, false, false) ? TEST_FAIL : TEST_OK;
+}
+
+/*
+ * Testing cpu based event to get proper number of EXIT
+ * auxiliary events.
+ */
+int test__task_exit_cpu(void)
+{
+	/*
+	 * Create maps of cpus to monitor. In this case we create
+	 * cpu map for all cpus and leave threads maps as NULL.
+	 * The threads map will be dummied by perf_evsel__open.
+	 */
+	struct cpu_map *cpus = cpu_map__new(NULL);
+
+	if (!cpus) {
+		pr_debug("Not enough memory to create cpu map\n");
+		return TEST_FAIL;
+	}
+
+	return run_test(cpus, NULL, true, true) ? TEST_FAIL : TEST_OK;
 }

@@ -86,8 +86,12 @@ static struct test {
 		.func = test__bp_signal_overflow,
 	},
 	{
-		.desc = "Test number of exit event of a simple workload",
-		.func = test__task_exit,
+		.desc = "Test number of exit TASK event of a simple task workload",
+		.func = test__task_exit_task,
+	},
+	{
+		.desc = "Test number of exit CPU events of a simple task workload",
+		.func = test__task_exit_cpu,
 	},
 	{
 		.desc = "Test software clock events have valid period values",
