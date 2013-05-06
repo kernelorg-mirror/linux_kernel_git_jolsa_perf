@@ -6844,11 +6844,6 @@ static void perf_event_exit_task_context(struct task_struct *child, int ctxn)
 	struct perf_event_context *child_ctx;
 	unsigned long flags;
 
-	if (likely(!child->perf_event_ctxp[ctxn])) {
-		perf_event_task(child, NULL, 0);
-		return;
-	}
-
 	local_irq_save(flags);
 	/*
 	 * We can't reschedule here because interrupts are disabled,
@@ -6924,6 +6919,7 @@ void perf_event_exit_task(struct task_struct *child)
 {
 	struct perf_event *event, *tmp;
 	int ctxn;
+	bool defined = false;
 
 	mutex_lock(&child->perf_event_mutex);
 	list_for_each_entry_safe(event, tmp, &child->perf_event_list,
@@ -6940,8 +6936,17 @@ void perf_event_exit_task(struct task_struct *child)
 	}
 	mutex_unlock(&child->perf_event_mutex);
 
-	for_each_task_context_nr(ctxn)
+	for_each_task_context_nr(ctxn) {
+		if (likely(!child->perf_event_ctxp[ctxn]))
+			continue;
+		else
+			defined = true;
+
 		perf_event_exit_task_context(child, ctxn);
+	}
+
+	if (!defined)
+		perf_event_task(child, NULL, 0);
 }
 
 static void perf_free_event(struct perf_event *event,
