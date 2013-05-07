@@ -460,9 +460,6 @@ static int session_write(char *path)
 	size_t size = 0;
 	int feat;
 
-	file.fd = open(file.path, O_RDWR);
-	TEST_ASSERT_VAL("failed to open data file", file.fd >= 0);
-
 	evlist = perf_evlist__new_default();
 	TEST_ASSERT_VAL("failed to get evlist", evlist);
 
