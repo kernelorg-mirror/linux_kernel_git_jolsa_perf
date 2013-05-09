@@ -18,6 +18,7 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/hash.h>
+#include <linux/tick.h>
 #include <linux/sysfs.h>
 #include <linux/dcache.h>
 #include <linux/percpu.h>
@@ -266,7 +267,22 @@ perf_cgroup_match(struct perf_event *event)
 	struct perf_event_context *ctx = event->ctx;
 	struct perf_cpu_context *cpuctx = __get_cpu_context(ctx);
 
-	return !event->cgrp || event->cgrp == cpuctx->cgrp;
+	/* @event doesn't care about cgroup */
+	if (!event->cgrp)
+		return true;
+
+	/* wants specific cgroup scope but @cpuctx isn't associated with any */
+	if (!cpuctx->cgrp)
+		return false;
+
+	/*
+	 * Cgroup scoping is recursive.  An event enabled for a cgroup is
+	 * also enabled for all its descendant cgroups.  If @cpuctx's
+	 * cgroup is a descendant of @event's (the test covers identity
+	 * case), it's a match.
+	 */
+	return cgroup_is_descendant(cpuctx->cgrp->css.cgroup,
+				    event->cgrp->css.cgroup);
 }
 
 static inline bool perf_tryget_cgroup(struct perf_event *event)
@@ -670,8 +686,12 @@ static void perf_pmu_rotate_start(struct pmu *pmu)
 
 	WARN_ON(!irqs_disabled());
 
-	if (list_empty(&cpuctx->rotation_list))
+	if (list_empty(&cpuctx->rotation_list)) {
+		int was_empty = list_empty(head);
 		list_add(&cpuctx->rotation_list, head);
+		if (was_empty)
+			tick_nohz_full_kick();
+	}
 }
 
 static void get_ctx(struct perf_event_context *ctx)
@@ -2576,6 +2596,16 @@ done:
 		list_del_init(&cpuctx->rotation_list);
 }
 
+#ifdef CONFIG_NO_HZ_FULL
+bool perf_event_can_stop_tick(void)
+{
+	if (list_empty(&__get_cpu_var(rotation_list)))
+		return true;
+	else
+		return false;
+}
+#endif
+
 void perf_event_task_tick(void)
 {
 	struct list_head *head = &__get_cpu_var(rotation_list);
@@ -4374,6 +4404,64 @@ perf_event_read_event(struct perf_event *event,
 	perf_output_end(&handle);
 }
 
+typedef int  (perf_event_aux_match_cb)(struct perf_event *event, void *data);
+typedef void (perf_event_aux_output_cb)(struct perf_event *event, void *data);
+
+static void
+perf_event_aux_ctx(struct perf_event_context *ctx,
+		   perf_event_aux_match_cb match,
+		   perf_event_aux_output_cb output,
+		   void *data)
+{
+	struct perf_event *event;
+
+	list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
+		if (event->state < PERF_EVENT_STATE_INACTIVE)
+			continue;
+		if (!event_filter_match(event))
+			continue;
+		if (match(event, data))
+			output(event, data);
+	}
+}
+
+static void
+perf_event_aux(perf_event_aux_match_cb match,
+	       perf_event_aux_output_cb output,
+	       void *data,
+	       struct perf_event_context *task_ctx)
+{
+	struct perf_cpu_context *cpuctx;
+	struct perf_event_context *ctx;
+	struct pmu *pmu;
+	int ctxn;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(pmu, &pmus, entry) {
+		cpuctx = get_cpu_ptr(pmu->pmu_cpu_context);
+		if (cpuctx->unique_pmu != pmu)
+			goto next;
+		perf_event_aux_ctx(&cpuctx->ctx, match, output, data);
+		if (task_ctx)
+			goto next;
+		ctxn = pmu->task_ctx_nr;
+		if (ctxn < 0)
+			goto next;
+		ctx = rcu_dereference(current->perf_event_ctxp[ctxn]);
+		if (ctx)
+			perf_event_aux_ctx(ctx, match, output, data);
+next:
+		put_cpu_ptr(pmu->pmu_cpu_context);
+	}
+
+	if (task_ctx) {
+		preempt_disable();
+		perf_event_aux_ctx(task_ctx, match, output, data);
+		preempt_enable();
+	}
+	rcu_read_unlock();
+}
+
 /*
  * task tracking -- fork/exit
  *
@@ -4396,8 +4484,9 @@ struct perf_task_event {
 };
 
 static void perf_event_task_output(struct perf_event *event,
-				     struct perf_task_event *task_event)
+				   void *data)
 {
+	struct perf_task_event *task_event = data;
 	struct perf_output_handle handle;
 	struct perf_sample_data	sample;
 	struct task_struct *task = task_event->task;
@@ -4425,62 +4514,11 @@ out:
 	task_event->event_id.header.size = size;
 }
 
-static int perf_event_task_match(struct perf_event *event)
+static int perf_event_task_match(struct perf_event *event,
+				 void *data __maybe_unused)
 {
-	if (event->state < PERF_EVENT_STATE_INACTIVE)
-		return 0;
-
-	if (!event_filter_match(event))
-		return 0;
-
-	if (event->attr.comm || event->attr.mmap ||
-	    event->attr.mmap_data || event->attr.task)
-		return 1;
-
-	return 0;
-}
-
-static void perf_event_task_ctx(struct perf_event_context *ctx,
-				  struct perf_task_event *task_event)
-{
-	struct perf_event *event;
-
-	list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
-		if (perf_event_task_match(event))
-			perf_event_task_output(event, task_event);
-	}
-}
-
-static void perf_event_task_event(struct perf_task_event *task_event)
-{
-	struct perf_cpu_context *cpuctx;
-	struct perf_event_context *ctx;
-	struct pmu *pmu;
-	int ctxn;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(pmu, &pmus, entry) {
-		cpuctx = get_cpu_ptr(pmu->pmu_cpu_context);
-		if (cpuctx->unique_pmu != pmu)
-			goto next;
-		perf_event_task_ctx(&cpuctx->ctx, task_event);
-
-		ctx = task_event->task_ctx;
-		if (!ctx) {
-			ctxn = pmu->task_ctx_nr;
-			if (ctxn < 0)
-				goto next;
-			ctx = rcu_dereference(current->perf_event_ctxp[ctxn]);
-			if (ctx)
-				perf_event_task_ctx(ctx, task_event);
-		}
-next:
-		put_cpu_ptr(pmu->pmu_cpu_context);
-	}
-	if (task_event->task_ctx)
-		perf_event_task_ctx(task_event->task_ctx, task_event);
-
-	rcu_read_unlock();
+	return event->attr.comm || event->attr.mmap ||
+	       event->attr.mmap_data || event->attr.task;
 }
 
 static void perf_event_task(struct task_struct *task,
@@ -4511,7 +4549,10 @@ static void perf_event_task(struct task_struct *task,
 		},
 	};
 
-	perf_event_task_event(&task_event);
+	perf_event_aux(perf_event_task_match,
+		       perf_event_task_output,
+		       &task_event,
+		       task_ctx);
 }
 
 void perf_event_fork(struct task_struct *task)
@@ -4537,8 +4578,9 @@ struct perf_comm_event {
 };
 
 static void perf_event_comm_output(struct perf_event *event,
-				     struct perf_comm_event *comm_event)
+				   void *data)
 {
+	struct perf_comm_event *comm_event = data;
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
 	int size = comm_event->event_id.header.size;
@@ -4565,39 +4607,16 @@ out:
 	comm_event->event_id.header.size = size;
 }
 
-static int perf_event_comm_match(struct perf_event *event)
+static int perf_event_comm_match(struct perf_event *event,
+				 void *data __maybe_unused)
 {
-	if (event->state < PERF_EVENT_STATE_INACTIVE)
-		return 0;
-
-	if (!event_filter_match(event))
-		return 0;
-
-	if (event->attr.comm)
-		return 1;
-
-	return 0;
-}
-
-static void perf_event_comm_ctx(struct perf_event_context *ctx,
-				  struct perf_comm_event *comm_event)
-{
-	struct perf_event *event;
-
-	list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
-		if (perf_event_comm_match(event))
-			perf_event_comm_output(event, comm_event);
-	}
+	return event->attr.comm;
 }
 
 static void perf_event_comm_event(struct perf_comm_event *comm_event)
 {
-	struct perf_cpu_context *cpuctx;
-	struct perf_event_context *ctx;
 	char comm[TASK_COMM_LEN];
 	unsigned int size;
-	struct pmu *pmu;
-	int ctxn;
 
 	memset(comm, 0, sizeof(comm));
 	strlcpy(comm, comm_event->task->comm, sizeof(comm));
@@ -4607,24 +4626,11 @@ static void perf_event_comm_event(struct perf_comm_event *comm_event)
 	comm_event->comm_size = size;
 
 	comm_event->event_id.header.size = sizeof(comm_event->event_id) + size;
-	rcu_read_lock();
-	list_for_each_entry_rcu(pmu, &pmus, entry) {
-		cpuctx = get_cpu_ptr(pmu->pmu_cpu_context);
-		if (cpuctx->unique_pmu != pmu)
-			goto next;
-		perf_event_comm_ctx(&cpuctx->ctx, comm_event);
 
-		ctxn = pmu->task_ctx_nr;
-		if (ctxn < 0)
-			goto next;
-
-		ctx = rcu_dereference(current->perf_event_ctxp[ctxn]);
-		if (ctx)
-			perf_event_comm_ctx(ctx, comm_event);
-next:
-		put_cpu_ptr(pmu->pmu_cpu_context);
-	}
-	rcu_read_unlock();
+	perf_event_aux(perf_event_comm_match,
+		       perf_event_comm_output,
+		       comm_event,
+		       NULL);
 }
 
 void perf_event_comm(struct task_struct *task)
@@ -4633,6 +4639,7 @@ void perf_event_comm(struct task_struct *task)
 	struct perf_event_context *ctx;
 	int ctxn;
 
+	rcu_read_lock();
 	for_each_task_context_nr(ctxn) {
 		ctx = task->perf_event_ctxp[ctxn];
 		if (!ctx)
@@ -4640,6 +4647,7 @@ void perf_event_comm(struct task_struct *task)
 
 		perf_event_enable_on_exec(ctx);
 	}
+	rcu_read_unlock();
 
 	if (!atomic_read(&nr_comm_events))
 		return;
@@ -4684,8 +4692,9 @@ struct perf_mmap_event {
 };
 
 static void perf_event_mmap_output(struct perf_event *event,
-				     struct perf_mmap_event *mmap_event)
+				   void *data)
 {
+	struct perf_mmap_event *mmap_event = data;
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
 	int size = mmap_event->event_id.header.size;
@@ -4712,46 +4721,24 @@ out:
 }
 
 static int perf_event_mmap_match(struct perf_event *event,
-				   struct perf_mmap_event *mmap_event,
-				   int executable)
+				 void *data)
 {
-	if (event->state < PERF_EVENT_STATE_INACTIVE)
-		return 0;
+	struct perf_mmap_event *mmap_event = data;
+	struct vm_area_struct *vma = mmap_event->vma;
+	int executable = vma->vm_flags & VM_EXEC;
 
-	if (!event_filter_match(event))
-		return 0;
-
-	if ((!executable && event->attr.mmap_data) ||
-	    (executable && event->attr.mmap))
-		return 1;
-
-	return 0;
-}
-
-static void perf_event_mmap_ctx(struct perf_event_context *ctx,
-				  struct perf_mmap_event *mmap_event,
-				  int executable)
-{
-	struct perf_event *event;
-
-	list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
-		if (perf_event_mmap_match(event, mmap_event, executable))
-			perf_event_mmap_output(event, mmap_event);
-	}
+	return (!executable && event->attr.mmap_data) ||
+	       (executable && event->attr.mmap);
 }
 
 static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
 {
-	struct perf_cpu_context *cpuctx;
-	struct perf_event_context *ctx;
 	struct vm_area_struct *vma = mmap_event->vma;
 	struct file *file = vma->vm_file;
 	unsigned int size;
 	char tmp[16];
 	char *buf = NULL;
 	const char *name;
-	struct pmu *pmu;
-	int ctxn;
 
 	memset(tmp, 0, sizeof(tmp));
 
@@ -4774,7 +4761,8 @@ static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
 	} else {
 		if (arch_vma_name(mmap_event->vma)) {
 			name = strncpy(tmp, arch_vma_name(mmap_event->vma),
-				       sizeof(tmp));
+				       sizeof(tmp) - 1);
+			tmp[sizeof(tmp) - 1] = '\0';
 			goto got_name;
 		}
 
@@ -4806,27 +4794,10 @@ got_name:
 
 	mmap_event->event_id.header.size = sizeof(mmap_event->event_id) + size;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(pmu, &pmus, entry) {
-		cpuctx = get_cpu_ptr(pmu->pmu_cpu_context);
-		if (cpuctx->unique_pmu != pmu)
-			goto next;
-		perf_event_mmap_ctx(&cpuctx->ctx, mmap_event,
-					vma->vm_flags & VM_EXEC);
-
-		ctxn = pmu->task_ctx_nr;
-		if (ctxn < 0)
-			goto next;
-
-		ctx = rcu_dereference(current->perf_event_ctxp[ctxn]);
-		if (ctx) {
-			perf_event_mmap_ctx(ctx, mmap_event,
-					vma->vm_flags & VM_EXEC);
-		}
-next:
-		put_cpu_ptr(pmu->pmu_cpu_context);
-	}
-	rcu_read_unlock();
+	perf_event_aux(perf_event_mmap_match,
+		       perf_event_mmap_output,
+		       mmap_event,
+		       NULL);
 
 	kfree(buf);
 }
@@ -5370,7 +5341,7 @@ static void sw_perf_event_destroy(struct perf_event *event)
 
 static int perf_swevent_init(struct perf_event *event)
 {
-	int event_id = event->attr.config;
+	u64 event_id = event->attr.config;
 
 	if (event->attr.type != PERF_TYPE_SOFTWARE)
 		return -ENOENT;
@@ -6026,6 +5997,7 @@ skip_type:
 	if (pmu->pmu_cpu_context)
 		goto got_cpu_context;
 
+	ret = -ENOMEM;
 	pmu->pmu_cpu_context = alloc_percpu(struct perf_cpu_context);
 	if (!pmu->pmu_cpu_context)
 		goto free_dev;
@@ -7553,12 +7525,5 @@ struct cgroup_subsys perf_subsys = {
 	.css_free	= perf_cgroup_css_free,
 	.exit		= perf_cgroup_exit,
 	.attach		= perf_cgroup_attach,
-
-	/*
-	 * perf_event cgroup doesn't handle nesting correctly.
-	 * ctx->nr_cgroups adjustments should be propagated through the
-	 * cgroup hierarchy.  Fix it and remove the following.
-	 */
-	.broken_hierarchy = true,
 };
 #endif /* CONFIG_CGROUP_PERF */
