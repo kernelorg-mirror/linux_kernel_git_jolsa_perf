@@ -32,11 +32,15 @@ struct perf_evlist {
 	int		 nr_fds;
 	int		 nr_mmaps;
 	int		 mmap_len;
+	int		 id_pos;
+	int		 is_pos;
+	u64		 combined_sample_type;
 	struct {
 		int	cork_fd;
 		pid_t	pid;
 	} workload;
 	bool		 overwrite;
+	bool		 matching_sample_types;
 	struct perf_mmap *mmap;
 	struct pollfd	 *pollfd;
 	struct thread_map *threads;
@@ -85,6 +89,7 @@ union perf_event *perf_evlist__mmap_read(struct perf_evlist *self, int idx);
 int perf_evlist__open(struct perf_evlist *evlist);
 void perf_evlist__close(struct perf_evlist *evlist);
 
+void perf_evlist__make_sample_types_compatible(struct perf_evlist *evlist);
 void perf_evlist__config(struct perf_evlist *evlist,
 			 struct perf_record_opts *opts);
 
@@ -121,7 +126,8 @@ void __perf_evlist__set_leader(struct list_head *list);
 void perf_evlist__set_leader(struct perf_evlist *evlist);
 
 u64 perf_evlist__read_format(struct perf_evlist *evlist);
-u64 perf_evlist__sample_type(struct perf_evlist *evlist);
+u64 __perf_evlist__combined_sample_type(struct perf_evlist *evlist);
+u64 perf_evlist__combined_sample_type(struct perf_evlist *evlist);
 bool perf_evlist__sample_id_all(struct perf_evlist *evlist);
 u16 perf_evlist__id_hdr_size(struct perf_evlist *evlist);
 

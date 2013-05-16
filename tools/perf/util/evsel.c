@@ -30,7 +30,7 @@ static struct {
 
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 
-static int __perf_evsel__sample_size(u64 sample_type)
+int __perf_evsel__sample_size(u64 sample_type)
 {
 	u64 mask = sample_type & PERF_SAMPLE_MASK;
 	int size = 0;
@@ -44,6 +44,65 @@ static int __perf_evsel__sample_size(u64 sample_type)
 	size *= sizeof(u64);
 
 	return size;
+}
+
+/**
+ * __perf_evsel__calc_id_pos - calculate id_pos.
+ * @sample_type: sample type
+ *
+ * This function returns the position of the event id (PERF_SAMPLE_ID) in a
+ * sample event i.e. in the array of struct sample_event.
+ */
+static int __perf_evsel__calc_id_pos(u64 sample_type)
+{
+	int idx = 0;
+
+	if (!(sample_type & PERF_SAMPLE_ID))
+		return -1;
+
+	if (sample_type & PERF_SAMPLE_IP)
+		idx += 1;
+
+	if (sample_type & PERF_SAMPLE_TID)
+		idx += 1;
+
+	if (sample_type & PERF_SAMPLE_TIME)
+		idx += 1;
+
+	if (sample_type & PERF_SAMPLE_ADDR)
+		idx += 1;
+
+	return idx;
+}
+
+/**
+ * __perf_evsel__calc_is_pos - calculate is_pos.
+ * @sample_type: sample type
+ *
+ * This function returns the position (counting backwards) of the event id
+ * (PERF_SAMPLE_ID) in a non-sample event i.e. if sample_id_all is used there is
+ * an id sample appended to non-sample events.
+ */
+static int __perf_evsel__calc_is_pos(u64 sample_type)
+{
+	int idx = 1;
+
+	if (!(sample_type & PERF_SAMPLE_ID))
+		return -1;
+
+	if (sample_type & PERF_SAMPLE_CPU)
+		idx += 1;
+
+	if (sample_type & PERF_SAMPLE_STREAM_ID)
+		idx += 1;
+
+	return idx;
+}
+
+void perf_evsel__calc_id_pos(struct perf_evsel *evsel)
+{
+	evsel->id_pos = __perf_evsel__calc_id_pos(evsel->attr.sample_type);
+	evsel->is_pos = __perf_evsel__calc_is_pos(evsel->attr.sample_type);
 }
 
 void hists__init(struct hists *hists)
@@ -62,6 +121,7 @@ void __perf_evsel__set_sample_bit(struct perf_evsel *evsel,
 	if (!(evsel->attr.sample_type & bit)) {
 		evsel->attr.sample_type |= bit;
 		evsel->sample_size += sizeof(u64);
+		perf_evsel__calc_id_pos(evsel);
 	}
 }
 
@@ -71,6 +131,7 @@ void __perf_evsel__reset_sample_bit(struct perf_evsel *evsel,
 	if (evsel->attr.sample_type & bit) {
 		evsel->attr.sample_type &= ~bit;
 		evsel->sample_size -= sizeof(u64);
+		perf_evsel__calc_id_pos(evsel);
 	}
 }
 
@@ -89,6 +150,7 @@ void perf_evsel__init(struct perf_evsel *evsel,
 	INIT_LIST_HEAD(&evsel->node);
 	hists__init(&evsel->hists);
 	evsel->sample_size = __perf_evsel__sample_size(attr->sample_type);
+	perf_evsel__calc_id_pos(evsel);
 }
 
 struct perf_evsel *perf_evsel__new(struct perf_event_attr *attr, int idx)

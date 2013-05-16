@@ -739,7 +739,7 @@ static void perf_session__print_tstamp(struct perf_session *session,
 				       union perf_event *event,
 				       struct perf_sample *sample)
 {
-	u64 sample_type = perf_evlist__sample_type(session->evlist);
+	u64 sample_type = __perf_evlist__combined_sample_type(session->evlist);
 
 	if (event->header.type != PERF_RECORD_SAMPLE &&
 	    !perf_evlist__sample_id_all(session->evlist)) {
@@ -1001,7 +1001,7 @@ static int perf_session__preprocess_sample(struct perf_session *session,
 					   union perf_event *event, struct perf_sample *sample)
 {
 	if (event->header.type != PERF_RECORD_SAMPLE ||
-	    !(perf_evlist__sample_type(session->evlist) & PERF_SAMPLE_CALLCHAIN))
+	    !sample->callchain)
 		return 0;
 
 	if (!ip_callchain__valid(sample->callchain, event)) {
