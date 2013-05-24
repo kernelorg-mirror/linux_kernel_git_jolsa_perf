@@ -61,6 +61,7 @@ static struct cmd_struct commands[] = {
 #endif
 	{ "inject",	cmd_inject,	0 },
 	{ "mem",	cmd_mem,	0 },
+	{ "ifunc",	cmd_ifunc,	0 },
 };
 
 struct pager_config {
