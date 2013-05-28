@@ -54,6 +54,25 @@ static void perf_output_wakeup(struct perf_output_handle *handle)
 	irq_work_queue(&handle->event->pending);
 }
 
+static void perf_output_check_wakeup(struct perf_output_handle *handle)
+{
+	struct perf_event *event = handle->event;
+
+	if (!event->attr.watermark) {
+		int wakeup_events = event->attr.wakeup_events;
+
+		if (wakeup_events) {
+			struct ring_buffer *rb = handle->rb;
+			int events = local_inc_return(&rb->events);
+
+			if (events >= wakeup_events) {
+				local_sub(wakeup_events, &rb->events);
+				local_inc(&rb->wakeup);
+			}
+		}
+	}
+}
+
 /*
  * We need to ensure a later event_id doesn't publish a head when a former
  * event isn't done writing. However since we need to deal with NMIs we
@@ -208,6 +227,7 @@ unsigned int perf_output_skip(struct perf_output_handle *handle,
 
 void perf_output_end(struct perf_output_handle *handle)
 {
+	perf_output_check_wakeup(handle);
 	perf_output_put_handle(handle);
 	rcu_read_unlock();
 }
