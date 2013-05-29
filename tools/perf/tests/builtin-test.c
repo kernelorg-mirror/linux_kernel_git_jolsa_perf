@@ -116,6 +116,10 @@ static struct test {
 		.func = test__parse_no_sample_id_all,
 	},
 	{
+		.desc = "Test poll syscall for auxiliary events",
+		.func = test__aux_poll,
+	},
+	{
 		.func = NULL,
 	},
 };
