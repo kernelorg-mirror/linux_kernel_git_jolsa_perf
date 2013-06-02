@@ -75,7 +75,6 @@ struct perf_record {
 	bool			no_buildid;
 	bool			no_buildid_cache;
 	long			samples;
-	off_t			post_processing_offset;
 };
 
 static void advance_output(struct perf_record *rec, size_t size)
@@ -249,15 +248,17 @@ out:
 
 static int process_buildids(struct perf_record *rec)
 {
-	u64 size = lseek(rec->output, 0, SEEK_CUR);
+	struct perf_session *session = rec->session;
+	u64 data_offset              = PERF_FILE_HEADER__DATA_OFFSET;
+	u64 size                     = session->header.data_size;
 
 	if (size == 0)
 		return 0;
 
 	rec->session->fd = rec->output;
-	return __perf_session__process_events(rec->session, rec->post_processing_offset,
-					      size - rec->post_processing_offset,
-					      size, &build_id__mark_dso_hit_ops);
+	return __perf_session__process_events(session, data_offset,
+					      size - data_offset, size,
+					      &build_id__mark_dso_hit_ops);
 }
 
 static void perf_record__exit(int status, void *arg)
@@ -456,8 +457,6 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 		err = -1;
 		goto out_delete_session;
 	}
-
-	rec->post_processing_offset = lseek(output, 0, SEEK_CUR);
 
 	machine = &session->machines.host;
 
