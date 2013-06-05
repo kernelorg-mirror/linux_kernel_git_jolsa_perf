@@ -671,6 +671,30 @@ void perf_evsel__config(struct perf_evsel *evsel,
 		attr->branch_sample_type = opts->branch_stack;
 	}
 
+	if (opts->multi_limit) {
+		u64 wm = MULTI_LIMIT__MIN_WATTERMARK;
+		attr->watermark = 1;
+
+		if (opts->multi_type == MULTI_TYPE__SIZE) {
+			/*
+			 * The watermark could not get under 10K because
+			 * of the minimal file limit and we are guarded
+			 * with 100K for max wattermark.
+			 */
+			wm = opts->multi_value;
+			wm = min(wm / 10, (u64) MULTI_LIMIT__MAX_WATTERMARK);
+
+			/*
+			 * We also dont want to have watermark close to the size
+			 * of the mmap to ensure data would always cross it and
+			 * we get poll notification.
+			 */
+			wm = min(wm, (u64) perf_evlist__mmap_size(opts->mmap_pages) - 100);
+		}
+
+		attr->wakeup_watermark = wm;
+	}
+
 	if (opts->sample_weight)
 		attr->sample_type	|= PERF_SAMPLE_WEIGHT;
 

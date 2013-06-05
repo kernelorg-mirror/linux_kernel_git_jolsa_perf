@@ -210,6 +210,17 @@ enum perf_call_graph_mode {
 	CALLCHAIN_DWARF
 };
 
+enum perf_record_multi_limits {
+	MULTI_LIMIT__MIN_SIZE       = 100 * 1024, /* 100K */
+	MULTI_LIMIT__MIN_WATTERMARK = 10  * 1024, /* 10K */
+	MULTI_LIMIT__MAX_WATTERMARK = MULTI_LIMIT__MIN_SIZE,
+};
+
+enum perf_record_multi_type {
+	MULTI_TYPE__SIZE,
+	MULTI_TYPE__TIME,
+};
+
 struct perf_record_opts {
 	struct perf_target target;
 	int	     call_graph;
@@ -223,6 +234,7 @@ struct perf_record_opts {
 	bool	     sample_weight;
 	bool	     sample_time;
 	bool	     period;
+	bool	     multi_limit;
 	unsigned int freq;
 	unsigned int mmap_pages;
 	unsigned int user_freq;
@@ -230,6 +242,8 @@ struct perf_record_opts {
 	u64	     default_interval;
 	u64	     user_interval;
 	u16	     stack_dump_size;
+	u64	     multi_value;
+	int	     multi_type;
 };
 
 #endif
