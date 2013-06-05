@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "types.h"
 #include "event.h"
+#include "data.h"
 
 #include <linux/bitmap.h>
 
