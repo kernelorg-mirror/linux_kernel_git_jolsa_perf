@@ -184,6 +184,20 @@ Enable weightened sampling. An additional weight is recorded per sample and can 
 displayed with the weight and local_weight sort keys.  This currently works for TSX
 abort events and some memory events in precise mode on modern Intel CPUs.
 
+-M::
+--multi::
+Store output perf.data into multiple files based on the size threshold.
+The threshold is specified either as size (B/K/M/G) or time (s/m/h)
+by appending the size with appropriate unit, like:
+  -M 5M for 5 megabytes threshold
+  -M 1h for 1 hour threshold
+The generated name for each data file is appended with sequential number
+(prepended by 5 zeros).  For default output file name it will be:
+  perf.data-00000
+  perf.data-00001
+  perf.data-00002
+  ...
+
 SEE ALSO
 --------
 linkperf:perf-stat[1], linkperf:perf-list[1]

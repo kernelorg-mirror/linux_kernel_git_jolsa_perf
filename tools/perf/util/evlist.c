@@ -632,7 +632,7 @@ out_unmap:
 	return -1;
 }
 
-static size_t perf_evlist__mmap_size(unsigned long pages)
+size_t perf_evlist__mmap_size(unsigned long pages)
 {
 	/* 512 kiB: default amount of unprivileged mlocked memory */
 	if (pages == UINT_MAX)
