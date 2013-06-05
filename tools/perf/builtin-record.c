@@ -251,7 +251,6 @@ out:
 
 static int process_buildids(struct perf_record *rec)
 {
-	struct perf_data_file *file  = rec->file;
 	struct perf_session *session = rec->session;
 	u64 data_offset              = PERF_FILE_HEADER__DATA_OFFSET;
 	u64 size                     = session->header.data_size;
@@ -259,7 +258,6 @@ static int process_buildids(struct perf_record *rec)
 	if (size == 0)
 		return 0;
 
-	rec->session->fd = file->fd;
 	return __perf_session__process_events(session, data_offset,
 					      size - data_offset, size,
 					      &build_id__mark_dso_hit_ops);
