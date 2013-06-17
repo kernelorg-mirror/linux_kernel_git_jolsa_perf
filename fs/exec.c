@@ -1139,8 +1139,11 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 * Flush performance counters when crossing a
 	 * security domain:
 	 */
-	if (!get_dumpable(current->mm))
+	if (!capable(CAP_SYS_ADMIN) &&
+	    !(uid_eq(bprm->cred->euid, current_uid()) &&
+	      gid_eq(bprm->cred->egid, current_gid()))) {
 		perf_event_exit_task(current);
+	}
 
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
