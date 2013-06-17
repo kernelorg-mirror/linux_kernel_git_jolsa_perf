@@ -805,7 +805,7 @@ void do_exit(long code)
 	 *
 	 * because of cgroup mode, must be called before cgroup_exit()
 	 */
-	perf_event_exit_task(tsk);
+	perf_event_exit_task(tsk, false);
 
 	cgroup_exit(tsk, 1);
 

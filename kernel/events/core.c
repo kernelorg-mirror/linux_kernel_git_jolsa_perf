@@ -3292,6 +3292,9 @@ static unsigned int perf_poll(struct file *file, poll_table *wait)
 	struct ring_buffer *rb;
 	unsigned int events = POLL_HUP;
 
+	if (has_fatal_error(event))
+		return POLL_HUP;
+
 	/*
 	 * Race between perf_event_set_output() and perf_poll(): perf_poll()
 	 * grabs the rb reference but perf_event_set_output() overrides it.
@@ -3424,6 +3427,9 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct perf_event *event = file->private_data;
 	void (*func)(struct perf_event *);
 	u32 flags = arg;
+
+	if (has_fatal_error(event))
+		return POLL_HUP;
 
 	switch (cmd) {
 	case PERF_EVENT_IOC_ENABLE:
@@ -6970,10 +6976,18 @@ static void sync_child_event(struct perf_event *child_event,
 	put_event(parent_event);
 }
 
+static void perf_event_suid_error(struct perf_event *event)
+{
+	event->state = PERF_EVENT_STATE_ERROR_SUID;
+	event->pending_wakeup = 1;
+	irq_work_queue(&event->pending);
+}
+
 static void
 __perf_event_exit_task(struct perf_event *child_event,
-			 struct perf_event_context *child_ctx,
-			 struct task_struct *child)
+		       struct perf_event_context *child_ctx,
+		       struct task_struct *child,
+		       bool suid)
 {
 	if (child_event->parent) {
 		raw_spin_lock_irq(&child_ctx->lock);
@@ -6982,6 +6996,8 @@ __perf_event_exit_task(struct perf_event *child_event,
 	}
 
 	perf_remove_from_context(child_event);
+	if (suid)
+		perf_event_suid_error(child_event);
 
 	/*
 	 * It can happen that the parent exits first, and has events
@@ -6994,7 +7010,8 @@ __perf_event_exit_task(struct perf_event *child_event,
 	}
 }
 
-static void perf_event_exit_task_context(struct task_struct *child, int ctxn)
+static void perf_event_exit_task_context(struct task_struct *child,
+					 int ctxn, bool suid)
 {
 	struct perf_event *child_event, *tmp;
 	struct perf_event_context *child_ctx;
@@ -7053,11 +7070,11 @@ static void perf_event_exit_task_context(struct task_struct *child, int ctxn)
 again:
 	list_for_each_entry_safe(child_event, tmp, &child_ctx->pinned_groups,
 				 group_entry)
-		__perf_event_exit_task(child_event, child_ctx, child);
+		__perf_event_exit_task(child_event, child_ctx, child, suid);
 
 	list_for_each_entry_safe(child_event, tmp, &child_ctx->flexible_groups,
 				 group_entry)
-		__perf_event_exit_task(child_event, child_ctx, child);
+		__perf_event_exit_task(child_event, child_ctx, child, suid);
 
 	/*
 	 * If the last event was a group event, it will have appended all
@@ -7076,7 +7093,7 @@ again:
 /*
  * When a child task exits, feed back event values to parent events.
  */
-void perf_event_exit_task(struct task_struct *child)
+void perf_event_exit_task(struct task_struct *child, bool suid)
 {
 	struct perf_event *event, *tmp;
 	int ctxn;
@@ -7097,7 +7114,7 @@ void perf_event_exit_task(struct task_struct *child)
 	mutex_unlock(&child->perf_event_mutex);
 
 	for_each_task_context_nr(ctxn)
-		perf_event_exit_task_context(child, ctxn);
+		perf_event_exit_task_context(child, ctxn, suid);
 }
 
 static void perf_free_event(struct perf_event *event,

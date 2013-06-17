@@ -271,6 +271,7 @@ struct pmu {
  * enum perf_event_active_state - the states of a event
  */
 enum perf_event_active_state {
+	PERF_EVENT_STATE_ERROR_SUID	= -3,
 	PERF_EVENT_STATE_ERROR_SCHED	= -2,
 	PERF_EVENT_STATE_ERROR		= PERF_EVENT_STATE_ERROR_SCHED,
 	PERF_EVENT_STATE_OFF		= -1,
@@ -530,7 +531,7 @@ extern void __perf_event_task_sched_in(struct task_struct *prev,
 extern void __perf_event_task_sched_out(struct task_struct *prev,
 					struct task_struct *next);
 extern int perf_event_init_task(struct task_struct *child);
-extern void perf_event_exit_task(struct task_struct *child);
+extern void perf_event_exit_task(struct task_struct *child, bool suid);
 extern void perf_event_free_task(struct task_struct *task);
 extern void perf_event_delayed_put(struct task_struct *task);
 extern void perf_event_print_debug(void);
@@ -741,6 +742,11 @@ static inline bool has_error(struct perf_event *event)
 	return event->state <= PERF_EVENT_STATE_ERROR;
 }
 
+static inline bool has_fatal_error(struct perf_event *event)
+{
+	return event->state == PERF_EVENT_STATE_ERROR_SUID;
+}
+
 extern int perf_output_begin(struct perf_output_handle *handle,
 			     struct perf_event *event, unsigned int size);
 extern void perf_output_end(struct perf_output_handle *handle);
@@ -763,7 +769,7 @@ static inline void
 perf_event_task_sched_out(struct task_struct *prev,
 			  struct task_struct *next)			{ }
 static inline int perf_event_init_task(struct task_struct *child)	{ return 0; }
-static inline void perf_event_exit_task(struct task_struct *child)	{ }
+static inline void perf_event_exit_task(struct task_struct *child, bool suid)	{ }
 static inline void perf_event_free_task(struct task_struct *task)	{ }
 static inline void perf_event_delayed_put(struct task_struct *task)	{ }
 static inline void perf_event_print_debug(void)				{ }
