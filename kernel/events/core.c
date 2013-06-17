@@ -1918,7 +1918,7 @@ static int __perf_event_enable(void *info)
 		}
 		if (leader->attr.pinned) {
 			update_group_times(leader);
-			leader->state = PERF_EVENT_STATE_ERROR;
+			leader->state = PERF_EVENT_STATE_ERROR_SCHED;
 		}
 	}
 
@@ -1961,7 +1961,7 @@ void perf_event_enable(struct perf_event *event)
 	 * from the task having been scheduled away before the
 	 * cross-call arrived.
 	 */
-	if (event->state == PERF_EVENT_STATE_ERROR)
+	if (event->state == PERF_EVENT_STATE_ERROR_SCHED)
 		event->state = PERF_EVENT_STATE_OFF;
 
 retry:
@@ -2270,7 +2270,7 @@ ctx_pinned_sched_in(struct perf_event_context *ctx,
 		 */
 		if (event->state == PERF_EVENT_STATE_INACTIVE) {
 			update_group_times(event);
-			event->state = PERF_EVENT_STATE_ERROR;
+			event->state = PERF_EVENT_STATE_ERROR_SCHED;
 		}
 	}
 }
@@ -3263,7 +3263,7 @@ perf_read_hw(struct perf_event *event, char __user *buf, size_t count)
 	 * error state (i.e. because it was pinned but it couldn't be
 	 * scheduled on to the CPU at some point).
 	 */
-	if (event->state == PERF_EVENT_STATE_ERROR)
+	if (has_error(event))
 		return 0;
 
 	if (count < event->read_size)

@@ -271,7 +271,8 @@ struct pmu {
  * enum perf_event_active_state - the states of a event
  */
 enum perf_event_active_state {
-	PERF_EVENT_STATE_ERROR		= -2,
+	PERF_EVENT_STATE_ERROR_SCHED	= -2,
+	PERF_EVENT_STATE_ERROR		= PERF_EVENT_STATE_ERROR_SCHED,
 	PERF_EVENT_STATE_OFF		= -1,
 	PERF_EVENT_STATE_INACTIVE	=  0,
 	PERF_EVENT_STATE_ACTIVE		=  1,
@@ -733,6 +734,11 @@ extern void perf_bp_event(struct perf_event *event, void *data);
 static inline bool has_branch_stack(struct perf_event *event)
 {
 	return event->attr.sample_type & PERF_SAMPLE_BRANCH_STACK;
+}
+
+static inline bool has_error(struct perf_event *event)
+{
+	return event->state <= PERF_EVENT_STATE_ERROR;
 }
 
 extern int perf_output_begin(struct perf_output_handle *handle,
