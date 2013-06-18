@@ -1210,7 +1210,9 @@ static int machine__resolve_callchain_sample(struct machine *machine,
 		thread__find_addr_location(thread, machine, cpumode,
 					   MAP__FUNCTION, ip, &al, NULL);
 		if (al.sym != NULL) {
-			if (sort__has_parent && !*parent &&
+			bool more = symbol_conf.parent_deep || !*parent;
+
+			if (sort__has_parent && more &&
 			    symbol__match_parent_regex(al.sym))
 				*parent = al.sym;
 			if (!symbol_conf.use_callchain)

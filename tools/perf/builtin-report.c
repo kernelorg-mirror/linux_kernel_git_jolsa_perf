@@ -714,6 +714,16 @@ parse_percent_limit(const struct option *opt, const char *str,
 	return 0;
 }
 
+static int
+parent_deep(const struct option *opt __maybe_unused,
+	    const char *str,
+	    int unset __maybe_unused)
+{
+	parent_pattern = str;
+	symbol_conf.parent_deep = true;
+	return 0;
+}
+
 int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	struct perf_session *session;
@@ -777,6 +787,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "Show sample percentage for different cpu modes"),
 	OPT_STRING('p', "parent", &parent_pattern, "regex",
 		   "regex filter to identify parent, see: '--sort parent'"),
+	OPT_CALLBACK('P', "parent-deep", NULL, "regex",
+		     "Enables deep callchain search, implies -p", parent_deep),
 	OPT_BOOLEAN('x', "exclude-other", &symbol_conf.exclude_other,
 		    "Only display entries with parent-match"),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", &report, "output_type,min_percent[,print_limit],call_order",

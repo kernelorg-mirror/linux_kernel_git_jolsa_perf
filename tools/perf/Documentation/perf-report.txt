@@ -96,6 +96,11 @@ OPTIONS
 	information recorded. The pattern is in the exteneded regex format and
 	defaults to "\^sys_|^do_page_fault", see '--sort parent'.
 
+-P::
+--parent-deep=<regex>::
+	Same as '-p' but it force the deep search of the callchain
+	and looks for the deepest possible match.
+
 -x::
 --exclude-other::
         Only display entries with parent-match.
