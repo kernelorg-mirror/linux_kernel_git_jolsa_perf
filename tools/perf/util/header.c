@@ -2515,18 +2515,23 @@ static int check_magic_endian(u64 magic, uint64_t hdr_sz,
 	 * - encode endianness of file
 	 */
 
-	/* check magic number with one endianness */
-	if (magic == __perf_magic2)
-		return 0;
+#define CHECK(__m, __v)						\
+do {								\
+	/* check magic number with one endianness */		\
+	if (magic == __m)					\
+		goto v ## __v;					\
+	/* check magic number with opposite endianness */	\
+	if (magic != __m ## _sw)				\
+		break;						\
+	ph->needs_swap = true;					\
+ v ## __v:							\
+	ph->version = __v;					\
+	return 0;						\
+} while (0)
 
-	/* check magic number with opposite endianness */
-	if (magic != __perf_magic2_sw)
-		return -1;
+	CHECK(__perf_magic2, PERF_HEADER_VERSION_2);
 
-	ph->needs_swap = true;
-	ph->version = PERF_HEADER_VERSION_2;
-
-	return 0;
+	return -1;
 }
 
 int perf_file_header__read(struct perf_file_header *header,
