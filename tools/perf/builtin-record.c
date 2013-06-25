@@ -512,6 +512,8 @@ static int multi_file_finish(struct perf_record *rec)
 static int multi_file_init(struct perf_record *rec)
 {
 	struct perf_data_file *file = rec->file;
+	struct perf_record_opts *opts = &rec->opts;
+	static bool target_change;
 	int err;
 
 	if (multi_file_name(rec->file, rec->multi_idx++))
@@ -524,6 +526,15 @@ static int multi_file_init(struct perf_record *rec)
 	err = perf_session__prepare_header(file->fd);
 	if (err)
 		goto out_close;
+
+	/*
+	 * XXX HACK - Make the target looks like we have pid
+	 * so we get the process fully synthetised.
+	 */
+	if (perf_target__none(&opts->target) && !target_change) {
+		target_change = true;
+		opts->target.pid = "multi";
+	}
 
 	err = synthesize_record_file(rec);
 	if (err)
