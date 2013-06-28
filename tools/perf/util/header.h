@@ -44,15 +44,23 @@ struct perf_file_section {
 	u64 size;
 };
 
-struct perf_file_header {
-	u64				magic;
-	u64				size;
-	u64				attr_size;
+struct perf_file_header_v2 {
 	struct perf_file_section	attrs;
 	struct perf_file_section	data;
 	/* event_types is ignored */
 	struct perf_file_section	event_types;
 	DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
+};
+
+struct perf_file_header {
+	u64	magic;
+	u64	size;
+	u64	attr_size;
+
+	/* version specific data */
+	union {
+		struct perf_file_header_v2 v2;
+	};
 };
 
 struct perf_pipe_file_header {
