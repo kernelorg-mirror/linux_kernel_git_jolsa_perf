@@ -2515,6 +2515,39 @@ do {								\
 	return -1;
 }
 
+static void swap_features(unsigned long *adds_features)
+{
+	/*
+	 * feature bitmap is declared as an array of unsigned longs --
+	 * not good since its size can differ between the host that
+	 * generated the data file and the host analyzing the file.
+	 *
+	 * We need to handle endianness, but we don't know the size of
+	 * the unsigned long where the file was generated. Take a best
+	 * guess at determining it: try 64-bit swap first (ie., file
+	 * created on a 64-bit host), and check if the hostname feature
+	 * bit is set (this feature bit is forced on as of fbe96f2).
+	 * If the bit is not, undo the 64-bit swap and try a 32-bit
+	 * swap. If the hostname bit is still not set (e.g., older data
+	 * file), punt and fallback to the original behavior --
+	 * clearing all feature bits and setting buildid.
+	 */
+	mem_bswap_64(adds_features, BITS_TO_U64(HEADER_FEAT_BITS));
+
+	if (!test_bit(HEADER_HOSTNAME, adds_features)) {
+		/* unswap as u64 */
+		mem_bswap_64(adds_features, BITS_TO_U64(HEADER_FEAT_BITS));
+
+		/* unswap as u32 */
+		mem_bswap_32(adds_features, BITS_TO_U32(HEADER_FEAT_BITS));
+	}
+
+	if (!test_bit(HEADER_HOSTNAME, adds_features)) {
+		bitmap_zero(adds_features, HEADER_FEAT_BITS);
+		set_bit(HEADER_BUILD_ID, adds_features);
+	}
+}
+
 int perf_file_header__read(struct perf_file_header *header,
 			   struct perf_header *ph, int fd)
 {
@@ -2543,40 +2576,8 @@ int perf_file_header__read(struct perf_file_header *header,
 			bitmap_zero(header->adds_features, HEADER_FEAT_BITS);
 		else
 			return -1;
-	} else if (ph->needs_swap) {
-		/*
-		 * feature bitmap is declared as an array of unsigned longs --
-		 * not good since its size can differ between the host that
-		 * generated the data file and the host analyzing the file.
-		 *
-		 * We need to handle endianness, but we don't know the size of
-		 * the unsigned long where the file was generated. Take a best
-		 * guess at determining it: try 64-bit swap first (ie., file
-		 * created on a 64-bit host), and check if the hostname feature
-		 * bit is set (this feature bit is forced on as of fbe96f2).
-		 * If the bit is not, undo the 64-bit swap and try a 32-bit
-		 * swap. If the hostname bit is still not set (e.g., older data
-		 * file), punt and fallback to the original behavior --
-		 * clearing all feature bits and setting buildid.
-		 */
-		mem_bswap_64(&header->adds_features,
-			    BITS_TO_U64(HEADER_FEAT_BITS));
-
-		if (!test_bit(HEADER_HOSTNAME, header->adds_features)) {
-			/* unswap as u64 */
-			mem_bswap_64(&header->adds_features,
-				    BITS_TO_U64(HEADER_FEAT_BITS));
-
-			/* unswap as u32 */
-			mem_bswap_32(&header->adds_features,
-				    BITS_TO_U32(HEADER_FEAT_BITS));
-		}
-
-		if (!test_bit(HEADER_HOSTNAME, header->adds_features)) {
-			bitmap_zero(header->adds_features, HEADER_FEAT_BITS);
-			set_bit(HEADER_BUILD_ID, header->adds_features);
-		}
-	}
+	} else if (ph->needs_swap)
+		swap_features(header->adds_features);
 
 	memcpy(&ph->adds_features, &header->adds_features,
 	       sizeof(ph->adds_features));
