@@ -2545,6 +2545,22 @@ static void swap_features(unsigned long *adds_features)
 	}
 }
 
+static int swap_header(struct perf_file_header *header)
+{
+	mem_bswap_64(header, offsetof(struct perf_file_header, adds_features));
+
+	if (header->size != sizeof(*header)) {
+		/* Support the previous format */
+		if (header->size == offsetof(typeof(*header), adds_features))
+			bitmap_zero(header->adds_features, HEADER_FEAT_BITS);
+		else
+			return -1;
+	} else
+		swap_features(header->adds_features);
+
+	return 0;
+}
+
 int perf_file_header__read(struct perf_file_header *header,
 			   struct perf_header *ph, int fd)
 {
@@ -2562,19 +2578,8 @@ int perf_file_header__read(struct perf_file_header *header,
 		return -1;
 	}
 
-	if (ph->needs_swap) {
-		mem_bswap_64(header, offsetof(struct perf_file_header,
-			     adds_features));
-	}
-
-	if (header->size != sizeof(*header)) {
-		/* Support the previous format */
-		if (header->size == offsetof(typeof(*header), adds_features))
-			bitmap_zero(header->adds_features, HEADER_FEAT_BITS);
-		else
-			return -1;
-	} else if (ph->needs_swap)
-		swap_features(header->adds_features);
+	if (ph->needs_swap && swap_header(header))
+		return -1;
 
 	memcpy(&ph->adds_features, &header->adds_features,
 	       sizeof(ph->adds_features));
