@@ -2564,13 +2564,28 @@ static int swap_header_v2(struct perf_file_header *header)
 	return 0;
 }
 
-static int swap_header(struct perf_file_header *header)
+static int swap_header_v3(struct perf_file_header *header)
+{
+	struct perf_file_header_v3 *v3 = &header->v3;
+
+	mem_bswap_64(v3, offsetof(struct perf_file_header_v3,
+		     adds_features));
+
+	swap_features(v3->adds_features);
+	return 0;
+}
+
+static int swap_header(struct perf_header *ph,
+		       struct perf_file_header *header)
 {
 	/* swap the generic part */
 	mem_bswap_64(header, offsetof(struct perf_file_header, v2));
 
 	/* version specific swap */
-	return swap_header_v2(header);
+	if (ph->version <= PERF_HEADER_VERSION_2)
+		return swap_header_v2(header);
+
+	return swap_header_v3(header);
 }
 
 int perf_file_header__read(struct perf_file_header *header,
@@ -2590,7 +2605,7 @@ int perf_file_header__read(struct perf_file_header *header,
 		return -1;
 	}
 
-	return ph->needs_swap ? swap_header(header) : 0;
+	return ph->needs_swap ? swap_header(ph, header) : 0;
 }
 
 static int perf_file_section__process(struct perf_file_section *section,
