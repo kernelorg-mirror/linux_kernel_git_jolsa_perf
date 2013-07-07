@@ -1777,17 +1777,26 @@ process_event_desc(struct perf_file_section *section __maybe_unused,
 	struct perf_session *session;
 	struct perf_evlist *evlist;
 	struct perf_evsel *evsel;
-
-	evlist = read_event_desc(header, fd);
-	if (!evlist)
-		return 0;
+	struct perf_header *ph;
 
 	session = container_of(header, struct perf_session, header);
 
-	list_for_each_entry(evsel, &evlist->entries, node)
-		perf_evlist__set_event_name(session->evlist, evsel);
+	evlist = read_event_desc(header, fd);
+	if (!evlist)
+		return -1;
 
-	perf_evlist__delete(evlist);
+	ph = &session->header;
+
+	if (ph->version <= PERF_HEADER_VERSION_2) {
+		list_for_each_entry(evsel, &evlist->entries, node)
+			perf_evlist__set_event_name(session->evlist, evsel);
+
+		perf_evlist__delete(evlist);
+	} else {
+		session->evlist = session->evlist ?: evlist;
+		symbol_conf.nr_events = evlist->nr_entries;
+	}
+
 	return 0;
 }
 
@@ -2854,15 +2863,38 @@ static int perf_session__read_header_v2(struct perf_session *session,
 	return __perf_session__read_header_v2(session, header);
 }
 
+static int perf_session__read_header_v3(struct perf_session *session,
+					struct perf_file_header *header)
+{
+	struct perf_header *ph = &session->header;
+	struct perf_file_header_v3 *v3 = &header->v3;
+
+	memcpy(&ph->adds_features, &v3->adds_features,
+	       sizeof(ph->adds_features));
+
+	ph->data_offset  = v3->data.offset;
+	ph->data_size	 = v3->data.size;
+	ph->feat_offset  = v3->features.offset;
+
+	perf_header__process_sections(ph, session->fd, &session->pevent,
+				      perf_file_section__process);
+
+	return 0;
+}
+
 static int perf_header_read_file(struct perf_session *session)
 {
 	struct perf_file_header header;
+	struct perf_header *ph = &session->header;
 
 	if (perf_file_header__read(&header, &session->header, session->fd))
 		return -1;
 
-	/* read v2 specific data */
-	return perf_session__read_header_v2(session, &header);
+	/* read version specific data */
+	if (ph->version <= PERF_HEADER_VERSION_2)
+		return perf_session__read_header_v2(session, &header);
+
+	return perf_session__read_header_v3(session, &header);
 }
 
 int perf_session__read_header(struct perf_session *session)
