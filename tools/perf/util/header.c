@@ -1208,28 +1208,11 @@ static void print_cpu_topology(struct perf_header *ph, int fd __maybe_unused,
 	}
 }
 
-static void free_event_desc(struct perf_evsel *events)
-{
-	struct perf_evsel *evsel;
-
-	if (!events)
-		return;
-
-	for (evsel = events; evsel->attr.size; evsel++) {
-		if (evsel->name)
-			free(evsel->name);
-		if (evsel->id)
-			free(evsel->id);
-	}
-
-	free(events);
-}
-
-static struct perf_evsel *
+static struct perf_evlist *
 read_event_desc(struct perf_header *ph, int fd)
 {
-	struct perf_evsel *evsel, *events = NULL;
-	u64 *id;
+	struct perf_evlist *evlist = NULL;
+	struct perf_evsel *evsel;
 	void *buf = NULL;
 	u32 nre, sz, nr, i, j;
 	ssize_t ret;
@@ -1255,24 +1238,25 @@ read_event_desc(struct perf_header *ph, int fd)
 	if (!buf)
 		goto error;
 
-	/* the last event terminates with evsel->attr.size == 0: */
-	events = calloc(nre + 1, sizeof(*events));
-	if (!events)
+	evlist = perf_evlist__new();
+	if (!evlist)
 		goto error;
 
 	msz = sizeof(evsel->attr);
 	if (sz < msz)
 		msz = sz;
 
-	for (i = 0, evsel = events; i < nre; evsel++, i++) {
-		evsel->idx = i;
-
+	for (i = 0; i < nre; i++) {
 		/*
 		 * must read entire on-file attr struct to
 		 * sync up with layout.
 		 */
 		ret = readn(fd, buf, sz);
 		if (ret != (ssize_t)sz)
+			goto error;
+
+		evsel = perf_evsel__new(buf, i);
+		if (!evsel)
 			goto error;
 
 		if (ph->needs_swap)
@@ -1289,49 +1273,55 @@ read_event_desc(struct perf_header *ph, int fd)
 			evsel->needs_swap = true;
 		}
 
+		perf_evlist__add(evlist, evsel);
+
 		evsel->name = do_read_string(fd, ph);
 
 		if (!nr)
 			continue;
 
-		id = calloc(nr, sizeof(*id));
-		if (!id)
+		if (perf_evsel__alloc_id(evsel, 1, nr))
 			goto error;
+
 		evsel->ids = nr;
-		evsel->id = id;
 
 		for (j = 0 ; j < nr; j++) {
-			ret = readn(fd, id, sizeof(*id));
-			if (ret != (ssize_t)sizeof(*id))
+			u64 id;
+
+			ret = readn(fd, &id, sizeof(id));
+			if (ret != (ssize_t)sizeof(id))
 				goto error;
 			if (ph->needs_swap)
-				*id = bswap_64(*id);
-			id++;
+				id = bswap_64(id);
+
+			perf_evlist__id_add(evlist, evsel, 0, j, id);
 		}
 	}
 out:
 	if (buf)
 		free(buf);
-	return events;
+	return evlist;
 error:
-	if (events)
-		free_event_desc(events);
-	events = NULL;
+	if (evlist)
+		perf_evlist__delete(evlist);
+	evlist = NULL;
 	goto out;
 }
 
 static void print_event_desc(struct perf_header *ph, int fd, FILE *fp)
 {
-	struct perf_evsel *evsel, *events = read_event_desc(ph, fd);
+	struct perf_evlist *evlist;
+	struct perf_evsel *evsel;
 	u32 j;
 	u64 *id;
 
-	if (!events) {
+	evlist = read_event_desc(ph, fd);
+	if (!evlist) {
 		fprintf(fp, "# event desc: not available or unable to read\n");
 		return;
 	}
 
-	for (evsel = events; evsel->attr.size; evsel++) {
+	list_for_each_entry(evsel, &evlist->entries, node) {
 		fprintf(fp, "# event : name = %s, ", evsel->name);
 
 		fprintf(fp, "type = %d, config = 0x%"PRIx64
@@ -1364,7 +1354,7 @@ static void print_event_desc(struct perf_header *ph, int fd, FILE *fp)
 		fputc('\n', fp);
 	}
 
-	free_event_desc(events);
+	perf_evlist__delete(evlist);
 }
 
 static void print_total_mem(struct perf_header *ph, int fd __maybe_unused,
@@ -1785,17 +1775,19 @@ process_event_desc(struct perf_file_section *section __maybe_unused,
 		   void *data __maybe_unused)
 {
 	struct perf_session *session;
-	struct perf_evsel *evsel, *events = read_event_desc(header, fd);
+	struct perf_evlist *evlist;
+	struct perf_evsel *evsel;
 
-	if (!events)
+	evlist = read_event_desc(header, fd);
+	if (!evlist)
 		return 0;
 
 	session = container_of(header, struct perf_session, header);
-	for (evsel = events; evsel->attr.size; evsel++)
+
+	list_for_each_entry(evsel, &evlist->entries, node)
 		perf_evlist__set_event_name(session->evlist, evsel);
 
-	free_event_desc(events);
-
+	perf_evlist__delete(evlist);
 	return 0;
 }
 
