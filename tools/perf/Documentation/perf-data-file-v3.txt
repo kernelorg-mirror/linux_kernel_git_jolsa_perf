@@ -1,0 +1,68 @@
+perf-data-file-v3(5)
+====================
+
+NAME
+----
+perf-data-file-v3 - The perf tool file format version 3
+
+
+DESCRIPTION
+-----------
+Following text describes version 3 of the perf data file format,
+which is version that is currently used by perf tool.
+
+In version 3 we got rid of following sections:
+  EVENT IDS
+  EVENT ATTRIBUTES
+  EVENT TYPES
+
+and keep only data and features sections. All the data
+from above listed sections are now read from specific
+FEATURES sections.
+
+benefits:
+  - simplified header storage at the time the file is closed
+  - allowing cpu hot-plugged addition/removal event IDs
+    during the session
+
+High level view of the format:
+  FILE HEADER
+  EVENT DATA
+  FEATURES
+
+
+FILE HEADER
+-----------
+Starting point of the data file with magic bytes and global
+section information.
+
+The section contains following data:
+  struct perf_file_header header
+
+struct perf_file_header::
+  struct perf_file_header {
+        u64  magic;
+        u64  size;
+        u64  attr_size;
+        struct perf_file_section  data;
+        struct perf_file_section  features;
+        DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
+  }
+
+  magic           ID 'PERFILE3'
+  size            size minus sizeof(struct perf_file_header)
+  attr_size       attribute size minus sizeof(struct perf_file_attr)
+  data            location of 'EVENT DATA'
+  features        location of 'EVENT TYPES'
+  adds_features   'FEATURES' bitmask
+
+
+EVENT DATA
+----------
+This section contains blob of all events' data - auxiliary events
+and samples.
+
+
+FEATURES
+--------
+Same as in version 2.

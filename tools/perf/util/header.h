@@ -37,6 +37,7 @@ enum {
 enum perf_header_version {
 	PERF_HEADER_VERSION_1,
 	PERF_HEADER_VERSION_2,
+	PERF_HEADER_VERSION_3,
 };
 
 struct perf_file_section {
@@ -52,6 +53,12 @@ struct perf_file_header_v2 {
 	DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
 };
 
+struct perf_file_header_v3 {
+	struct perf_file_section	data;
+	struct perf_file_section	features;
+	DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
+};
+
 struct perf_file_header {
 	u64	magic;
 	u64	size;
@@ -60,6 +67,7 @@ struct perf_file_header {
 	/* version specific data */
 	union {
 		struct perf_file_header_v2 v2;
+		struct perf_file_header_v3 v3;
 	};
 };
 

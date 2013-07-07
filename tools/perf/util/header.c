@@ -30,6 +30,7 @@ static const char **header_argv;
 
 /*
  * magic2 = "PERFILE2"
+ * magic3 = "PERFILE3"
  * must be a numerical value to let the endianness
  * determine the memory layout. That way we are able
  * to detect endianness when reading the perf.data file
@@ -40,6 +41,8 @@ static const char **header_argv;
 static const char *__perf_magic1 = "PERFFILE";
 static const u64 __perf_magic2    = 0x32454c4946524550ULL;
 static const u64 __perf_magic2_sw = 0x50455246494c4532ULL;
+static const u64 __perf_magic3    = 0x33454c4946524550ULL;
+static const u64 __perf_magic3_sw = 0x50455246494c4533ULL;
 
 #define PERF_MAGIC	__perf_magic2
 
@@ -2460,7 +2463,9 @@ bool is_perf_magic(u64 magic)
 {
 	if (!memcmp(&magic, __perf_magic1, sizeof(magic))
 		|| magic == __perf_magic2
-		|| magic == __perf_magic2_sw)
+		|| magic == __perf_magic2_sw
+		|| magic == __perf_magic3
+		|| magic == __perf_magic3_sw)
 		return true;
 
 	return false;
@@ -2502,6 +2507,7 @@ do {								\
 } while (0)
 
 	CHECK(__perf_magic2, PERF_HEADER_VERSION_2);
+	CHECK(__perf_magic3, PERF_HEADER_VERSION_3);
 
 	return -1;
 }
