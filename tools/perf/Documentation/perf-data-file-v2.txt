@@ -8,8 +8,9 @@ perf-data-file-v2 - The perf tool file format version 2
 
 DESCRIPTION
 -----------
-Following text describes version 2 of the perf data file format,
-which is version that is currently used by perf tool.
+Following text describes version 2 of the perf data file format.
+The perf tool supports this format for reading, but for writing
+it uses version 3 format perf-data-file-v3(1).
 
 The perf data file format is composed of several sections
 describing monitored events and the data itself.

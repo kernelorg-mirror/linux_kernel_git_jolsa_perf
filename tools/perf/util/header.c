@@ -44,7 +44,7 @@ static const u64 __perf_magic2_sw = 0x50455246494c4532ULL;
 static const u64 __perf_magic3    = 0x33454c4946524550ULL;
 static const u64 __perf_magic3_sw = 0x50455246494c4533ULL;
 
-#define PERF_MAGIC	__perf_magic2
+#define PERF_MAGIC	__perf_magic3
 
 struct perf_file_attr {
 	struct perf_event_attr	attr;
@@ -2240,6 +2240,7 @@ static int perf_header__adds_write(struct perf_header *header,
 			perf_header__clear_feat(header, feat);
 	}
 
+	header->feat_size = lseek(fd, 0, SEEK_CUR) - sec_start;
 	lseek(fd, sec_start, SEEK_SET);
 	/*
 	 * may write more than needed due to dropped feature, but
@@ -2271,72 +2272,45 @@ int perf_header__write_pipe(int fd)
 	return 0;
 }
 
+int perf_session__prepare_header(int fd)
+{
+	off_t off = lseek(fd, PERF_FILE_HEADER__DATA_OFFSET, SEEK_SET);
+	return off == PERF_FILE_HEADER__DATA_OFFSET ? 0 : -1;
+}
+
 int perf_session__write_header(struct perf_session *session,
 			       struct perf_evlist *evlist,
-			       int fd, bool at_exit)
+			       int fd)
 {
 	struct perf_file_header f_header;
 	struct perf_file_attr   f_attr;
 	struct perf_header *header = &session->header;
-	struct perf_evsel *evsel;
-	u64 attr_offset;
 	int err;
 
-	lseek(fd, sizeof(f_header), SEEK_SET);
+	header->feat_offset = PERF_FILE_HEADER__DATA_OFFSET +
+			      header->data_size;
 
-	list_for_each_entry(evsel, &evlist->entries, node) {
-		evsel->id_offset = lseek(fd, 0, SEEK_CUR);
-		err = do_write(fd, evsel->id, evsel->ids * sizeof(u64));
-		if (err < 0) {
-			pr_debug("failed to write perf header\n");
-			return err;
-		}
-	}
-
-	attr_offset = lseek(fd, 0, SEEK_CUR);
-
-	list_for_each_entry(evsel, &evlist->entries, node) {
-		f_attr = (struct perf_file_attr){
-			.attr = evsel->attr,
-			.ids  = {
-				.offset = evsel->id_offset,
-				.size   = evsel->ids * sizeof(u64),
-			}
-		};
-		err = do_write(fd, &f_attr, sizeof(f_attr));
-		if (err < 0) {
-			pr_debug("failed to write perf header attribute\n");
-			return err;
-		}
-	}
-
-	header->data_offset = lseek(fd, 0, SEEK_CUR);
-	header->feat_offset = header->data_offset + header->data_size;
-
-	if (at_exit) {
-		err = perf_header__adds_write(header, evlist, fd);
-		if (err < 0)
-			return err;
-	}
+	err = perf_header__adds_write(header, evlist, fd);
+	if (err < 0)
+		return err;
 
 	f_header = (struct perf_file_header){
 		.magic	   = PERF_MAGIC,
 		.size	   = sizeof(f_header),
 		.attr_size = sizeof(f_attr),
-		.v2        = {
-			.attrs = {
-				.offset = attr_offset,
-				.size   = evlist->nr_entries * sizeof(f_attr),
-			},
+		.v3        = {
 			.data = {
-				.offset = header->data_offset,
+				.offset = PERF_FILE_HEADER__DATA_OFFSET,
 				.size	= header->data_size,
 			},
-		/* event_types is ignored, store zeros */
+			.features = {
+				.offset = header->feat_offset,
+				.size   = header->feat_size,
+			},
 		},
 	};
 
-	memcpy(&f_header.v2.adds_features, &header->adds_features,
+	memcpy(&f_header.v3.adds_features, &header->adds_features,
 	       sizeof(header->adds_features));
 
 	lseek(fd, 0, SEEK_SET);
@@ -2345,7 +2319,6 @@ int perf_session__write_header(struct perf_session *session,
 		pr_debug("failed to write perf header\n");
 		return err;
 	}
-	lseek(fd, header->data_offset + header->data_size, SEEK_SET);
 
 	return 0;
 }
@@ -2880,6 +2853,7 @@ static int perf_session__read_header_v3(struct perf_session *session,
 	ph->data_offset  = v3->data.offset;
 	ph->data_size	 = v3->data.size;
 	ph->feat_offset  = v3->features.offset;
+	ph->feat_size    = v3->features.size;
 
 	perf_header__process_sections(ph, session->fd, &session->pevent,
 				      perf_file_section__process);

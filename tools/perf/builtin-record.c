@@ -273,7 +273,7 @@ static void perf_record__exit(int status, void *arg)
 		if (!rec->no_buildid)
 			process_buildids(rec);
 		perf_session__write_header(rec->session, rec->evlist,
-					   rec->output, true);
+					   rec->output);
 		perf_session__delete(rec->session);
 		perf_evlist__delete(rec->evlist);
 		symbol__exit();
@@ -444,8 +444,7 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 		if (err < 0)
 			goto out_delete_session;
 	} else {
-		err = perf_session__write_header(session, evsel_list,
-						 output, false);
+		err = perf_session__prepare_header(output);
 		if (err < 0)
 			goto out_delete_session;
 	}

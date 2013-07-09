@@ -53,6 +53,8 @@ struct perf_file_header_v2 {
 	DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
 };
 
+#define PERF_FILE_HEADER__DATA_OFFSET (sizeof(struct perf_file_header))
+
 struct perf_file_header_v3 {
 	struct perf_file_section	data;
 	struct perf_file_section	features;
@@ -111,6 +113,7 @@ struct perf_header {
 	u64				data_offset;
 	u64				data_size;
 	u64				feat_offset;
+	u64				feat_size;
 	DECLARE_BITMAP(adds_features, HEADER_FEAT_BITS);
 	struct perf_session_env 	env;
 };
@@ -119,9 +122,10 @@ struct perf_evlist;
 struct perf_session;
 
 int perf_session__read_header(struct perf_session *session);
+int perf_session__prepare_header(int fd);
 int perf_session__write_header(struct perf_session *session,
 			       struct perf_evlist *evlist,
-			       int fd, bool at_exit);
+			       int fd);
 int perf_header__write_pipe(int fd);
 
 void perf_header__set_feat(struct perf_header *header, int feat);
