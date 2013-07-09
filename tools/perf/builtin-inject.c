@@ -376,7 +376,7 @@ static int __cmd_inject(struct perf_inject *inject)
 
 	if (!inject->pipe_output) {
 		session->header.data_size = inject->bytes_written;
-		perf_session__write_header(session, session->evlist, inject->output, true);
+		perf_session__write_header(session, session->evlist, inject->output);
 	}
 
 	perf_session__delete(session);

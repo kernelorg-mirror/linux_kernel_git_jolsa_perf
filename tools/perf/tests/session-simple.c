@@ -479,7 +479,7 @@ static int session_write(char *file)
 	perf_header__clear_feat(&session->header, HEADER_BRANCH_STACK);
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__write_header(session, evlist, fd, false));
+		!perf_session__prepare_header(fd));
 
 #define STORE_EVENTS(str, func, cnt)				\
 do {								\
@@ -519,7 +519,7 @@ do {								\
 	session->header.data_size += size;
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__write_header(session, evlist, fd, true));
+		!perf_session__write_header(session, evlist, fd));
 
 	perf_session__delete(session);
 	perf_evlist__delete(evlist);
