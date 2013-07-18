@@ -89,7 +89,9 @@ union perf_event *perf_evlist__mmap_read(struct perf_evlist *self, int idx);
 int perf_evlist__open(struct perf_evlist *evlist);
 void perf_evlist__close(struct perf_evlist *evlist);
 
+void perf_evlist__set_id_pos(struct perf_evlist *evlist);
 void perf_evlist__make_sample_types_compatible(struct perf_evlist *evlist);
+bool perf_can_sample_identifier(void);
 void perf_evlist__config(struct perf_evlist *evlist,
 			 struct perf_record_opts *opts);
 

@@ -53,7 +53,8 @@ struct read_event {
 	(PERF_SAMPLE_IP | PERF_SAMPLE_TID |		\
 	 PERF_SAMPLE_TIME | PERF_SAMPLE_ADDR |		\
 	PERF_SAMPLE_ID | PERF_SAMPLE_STREAM_ID |	\
-	 PERF_SAMPLE_CPU | PERF_SAMPLE_PERIOD)
+	 PERF_SAMPLE_CPU | PERF_SAMPLE_PERIOD |		\
+	 PERF_SAMPLE_IDENTIFIER)
 
 /*
  * Events have compatible sample types if the following bits all have the same
@@ -61,13 +62,15 @@ struct read_event {
  * events the order is: PERF_SAMPLE_IP, PERF_SAMPLE_TID, PERF_SAMPLE_TIME,
  * PERF_SAMPLE_ADDR, PERF_SAMPLE_ID.  For non-sample events the sample members
  * are accessed in reverse order.  The order is: PERF_SAMPLE_ID,
- * PERF_SAMPLE_STREAM_ID, PERF_SAMPLE_CPU.
+ * PERF_SAMPLE_STREAM_ID, PERF_SAMPLE_CPU.  PERF_SAMPLE_IDENTIFIER is added for
+ * completeness but it should not be used with PERF_SAMPLE_ID.  Sample types
+ * that include PERF_SAMPLE_IDENTIFIER are always compatible.
  */
 #define PERF_COMPAT_MASK				\
 	(PERF_SAMPLE_IP   | PERF_SAMPLE_TID       |	\
 	 PERF_SAMPLE_TIME | PERF_SAMPLE_ADDR      |	\
 	 PERF_SAMPLE_ID   | PERF_SAMPLE_STREAM_ID |	\
-	 PERF_SAMPLE_CPU)
+	 PERF_SAMPLE_CPU  | PERF_SAMPLE_IDENTIFIER)
 
 struct sample_event {
 	struct perf_event_header        header;

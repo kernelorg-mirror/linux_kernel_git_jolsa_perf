@@ -50,12 +50,16 @@ int __perf_evsel__sample_size(u64 sample_type)
  * __perf_evsel__calc_id_pos - calculate id_pos.
  * @sample_type: sample type
  *
- * This function returns the position of the event id (PERF_SAMPLE_ID) in a
- * sample event i.e. in the array of struct sample_event.
+ * This function returns the position of the event id (PERF_SAMPLE_ID or
+ * PERF_SAMPLE_IDENTIFIER) in a sample event i.e. in the array of struct
+ * sample_event.
  */
 static int __perf_evsel__calc_id_pos(u64 sample_type)
 {
 	int idx = 0;
+
+	if (sample_type & PERF_SAMPLE_IDENTIFIER)
+		return 0;
 
 	if (!(sample_type & PERF_SAMPLE_ID))
 		return -1;
@@ -80,12 +84,15 @@ static int __perf_evsel__calc_id_pos(u64 sample_type)
  * @sample_type: sample type
  *
  * This function returns the position (counting backwards) of the event id
- * (PERF_SAMPLE_ID) in a non-sample event i.e. if sample_id_all is used there is
- * an id sample appended to non-sample events.
+ * (PERF_SAMPLE_ID or PERF_SAMPLE_IDENTIFIER) in a non-sample event i.e. if
+ * sample_id_all is used there is an id sample appended to non-sample events.
  */
 static int __perf_evsel__calc_is_pos(u64 sample_type)
 {
 	int idx = 1;
+
+	if (sample_type & PERF_SAMPLE_IDENTIFIER)
+		return 1;
 
 	if (!(sample_type & PERF_SAMPLE_ID))
 		return -1;
@@ -135,9 +142,15 @@ void __perf_evsel__reset_sample_bit(struct perf_evsel *evsel,
 	}
 }
 
-void perf_evsel__set_sample_id(struct perf_evsel *evsel)
+void perf_evsel__set_sample_id(struct perf_evsel *evsel,
+			       bool can_sample_identifier)
 {
-	perf_evsel__set_sample_bit(evsel, ID);
+	if (can_sample_identifier) {
+		perf_evsel__reset_sample_bit(evsel, ID);
+		perf_evsel__set_sample_bit(evsel, IDENTIFIER);
+	} else {
+		perf_evsel__set_sample_bit(evsel, ID);
+	}
 	evsel->attr.read_format |= PERF_FORMAT_ID;
 }
 
@@ -570,7 +583,7 @@ void perf_evsel__config(struct perf_evsel *evsel,
 		 * We need ID even in case of single event, because
 		 * PERF_SAMPLE_READ process ID specific data.
 		 */
-		perf_evsel__set_sample_id(evsel);
+		perf_evsel__set_sample_id(evsel, false);
 
 		/*
 		 * Apply group format only if we belong to group
@@ -1125,6 +1138,11 @@ static int perf_evsel__parse_id_sample(const struct perf_evsel *evsel,
 	array += ((event->header.size -
 		   sizeof(event->header)) / sizeof(u64)) - 1;
 
+	if (type & PERF_SAMPLE_IDENTIFIER) {
+		sample->id = *array;
+		array--;
+	}
+
 	if (type & PERF_SAMPLE_CPU) {
 		u.val64 = *array;
 		if (swapped) {
@@ -1221,6 +1239,12 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (evsel->sample_size + sizeof(event->header) > event->header.size)
 		return -EFAULT;
 
+	data->id = -1ULL;
+	if (type & PERF_SAMPLE_IDENTIFIER) {
+		data->id = *array;
+		array++;
+	}
+
 	if (type & PERF_SAMPLE_IP) {
 		data->ip = *array;
 		array++;
@@ -1251,7 +1275,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		array++;
 	}
 
-	data->id = -1ULL;
 	if (type & PERF_SAMPLE_ID) {
 		data->id = *array;
 		array++;
@@ -1432,6 +1455,11 @@ int perf_event__synthesize_sample(union perf_event *event, u64 type,
 	union u64_swap u;
 
 	array = event->sample.array;
+
+	if (type & PERF_SAMPLE_IDENTIFIER) {
+		*array = sample->id;
+		array++;
+	}
 
 	if (type & PERF_SAMPLE_IP) {
 		*array = sample->ip;
@@ -1621,6 +1649,7 @@ static int sample_type__fprintf(FILE *fp, bool *first, u64 value)
 		bit_name(READ), bit_name(CALLCHAIN), bit_name(ID), bit_name(CPU),
 		bit_name(PERIOD), bit_name(STREAM_ID), bit_name(RAW),
 		bit_name(BRANCH_STACK), bit_name(REGS_USER), bit_name(STACK_USER),
+		bit_name(IDENTIFIER),
 		{ .name = NULL, }
 	};
 #undef bit_name

@@ -56,7 +56,7 @@ struct perf_evlist *perf_evlist__new(void)
  * Events with compatible sample types all have the same id_pos
  * and is_pos.  For convenience, put a copy on evlist.
  */
-static void perf_evlist__set_id_pos(struct perf_evlist *evlist)
+void perf_evlist__set_id_pos(struct perf_evlist *evlist)
 {
 	struct perf_evsel *first = perf_evlist__first(evlist);
 
@@ -848,6 +848,9 @@ u16 perf_evlist__id_hdr_size(struct perf_evlist *evlist)
 
 	if (sample_type & PERF_SAMPLE_CPU)
 		size += sizeof(data->cpu) * 2;
+
+	if (sample_type & PERF_SAMPLE_IDENTIFIER)
+		size += sizeof(data->id);
 out:
 	return size;
 }
