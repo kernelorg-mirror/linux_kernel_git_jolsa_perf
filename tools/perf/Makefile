@@ -295,6 +295,7 @@ LIB_H += ui/ui.h
 LIB_H += tests/perf.data.v2.le.h
 LIB_H += tests/perf.data.v2.be.h
 LIB_H += tests/perf.data.v3.le.h
+LIB_H += tests/perf.data.v3.be.h
 
 LIB_OBJS += $(OUTPUT)util/abspath.o
 LIB_OBJS += $(OUTPUT)util/alias.o
