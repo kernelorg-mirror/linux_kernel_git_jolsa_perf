@@ -120,6 +120,10 @@ static struct test {
 		.func = test__aux_poll,
 	},
 	{
+		.desc = "Test session - simple read/write",
+		.func = test__session_simple,
+	},
+	{
 		.func = NULL,
 	},
 };
