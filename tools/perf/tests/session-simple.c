@@ -21,6 +21,10 @@
 #define EVENTS_UNTHROTTLE 3
 #define EVENTS_SAMPLE 4
 
+char data_file_v2_le[] = {
+#include "perf.data.v2.le.h"
+};
+
 static int events_mmap;
 static int events_lost;
 static int events_comm;
@@ -591,11 +595,40 @@ static int test_generated_data(void)
 	return err;
 }
 
+static int file_write(char *file, char *data, ssize_t size)
+{
+	int fd = open(file, O_TRUNC|O_RDWR);
+	int err = 0;
+
+	if (size != write(fd, data, size))
+		err = -1;
+
+	close(fd);
+	return err;
+}
+
+static int test_file_data(char *data, ssize_t size)
+{
+	char *file = get_file();
+	int err = 0;
+
+	TEST_ASSERT_VAL("failed to get temporary file", file);
+
+	err = file_write(file, data, size);
+	if (!err)
+		err = session_read(file);
+
+	unlink(file);
+	return err;
+}
+
 int test__session_simple(void)
 {
 	int err;
 
 	pr_debug("Testing generated data\n");
 	err = test_generated_data();
+	pr_debug("Testing v2 LE data\n");
+	err |= test_file_data(data_file_v2_le, sizeof(data_file_v2_le));
 	return err;
 }
