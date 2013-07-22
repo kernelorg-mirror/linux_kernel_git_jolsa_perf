@@ -34,6 +34,10 @@ char data_file_v3_le[] = {
 #include "perf.data.v3.le.h"
 };
 
+char data_file_v3_be[] = {
+#include "perf.data.v3.be.h"
+};
+
 static int events_mmap;
 static int events_lost;
 static int events_comm;
@@ -648,5 +652,7 @@ int test__session_simple(void)
 	err |= test_file_data(data_file_v2_be, sizeof(data_file_v2_be));
 	pr_debug("Testing v3 LE data\n");
 	err |= test_file_data(data_file_v3_le, sizeof(data_file_v3_le));
+	pr_debug("Testing v3 BE data\n");
+	err |= test_file_data(data_file_v3_be, sizeof(data_file_v3_be));
 	return err;
 }
