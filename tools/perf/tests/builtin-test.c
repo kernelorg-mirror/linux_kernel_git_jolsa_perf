@@ -108,6 +108,10 @@ static struct test {
 		.func = test__sample_parsing,
 	},
 	{
+		.desc = "Test session - simple read/write",
+		.func = test__session_simple,
+	},
+	{
 		.func = NULL,
 	},
 };
