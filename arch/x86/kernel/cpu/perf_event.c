@@ -1570,7 +1570,11 @@ early_initcall(init_hw_perf_events);
 
 static inline void x86_pmu_read(struct perf_event *event)
 {
-	x86_perf_event_update(event);
+	struct hw_perf_event *hwc = &event->hw;
+
+	/* Update only if the event has already been started. */
+	if (!(hwc->state & PERF_HES_ARCH))
+		x86_perf_event_update(event);
 }
 
 /*
