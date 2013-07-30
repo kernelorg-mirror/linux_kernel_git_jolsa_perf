@@ -8,6 +8,7 @@
 #include "evsel.h"
 #include "util.h"
 #include <unistd.h>
+#include "poller.h"
 
 struct pollfd;
 struct thread_map;
@@ -40,6 +41,7 @@ struct perf_sample_id {
 	/* perf record data */
 	int			fd;
 	struct perf_mmap	*mmap;
+	struct poller_item	poll;
 
 	struct perf_sample_id	*next;
 };

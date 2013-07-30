@@ -316,31 +316,62 @@ static void perf_event__synthesize_guest_os(struct machine *machine, void *data)
 		       " relocation symbol.\n", machine->pid);
 }
 
-static struct perf_event_header finished_round_event = {
-	.size = sizeof(struct perf_event_header),
-	.type = PERF_RECORD_FINISHED_ROUND,
-};
-
 static int perf_record__mmap_read_all(struct perf_record *rec)
 {
 	int i;
-	int rc = 0;
 
 	for (i = 0; i < rec->evlist->nr_mmaps; i++) {
 		if (rec->evlist->mmap[i].base) {
-			if (perf_record__mmap_read(rec, &rec->evlist->mmap[i]) != 0) {
-				rc = -1;
-				goto out;
-			}
+			if (perf_record__mmap_read(rec, &rec->evlist->mmap[i]) != 0)
+				return -1;
 		}
 	}
 
-	if (perf_header__has_feat(&rec->session->header, HEADER_TRACING_DATA))
-		rc = write_output(rec, &finished_round_event,
-				  sizeof(finished_round_event));
+	return 0;
+}
 
-out:
-	return rc;
+static int poll_data(struct poller_item *item)
+{
+	struct perf_record *rec;
+	struct perf_sample_id *sid;
+	struct perf_mmap *m;
+
+	rec = item->data;
+	sid = container_of(item, struct perf_sample_id, poll);
+	m   = sid->mmap;
+
+	return perf_record__mmap_read(rec, m);
+}
+
+static int poll_error(struct poller_item *item __maybe_unused)
+{
+	return -1;
+}
+
+static int perf_evlist__poller_init(struct perf_evlist *evlist,
+				    struct poller *p, void *data)
+{
+	struct perf_sample_id *sid = evlist->sample_id;
+
+	poller_init(p);
+
+	while (sid) {
+		struct poller_item *item = &sid->poll;
+		int ret;
+
+		item->fd        = sid->fd;
+		item->data      = data;
+		item->ops.data  = poll_data;
+		item->ops.error = poll_error;
+
+		ret = poller_add(p, item);
+		if (ret)
+			return ret;
+
+		sid = sid->next;
+	}
+
+	return 0;
 }
 
 static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
@@ -356,7 +387,7 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 	struct perf_evlist *evsel_list = rec->evlist;
 	const char *output_name = rec->output_name;
 	struct perf_session *session;
-	bool disabled = false;
+	struct poller poller;
 
 	rec->progname = argv[0];
 
@@ -553,31 +584,35 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 	if (forks)
 		perf_evlist__start_workload(evsel_list);
 
-	for (;;) {
+	err = perf_evlist__poller_init(evsel_list, &poller, rec);
+	if (err) {
+		pr_err("failed to initialize poller\n");
+		goto out_delete_session;
+	}
+
+	while (!done) {
+		if (poller_poll(&poller, 1000))
+			break;
+
+		waking++;
+	}
+
+	if (!perf_target__none(&opts->target))
+		perf_evlist__disable(evsel_list);
+
+	while (1) {
 		int hits = rec->samples;
 
 		if (perf_record__mmap_read_all(rec) < 0) {
 			err = -1;
-			goto out_delete_session;
+			goto out_delete_poller;
 		}
 
-		if (hits == rec->samples) {
-			if (done)
-				break;
-			err = poll(evsel_list->pollfd, evsel_list->nr_fds, -1);
-			waking++;
-		}
-
-		/*
-		 * When perf is starting the traced process, at the end events
-		 * die with the process and we wait for that. Thus no need to
-		 * disable events in this case.
-		 */
-		if (done && !disabled && !perf_target__none(&opts->target)) {
-			perf_evlist__disable(evsel_list);
-			disabled = true;
-		}
+		if (hits == rec->samples)
+			break;
 	}
+
+	poller_cleanup(&poller);
 
 	if (quiet || signr == SIGUSR1)
 		return 0;
@@ -595,6 +630,8 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 
 	return 0;
 
+out_delete_poller:
+	poller_cleanup(&poller);
 out_delete_session:
 	perf_session__delete(session);
 	return err;
