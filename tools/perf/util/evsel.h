@@ -28,21 +28,6 @@ struct perf_counts {
 	struct perf_counts_values cpu[];
 };
 
-struct perf_evsel;
-
-/*
- * Per fd, to map back from PERF_SAMPLE_ID to evsel, only used when there are
- * more than one entry in the evlist.
- */
-struct perf_sample_id {
-	struct hlist_node 	node;
-	u64		 	id;
-	struct perf_evsel	*evsel;
-
-	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
-	u64			period;
-};
-
 /** struct perf_evsel - event selector
  *
  * @name - Can be set to retain the original event name passed by the user,
@@ -54,7 +39,6 @@ struct perf_evsel {
 	struct perf_event_attr	attr;
 	char			*filter;
 	struct xyarray		*fd;
-	struct xyarray		*sample_id;
 	u64			*id;
 	struct perf_counts	*counts;
 	struct perf_counts	*prev_raw_counts;

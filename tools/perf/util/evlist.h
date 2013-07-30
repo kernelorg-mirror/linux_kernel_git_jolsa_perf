@@ -24,6 +24,21 @@ struct perf_mmap {
 	union perf_event event_copy;
 };
 
+/*
+ * Per fd, to map back from PERF_SAMPLE_ID to evsel, only used when there are
+ * more than one entry in the evlist.
+ */
+struct perf_sample_id {
+	struct hlist_node 	node;
+	u64		 	id;
+	struct perf_evsel	*evsel;
+
+	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
+	u64			period;
+
+	struct perf_sample_id	*next;
+};
+
 struct perf_evlist {
 	struct list_head entries;
 	struct hlist_head heads[PERF_EVLIST__HLIST_SIZE];
@@ -42,6 +57,7 @@ struct perf_evlist {
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
+	struct perf_sample_id *sample_id;
 };
 
 struct perf_evsel_str_handler {
@@ -71,8 +87,8 @@ int perf_evlist__set_filter(struct perf_evlist *evlist, const char *filter);
 struct perf_evsel *
 perf_evlist__find_tracepoint_by_id(struct perf_evlist *evlist, int id);
 
-void perf_evlist__id_add(struct perf_evlist *evlist, struct perf_evsel *evsel,
-			 int cpu, int thread, u64 id);
+struct perf_sample_id* perf_evlist__id_add(struct perf_evlist *evlist,
+					   struct perf_evsel *evsel, u64 id);
 
 void perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd);
 
