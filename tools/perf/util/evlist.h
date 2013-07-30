@@ -21,6 +21,7 @@ struct perf_mmap {
 	void		 *base;
 	int		 mask;
 	unsigned int	 prev;
+	int		 fd;
 	union perf_event event_copy;
 };
 

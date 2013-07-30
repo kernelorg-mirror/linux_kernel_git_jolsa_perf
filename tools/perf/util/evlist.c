@@ -491,20 +491,23 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 	return evlist->mmap != NULL ? 0 : -ENOMEM;
 }
 
-static int __perf_evlist__mmap(struct perf_evlist *evlist,
-			       int idx, int prot, int mask, int fd)
+static struct perf_mmap*
+__perf_evlist__mmap(struct perf_evlist *evlist,
+		    int idx, int prot, int mask, int fd)
 {
-	evlist->mmap[idx].prev = 0;
-	evlist->mmap[idx].mask = mask;
-	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, prot,
-				      MAP_SHARED, fd, 0);
-	if (evlist->mmap[idx].base == MAP_FAILED) {
-		evlist->mmap[idx].base = NULL;
-		return -1;
+	struct perf_mmap *m = &evlist->mmap[idx];
+
+	m->prev = 0;
+	m->mask = mask;
+	m->base = mmap(NULL, evlist->mmap_len, prot, MAP_SHARED, fd, 0);
+	if (m->base == MAP_FAILED) {
+		m->base = NULL;
+		return NULL;
 	}
 
+	m->fd = fd;
 	perf_evlist__add_pollfd(evlist, fd);
-	return 0;
+	return m;
 }
 
 static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist, int prot, int mask)
@@ -515,19 +518,20 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist, int prot, int m
 	int nr_threads = thread_map__nr(evlist->threads);
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
-		int output = -1;
+		struct perf_mmap *out = NULL;
 
 		for (thread = 0; thread < nr_threads; thread++) {
 			list_for_each_entry(evsel, &evlist->entries, node) {
 				int fd = FD(evsel, cpu, thread);
 
-				if (output == -1) {
-					output = fd;
-					if (__perf_evlist__mmap(evlist, cpu,
-								prot, mask, output) < 0)
+				if (!out) {
+					out = __perf_evlist__mmap(evlist, cpu,
+								  prot, mask, fd);
+					if (!out)
 						goto out_unmap;
+
 				} else {
-					if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, output) != 0)
+					if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, out->fd) != 0)
 						goto out_unmap;
 				}
 
@@ -553,18 +557,18 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist, int prot, in
 	int nr_threads = thread_map__nr(evlist->threads);
 
 	for (thread = 0; thread < nr_threads; thread++) {
-		int output = -1;
+		struct perf_mmap *out = NULL;
 
 		list_for_each_entry(evsel, &evlist->entries, node) {
 			int fd = FD(evsel, 0, thread);
 
-			if (output == -1) {
-				output = fd;
-				if (__perf_evlist__mmap(evlist, thread,
-							prot, mask, output) < 0)
+			if (!out) {
+				out = __perf_evlist__mmap(evlist, thread,
+							  prot, mask, fd);
+				if (!out)
 					goto out_unmap;
 			} else {
-				if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, output) != 0)
+				if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, out->fd) != 0)
 					goto out_unmap;
 			}
 
