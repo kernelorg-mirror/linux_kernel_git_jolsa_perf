@@ -325,9 +325,10 @@ struct perf_sample_id* perf_evlist__id_add(struct perf_evlist *evlist,
 	return perf_evlist__id_hash(evlist, evsel, id);
 }
 
-static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
-				  struct perf_evsel *evsel,
-				  int fd)
+static struct perf_sample_id*
+perf_evlist__id_add_fd(struct perf_evlist *evlist,
+		       struct perf_evsel *evsel,
+		       int fd)
 {
 	u64 read_data[4] = { 0, };
 	int id_idx = 1; /* The first entry is the counter value */
@@ -339,7 +340,7 @@ static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
 		goto add;
 
 	if (errno != ENOTTY)
-		return -1;
+		return NULL;
 
 	/* Legacy way to get event id.. All hail to old kernels! */
 
@@ -348,11 +349,11 @@ static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
 	 * out in that case.
 	 */
 	if (perf_evlist__read_format(evlist) & PERF_FORMAT_GROUP)
-		return -1;
+		return NULL;
 
 	if (!(evsel->attr.read_format & PERF_FORMAT_ID) ||
 	    read(fd, &read_data, sizeof(read_data)) == -1)
-		return -1;
+		return NULL;
 
 	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
 		++id_idx;
@@ -362,7 +363,7 @@ static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
 	id = read_data[id_idx];
 
  add:
-	return perf_evlist__id_add(evlist, evsel, id) ? 0 : -ENOMEM;
+	return perf_evlist__id_add(evlist, evsel, id);
 }
 
 struct perf_sample_id *perf_evlist__id2sid(struct perf_evlist *evlist, u64 id)
@@ -522,6 +523,7 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist, int prot, int m
 
 		for (thread = 0; thread < nr_threads; thread++) {
 			list_for_each_entry(evsel, &evlist->entries, node) {
+				struct perf_sample_id *sid;
 				int fd = FD(evsel, cpu, thread);
 
 				if (!out) {
@@ -535,9 +537,12 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist, int prot, int m
 						goto out_unmap;
 				}
 
-				if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
-				    perf_evlist__id_add_fd(evlist, evsel, fd) < 0)
+				sid = perf_evlist__id_add_fd(evlist, evsel, fd);
+				if (!sid)
 					goto out_unmap;
+
+				sid->fd = fd;
+				sid->mmap = out;
 			}
 		}
 	}
@@ -560,6 +565,7 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist, int prot, in
 		struct perf_mmap *out = NULL;
 
 		list_for_each_entry(evsel, &evlist->entries, node) {
+			struct perf_sample_id *sid;
 			int fd = FD(evsel, 0, thread);
 
 			if (!out) {
@@ -572,9 +578,12 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist, int prot, in
 					goto out_unmap;
 			}
 
-			if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
-			    perf_evlist__id_add_fd(evlist, evsel, fd) < 0)
+			sid = perf_evlist__id_add_fd(evlist, evsel, fd);
+			if (!sid)
 				goto out_unmap;
+
+			sid->fd = fd;
+			sid->mmap = out;
 		}
 	}
 

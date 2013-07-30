@@ -37,6 +37,10 @@ struct perf_sample_id {
 	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
 	u64			period;
 
+	/* perf record data */
+	int			fd;
+	struct perf_mmap	*mmap;
+
 	struct perf_sample_id	*next;
 };
 
