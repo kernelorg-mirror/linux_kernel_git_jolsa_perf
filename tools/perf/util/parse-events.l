@@ -54,8 +54,10 @@ static int str(yyscan_t scanner, int token)
 static int sym(yyscan_t scanner, int type, int config)
 {
 	YYSTYPE *yylval = parse_events_get_lval(scanner);
+	char *text = parse_events_get_text(scanner);
 
-	yylval->num = (type << 16) + config;
+	yylval->sym.num = (type << 16) + config;
+	yylval->sym.str = strdup(text);
 	return type == PERF_TYPE_HARDWARE ? PE_VALUE_SYM_HW : PE_VALUE_SYM_SW;
 }
 
