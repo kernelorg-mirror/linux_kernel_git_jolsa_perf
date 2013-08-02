@@ -740,6 +740,7 @@ void perf_evsel__delete(struct perf_evsel *evsel)
 	free(evsel->group_name);
 	if (evsel->tp_format)
 		pevent_free_format(evsel->tp_format);
+	free(evsel->toggle_name);
 	free(evsel->name);
 	free(evsel);
 }

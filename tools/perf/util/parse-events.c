@@ -262,7 +262,42 @@ const char *event_type(int type)
 	return "unknown";
 }
 
+static int config_evsel_term(struct perf_evsel *evsel,
+			     struct parse_events_term *term)
+{
+	if (evsel->toggle_name)
+		return -EINVAL;
 
+	switch (term->type_term) {
+	case PARSE_EVENTS__TERM_TYPE_TOGGLE_ON:
+		evsel->toggle_flag = PERF_FLAG_TOGGLE_ON;
+		break;
+	case PARSE_EVENTS__TERM_TYPE_TOGGLE_OFF:
+		evsel->toggle_flag = PERF_FLAG_TOGGLE_OFF;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	evsel->toggle_name = strdup(term->val.str);
+	return 0;
+}
+
+static int config_evsel(struct perf_evsel *evsel,
+			struct list_head *head)
+{
+	struct parse_events_term *term;
+
+	list_for_each_entry(term, head, list) {
+		int ret;
+
+		ret = config_evsel_term(evsel, term);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
 
 static int __add_event(struct list_head *list, int *idx,
 		       struct perf_event_attr *attr,
@@ -369,7 +404,8 @@ int parse_events_add_cache(struct list_head *list, int *idx,
 }
 
 static int add_tracepoint(struct list_head *list, int *idx,
-			  char *sys_name, char *evt_name)
+			  char *sys_name, char *evt_name,
+			  struct list_head *terms)
 {
 	struct perf_evsel *evsel;
 
@@ -377,13 +413,20 @@ static int add_tracepoint(struct list_head *list, int *idx,
 	if (!evsel)
 		return -ENOMEM;
 
+	if (terms && config_evsel(evsel, terms)) {
+		perf_evsel__delete(evsel);
+		free(list);
+		return -EINVAL;
+	}
+
 	list_add_tail(&evsel->node, list);
 
 	return 0;
 }
 
 static int add_tracepoint_multi_event(struct list_head *list, int *idx,
-				      char *sys_name, char *evt_name)
+				      char *sys_name, char *evt_name,
+				      struct list_head *terms)
 {
 	char evt_path[MAXPATHLEN];
 	struct dirent *evt_ent;
@@ -407,7 +450,8 @@ static int add_tracepoint_multi_event(struct list_head *list, int *idx,
 		if (!strglobmatch(evt_ent->d_name, evt_name))
 			continue;
 
-		ret = add_tracepoint(list, idx, sys_name, evt_ent->d_name);
+		ret = add_tracepoint(list, idx, sys_name,
+				     evt_ent->d_name, terms);
 	}
 
 	closedir(evt_dir);
@@ -415,15 +459,17 @@ static int add_tracepoint_multi_event(struct list_head *list, int *idx,
 }
 
 static int add_tracepoint_event(struct list_head *list, int *idx,
-				char *sys_name, char *evt_name)
+				char *sys_name, char *evt_name,
+				struct list_head *terms)
 {
 	return strpbrk(evt_name, "*?") ?
-	       add_tracepoint_multi_event(list, idx, sys_name, evt_name) :
-	       add_tracepoint(list, idx, sys_name, evt_name);
+	       add_tracepoint_multi_event(list, idx, sys_name, evt_name, terms) :
+	       add_tracepoint(list, idx, sys_name, evt_name, terms);
 }
 
 static int add_tracepoint_multi_sys(struct list_head *list, int *idx,
-				    char *sys_name, char *evt_name)
+				    char *sys_name, char *evt_name,
+				    struct list_head *terms)
 {
 	struct dirent *events_ent;
 	DIR *events_dir;
@@ -447,7 +493,7 @@ static int add_tracepoint_multi_sys(struct list_head *list, int *idx,
 			continue;
 
 		ret = add_tracepoint_event(list, idx, events_ent->d_name,
-					   evt_name);
+					   evt_name, terms);
 	}
 
 	closedir(events_dir);
@@ -455,7 +501,8 @@ static int add_tracepoint_multi_sys(struct list_head *list, int *idx,
 }
 
 int parse_events_add_tracepoint(struct list_head *list, int *idx,
-				char *sys, char *event)
+				char *sys, char *event,
+				struct list_head *terms)
 {
 	int ret;
 
@@ -464,9 +511,9 @@ int parse_events_add_tracepoint(struct list_head *list, int *idx,
 		return ret;
 
 	if (strpbrk(sys, "*?"))
-		return add_tracepoint_multi_sys(list, idx, sys, event);
+		return add_tracepoint_multi_sys(list, idx, sys, event, terms);
 	else
-		return add_tracepoint_event(list, idx, sys, event);
+		return add_tracepoint_event(list, idx, sys, event, terms);
 }
 
 static int

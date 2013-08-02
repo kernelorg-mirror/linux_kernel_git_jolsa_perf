@@ -200,7 +200,7 @@ event_def: event_pmu |
 	   event_legacy_symbol |
 	   event_legacy_cache sep_dc |
 	   event_legacy_mem |
-	   event_legacy_tracepoint sep_dc |
+	   event_legacy_tracepoint |
 	   event_legacy_numeric sep_dc |
 	   event_legacy_raw sep_dc
 
@@ -303,13 +303,13 @@ PE_PREFIX_MEM PE_VALUE sep_dc
 }
 
 event_legacy_tracepoint:
-PE_NAME ':' PE_NAME
+PE_NAME ':' PE_NAME event_config_optional
 {
 	struct parse_events_evlist *data = _data;
 	struct list_head *list;
 
 	ALLOC_LIST(list);
-	ABORT_ON(parse_events_add_tracepoint(list, &data->idx, $1, $3));
+	ABORT_ON(parse_events_add_tracepoint(list, &data->idx, $1, $3, $4));
 	$$ = list;
 }
 

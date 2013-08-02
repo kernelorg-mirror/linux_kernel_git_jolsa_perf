@@ -49,6 +49,8 @@ enum {
 	PARSE_EVENTS__TERM_TYPE_NAME,
 	PARSE_EVENTS__TERM_TYPE_SAMPLE_PERIOD,
 	PARSE_EVENTS__TERM_TYPE_BRANCH_SAMPLE_TYPE,
+	PARSE_EVENTS__TERM_TYPE_TOGGLE_ON,
+	PARSE_EVENTS__TERM_TYPE_TOGGLE_OFF,
 };
 
 struct parse_events_term {
@@ -86,7 +88,8 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add);
 int parse_events__modifier_group(struct list_head *list, char *event_mod);
 int parse_events_name(struct list_head *list, char *name);
 int parse_events_add_tracepoint(struct list_head *list, int *idx,
-				char *sys, char *event);
+				char *sys, char *event,
+				struct list_head *terms);
 int parse_events_add_numeric(struct list_head *list, int *idx,
 			     u32 type, u64 config,
 			     struct list_head *terms);
