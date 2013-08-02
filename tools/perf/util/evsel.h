@@ -78,6 +78,9 @@ struct perf_evsel {
 	int			nr_members;
 	struct perf_evsel	*leader;
 	char			*group_name;
+	/* toggle event config */
+	char			toggle_flag;
+	char			*toggle_name;
 };
 
 #define hists_to_evsel(h) container_of(h, struct perf_evsel, hists)
