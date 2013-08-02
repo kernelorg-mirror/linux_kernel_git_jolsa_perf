@@ -48,8 +48,8 @@ static inc_group_count(struct list_head *list,
 %token PE_PREFIX_MEM PE_PREFIX_RAW PE_PREFIX_GROUP
 %token PE_ERROR
 %type <num> PE_VALUE
-%type <num> PE_VALUE_SYM_HW
-%type <num> PE_VALUE_SYM_SW
+%type <sym> PE_VALUE_SYM_HW
+%type <sym> PE_VALUE_SYM_SW
 %type <num> PE_RAW
 %type <num> PE_TERM
 %type <str> PE_NAME
@@ -58,7 +58,7 @@ static inc_group_count(struct list_head *list,
 %type <str> PE_MODIFIER_EVENT
 %type <str> PE_MODIFIER_BP
 %type <str> PE_EVENT_NAME
-%type <num> value_sym
+%type <sym> value_sym
 %type <head> event_config_optional
 %type <head> event_config
 %type <term> event_term
@@ -80,8 +80,12 @@ static inc_group_count(struct list_head *list,
 
 %union
 {
-	char *str;
+	struct {
+		u64 num;
+		char *str;
+	} sym;
 	u64 num;
+	char *str;
 	struct list_head *head;
 	struct parse_events_term *term;
 }
@@ -234,8 +238,8 @@ value_sym event_config_optional
 	struct parse_events_evlist *data = _data;
 	struct list_head *list;
 	struct list_head *terms = $2;
-	int type = $1 >> 16;
-	int config = $1 & 255;
+	int type = $1.num >> 16;
+	int config = $1.num & 255;
 
 	ALLOC_LIST(list);
 	ABORT_ON(parse_events_add_numeric(list, &data->idx,
@@ -382,7 +386,7 @@ PE_NAME '=' PE_VALUE
 PE_NAME '=' PE_VALUE_SYM_HW
 {
 	struct parse_events_term *term;
-	int config = $3 & 255;
+	int config = $3.num & 255;
 
 	ABORT_ON(parse_events_term__sym_hw(&term, $1, config));
 	$$ = term;
@@ -400,7 +404,7 @@ PE_NAME
 PE_VALUE_SYM_HW
 {
 	struct parse_events_term *term;
-	int config = $1 & 255;
+	int config = $1.num & 255;
 
 	ABORT_ON(parse_events_term__sym_hw(&term, NULL, config));
 	$$ = term;
@@ -411,6 +415,14 @@ PE_TERM '=' PE_NAME
 	struct parse_events_term *term;
 
 	ABORT_ON(parse_events_term__str(&term, (int)$1, NULL, $3));
+	$$ = term;
+}
+|
+PE_TERM '=' value_sym
+{
+	struct parse_events__term *term;
+
+	ABORT_ON(parse_events_term__str(&term, (int)$1, NULL, $3.str));
 	$$ = term;
 }
 |
