@@ -540,8 +540,8 @@ int parse_events_add_breakpoint(struct list_head *list, int *idx,
 	return add_event(list, idx, &attr, NULL);
 }
 
-static int config_term(struct perf_event_attr *attr,
-		       struct parse_events_term *term)
+static int config_attr_term(struct perf_event_attr *attr,
+			    struct parse_events_term *term)
 {
 #define CHECK_TYPE_VAL(type)					\
 do {								\
@@ -608,7 +608,7 @@ static int config_attr(struct perf_event_attr *attr,
 	struct parse_events_term *term;
 
 	list_for_each_entry(term, head, list)
-		if (config_term(attr, term) && fail)
+		if (config_attr_term(attr, term) && fail)
 			return -EINVAL;
 
 	return 0;
@@ -616,7 +616,7 @@ static int config_attr(struct perf_event_attr *attr,
 
 int parse_events_add_numeric(struct list_head *list, int *idx,
 			     u32 type, u64 config,
-			     struct list_head *head_config)
+			     struct list_head *terms)
 {
 	struct perf_event_attr attr;
 
@@ -624,15 +624,15 @@ int parse_events_add_numeric(struct list_head *list, int *idx,
 	attr.type = type;
 	attr.config = config;
 
-	if (head_config &&
-	    config_attr(&attr, head_config, 1))
+	if (terms &&
+	    config_attr(&attr, terms, 1))
 		return -EINVAL;
 
 	return add_event(list, idx, &attr, pmu_event_name(terms));
 }
 
 int parse_events_add_pmu(struct list_head *list, int *idx,
-			 char *name, struct list_head *head_config)
+			 char *name, struct list_head *terms)
 {
 	struct perf_event_attr attr;
 	struct perf_pmu *pmu;
@@ -643,19 +643,19 @@ int parse_events_add_pmu(struct list_head *list, int *idx,
 
 	memset(&attr, 0, sizeof(attr));
 
-	if (perf_pmu__check_alias(pmu, head_config))
+	if (perf_pmu__check_alias(pmu, terms))
 		return -EINVAL;
 
 	/*
 	 * Configure hardcoded terms first, no need to check
 	 * return value when called with fail == 0 ;)
 	 */
-	config_attr(&attr, head_config, 0);
+	config_attr(&attr, terms, 0);
 
-	if (perf_pmu__config(pmu, &attr, head_config))
+	if (perf_pmu__config(pmu, &attr, terms))
 		return -EINVAL;
 
-	return __add_event(list, idx, &attr, pmu_event_name(head_config),
+	return __add_event(list, idx, &attr, pmu_event_name(terms),
 			   pmu->cpus);
 }
 
