@@ -447,6 +447,8 @@ struct perf_event {
 	enum perf_event_toggle_flag	toggle_flag;
 	int				paused;
 	atomic_t			toggled_cnt;
+	struct perf_event		*toggled_child;
+	int				toggled_child_cnt;
 #endif /* CONFIG_PERF_EVENTS */
 };
 
