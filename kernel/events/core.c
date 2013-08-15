@@ -3152,6 +3152,8 @@ static void free_event_rcu(struct rcu_head *head)
 	if (event->ns)
 		put_pid_ns(event->ns);
 	perf_event_free_filter(event);
+	if (event->toggled_child)
+		kfree(event->toggled_child);
 	kfree(event);
 }
 
@@ -6599,6 +6601,12 @@ static void account_event(struct perf_event *event)
 	account_event_cpu(event, event->cpu);
 }
 
+
+static struct perf_event *__perf_event_alloc(void)
+{
+	return kzalloc(sizeof(struct perf_event), GFP_KERNEL);
+}
+
 /*
  * Allocate and initialize a event structure
  */
@@ -6608,10 +6616,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		 struct perf_event *group_leader,
 		 struct perf_event *parent_event,
 		 perf_overflow_handler_t overflow_handler,
-		 void *context)
+		 void *context, struct perf_event *event)
 {
 	struct pmu *pmu;
-	struct perf_event *event;
 	struct hw_perf_event *hwc;
 	long err = -EINVAL;
 
@@ -6620,9 +6627,11 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 			return ERR_PTR(-EINVAL);
 	}
 
-	event = kzalloc(sizeof(*event), GFP_KERNEL);
-	if (!event)
-		return ERR_PTR(-ENOMEM);
+	if (!event) {
+		event = __perf_event_alloc();
+		if (!event)
+			return ERR_PTR(-ENOMEM);
+	}
 
 	/*
 	 * Single events are their own group leaders, with an
@@ -6682,6 +6691,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 
 	event->overflow_handler	= overflow_handler;
 	event->overflow_handler_context = context;
+
+	if (parent_event && atomic_read(&parent_event->toggled_cnt))
+		event->toggled_cnt = parent_event->toggled_cnt;
 
 	perf_event__state_init(event);
 
@@ -7041,7 +7053,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	get_online_cpus();
 
 	event = perf_event_alloc(&attr, cpu, task, group_leader, NULL,
-				 NULL, NULL);
+				 NULL, NULL, NULL);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
 		goto err_task;
@@ -7263,7 +7275,7 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	 */
 
 	event = perf_event_alloc(attr, cpu, task, NULL, NULL,
-				 overflow_handler, context);
+				 overflow_handler, context, NULL);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
 		goto err;
@@ -7555,6 +7567,45 @@ void perf_event_delayed_put(struct task_struct *task)
 		WARN_ON_ONCE(task->perf_event_ctxp[ctxn]);
 }
 
+static void
+perf_event_toggled_child(struct perf_event *event,
+			 struct perf_event *child)
+{
+	event->toggled_child     = child;
+	event->toggled_child_cnt = atomic_read(&event->toggled_cnt) + 1;
+}
+
+static int
+perf_event_inherit_toggle(struct perf_event *event,
+			  struct perf_event *parent)
+{
+	struct perf_event *child   = parent->toggled_child;
+	struct perf_event *toggled = parent->toggled_event;
+
+	if (atomic_read(&event->toggled_cnt)) {
+		if (!child)
+			perf_event_toggled_child(parent, event);
+		toggled = parent;
+	} else if (toggled) {
+		child = toggled->toggled_child;
+		if (!child) {
+			child = __perf_event_alloc();
+			if (!child)
+				return -ENOMEM;
+			perf_event_toggled_child(toggled, child);
+		}
+
+		/* set inherited toggling */
+		event->toggled_event = child;
+		event->toggle_flag   = parent->toggle_flag;
+	}
+
+	if (!--toggled->toggled_child_cnt)
+		toggled->toggled_child = NULL;
+
+	return 0;
+}
+
 /*
  * inherit a event from parent task to child task:
  */
@@ -7566,8 +7617,10 @@ inherit_event(struct perf_event *parent_event,
 	      struct perf_event *group_leader,
 	      struct perf_event_context *child_ctx)
 {
-	struct perf_event *child_event;
+	struct perf_event *event, *child_event, *pe = parent_event;
 	unsigned long flags;
+
+	event = parent_event->toggled_child;
 
 	/*
 	 * Instead of creating recursive hierarchies of events,
@@ -7579,12 +7632,18 @@ inherit_event(struct perf_event *parent_event,
 		parent_event = parent_event->parent;
 
 	child_event = perf_event_alloc(&parent_event->attr,
-					   parent_event->cpu,
-					   child,
-					   group_leader, parent_event,
-				           NULL, NULL);
+					parent_event->cpu,
+					child,
+					group_leader, parent_event,
+					NULL, NULL,
+					event);
 	if (IS_ERR(child_event))
 		return child_event;
+
+	if (perf_event_inherit_toggle(child_event, pe)) {
+		free_event(child_event);
+		return NULL;
+	}
 
 	if (!atomic_long_inc_not_zero(&parent_event->refcount)) {
 		free_event(child_event);
