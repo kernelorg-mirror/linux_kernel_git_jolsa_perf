@@ -3152,6 +3152,8 @@ static void free_event_rcu(struct rcu_head *head)
 	if (event->ns)
 		put_pid_ns(event->ns);
 	perf_event_free_filter(event);
+	if (event->toggled_alloc)
+		kfree(event->toggled_alloc);
 	kfree(event);
 }
 
@@ -6593,6 +6595,12 @@ static void account_event(struct perf_event *event)
 	account_event_cpu(event, event->cpu);
 }
 
+
+static struct perf_event *__perf_event_alloc(void)
+{
+	return kzalloc(sizeof(struct perf_event), GFP_KERNEL);
+}
+
 /*
  * Allocate and initialize a event structure
  */
@@ -6602,10 +6610,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		 struct perf_event *group_leader,
 		 struct perf_event *parent_event,
 		 perf_overflow_handler_t overflow_handler,
-		 void *context)
+		 void *context, struct perf_event *event)
 {
 	struct pmu *pmu;
-	struct perf_event *event;
 	struct hw_perf_event *hwc;
 	long err = -EINVAL;
 
@@ -6614,9 +6621,11 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 			return ERR_PTR(-EINVAL);
 	}
 
-	event = kzalloc(sizeof(*event), GFP_KERNEL);
-	if (!event)
-		return ERR_PTR(-ENOMEM);
+	if (!event) {
+		event = __perf_event_alloc();
+		if (!event)
+			return ERR_PTR(-ENOMEM);
+	}
 
 	/*
 	 * Single events are their own group leaders, with an
@@ -7035,7 +7044,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	get_online_cpus();
 
 	event = perf_event_alloc(&attr, cpu, task, group_leader, NULL,
-				 NULL, NULL);
+				 NULL, NULL, NULL);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
 		goto err_task;
@@ -7257,7 +7266,7 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	 */
 
 	event = perf_event_alloc(attr, cpu, task, NULL, NULL,
-				 overflow_handler, context);
+				 overflow_handler, context, NULL);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
 		goto err;
@@ -7549,6 +7558,57 @@ void perf_event_delayed_put(struct task_struct *task)
 		WARN_ON_ONCE(task->perf_event_ctxp[ctxn]);
 }
 
+static struct perf_event *
+perf_event_toggle_alloc_get(struct perf_event *event)
+{
+	struct perf_event *alloc   = event->toggled_alloc;
+	struct perf_event *toggled = event->toggled_event;
+
+	if (atomic_read(&event->toggled_cnt))
+		return alloc;
+
+	return toggled ? toggled->toggled_alloc : NULL;
+}
+
+static void
+perf_event_toggle_alloc_set(struct perf_event *event,
+			    struct perf_event *alloc)
+{
+	event->toggled_alloc     = event;
+	event->toggled_alloc_cnt = atomic_read(&event->toggled_cnt) + 1;
+}
+
+static int
+perf_event_toggle_inherit(struct perf_event *event)
+{
+	struct perf_event *alloc   = event->toggled_alloc;
+	struct perf_event *toggled = event->toggled_event;
+
+	if (atomic_read(&event->toggled_cnt)) {
+		if (!alloc)
+			perf_event_toggle_alloc_set(event, event);
+		toggled = event;
+	} else if (toggled) {
+		struct perf_event *alloc = toggled->toggled_alloc;
+
+		if (!alloc) {
+			alloc = __perf_event_alloc();
+			if (!alloc)
+				return -ENOMEM;
+			perf_event_toggle_alloc_set(toggled, alloc);
+		}
+
+		/* set inherited toggling */
+		event->toggled_event = alloc;
+		event->toggle_flag   = event->parent->toggle_flag;
+	}
+
+	if (!--toggled->toggled_alloc_cnt)
+		toggled->toggled_alloc = NULL;
+
+	return 0;
+}
+
 /*
  * inherit a event from parent task to child task:
  */
@@ -7560,8 +7620,11 @@ inherit_event(struct perf_event *parent_event,
 	      struct perf_event *group_leader,
 	      struct perf_event_context *child_ctx)
 {
+	struct perf_event *event;
 	struct perf_event *child_event;
 	unsigned long flags;
+
+	event = perf_event_toggle_alloc_get(parent_event);
 
 	/*
 	 * Instead of creating recursive hierarchies of events,
@@ -7576,9 +7639,14 @@ inherit_event(struct perf_event *parent_event,
 					   parent_event->cpu,
 					   child,
 					   group_leader, parent_event,
-				           NULL, NULL);
+				           NULL, NULL, event);
 	if (IS_ERR(child_event))
 		return child_event;
+
+	if (perf_event_toggle_inherit(event)) {
+		free_event(child_event);
+		return NULL;
+	}
 
 	if (!atomic_long_inc_not_zero(&parent_event->refcount)) {
 		free_event(child_event);
