@@ -1369,6 +1369,7 @@ static void __perf_event_toggle_detach(struct perf_event *event)
 	event->overflow_handler = NULL;
 	event->toggled_event    = NULL;
 
+	atomic_dec(&toggled_event->toggled_cnt);
 	put_event(toggled_event);
 }
 
@@ -7141,6 +7142,8 @@ SYSCALL_DEFINE5(perf_event_open,
 		if (!atomic_long_inc_not_zero(&toggled_event->refcount))
 			goto err_context;
 
+		atomic_inc(&toggled_event->toggled_cnt);
+
 		err = perf_event_set_toggle(event, toggled_event, ctx, flags);
 		if (err)
 			goto err_toggle;
@@ -7218,8 +7221,10 @@ SYSCALL_DEFINE5(perf_event_open,
 	return event_fd;
 
 err_toggle:
-	if (toggled_event)
+	if (toggled_event) {
+		atomic_dec(&toggled_event->toggled_cnt);
 		put_event(toggled_event);
+	}
 err_context:
 	perf_unpin_context(ctx);
 	put_ctx(ctx);
