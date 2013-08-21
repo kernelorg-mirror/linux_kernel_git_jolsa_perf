@@ -5217,8 +5217,8 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 	perf_output_end(&handle);
 }
 
-static void perf_event_toggle(struct perf_event *event,
-			      enum perf_event_toggle_flag flag)
+static void __perf_event_toggle(struct perf_event *event,
+				enum perf_event_toggle_flag flag)
 {
 	/* Could be out of HW counter. */
 	bool active = event->state == PERF_EVENT_STATE_ACTIVE;
@@ -5241,6 +5241,16 @@ static void perf_event_toggle(struct perf_event *event,
 	case PERF_TOGGLE_NONE:
 		break;
 	}
+}
+
+static void perf_event_toggle(struct perf_event *leader,
+			      enum perf_event_toggle_flag flag)
+{
+	struct perf_event *event;
+
+	__perf_event_toggle(leader, flag);
+	list_for_each_entry(event, &leader->sibling_list, group_entry)
+		__perf_event_toggle(event, flag);
 }
 
 static void
@@ -7582,6 +7592,9 @@ perf_event_inherit_toggle(struct perf_event *event,
 	struct perf_event *child   = parent->toggled_child;
 	struct perf_event *toggled = parent->toggled_event;
 
+trace_printk("event %p, parent %p, child %p, toggled %p, toggled_cnt %d\n",
+		event, parent, child, toggled, atomic_read(&event->toggled_cnt));
+
 	if (atomic_read(&event->toggled_cnt)) {
 		if (!child)
 			perf_event_toggled_child(parent, event);
@@ -7595,13 +7608,19 @@ perf_event_inherit_toggle(struct perf_event *event,
 			perf_event_toggled_child(toggled, child);
 		}
 
+trace_printk("child %p\n", child);
+
 		/* set inherited toggling */
 		event->toggled_event = child;
 		event->toggle_flag   = parent->toggle_flag;
 	}
 
+trace_printk("pre toggled %p, toggled_child_cnt %d\n", toggled, toggled->toggled_child_cnt);
+
 	if (!--toggled->toggled_child_cnt)
 		toggled->toggled_child = NULL;
+
+trace_printk("pos toggled %p, toggled_child_cnt %d\n", toggled, toggled->toggled_child_cnt);
 
 	return 0;
 }
@@ -7621,6 +7640,8 @@ inherit_event(struct perf_event *parent_event,
 	unsigned long flags;
 
 	event = parent_event->toggled_child;
+
+trace_printk("event %p, parent %p, toggled_child %p\n", event, pe, event);
 
 	/*
 	 * Instead of creating recursive hierarchies of events,
