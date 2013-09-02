@@ -1386,9 +1386,10 @@ event_sched_out(struct perf_event *event,
 		return;
 
 	event->tstamp_stopped = tstamp;
-	event->pmu->del(event, 0);
 	event->oncpu = -1;
 	event->state = PERF_EVENT_STATE_INACTIVE;
+
+	event->pmu->del(event, 0);
 
 	if (event->pending_disable) {
 		event->pending_disable = 0;
