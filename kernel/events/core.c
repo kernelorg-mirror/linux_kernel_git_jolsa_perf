@@ -6673,30 +6673,22 @@ static void account_event(struct perf_event *event)
 	account_event_cpu(event, event->cpu);
 }
 
-/*
- * Allocate and initialize a event structure
- */
-static struct perf_event *
-perf_event_alloc(struct perf_event_attr *attr, int cpu,
-		 struct task_struct *task,
-		 struct perf_event *group_leader,
-		 struct perf_event *parent_event,
-		 perf_overflow_handler_t overflow_handler,
-		 void *context)
+static int perf_init_event(struct perf_event *event,
+			   struct perf_event_attr *attr, int cpu,
+			   struct task_struct *task,
+			   struct perf_event *group_leader,
+			   struct perf_event *parent_event,
+			   perf_overflow_handler_t overflow_handler,
+			   void *context)
 {
 	struct pmu *pmu;
-	struct perf_event *event;
 	struct hw_perf_event *hwc;
-	long err = -EINVAL;
+	int err = -EINVAL;
 
 	if ((unsigned)cpu >= nr_cpu_ids) {
 		if (!task || cpu != -1)
-			return ERR_PTR(-EINVAL);
+			return err;
 	}
-
-	event = kzalloc(sizeof(*event), GFP_KERNEL);
-	if (!event)
-		return ERR_PTR(-ENOMEM);
 
 	/*
 	 * Single events are their own group leaders, with an
@@ -6791,7 +6783,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		}
 	}
 
-	return event;
+	return 0;
 
 err_pmu:
 	if (event->destroy)
@@ -6799,9 +6791,36 @@ err_pmu:
 err_ns:
 	if (event->ns)
 		put_pid_ns(event->ns);
-	kfree(event);
 
-	return ERR_PTR(err);
+	return err;
+}
+
+/*
+ * Allocate and initialize a event structure
+ */
+static struct perf_event *
+perf_event_alloc(struct perf_event_attr *attr, int cpu,
+		 struct task_struct *task,
+		 struct perf_event *group_leader,
+		 struct perf_event *parent_event,
+		 perf_overflow_handler_t overflow_handler,
+		 void *context)
+{
+	struct perf_event *event;
+	int err;
+
+	event = kzalloc(sizeof(*event), GFP_KERNEL);
+	if (!event)
+		return ERR_PTR(-ENOMEM);
+
+	err = perf_init_event(event, attr, cpu, task, group_leader,
+			      parent_event, overflow_handler, context);
+	if (err) {
+		kfree(event);
+		return ERR_PTR(err);
+	}
+
+	return event;
 }
 
 static int perf_copy_attr(struct perf_event_attr __user *uattr,
