@@ -675,6 +675,8 @@ void perf_evsel__config(struct perf_evsel *evsel,
 	if (opts->sample_weight)
 		attr->sample_type	|= PERF_SAMPLE_WEIGHT;
 
+	attr->paused = 1;
+
 	attr->mmap = track;
 	attr->comm = track;
 
@@ -997,6 +999,19 @@ static size_t perf_event_attr__fprintf(struct perf_event_attr *attr, FILE *fp)
 	return ret;
 }
 
+static int get_tp_id(const char *name)
+{
+	struct event_format *tp_format = event_format__new("irq", name);
+	u64 id = 0;
+
+	if (tp_format) {
+		id = tp_format->id;
+		pevent_free_format(tp_format);
+	}
+
+	return id;
+}
+
 static int __perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 			      struct thread_map *threads)
 {
@@ -1027,7 +1042,17 @@ retry_sample_id:
 	for (cpu = 0; cpu < cpus->nr; cpu++) {
 
 		for (thread = 0; thread < threads->nr; thread++) {
-			int group_fd;
+			int group_fd, fd_on, fd_off;
+			struct perf_event_attr attr_on = {
+				.type   = PERF_TYPE_TRACEPOINT,
+				.config = get_tp_id("irq_handler_entry"),
+				.sample_period = 1,
+			};
+			struct perf_event_attr attr_off = {
+				.type   = PERF_TYPE_TRACEPOINT,
+				.config = get_tp_id("irq_handler_exit"),
+				.sample_period = 1,
+			};
 
 			if (!evsel->cgrp)
 				pid = threads->map[thread];
@@ -1045,6 +1070,23 @@ retry_open:
 				err = -errno;
 				goto try_fallback;
 			}
+
+			fd_on = sys_perf_event_open(&attr_on, pid, cpus->map[cpu],
+						    FD(evsel, cpu, thread),
+						    PERF_FLAG_TOGGLE_ON);
+			if (fd_on < 0) {
+				pr_err("failed to open 'on' event, errno %d\n", errno);
+				return -errno;
+			}
+
+			fd_off = sys_perf_event_open(&attr_off, pid, cpus->map[cpu],
+						     FD(evsel, cpu, thread),
+						     PERF_FLAG_TOGGLE_OFF);
+			if (fd_off < 0) {
+				pr_err("failed to open 'off' event, errno %d\n", errno);
+				return -errno;
+			}
+
 			set_rlimit = NO_CHANGE;
 		}
 	}
