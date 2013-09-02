@@ -6596,7 +6596,7 @@ void perf_pmu_unregister(struct pmu *pmu)
 	free_pmu_context(pmu);
 }
 
-struct pmu *perf_init_event(struct perf_event *event)
+struct pmu *perf_pmu_init_event(struct perf_event *event)
 {
 	struct pmu *pmu = NULL;
 	int idx;
@@ -6773,7 +6773,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (attr->inherit && (attr->read_format & PERF_FORMAT_GROUP))
 		goto err_ns;
 
-	pmu = perf_init_event(event);
+	pmu = perf_pmu_init_event(event);
 	if (!pmu)
 		goto err_ns;
 	else if (IS_ERR(pmu)) {
