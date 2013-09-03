@@ -3575,6 +3575,7 @@ static inline int perf_fget_light(int fd, struct fd *p)
 static int perf_event_set_output(struct perf_event *event,
 				 struct perf_event *output_event);
 static int perf_event_set_filter(struct perf_event *event, void __user *arg);
+static int perf_event_set_toggle_fd(struct perf_event *event, u64 __user *arg);
 
 static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -3628,6 +3629,9 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
+
+	case PERF_EVENT_IOC_SET_TOGGLE:
+		return perf_event_set_toggle_fd(event, (u64 __user *)arg);
 
 	default:
 		return -ENOTTY;
@@ -7013,6 +7017,44 @@ perf_event_set_toggle(struct perf_event *event,
 	event->toggled_event    = toggled_event;
 	return 0;
 }
+
+static int perf_event_set_toggle_fd(struct perf_event *event, u64 __user *arg)
+{
+	struct perf_event *toggled_event;
+	struct fd toggled_fd = { NULL, 0 };
+	u64 fd, flag;
+	int err;
+
+	if (event->toggled_event)
+		return -EBUSY;
+
+	if (copy_from_user(&fd, arg, sizeof(fd)))
+		return -EFAULT;
+
+	if (copy_from_user(&flag, arg + 1, sizeof(flag)))
+		return -EFAULT;
+
+	err = perf_fget_light((int) fd, &toggled_fd);
+	if (err)
+		return -EINVAL;
+
+	toggled_event = toggled_fd.file->private_data;
+
+	if (!atomic_long_inc_not_zero(&toggled_event->refcount)) {
+	        fdput(toggled_fd);
+		return -EINVAL;
+	}
+
+	err = perf_event_set_toggle(event, toggled_event, event->ctx, flag);
+	if (err)
+		put_event(toggled_event);
+	else
+		atomic_inc(&toggled_event->toggled_cnt);
+
+	fdput(toggled_fd);
+	return err;
+}
+
 
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
