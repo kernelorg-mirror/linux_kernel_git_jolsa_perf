@@ -40,5 +40,6 @@ int test__code_reading(void);
 int test__sample_parsing(void);
 int test__toggle_event_raw(void);
 int test__toggle_event_group(void);
+int test__toggle_event_inherit(void);
 
 #endif /* TESTS_H */
