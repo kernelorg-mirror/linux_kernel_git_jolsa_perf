@@ -5265,8 +5265,8 @@ static void perf_log_throttle(struct perf_event *event, int enable)
  * - fix race against other toggler
  * - fix race against other callers of ->stop/start (adjust period/freq)
  */
-static void perf_event_toggle(struct perf_event *event,
-			      enum perf_event_toggle_flag flag)
+static void __perf_event_toggle(struct perf_event *event,
+				enum perf_event_toggle_flag flag)
 {
 	unsigned long flags;
 	bool active;
@@ -5300,6 +5300,16 @@ static void perf_event_toggle(struct perf_event *event,
 	}
 
 	local_irq_restore(flags);
+}
+
+static void perf_event_toggle(struct perf_event *leader,
+			      enum perf_event_toggle_flag flag)
+{
+	struct perf_event *event;
+
+	__perf_event_toggle(leader, flag);
+	list_for_each_entry(event, &leader->sibling_list, group_entry)
+		__perf_event_toggle(event, flag);
 }
 
 static void
