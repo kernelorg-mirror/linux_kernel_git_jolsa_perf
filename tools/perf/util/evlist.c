@@ -16,6 +16,7 @@
 #include "evsel.h"
 #include "debug.h"
 #include <unistd.h>
+#include "asm/bug.h"
 
 #include "parse-events.h"
 #include "parse-options.h"
@@ -819,6 +820,91 @@ void perf_evlist__delete_maps(struct perf_evlist *evlist)
 	evlist->threads = NULL;
 }
 
+static struct perf_evsel *
+perf_evlist__find_evsel_by_name(struct perf_evlist *evlist, char *name)
+{
+	struct perf_evsel *evsel;
+
+	list_for_each_entry(evsel, &evlist->entries, node)
+		if (strstr(perf_evsel__name(evsel), name))
+			return evsel;
+
+	return NULL;
+}
+
+static int apply_toggle(struct perf_evsel *evsel, struct perf_evsel *toggled,
+			int ncpus, int nthreads)
+{
+	int cpu, thread, err = 0;
+
+	for (cpu = 0; cpu < ncpus; cpu++) {
+		for (thread = 0; thread < nthreads; thread++) {
+			int fd = FD(evsel, cpu, thread);
+			u64 args[2] = {
+				FD(toggled, cpu, thread),
+				evsel->toggle_flag
+			};
+
+			err = ioctl(fd, PERF_EVENT_IOC_SET_TOGGLE, args);
+			if (err)
+				break;
+		}
+	}
+
+	return err;
+}
+
+int perf_evlist__apply_toggle(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int err = 0;
+	const int ncpus = cpu_map__nr(evlist->cpus),
+		  nthreads = thread_map__nr(evlist->threads);
+
+	list_for_each_entry(evsel, &evlist->entries, node) {
+		struct perf_evsel *toggled;
+
+		if (!evsel->toggle_flag)
+			continue;
+
+		toggled = perf_evlist__find_evsel_by_name(evlist,
+							  evsel->toggle_name);
+		if (WARN_ONCE(!toggled, "toggle apply: internal error\n"))
+			return -1;
+
+		pr_debug("toggle: %s toggles %s %s\n",
+			 perf_evsel__name(evsel),
+			 evsel->toggle_flag == PERF_FLAG_TOGGLE_ON ?
+					       "ON" : "OFF",
+			 perf_evsel__name(toggled));
+
+		err = apply_toggle(evsel, toggled, ncpus, nthreads);
+		if (err)
+			break;
+	}
+
+	return err;
+}
+
+void perf_evlist__mark_toggled(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	list_for_each_entry(evsel, &evlist->entries, node) {
+		struct perf_evsel *toggled;
+
+		if (!evsel->toggle_flag)
+			continue;
+
+		toggled = perf_evlist__find_evsel_by_name(evlist,
+							  evsel->toggle_name);
+		if (WARN_ONCE(!toggled, "toggle mark: internal error\n"))
+			continue;
+
+		toggled->is_toggled = true;
+	}
+}
+
 int perf_evlist__apply_filters(struct perf_evlist *evlist)
 {
 	struct perf_evsel *evsel;
@@ -827,6 +913,7 @@ int perf_evlist__apply_filters(struct perf_evlist *evlist)
 		  nthreads = thread_map__nr(evlist->threads);
 
 	list_for_each_entry(evsel, &evlist->entries, node) {
+
 		if (evsel->filter == NULL)
 			continue;
 

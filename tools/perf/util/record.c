@@ -88,6 +88,8 @@ void perf_evlist__config(struct perf_evlist *evlist,
 	if (evlist->cpus->map[0] < 0)
 		opts->no_inherit = true;
 
+	perf_evlist__mark_toggled(evlist);
+
 	list_for_each_entry(evsel, &evlist->entries, node)
 		perf_evsel__config(evsel, opts);
 
