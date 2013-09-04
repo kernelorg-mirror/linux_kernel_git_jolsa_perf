@@ -583,6 +583,25 @@ do {								\
 #undef CHECK_TYPE_VAL
 }
 
+static int parse_events__is_name_term(struct parse_events_term *term)
+{
+	return term->type_term == PARSE_EVENTS__TERM_TYPE_NAME;
+}
+
+static char *pmu_event_name(struct list_head *head_terms)
+{
+	struct parse_events_term *term;
+
+	if (!head_terms)
+		return NULL;
+
+	list_for_each_entry(term, head_terms, list)
+		if (parse_events__is_name_term(term))
+			return term->val.str;
+
+	return NULL;
+}
+
 static int config_attr(struct perf_event_attr *attr,
 		       struct list_head *head, int fail)
 {
@@ -609,23 +628,7 @@ int parse_events_add_numeric(struct list_head *list, int *idx,
 	    config_attr(&attr, head_config, 1))
 		return -EINVAL;
 
-	return add_event(list, idx, &attr, NULL);
-}
-
-static int parse_events__is_name_term(struct parse_events_term *term)
-{
-	return term->type_term == PARSE_EVENTS__TERM_TYPE_NAME;
-}
-
-static char *pmu_event_name(struct list_head *head_terms)
-{
-	struct parse_events_term *term;
-
-	list_for_each_entry(term, head_terms, list)
-		if (parse_events__is_name_term(term))
-			return term->val.str;
-
-	return NULL;
+	return add_event(list, idx, &attr, pmu_event_name(terms));
 }
 
 int parse_events_add_pmu(struct list_head *list, int *idx,
