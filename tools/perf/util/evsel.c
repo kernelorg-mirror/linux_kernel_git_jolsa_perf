@@ -693,6 +693,9 @@ void perf_evsel__config(struct perf_evsel *evsel,
 	 */
 	if (perf_target__none(&opts->target) && perf_evsel__is_group_leader(evsel))
 		attr->enable_on_exec = 1;
+
+	if (evsel->is_toggled)
+		attr->paused = 1;
 }
 
 int perf_evsel__alloc_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
