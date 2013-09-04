@@ -462,6 +462,8 @@ static int __run_perf_stat(int argc, const char **argv)
 	if (group)
 		perf_evlist__set_leader(evsel_list);
 
+	perf_evlist__mark_toggled(evsel_list);
+
 	list_for_each_entry(counter, &evsel_list->entries, node) {
 		if (create_perf_stat_counter(counter) < 0) {
 			/*
@@ -492,6 +494,12 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	if (perf_evlist__apply_filters(evsel_list)) {
 		error("failed to set filter with %d (%s)\n", errno,
+			strerror(errno));
+		return -1;
+	}
+
+	if (perf_evlist__apply_toggle(evsel_list)) {
+		error("failed to set toggling with %d (%s)\n", errno,
 			strerror(errno));
 		return -1;
 	}
