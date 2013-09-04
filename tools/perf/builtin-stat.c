@@ -242,12 +242,16 @@ static void perf_stat__reset_stats(struct perf_evlist *evlist)
 static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
+	struct perf_evsel *leader = evsel->leader;
 
 	if (scale)
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 				    PERF_FORMAT_TOTAL_TIME_RUNNING;
 
 	attr->inherit = !no_inherit;
+
+	if (leader->is_toggled)
+		attr->paused = 1;
 
 	if (perf_target__has_cpu(&target))
 		return perf_evsel__open_per_cpu(evsel, perf_evsel__cpus(evsel));
@@ -462,6 +466,8 @@ static int __run_perf_stat(int argc, const char **argv)
 	if (group)
 		perf_evlist__set_leader(evsel_list);
 
+	perf_evlist__mark_toggled(evsel_list);
+
 	list_for_each_entry(counter, &evsel_list->entries, node) {
 		if (create_perf_stat_counter(counter) < 0) {
 			/*
@@ -492,6 +498,12 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	if (perf_evlist__apply_filters(evsel_list)) {
 		error("failed to set filter with %d (%s)\n", errno,
+			strerror(errno));
+		return -1;
+	}
+
+	if (perf_evlist__apply_toggle(evsel_list)) {
+		error("failed to set toggling with %d (%s)\n", errno,
 			strerror(errno));
 		return -1;
 	}
