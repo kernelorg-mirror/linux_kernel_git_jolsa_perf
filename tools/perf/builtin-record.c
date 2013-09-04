@@ -225,6 +225,13 @@ try_again:
 		goto out;
 	}
 
+	if (perf_evlist__apply_toggle(evlist)) {
+		error("failed to set toggling %d (%s)\n", errno,
+			strerror(errno));
+		rc = -1;
+		goto out;
+	}
+
 	if (perf_evlist__mmap(evlist, opts->mmap_pages, false) < 0) {
 		if (errno == EPERM) {
 			pr_err("Permission error mapping pages.\n"

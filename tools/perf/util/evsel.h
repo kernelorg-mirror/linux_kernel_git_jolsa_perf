@@ -93,6 +93,7 @@ struct perf_evsel {
 	/* toggle event config */
 	char			toggle_flag;
 	char			*toggle_name;
+	bool			is_toggled;
 };
 
 #define hists_to_evsel(h) container_of(h, struct perf_evsel, hists)
