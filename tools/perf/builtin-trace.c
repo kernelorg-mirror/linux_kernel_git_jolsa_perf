@@ -605,6 +605,7 @@ struct trace {
 	struct perf_record_opts opts;
 	struct machine		host;
 	u64			base_time;
+	bool			full_time;
 	FILE			*output;
 	unsigned long		nr_events;
 	struct strlist		*ev_qualifier;
@@ -1047,7 +1048,7 @@ static int trace__process_sample(struct perf_tool *tool,
 	if (skip_sample(trace, sample))
 		return 0;
 
-	if (trace->base_time == 0)
+	if (!trace->full_time && trace->base_time == 0)
 		trace->base_time = sample->time;
 
 	if (handler)
@@ -1176,7 +1177,7 @@ again:
 				continue;
 			}
 
-			if (trace->base_time == 0)
+			if (!trace->full_time && trace->base_time == 0)
 				trace->base_time = sample.time;
 
 			if (type != PERF_RECORD_SAMPLE) {
@@ -1413,6 +1414,8 @@ int cmd_trace(int argc, const char **argv, const char *prefix __maybe_unused)
 		     trace__set_duration),
 	OPT_BOOLEAN(0, "sched", &trace.sched, "show blocking scheduler events"),
 	OPT_INCR('v', "verbose", &verbose, "be more verbose"),
+	OPT_BOOLEAN('T', "time", &trace.full_time,
+		    "Show full timestamp, not time relative to first start"),
 	OPT_END()
 	};
 	int err;
