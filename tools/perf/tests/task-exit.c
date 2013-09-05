@@ -112,12 +112,17 @@ retry:
 		err = -1;
 	}
 
+	/* Restore defaults and wait the child process. */
+	signal(SIGCHLD, SIG_DFL);
+	signal(SIGUSR1, SIG_DFL);
+
 	perf_evlist__munmap(evlist);
 out_close_evlist:
 	perf_evlist__close(evlist);
 out_delete_maps:
 	perf_evlist__delete_maps(evlist);
 out_free_evlist:
+	perf_evlist__wait_workload(evlist);
 	perf_evlist__delete(evlist);
 	return err;
 }
