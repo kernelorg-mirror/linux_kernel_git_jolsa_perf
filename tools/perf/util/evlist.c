@@ -1005,6 +1005,16 @@ out_err:
 	return err;
 }
 
+int perf_evlist__wait_workload(struct perf_evlist *evlist)
+{
+	int status, err = -1, pid = evlist->workload.pid;
+
+	if (pid > 0)
+		err = waitpid(pid, &status, 0);
+
+	return err ? err : status;
+}
+
 int perf_evlist__prepare_workload(struct perf_evlist *evlist,
 				  struct perf_target *target,
 				  const char *argv[], bool pipe_output,
