@@ -311,6 +311,7 @@ out_close_evlist:
 out_delete_maps:
 	perf_evlist__delete_maps(evlist);
 out_delete_evlist:
+	perf_evlist__wait_workload(evlist);
 	perf_evlist__delete(evlist);
 out:
 	return (err < 0 || errs > 0) ? -1 : 0;
