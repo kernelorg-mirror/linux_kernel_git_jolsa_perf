@@ -98,6 +98,7 @@ bool perf_can_sample_identifier(void);
 void perf_evlist__config(struct perf_evlist *evlist,
 			 struct perf_record_opts *opts);
 
+int perf_evlist__wait_workload(struct perf_evlist *evlist);
 int perf_evlist__prepare_workload(struct perf_evlist *evlist,
 				  struct perf_target *target,
 				  const char *argv[], bool pipe_output,
