@@ -124,6 +124,10 @@ static struct test {
 		.func = test__toggle_event_group,
 	},
 	{
+		.desc = "toggle event inherit",
+		.func = test__toggle_event_inherit,
+	},
+	{
 		.func = NULL,
 	},
 };
