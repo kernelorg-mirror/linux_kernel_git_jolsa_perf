@@ -112,6 +112,10 @@ static struct test {
 		.func = test__keep_tracking,
 	},
 	{
+		.desc = "toggle event raw",
+		.func = test__toggle_event_raw,
+	},
+	{
 		.func = NULL,
 	},
 };
