@@ -42,5 +42,6 @@ int test__keep_tracking(void);
 int test__parse_no_sample_id_all(void);
 int test__toggle_event_raw(void);
 int test__toggle_event_group(void);
+int test__toggle_event_inherit(void);
 
 #endif /* TESTS_H */
