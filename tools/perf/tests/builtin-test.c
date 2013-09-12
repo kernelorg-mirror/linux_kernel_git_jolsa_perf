@@ -120,6 +120,10 @@ static struct test {
 		.func = test__toggle_event_raw,
 	},
 	{
+		.desc = "Toggle event group",
+		.func = test__toggle_event_group,
+	},
+	{
 		.func = NULL,
 	},
 };
