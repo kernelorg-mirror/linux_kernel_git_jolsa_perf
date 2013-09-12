@@ -395,6 +395,7 @@ LIB_OBJS += $(OUTPUT)tests/perf-time-to-tsc.o
 endif
 LIB_OBJS += $(OUTPUT)tests/code-reading.o
 LIB_OBJS += $(OUTPUT)tests/toggle-event-raw.o
+LIB_OBJS += $(OUTPUT)tests/toggle-event-group.o
 ifeq ($(RAW_ARCH),x86_64)
 LIB_OBJS += $(OUTPUT)arch/x86/tests/toggle-event-raw-64.o
 endif
