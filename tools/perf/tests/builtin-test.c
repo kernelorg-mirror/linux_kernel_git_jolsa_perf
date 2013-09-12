@@ -116,6 +116,10 @@ static struct test {
 		.func = test__parse_no_sample_id_all,
 	},
 	{
+		.desc = "Toggle event raw",
+		.func = test__toggle_event_raw,
+	},
+	{
 		.func = NULL,
 	},
 };
