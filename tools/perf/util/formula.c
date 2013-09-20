@@ -1,5 +1,6 @@
 
 #include <linux/compiler.h>
+#include <linux/string.h>
 #include <stdio.h>
 #include "stat.h"
 #include "parse-events.h"
@@ -13,6 +14,10 @@
 #ifdef PARSER_DEBUG
 extern int perf_formula_debug;
 #endif
+
+static void print_results(struct perf_formula_result *result,
+			  struct perf_formula_expr *expr,
+			  const char *ctx, char *name);
 
 void perf_formula__init(struct perf_formula *f)
 {
@@ -68,16 +73,24 @@ static int cpu_nr(struct perf_formula_expr *expr)
 	return cpu_map__nr(expr->evlist->cpus);
 }
 
-static struct perf_formula_result*
-alloc_result(struct perf_formula_expr *expr)
+static size_t alloc_size(struct perf_formula_expr *expr)
 {
+	size_t size;
 	int nr = 0;
 
 	if (expr->system_wide)
 		nr = cpu_nr(expr);
 
-	return zalloc((sizeof(struct perf_formula_result) +
-		      (nr * sizeof(struct perf_formula_result))));
+	size  = sizeof(struct perf_formula_result);
+	size += nr * sizeof(struct perf_formula_result);
+
+	return size;
+}
+
+static struct perf_formula_result*
+alloc_result(struct perf_formula_expr *expr)
+{
+	return zalloc(alloc_size(expr));
 }
 
 static int config_parse(struct perf_formula_file *file)
@@ -425,7 +438,7 @@ static int eval_counter(struct perf_formula_counter *counter,
 
 	if (!ret) {
 		counter->result = expr->result;
-		pr_debug2("formula counter eval %s\n", counter->name);
+		print_results(counter->result, expr, "FINAL", counter->name);
 	}
 
 	return ret;
@@ -461,6 +474,121 @@ int perf_formula_set__eval(struct perf_formula_set *set,
 	};
 
 	return eval_set(set, &expr);
+}
+
+static struct perf_formula_event*
+resolve_event(struct perf_formula_expr *expr, char *name)
+{
+	struct perf_formula_set *set = expr->set;
+	struct perf_formula_event *event;
+
+	list_for_each_entry(event, &set->head_events, list) {
+		if (strcmp(event->name, name))
+			continue;
+
+		return event;
+	}
+
+	return NULL;
+}
+
+static struct perf_formula_counter*
+resolve_counter(struct perf_formula_expr *expr, char *name)
+{
+	struct perf_formula_set *set = expr->set;
+	struct perf_formula_counter *counter;
+
+	list_for_each_entry(counter, &set->head_counters, list) {
+		if (!strcmp(counter->name, name))
+			return counter;
+	}
+
+	return NULL;
+}
+
+static void print_results(struct perf_formula_result *result,
+			  struct perf_formula_expr *expr,
+			  const char *ctx, char *name)
+{
+	int cpu;
+
+	if (expr->system_wide) {
+		for (cpu = 0; cpu < cpu_nr(expr); cpu++) {
+			pr_debug2("result (%s %s)[%d] = %F\n",
+				  ctx, name, cpu, result->cpu[cpu].result);
+		}
+	} else {
+		pr_debug2("result (%s %s) = %F\n", ctx, name, result->aggr.result);
+	}
+}
+
+struct perf_formula_result*
+perf_formula_expr__resolve(struct perf_formula_expr *expr,
+			   char *name)
+{
+	struct perf_formula_counter *counter;
+	struct perf_formula_result  *result;
+	struct perf_formula_event   *event;
+
+	if (expr->test_only) {
+		expr->error = 1;
+		return NULL;
+	}
+
+	if (expr->error != 0)
+		return NULL;
+
+	event = resolve_event(expr, name);
+	if (event) {
+		struct perf_counts *ecounts = event->evsel->counts;
+
+		pr_debug2("formula resolve: (event) %s\n", name);
+
+		result = alloc_result(expr);
+		if (!result) {
+			expr->error = -ENOMEM;
+			return NULL;
+		}
+
+		/* copy data over */
+		if (!expr->system_wide) {
+			result->aggr.result = ecounts->aggr.val;
+			result->aggr.ena = ecounts->aggr.ena;
+			result->aggr.run = ecounts->aggr.run;
+		} else {
+			int cpu;
+
+			for (cpu = 0; cpu < cpu_nr(expr); cpu++) {
+				result->cpu[cpu].result = ecounts->cpu[cpu].val;
+				result->cpu[cpu].ena = ecounts->cpu[cpu].ena;
+				result->cpu[cpu].run = ecounts->cpu[cpu].run;
+			}
+		}
+
+		print_results(result, expr, "resolve_event", name);
+		return result;
+	}
+
+	counter = resolve_counter(expr, name);
+	if (counter) {
+		pr_debug2("formula resolve: (counter) %s\n", name);
+
+		/* should have already been pre-calculated before this formula */
+		if (!counter->result) {
+			pr_err("formula: resolved to uninitialized counter '%s'\n",
+				name);
+			expr->error = -EINVAL;
+			return NULL;
+		}
+
+		print_results(counter->result, expr, "resolve_counter", name);
+
+		return memdup(counter->result, alloc_size(expr));
+	}
+
+	pr_err("formula: failed to resolve '%s'\n", name);
+	expr->error = -EINVAL;
+	return NULL;
 }
 
 static int check_expr_errors(struct perf_formula_expr *expr,
