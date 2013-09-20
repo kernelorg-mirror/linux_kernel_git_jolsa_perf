@@ -192,6 +192,9 @@ PF_VALUE
 }
 |
 PF_NAME
+{
+	$$ = perf_formula_expr__resolve(_data, $1);
+}
 |
 '-' expr
 {
