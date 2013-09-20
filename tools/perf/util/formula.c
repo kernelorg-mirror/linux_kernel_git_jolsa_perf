@@ -484,6 +484,111 @@ int perf_formula__eval(struct perf_formula *f,
 	return for_each_set(f, eval_set_cb, expr);
 }
 
+static struct perf_formula_event*
+resolve_event(struct perf_formula_expr *expr, char *name)
+{
+	struct perf_formula_set *set = expr->set;
+	struct perf_formula_event *event;
+
+	list_for_each_entry(event, &set->head_events, list) {
+		if (strcmp(event->name, name))
+			continue;
+
+		return event;
+	}
+
+	return NULL;
+}
+
+static struct perf_formula_counter*
+resolve_counter(struct perf_formula_expr *expr, char *name)
+{
+	struct perf_formula_set *set = expr->set;
+	struct perf_formula_counter *counter;
+
+	list_for_each_entry(counter, &set->head_counters, list) {
+		if (!strcmp(counter->name, name))
+			return counter;
+	}
+
+	return NULL;
+}
+
+struct perf_formula_result*
+perf_formula_expr__resolve(struct perf_formula_expr *expr,
+			   char *name)
+{
+	struct perf_formula_event *evsel;
+	struct perf_formula_counter *counter;
+	struct perf_formula_result *result;
+
+	if (expr->test_only) {
+		expr->error = 1;
+		return NULL;
+	}
+
+	if (expr->error != 0)
+		return NULL;
+
+	evsel = resolve_event(expr, name);
+	if (evsel) {
+		struct perf_counts *ecounts = evsel->evsel->counts;
+
+		pr_debug2("formula resolve: (event) %s\n", name);
+
+		if (evsel->result)
+			/* data already copied over, just return pointer */
+			return evsel->result;
+
+		result = alloc_result(expr);
+		if (!result) {
+			expr->error = -ENOMEM;
+			return NULL;
+		}
+
+		/* copy data over */
+		if (!expr->system_wide) {
+			result->aggr.result = ecounts->aggr.val;
+			result->aggr.ena = ecounts->aggr.ena;
+			result->aggr.run = ecounts->aggr.run;
+			pr_debug2("formula resolve: (event) %s = %F\n", name, result->aggr.result);
+		} else {
+			int cpu;
+
+			pr_debug2("nr_cpus = %d\n", cpu_nr(expr));
+			for (cpu=0; cpu < cpu_nr(expr); cpu++) {
+				result->cpu[cpu].result = ecounts->cpu[cpu].val;
+				result->cpu[cpu].ena = ecounts->cpu[cpu].ena;
+				result->cpu[cpu].run = ecounts->cpu[cpu].run;
+				pr_debug2("formula resolve: (event, sw)[%d] %s = %F\n", cpu, name, result->cpu[cpu].result);
+			}
+		}
+
+		evsel->result = result;
+		return result;
+	}
+
+	counter = resolve_counter(expr, name);
+	if (counter) {
+		pr_debug2("formula resolve: (counter) %s\n", name);
+
+		/* should have already been pre-calculated before this formula */
+		if (!counter->result) {
+			pr_err("formula: resolved to uninitialized counter '%s'\n",
+				name);
+			expr->error = -EINVAL;
+			return NULL;
+		}
+
+		return counter->result;
+	}
+
+	pr_err("formula: failed to resolve '%s'\n", name);
+	expr->error = -EINVAL;
+	return NULL;
+
+}
+
 static int check_expr_errors(struct perf_formula_expr *expr,
 			     struct perf_formula_result *x,
 			     struct perf_formula_result *y)

@@ -164,4 +164,7 @@ struct perf_formula_result *perf_formula__negate(struct perf_formula_expr *expr,
 struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
 						double x);
 
+struct perf_formula_result* perf_formula_expr__resolve(struct perf_formula_expr *expr,
+						       char *name);
+
 #endif /* __PERF_FORMULA */
