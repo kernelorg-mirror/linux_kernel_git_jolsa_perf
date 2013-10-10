@@ -504,7 +504,7 @@ else
   endif
 endif
 
-ifndef ($(filter -lbfd,$(EXTLIBS)),)
+ifneq ($(filter -lbfd,$(EXTLIBS)),)
   CFLAGS += -DHAVE_LIBBFD_SUPPORT
 endif
 
