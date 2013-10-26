@@ -92,8 +92,12 @@ OPTIONS
 	size is rounded up to have nearest pages power of two value.
 
 -g::
+	Enables call-graph (stack chain/backtrace) recording.
+
 --call-graph::
-	Do call-graph (stack chain/backtrace) recording.
+	Setup and enable call-graph (stack chain/backtrace) recording,
+	implies -g.
+
 
 -q::
 --quiet::
