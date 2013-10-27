@@ -36,7 +36,7 @@ struct perf_session {
 	struct events_stats	stats;
 	bool			repipe;
 	struct ordered_samples	ordered_samples;
-	struct perf_data_file	*file;
+	struct perf_data	*data;
 };
 
 #define PRINT_IP_OPT_IP		(1<<0)
@@ -47,7 +47,7 @@ struct perf_session {
 
 struct perf_tool;
 
-struct perf_session *perf_session__new(struct perf_data_file *file,
+struct perf_session *perf_session__new(struct perf_data *data,
 				       bool repipe, struct perf_tool *tool);
 void perf_session__delete(struct perf_session *session);
 

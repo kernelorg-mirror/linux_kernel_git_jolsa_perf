@@ -2190,11 +2190,11 @@ int perf_header__fprintf_info(struct perf_session *session, FILE *fp, bool full)
 {
 	struct header_print_data hd;
 	struct perf_header *header = &session->header;
-	int fd = perf_data_file__fd(session->file);
+	struct perf_data_file *file = perf_data__file(session->data);
 	hd.fp = fp;
 	hd.full = full;
 
-	perf_header__process_sections(header, fd, &hd,
+	perf_header__process_sections(header, perf_data_file__fd(file), &hd,
 				      perf_file_section__fprintf_info);
 	return 0;
 }
@@ -2659,11 +2659,12 @@ static int perf_file_header__read_pipe(struct perf_pipe_file_header *header,
 
 static int perf_header__read_pipe(struct perf_session *session)
 {
+	struct perf_data_file *file = perf_data__file(session->data);
 	struct perf_header *header = &session->header;
 	struct perf_pipe_file_header f_header;
 
 	if (perf_file_header__read_pipe(&f_header, header,
-					perf_data_file__fd(session->file),
+					perf_data_file__fd(file),
 					session->repipe) < 0) {
 		pr_debug("incompatible file format\n");
 		return -EINVAL;
@@ -2764,7 +2765,7 @@ static int perf_evlist__prepare_tracepoint_events(struct perf_evlist *evlist,
 
 int perf_session__read_header(struct perf_session *session)
 {
-	struct perf_data_file *file = session->file;
+	struct perf_data_file *file = perf_data__file(session->data);
 	struct perf_header *header = &session->header;
 	struct perf_file_header	f_header;
 	struct perf_file_attr	f_attr;
@@ -3004,7 +3005,8 @@ int perf_event__process_tracing_data(struct perf_tool *tool __maybe_unused,
 				     struct perf_session *session)
 {
 	ssize_t size_read, padding, size = event->tracing_data.size;
-	int fd = perf_data_file__fd(session->file);
+	struct perf_data_file *file = perf_data__file(session->data);
+	int fd = perf_data_file__fd(file);
 	off_t offset = lseek(fd, 0, SEEK_CUR);
 	char buf[BUFSIZ];
 

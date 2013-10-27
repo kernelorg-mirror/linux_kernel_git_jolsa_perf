@@ -18,14 +18,14 @@
 
 static int perf_session__open(struct perf_session *self)
 {
-	struct perf_data_file *file = self->file;
+	struct perf_data *data = self->data;
 
 	if (perf_session__read_header(self) < 0) {
 		pr_err("incompatible file format (rerun with -v to learn more)");
 		return -1;
 	}
 
-	if (perf_data_file__is_pipe(file))
+	if (perf_data__is_pipe(data))
 		return 0;
 
 	if (!perf_evlist__valid_sample_type(self->evlist)) {
@@ -67,7 +67,7 @@ static void perf_session__destroy_kernel_maps(struct perf_session *self)
 	machines__destroy_kernel_maps(&self->machines);
 }
 
-struct perf_session *perf_session__new(struct perf_data_file *file,
+struct perf_session *perf_session__new(struct perf_data *data,
 				       bool repipe, struct perf_tool *tool)
 {
 	struct perf_session *self;
@@ -82,13 +82,13 @@ struct perf_session *perf_session__new(struct perf_data_file *file,
 	INIT_LIST_HEAD(&self->ordered_samples.to_free);
 	machines__init(&self->machines);
 
-	if (file) {
-		if (perf_data_file__open(file))
+	if (data) {
+		if (perf_data__open(data))
 			goto out_delete;
 
-		self->file = file;
+		self->data = data;
 
-		if (perf_data_file__is_read(file)) {
+		if (perf_data__is_read(data)) {
 			if (perf_session__open(self) < 0)
 				goto out_close;
 
@@ -96,7 +96,7 @@ struct perf_session *perf_session__new(struct perf_data_file *file,
 		}
 	}
 
-	if (!file || perf_data_file__is_write(file)) {
+	if (!data || perf_data__is_write(data)) {
 		/*
 		 * In O_RDONLY mode this will be performed when reading the
 		 * kernel MMAP event, in perf_event__process_mmap().
@@ -114,7 +114,7 @@ struct perf_session *perf_session__new(struct perf_data_file *file,
 	return self;
 
  out_close:
-	perf_data_file__close(file);
+	perf_data__close(data);
  out_delete:
 	perf_session__delete(self);
  out:
@@ -154,8 +154,8 @@ void perf_session__delete(struct perf_session *self)
 	perf_session__delete_threads(self);
 	perf_session_env__delete(&self->header.env);
 	machines__exit(&self->machines);
-	if (self->file)
-		perf_data_file__close(self->file);
+	if (self->data)
+		perf_data__close(self->data);
 	free(self);
 	vdso__exit();
 }
@@ -1013,7 +1013,8 @@ static int perf_session_deliver_event(struct perf_session *session,
 static int perf_session__process_user_event(struct perf_session *session, union perf_event *event,
 					    struct perf_tool *tool, u64 file_offset)
 {
-	int fd = perf_data_file__fd(session->file);
+	struct perf_data_file *file = perf_data__file(session->data);
+	int fd = perf_data_file__fd(file);
 	int err;
 
 	dump_event(session, event, file_offset, NULL);
@@ -1153,7 +1154,8 @@ volatile int session_done;
 static int __perf_session__process_pipe_events(struct perf_session *self,
 					       struct perf_tool *tool)
 {
-	int fd = perf_data_file__fd(self->file);
+	struct perf_data_file *file = perf_data__file(self->data);
+	int fd = perf_data_file__fd(file);
 	union perf_event *event;
 	uint32_t size, cur_size = 0;
 	void *buf = NULL;
@@ -1285,7 +1287,8 @@ int __perf_session__process_events(struct perf_session *session,
 				   u64 data_offset, u64 data_size,
 				   u64 file_size, struct perf_tool *tool)
 {
-	int fd = perf_data_file__fd(session->file);
+	struct perf_data_file *file = perf_data__file(session->data);
+	int fd = perf_data_file__fd(file);
 	u64 head, page_offset, file_offset, file_pos;
 	int err, mmap_prot, mmap_flags, map_idx = 0;
 	size_t	mmap_size;
@@ -1380,13 +1383,14 @@ out_err:
 int perf_session__process_events(struct perf_session *self,
 				 struct perf_tool *tool)
 {
-	u64 size = perf_data_file__size(self->file);
+	struct perf_data_file *file = perf_data__file(self->data);
+	u64 size = perf_data_file__size(file);
 	int err;
 
 	if (perf_session__register_idle_thread(self) == NULL)
 		return -ENOMEM;
 
-	if (!perf_data_file__is_pipe(self->file))
+	if (!perf_data_file__is_pipe(file))
 		err = __perf_session__process_events(self,
 						     self->header.data_offset,
 						     self->header.data_size,
@@ -1615,7 +1619,8 @@ int perf_session__cpu_bitmap(struct perf_session *session,
 void perf_session__fprintf_info(struct perf_session *session, FILE *fp,
 				bool full)
 {
-	int fd = perf_data_file__fd(session->file);
+	struct perf_data_file *file = perf_data__file(session->data);
+	int fd = perf_data_file__fd(file);
 	struct stat st;
 	int ret;
 

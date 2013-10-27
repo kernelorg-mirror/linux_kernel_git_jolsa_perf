@@ -375,7 +375,7 @@ static int perf_report__setup_sample_type(struct perf_report *rep)
 {
 	struct perf_session *session = rep->session;
 	u64 sample_type = perf_evlist__combined_sample_type(session->evlist);
-	bool is_pipe = perf_data_file__is_pipe(session->file);
+	bool is_pipe = perf_data__is_pipe(session->data);
 
 	if (!is_pipe && !(sample_type & PERF_SAMPLE_CALLCHAIN)) {
 		if (sort__has_parent) {
@@ -497,7 +497,7 @@ static int __cmd_report(struct perf_report *rep)
 	struct kmap *kernel_kmap;
 	const char *help = "For a higher level overview, try: perf report --sort comm,dso";
 	struct ui_progress prog;
-	struct perf_data_file *file = session->file;
+	struct perf_data *data = session->data;
 
 	signal(SIGINT, sig_handler);
 
@@ -589,7 +589,7 @@ static int __cmd_report(struct perf_report *rep)
 		return 0;
 
 	if (nr_samples == 0) {
-		ui__error("The %s file has no samples!\n", file->path);
+		ui__error("The %s file has no samples!\n", data->path);
 		return 0;
 	}
 
@@ -880,7 +880,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_END()
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.mode  = PERF_DATA_MODE_READ,
 	};
 
@@ -912,11 +912,11 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		perf_hpp__init();
 	}
 
-	file.path  = input_name;
-	file.force = report.force;
+	data.path  = input_name;
+	data.force = report.force;
 
 repeat:
-	session = perf_session__new(&file, false, &report.tool);
+	session = perf_session__new(&data, false, &report.tool);
 	if (session == NULL)
 		return -ENOMEM;
 

@@ -452,17 +452,15 @@ static int store_event(int fd, union perf_event *event, size_t *size)
 
 static int session_write(char *path)
 {
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.mode = PERF_DATA_MODE_WRITE,
 		.path = path,
 	};
+	struct perf_data_file *file;
 	struct perf_session *session;
 	struct perf_evlist *evlist;
 	size_t size = 0;
 	int feat;
-
-	file.fd = open(file.path, O_RDWR);
-	TEST_ASSERT_VAL("failed to open data file", file.fd >= 0);
 
 	evlist = perf_evlist__new_default();
 	TEST_ASSERT_VAL("failed to get evlist", evlist);
@@ -471,9 +469,10 @@ static int session_write(char *path)
 
 	pr_debug("session writing start\n");
 
-	session = perf_session__new(&file, false, NULL);
+	session = perf_session__new(&data, false, NULL);
 	TEST_ASSERT_VAL("failed to create session", session);
 
+	file = perf_data__file(&data);
 	session->evlist = evlist;
 
 	for (feat = HEADER_FIRST_FEATURE; feat < HEADER_LAST_FEATURE; feat++)
@@ -484,14 +483,14 @@ static int session_write(char *path)
 	perf_header__clear_feat(&session->header, HEADER_BRANCH_STACK);
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__write_header(session, evlist, file.fd, false));
+		!perf_session__write_header(session, evlist, file->fd, false));
 
 #define STORE_EVENTS(str, func, cnt)				\
 do {								\
 	int i;							\
 	for (i = 0; i < cnt; i++) {				\
 		TEST_ASSERT_VAL(str,				\
-			!store_event(file.fd, func(), &size));	\
+			!store_event(file->fd, func(), &size));	\
 	}							\
 } while (0)
 
@@ -524,7 +523,7 @@ do {								\
 	session->header.data_size += size;
 
 	TEST_ASSERT_VAL("failed to write header",
-		!perf_session__write_header(session, evlist, file.fd, true));
+		!perf_session__write_header(session, evlist, file->fd, true));
 
 	perf_session__delete(session);
 	perf_evlist__delete(evlist);
@@ -546,14 +545,14 @@ static int __session_read(char *path)
 		.unthrottle = process_unthrottle,
 		.sample = process_sample,
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.mode = PERF_DATA_MODE_READ,
 		.path = path,
 	};
 
 	pr_debug("session reading start\n");
 
-	session = perf_session__new(&file, false, &tool);
+	session = perf_session__new(&data, false, &tool);
 	TEST_ASSERT_VAL("failed to create session", session);
 
 	TEST_ASSERT_VAL("failed to process events",

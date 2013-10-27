@@ -991,12 +991,12 @@ static int __cmd_timechart(const char *output_name)
 		{ "power:power_frequency",	process_sample_power_frequency },
 #endif
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
 
-	struct perf_session *session = perf_session__new(&file, false,
+	struct perf_session *session = perf_session__new(&data, false,
 							 &perf_timechart);
 	int ret = -EINVAL;
 
