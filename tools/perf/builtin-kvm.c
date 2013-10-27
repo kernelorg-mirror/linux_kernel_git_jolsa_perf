@@ -1231,13 +1231,13 @@ static int read_events(struct perf_kvm_stat *kvm)
 		.comm			= perf_event__process_comm,
 		.ordered_samples	= true,
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
 
 	kvm->tool = eops;
-	kvm->session = perf_session__new(&file, false, &kvm->tool);
+	kvm->session = perf_session__new(&data, false, &kvm->tool);
 	if (!kvm->session) {
 		pr_err("Initializing perf session failed\n");
 		return -EINVAL;
@@ -1470,7 +1470,7 @@ static int kvm_events_live(struct perf_kvm_stat *kvm,
 		"perf kvm stat live [<options>]",
 		NULL
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.mode = PERF_DATA_MODE_WRITE,
 	};
 
@@ -1537,7 +1537,7 @@ static int kvm_events_live(struct perf_kvm_stat *kvm,
 	/*
 	 * perf session
 	 */
-	kvm->session = perf_session__new(&file, false, &kvm->tool);
+	kvm->session = perf_session__new(&data, false, &kvm->tool);
 	if (kvm->session == NULL) {
 		err = -ENOMEM;
 		goto out;

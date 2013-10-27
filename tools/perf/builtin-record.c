@@ -66,7 +66,7 @@ struct perf_record {
 	struct perf_tool	tool;
 	struct perf_record_opts	opts;
 	u64			bytes_written;
-	struct perf_data_file	file;
+	struct perf_data	data;
 	struct perf_evlist	*evlist;
 	struct perf_session	*session;
 	const char		*progname;
@@ -78,21 +78,12 @@ struct perf_record {
 
 static int perf_record__write(struct perf_record *rec, void *buf, size_t size)
 {
-	struct perf_data_file *file = &rec->file;
+	struct perf_data_file *file = perf_data__file(&rec->data);
+	ssize_t ret;
 
-	while (size) {
-		ssize_t ret = write(file->fd, buf, size);
-
-		if (ret < 0) {
-			pr_err("failed to write perf data, error: %m\n");
-			return -1;
-		}
-
-		size -= ret;
-		buf += ret;
-
-		rec->bytes_written += ret;
-	}
+	ret = perf_data_file__write(file, buf, size);
+	if (ret < 0)
+		return -1;
 
 	return 0;
 }
@@ -241,7 +232,8 @@ out:
 
 static int process_buildids(struct perf_record *rec)
 {
-	struct perf_data_file *file  = &rec->file;
+	struct perf_data_file *file = perf_data__file(&rec->data);
+
 	struct perf_session *session = rec->session;
 	u64 start = session->header.data_offset;
 
@@ -257,7 +249,7 @@ static int process_buildids(struct perf_record *rec)
 static void perf_record__exit(int status, void *arg)
 {
 	struct perf_record *rec = arg;
-	struct perf_data_file *file = &rec->file;
+	struct perf_data_file *file = perf_data__file(&rec->data);
 
 	if (status != 0)
 		return;
@@ -362,7 +354,8 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 	struct perf_tool *tool = &rec->tool;
 	struct perf_record_opts *opts = &rec->opts;
 	struct perf_evlist *evsel_list = rec->evlist;
-	struct perf_data_file *file = &rec->file;
+	struct perf_data *data = &rec->data;
+	struct perf_data_file *file;
 	struct perf_session *session;
 	bool disabled = false;
 
@@ -374,12 +367,13 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 	signal(SIGUSR1, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	session = perf_session__new(file, false, NULL);
+	session = perf_session__new(data, false, NULL);
 	if (session == NULL) {
 		pr_err("Not enough memory for reading perf file header\n");
 		return -1;
 	}
 
+	file = perf_data__file(data);
 	rec->session = session;
 
 	perf_record__init_features(rec);
@@ -833,7 +827,7 @@ const struct option record_options[] = {
 	OPT_STRING('C', "cpu", &record.opts.target.cpu_list, "cpu",
 		    "list of cpus to monitor"),
 	OPT_U64('c', "count", &record.opts.user_interval, "event period to sample"),
-	OPT_STRING('o', "output", &record.file.path, "file",
+	OPT_STRING('o', "output", &record.data.path, "file",
 		    "output file name"),
 	OPT_BOOLEAN_SET('i', "no-inherit", &record.opts.no_inherit,
 			&record.opts.no_inherit_set,

@@ -221,12 +221,12 @@ static bool dso__missing_buildid_cache(struct dso *dso, int parm __maybe_unused)
 
 static int build_id_cache__fprintf_missing(const char *filename, bool force, FILE *fp)
 {
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path  = filename,
 		.mode  = PERF_DATA_MODE_READ,
 		.force = force,
 	};
-	struct perf_session *session = perf_session__new(&file, false, NULL);
+	struct perf_session *session = perf_session__new(&data, false, NULL);
 	if (session == NULL)
 		return -1;
 

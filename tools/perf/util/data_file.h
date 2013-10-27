@@ -2,6 +2,7 @@
 #define __PERF_DATA_FILE_H
 
 #include <stdbool.h>
+#include <unistd.h>
 #include "data.h"
 
 struct perf_data_file {

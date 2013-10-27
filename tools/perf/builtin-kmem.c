@@ -487,12 +487,12 @@ static int __cmd_kmem(void)
 		{ "kmem:kfree",			perf_evsel__process_free_event, },
     		{ "kmem:kmem_cache_free",	perf_evsel__process_free_event, },
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
 
-	session = perf_session__new(&file, false, &perf_kmem);
+	session = perf_session__new(&data, false, &perf_kmem);
 	if (session == NULL)
 		return -ENOMEM;
 

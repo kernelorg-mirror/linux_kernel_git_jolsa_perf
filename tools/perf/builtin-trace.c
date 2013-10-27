@@ -2008,7 +2008,7 @@ static int trace__replay(struct trace *trace)
 	const struct perf_evsel_str_handler handlers[] = {
 		{ "probe:vfs_getname",	     trace__vfs_getname, },
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path  = input_name,
 		.mode  = PERF_DATA_MODE_READ,
 	};
@@ -2035,7 +2035,7 @@ static int trace__replay(struct trace *trace)
 	if (symbol__init() < 0)
 		return -1;
 
-	session = perf_session__new(&file, false, &trace->tool);
+	session = perf_session__new(&data, false, &trace->tool);
 	if (session == NULL)
 		return -ENOMEM;
 
