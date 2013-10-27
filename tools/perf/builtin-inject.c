@@ -343,7 +343,7 @@ static int __cmd_inject(struct perf_inject *inject)
 {
 	struct perf_session *session;
 	int ret = -EINVAL;
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path = inject->input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
@@ -358,7 +358,7 @@ static int __cmd_inject(struct perf_inject *inject)
 		inject->tool.tracing_data = perf_event__repipe_tracing_data;
 	}
 
-	session = perf_session__new(&file, true, &inject->tool);
+	session = perf_session__new(&data, true, &inject->tool);
 	if (session == NULL)
 		return -ENOMEM;
 

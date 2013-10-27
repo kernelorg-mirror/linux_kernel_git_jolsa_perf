@@ -200,13 +200,13 @@ static int __cmd_annotate(struct perf_annotate *ann)
 	struct perf_session *session;
 	struct perf_evsel *pos;
 	u64 total_nr_samples;
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path  = input_name,
 		.mode  = PERF_DATA_MODE_READ,
 		.force = ann->force,
 	};
 
-	session = perf_session__new(&file, false, &ann->tool);
+	session = perf_session__new(&data, false, &ann->tool);
 	if (session == NULL)
 		return -ENOMEM;
 
@@ -259,7 +259,7 @@ static int __cmd_annotate(struct perf_annotate *ann)
 	}
 
 	if (total_nr_samples == 0) {
-		ui__error("The %s file has no samples!\n", file.path);
+		ui__error("The %s file has no samples!\n", data.path);
 		goto out_delete;
 	}
 
