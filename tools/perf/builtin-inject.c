@@ -22,14 +22,13 @@
 #include <linux/list.h>
 
 struct perf_inject {
-	struct perf_tool tool;
-	bool		 build_ids;
-	bool		 sched_stat;
-	const char	 *input_name;
-	int		 pipe_output,
-			 output;
-	u64		 bytes_written;
-	struct list_head samples;
+	struct perf_tool	 tool;
+	bool			 build_ids;
+	bool			 sched_stat;
+	const char		*input_name;
+	struct perf_data_file	 output;
+	u64			 bytes_written;
+	struct list_head	 samples;
 };
 
 struct event_entry {
@@ -42,13 +41,14 @@ static int perf_event__repipe_synth(struct perf_tool *tool,
 				    union perf_event *event)
 {
 	struct perf_inject *inject = container_of(tool, struct perf_inject, tool);
+	int fd = perf_data_file__fd(&inject->output);
 	uint32_t size;
 	void *buf = event;
 
 	size = event->header.size;
 
 	while (size) {
-		int ret = write(inject->output, buf, size);
+		int ret = write(fd, buf, size);
 		if (ret < 0)
 			return -errno;
 
@@ -80,7 +80,7 @@ static int perf_event__repipe_attr(struct perf_tool *tool,
 	if (ret)
 		return ret;
 
-	if (!inject->pipe_output)
+	if (!perf_data_file__is_pipe(&inject->output))
 		return 0;
 
 	return perf_event__repipe_synth(tool, event);
@@ -351,10 +351,11 @@ static int __cmd_inject(struct perf_inject *inject)
 {
 	struct perf_session *session;
 	int ret = -EINVAL;
-	struct perf_data_file file = {
+	struct perf_data_file file_in = {
 		.path = inject->input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
+	struct perf_data_file *file_out = &inject->output;
 
 	signal(SIGINT, sig_handler);
 
@@ -365,7 +366,7 @@ static int __cmd_inject(struct perf_inject *inject)
 		inject->tool.tracing_data = perf_event__repipe_tracing_data;
 	}
 
-	session = perf_session__new(&file, true, &inject->tool);
+	session = perf_session__new(&file_in, true, &inject->tool);
 	if (session == NULL)
 		return -ENOMEM;
 
@@ -391,14 +392,16 @@ static int __cmd_inject(struct perf_inject *inject)
 		}
 	}
 
-	if (!inject->pipe_output)
-		lseek(inject->output, session->header.data_offset, SEEK_SET);
+	if (!perf_data_file__is_pipe(file_out))
+		lseek(perf_data_file__fd(file_out),
+		      session->header.data_offset, SEEK_SET);
 
 	ret = perf_session__process_events(session, &inject->tool);
 
-	if (!inject->pipe_output) {
+	if (!perf_data_file__is_pipe(file_out)) {
 		session->header.data_size = inject->bytes_written;
-		perf_session__write_header(session, session->evlist, inject->output, true);
+		perf_session__write_header(session, session->evlist,
+					   inject->output.fd, true);
 	}
 
 	perf_session__delete(session);
@@ -427,14 +430,17 @@ int cmd_inject(int argc, const char **argv, const char *prefix __maybe_unused)
 		},
 		.input_name  = "-",
 		.samples = LIST_HEAD_INIT(inject.samples),
+		.output = {
+			.path = "-",
+			.mode = PERF_DATA_MODE_WRITE,
+		},
 	};
-	const char *output_name = "-";
 	const struct option options[] = {
 		OPT_BOOLEAN('b', "build-ids", &inject.build_ids,
 			    "Inject build-ids into the output stream"),
 		OPT_STRING('i', "input", &inject.input_name, "file",
 			   "input file name"),
-		OPT_STRING('o', "output", &output_name, "file",
+		OPT_STRING('o', "output", &inject.output.path, "file",
 			   "output file name"),
 		OPT_BOOLEAN('s', "sched-stat", &inject.sched_stat,
 			    "Merge sched-stat and sched-switch for getting events "
@@ -456,16 +462,9 @@ int cmd_inject(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (argc)
 		usage_with_options(inject_usage, options);
 
-	if (!strcmp(output_name, "-")) {
-		inject.pipe_output = 1;
-		inject.output = STDOUT_FILENO;
-	} else {
-		inject.output = open(output_name, O_CREAT | O_WRONLY | O_TRUNC,
-						  S_IRUSR | S_IWUSR);
-		if (inject.output < 0) {
-			perror("failed to create output file");
-			return -1;
-		}
+	if (perf_data_file__open(&inject.output)) {
+		perror("failed to create output file");
+		return -1;
 	}
 
 	if (symbol__init() < 0)
