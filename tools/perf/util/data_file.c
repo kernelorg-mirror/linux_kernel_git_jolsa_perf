@@ -118,3 +118,23 @@ void perf_data_file__close(struct perf_data_file *file)
 {
 	close(file->fd);
 }
+
+ssize_t perf_data_file__write(struct perf_data_file *file,
+			      void *buf, size_t size)
+{
+	ssize_t total = size;
+
+	while (size) {
+		ssize_t ret = write(file->fd, buf, size);
+
+		if (ret < 0) {
+			pr_err("failed to write perf data, error: %m\n");
+			return -1;
+		}
+
+		size  -= ret;
+		buf   += ret;
+	}
+
+	return total;
+}

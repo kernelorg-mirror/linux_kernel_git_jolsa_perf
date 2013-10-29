@@ -1,6 +1,8 @@
 #ifndef __PERF_DATA_H
 #define __PERF_DATA_H
 
+#include <unistd.h>
+
 enum perf_data_mode {
 	PERF_DATA_MODE_WRITE,
 	PERF_DATA_MODE_READ,
@@ -34,5 +36,6 @@ static inline bool perf_data__is_write(struct perf_data *data)
 
 int perf_data__open(struct perf_data *data);
 void perf_data__close(struct perf_data *data);
+ssize_t perf_data__write(struct perf_data *data, void *buf, size_t size);
 
 #endif /* __PERF_DATA_H */

@@ -82,24 +82,17 @@ static void advance_output(struct perf_record *rec, size_t size)
 	rec->bytes_written += size;
 }
 
-static int write_output(struct perf_record *rec, void *buf, size_t size)
+static ssize_t perf_record__write(struct perf_record *rec,
+				  void *buf, size_t size)
 {
-	struct perf_data_file *file = perf_data__file(&rec->data);
+	struct perf_session *session = rec->session;
+	ssize_t ret;
 
-	while (size) {
-		int ret = write(file->fd, buf, size);
+	ret = perf_data__write(session->data, buf, size);
+	if (ret < 0)
+		return -1;
 
-		if (ret < 0) {
-			pr_err("failed to write perf data, error: %m\n");
-			return -1;
-		}
-
-		size -= ret;
-		buf += ret;
-
-		rec->bytes_written += ret;
-	}
-
+	rec->bytes_written += ret;
 	return 0;
 }
 
@@ -109,10 +102,7 @@ static int process_synthesized_event(struct perf_tool *tool,
 				     struct machine *machine __maybe_unused)
 {
 	struct perf_record *rec = container_of(tool, struct perf_record, tool);
-	if (write_output(rec, event, event->header.size) < 0)
-		return -1;
-
-	return 0;
+	return perf_record__write(rec, event, event->header.size);
 }
 
 static int perf_record__mmap_read(struct perf_record *rec,
@@ -137,7 +127,7 @@ static int perf_record__mmap_read(struct perf_record *rec,
 		size = md->mask + 1 - (old & md->mask);
 		old += size;
 
-		if (write_output(rec, buf, size) < 0) {
+		if (perf_record__write(rec, buf, size) < 0) {
 			rc = -1;
 			goto out;
 		}
@@ -147,7 +137,7 @@ static int perf_record__mmap_read(struct perf_record *rec,
 	size = head - old;
 	old += size;
 
-	if (write_output(rec, buf, size) < 0) {
+	if (perf_record__write(rec, buf, size) < 0) {
 		rc = -1;
 		goto out;
 	}
