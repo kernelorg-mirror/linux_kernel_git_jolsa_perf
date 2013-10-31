@@ -70,7 +70,7 @@ int test__syscall_open_tp_fields(void)
 		for (i = 0; i < evlist->nr_mmaps; i++) {
 			union perf_event *event;
 
-			while ((event = perf_evlist__mmap_read(evlist, i)) != NULL) {
+			while ((event = perf_evlist__mmap_read_idx(evlist, i)) != NULL) {
 				const u32 type = event->header.type;
 				int tp_flags;
 				struct perf_sample sample;

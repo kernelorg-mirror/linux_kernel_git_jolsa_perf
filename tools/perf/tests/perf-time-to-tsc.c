@@ -116,7 +116,7 @@ int test__perf_time_to_tsc(void)
 	perf_evlist__disable(evlist);
 
 	for (i = 0; i < evlist->nr_mmaps; i++) {
-		while ((event = perf_evlist__mmap_read(evlist, i)) != NULL) {
+		while ((event = perf_evlist__mmap_read_idx(evlist, i)) != NULL) {
 			struct perf_sample sample;
 
 			if (event->header.type != PERF_RECORD_COMM ||

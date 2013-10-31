@@ -806,7 +806,7 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 	u8 origin;
 	int ret;
 
-	while ((event = perf_evlist__mmap_read(top->evlist, idx)) != NULL) {
+	while ((event = perf_evlist__mmap_read_idx(top->evlist, idx)) != NULL) {
 		ret = perf_evlist__parse_sample(top->evlist, event, &sample);
 		if (ret) {
 			pr_err("Can't parse sample, err = %d\n", ret);

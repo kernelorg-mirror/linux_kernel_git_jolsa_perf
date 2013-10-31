@@ -137,7 +137,7 @@ int test__aux_poll(void)
 	 * only auxiliary events.
 	 */
  retry:
-	while ((event = perf_evlist__mmap_read(evlist, 0)) != NULL) {
+	while ((event = perf_evlist__mmap_read_idx(evlist, 0)) != NULL) {
 		switch (event->header.type) {
 		case PERF_RECORD_MMAP:
 		case PERF_RECORD_COMM:

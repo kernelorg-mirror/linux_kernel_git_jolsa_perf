@@ -86,7 +86,7 @@ int test__task_exit(void)
 	perf_evlist__start_workload(evlist);
 
 retry:
-	while ((event = perf_evlist__mmap_read(evlist, 0)) != NULL) {
+	while ((event = perf_evlist__mmap_read_idx(evlist, 0)) != NULL) {
 		if (event->header.type == PERF_RECORD_EXIT)
 			nr_exit++;
 

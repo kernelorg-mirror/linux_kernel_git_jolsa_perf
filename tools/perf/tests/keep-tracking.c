@@ -30,7 +30,7 @@ static int find_comm(struct perf_evlist *evlist, const char *comm)
 
 	found = 0;
 	for (i = 0; i < evlist->nr_mmaps; i++) {
-		while ((event = perf_evlist__mmap_read(evlist, i)) != NULL) {
+		while ((event = perf_evlist__mmap_read_idx(evlist, i)) != NULL) {
 			if (event->header.type == PERF_RECORD_COMM &&
 			    (pid_t)event->comm.pid == getpid() &&
 			    (pid_t)event->comm.tid == getpid() &&

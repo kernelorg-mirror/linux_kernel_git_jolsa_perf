@@ -74,7 +74,7 @@ static int __test__sw_clock_freq(enum perf_sw_ids clock_id)
 
 	perf_evlist__disable(evlist);
 
-	while ((event = perf_evlist__mmap_read(evlist, 0)) != NULL) {
+	while ((event = perf_evlist__mmap_read_idx(evlist, 0)) != NULL) {
 		struct perf_sample sample;
 
 		if (event->header.type != PERF_RECORD_SAMPLE)
