@@ -89,7 +89,7 @@ static int __test__sw_clock_freq(enum perf_sw_ids clock_id)
 		total_periods += sample.period;
 		nr_samples++;
 next_event:
-		perf_evlist__mmap_consume(evlist, 0);
+		perf_evlist__mmap_consume_idx(evlist, 0);
 	}
 
 	if ((u64) nr_samples == total_periods) {

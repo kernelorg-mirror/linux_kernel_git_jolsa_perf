@@ -254,7 +254,7 @@ int test__PERF_RECORD(void)
 					++errs;
 				}
 
-				perf_evlist__mmap_consume(evlist, i);
+				perf_evlist__mmap_consume_idx(evlist, i);
 			}
 		}
 

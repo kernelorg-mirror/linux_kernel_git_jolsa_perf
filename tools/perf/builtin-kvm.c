@@ -889,7 +889,7 @@ static s64 perf_kvm__mmap_read_idx(struct perf_kvm_stat *kvm, int idx,
 	while ((event = perf_evlist__mmap_read_idx(kvm->evlist, idx)) != NULL) {
 		err = perf_evlist__parse_sample(kvm->evlist, event, &sample);
 		if (err) {
-			perf_evlist__mmap_consume(kvm->evlist, idx);
+			perf_evlist__mmap_consume_idx(kvm->evlist, idx);
 			pr_err("Failed to parse sample\n");
 			return -1;
 		}
@@ -899,7 +899,7 @@ static s64 perf_kvm__mmap_read_idx(struct perf_kvm_stat *kvm, int idx,
 		 * FIXME: Here we can't consume the event, as perf_session_queue_event will
 		 *        point to it, and it'll get possibly overwritten by the kernel.
 		 */
-		perf_evlist__mmap_consume(kvm->evlist, idx);
+		perf_evlist__mmap_consume_idx(kvm->evlist, idx);
 
 		if (err) {
 			pr_err("Failed to enqueue sample: %d\n", err);

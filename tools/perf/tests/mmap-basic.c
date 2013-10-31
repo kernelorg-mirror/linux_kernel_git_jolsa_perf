@@ -122,7 +122,7 @@ int test__basic_mmap(void)
 			goto out_munmap;
 		}
 		nr_events[evsel->idx]++;
-		perf_evlist__mmap_consume(evlist, 0);
+		perf_evlist__mmap_consume_idx(evlist, 0);
 	}
 
 	err = 0;

@@ -92,7 +92,9 @@ union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist,
 					 struct perf_mmap *md);
 union perf_event *perf_evlist__mmap_read_idx(struct perf_evlist *self, int idx);
 
-void perf_evlist__mmap_consume(struct perf_evlist *evlist, int idx);
+void perf_evlist__mmap_consume(struct perf_evlist *evlist,
+			       struct perf_mmap *md);
+void perf_evlist__mmap_consume_idx(struct perf_evlist *evlist, int idx);
 
 int perf_evlist__open(struct perf_evlist *evlist);
 void perf_evlist__close(struct perf_evlist *evlist);

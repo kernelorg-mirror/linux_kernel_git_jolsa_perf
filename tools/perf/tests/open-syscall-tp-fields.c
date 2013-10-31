@@ -78,7 +78,7 @@ int test__syscall_open_tp_fields(void)
 				++nr_events;
 
 				if (type != PERF_RECORD_SAMPLE) {
-					perf_evlist__mmap_consume(evlist, i);
+					perf_evlist__mmap_consume_idx(evlist, i);
 					continue;
 				}
 

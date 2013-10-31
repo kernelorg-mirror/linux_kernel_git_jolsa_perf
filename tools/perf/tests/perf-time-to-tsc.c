@@ -135,7 +135,7 @@ int test__perf_time_to_tsc(void)
 				comm2_time = sample.time;
 			}
 next_event:
-			perf_evlist__mmap_consume(evlist, i);
+			perf_evlist__mmap_consume_idx(evlist, i);
 		}
 	}
 

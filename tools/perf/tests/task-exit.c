@@ -90,7 +90,7 @@ retry:
 		if (event->header.type == PERF_RECORD_EXIT)
 			nr_exit++;
 
-		perf_evlist__mmap_consume(evlist, 0);
+		perf_evlist__mmap_consume_idx(evlist, 0);
 	}
 
 	if (!exited || !nr_exit) {
