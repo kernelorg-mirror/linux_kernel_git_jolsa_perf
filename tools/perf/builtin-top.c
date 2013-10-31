@@ -796,7 +796,7 @@ static void perf_event__process_sample(struct perf_tool *tool,
 	return;
 }
 
-static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
+static void perf_top__mmap_read(struct perf_top *top, struct perf_mmap *m)
 {
 	struct perf_sample sample;
 	struct perf_evsel *evsel;
@@ -806,7 +806,7 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 	u8 origin;
 	int ret;
 
-	while ((event = perf_evlist__mmap_read_idx(top->evlist, idx)) != NULL) {
+	while ((event = perf_evlist__mmap_read(top->evlist, m)) != NULL) {
 		ret = perf_evlist__parse_sample(top->evlist, event, &sample);
 		if (ret) {
 			pr_err("Can't parse sample, err = %d\n", ret);
@@ -860,16 +860,35 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 		} else
 			++session->stats.nr_unknown_events;
 next_event:
-		perf_evlist__mmap_consume_idx(top->evlist, idx);
+		perf_evlist__mmap_consume(top->evlist, m);
 	}
 }
 
-static void perf_top__mmap_read(struct perf_top *top)
+static void perf_top__mmap_read_all(struct perf_top *top)
 {
+	struct perf_evlist *evlist = top->evlist;
 	int i;
 
-	for (i = 0; i < top->evlist->nr_mmaps; i++)
-		perf_top__mmap_read_idx(top, i);
+	for (i = 0; i < evlist->nr_mmaps; i++)
+		perf_top__mmap_read(top, &evlist->mmap[i]);
+}
+
+static int poll_data(struct poller_item *item)
+{
+	struct perf_top *top;
+	struct perf_mmap *m;
+
+	top = item->data;
+	m = container_of(item, struct perf_mmap, poll);
+
+	perf_top__mmap_read(top, m);
+	return 0;
+}
+
+static int poll_error(struct poller_item *item __maybe_unused)
+{
+	pr_err("failed: poll error on event\n");
+	return -1;
 }
 
 static int perf_top__start_counters(struct perf_top *top)
@@ -901,6 +920,11 @@ try_again:
 	if (perf_evlist__mmap(evlist, opts->mmap_pages, false) < 0) {
 		ui__error("Failed to mmap with %d (%s)\n",
 			    errno, strerror(errno));
+		goto out_err;
+	}
+
+	if (perf_evlist__poller_init(evlist, poll_data, poll_error, top)) {
+		ui__error("Failed to nitialize polling object.\n");
 		goto out_err;
 	}
 
@@ -975,11 +999,6 @@ static int __cmd_top(struct perf_top *top)
         if (!perf_target__none(&opts->target))
                 perf_evlist__enable(top->evlist);
 
-	/* Wait for a minimal set of events before starting the snapshot */
-	poll(top->evlist->pollfd, top->evlist->nr_fds, 100);
-
-	perf_top__mmap_read(top);
-
 	ret = -1;
 	if (pthread_create(&thread, NULL, (use_browser > 0 ? display_thread_tui :
 							    display_thread), top)) {
@@ -998,12 +1017,8 @@ static int __cmd_top(struct perf_top *top)
 	}
 
 	while (!done) {
-		u64 hits = top->samples;
-
-		perf_top__mmap_read(top);
-
-		if (hits == top->samples)
-			ret = poll(top->evlist->pollfd, top->evlist->nr_fds, 100);
+		if (!perf_evlist__poll(top->evlist, 1000))
+			perf_top__mmap_read_all(top);
 	}
 
 	ret = 0;
