@@ -109,6 +109,7 @@ void perf_evlist__exit(struct perf_evlist *evlist)
 
 void perf_evlist__delete(struct perf_evlist *evlist)
 {
+	perf_evlist__poller_cleanup(evlist);
 	perf_evlist__purge(evlist);
 	perf_evlist__exit(evlist);
 	free(evlist);
@@ -613,15 +614,18 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 static int __perf_evlist__mmap(struct perf_evlist *evlist,
 			       int idx, int prot, int mask, int fd)
 {
-	evlist->mmap[idx].prev = 0;
-	evlist->mmap[idx].mask = mask;
-	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, prot,
-				      MAP_SHARED, fd, 0);
-	if (evlist->mmap[idx].base == MAP_FAILED) {
-		evlist->mmap[idx].base = NULL;
+	struct perf_mmap *m = &evlist->mmap[idx];
+
+	m->prev = 0;
+	m->mask = mask;
+	m->base = mmap(NULL, evlist->mmap_len, prot,
+			MAP_SHARED, fd, 0);
+	if (m->base == MAP_FAILED) {
+		m->base = NULL;
 		return -1;
 	}
 
+	m->poll.fd = fd;
 	perf_evlist__add_pollfd(evlist, fd);
 	return 0;
 }
@@ -837,6 +841,41 @@ void perf_evlist__delete_maps(struct perf_evlist *evlist)
 	thread_map__delete(evlist->threads);
 	evlist->cpus	= NULL;
 	evlist->threads = NULL;
+}
+
+int perf_evlist__poller_init(struct perf_evlist *evlist,
+			     poller_cb data_cb, poller_cb error_cb,
+			     void *data)
+{
+	struct poller *p = &evlist->poller;
+	int i;
+
+	poller_init(p);
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		struct poller_item *item = &evlist->mmap[i].poll;
+		int ret;
+
+		item->data      = data;
+		item->ops.data  = data_cb;
+		item->ops.error = error_cb;
+
+		ret = poller_add(p, item);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+void perf_evlist__poller_cleanup(struct perf_evlist *evlist)
+{
+	poller_cleanup(&evlist->poller);
+}
+
+int perf_evlist__poll(struct perf_evlist *evlist, int timeout)
+{
+	return poller_poll(&evlist->poller, timeout);
 }
 
 int perf_evlist__apply_filters(struct perf_evlist *evlist)

@@ -8,6 +8,7 @@
 #include "evsel.h"
 #include "util.h"
 #include <unistd.h>
+#include "poller.h"
 
 struct pollfd;
 struct thread_map;
@@ -18,10 +19,11 @@ struct perf_record_opts;
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
 struct perf_mmap {
-	void		 *base;
-	int		 mask;
-	unsigned int	 prev;
-	char		 event_copy[PERF_SAMPLE_MAX_SIZE];
+	struct poller_item	 poll;
+	void			*base;
+	int			 mask;
+	unsigned int		 prev;
+	char			 event_copy[PERF_SAMPLE_MAX_SIZE];
 };
 
 struct perf_evlist {
@@ -42,6 +44,7 @@ struct perf_evlist {
 	bool		 overwrite;
 	struct perf_mmap *mmap;
 	struct pollfd	 *pollfd;
+	struct poller	 poller;
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
@@ -117,6 +120,12 @@ int perf_evlist__parse_mmap_pages(const struct option *opt,
 int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 		      bool overwrite);
 void perf_evlist__munmap(struct perf_evlist *evlist);
+
+int perf_evlist__poller_init(struct perf_evlist *evlist,
+			     poller_cb data_cb, poller_cb error_cb,
+			     void *data);
+void perf_evlist__poller_cleanup(struct perf_evlist *evlist);
+int perf_evlist__poll(struct perf_evlist *evlist, int timeout);
 
 void perf_evlist__disable(struct perf_evlist *evlist);
 void perf_evlist__enable(struct perf_evlist *evlist);
