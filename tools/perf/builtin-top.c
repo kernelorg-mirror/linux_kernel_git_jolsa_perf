@@ -431,32 +431,10 @@ static int perf_top__key_mapped(struct perf_top *top, int c)
 	return 0;
 }
 
-static bool perf_top__handle_keypress(struct perf_top *top, int c)
+static void perf_top__handle_keypress(struct perf_top *top, int c)
 {
-	bool ret = true;
-
-	if (!perf_top__key_mapped(top, c)) {
-		struct pollfd stdin_poll = { .fd = 0, .events = POLLIN };
-		struct termios tc, save;
-
-		perf_top__print_mapped_keys(top);
-		fprintf(stdout, "\nEnter selection, or unmapped key to continue: ");
-		fflush(stdout);
-
-		tcgetattr(0, &save);
-		tc = save;
-		tc.c_lflag &= ~(ICANON | ECHO);
-		tc.c_cc[VMIN] = 0;
-		tc.c_cc[VTIME] = 0;
-		tcsetattr(0, TCSANOW, &tc);
-
-		poll(&stdin_poll, 1, -1);
-		c = getc(stdin);
-
-		tcsetattr(0, TCSAFLUSH, &save);
-		if (!perf_top__key_mapped(top, c))
-			return ret;
-	}
+	if (!perf_top__key_mapped(top, c))
+		return;
 
 	switch (c) {
 		case 'd':
@@ -516,7 +494,7 @@ static bool perf_top__handle_keypress(struct perf_top *top, int c)
 			printf("exiting.\n");
 			if (top->dump_symtab)
 				perf_session__fprintf_dsos(top->session, stderr);
-			ret = false;
+			done = 1;
 			break;
 		case 's':
 			perf_top__prompt_symbol(top, "Enter details symbol");
@@ -540,8 +518,49 @@ static bool perf_top__handle_keypress(struct perf_top *top, int c)
 		default:
 			break;
 	}
+}
 
-	return ret;
+static int stdin_init_poller(struct poller *p, struct poller_item *item,
+			     void *data)
+{
+	poller_init(p);
+	item->data = data;
+	return poller_add(p, item);
+}
+
+static int stdin_data(struct poller_item *item)
+{
+	struct perf_top *top = item->data;
+
+	perf_top__handle_keypress(top, getc(stdin));
+	return 0;
+}
+
+static struct poller_item stdin_poll = {
+	.ops = {
+		.data = stdin_data,
+	},
+};
+
+static void perf_top__handle_keypress_wait(struct perf_top *top, int c)
+{
+	struct poller poller;
+
+	if (perf_top__key_mapped(top, c)) {
+		perf_top__handle_keypress(top, c);
+		return;
+	}
+
+	if (stdin_init_poller(&poller, &stdin_poll, top)) {
+		pr_err("failed to initialize polling\n");
+		return;
+	}
+
+	perf_top__print_mapped_keys(top);
+	fprintf(stdout, "\nEnter selection, or unmapped key to continue: ");
+	fflush(stdout);
+
+	poller_poll(&poller, -1);
 }
 
 static void perf_top__sort_new_samples(void *arg)
@@ -587,49 +606,46 @@ static void *display_thread_tui(void *arg)
 	return NULL;
 }
 
+static int stdin_data_wait(struct poller_item *item)
+{
+	struct perf_top *top = item->data;
+
+	perf_top__handle_keypress_wait(top, getc(stdin));
+	return 0;
+}
+
+static struct poller_item stdin_poll_wait = {
+	.ops = {
+		.data = stdin_data_wait,
+	},
+};
+
 static void *display_thread(void *arg)
 {
-	struct pollfd stdin_poll = { .fd = 0, .events = POLLIN };
 	struct termios tc, save;
 	struct perf_top *top = arg;
-	int delay_msecs, c;
+	struct poller poller;
+
+	if (stdin_init_poller(&poller, &stdin_poll_wait, top)) {
+		pr_err("failed to initialize polling\n");
+		return NULL;;
+	}
 
 	tcgetattr(0, &save);
 	tc = save;
 	tc.c_lflag &= ~(ICANON | ECHO);
 	tc.c_cc[VMIN] = 0;
 	tc.c_cc[VTIME] = 0;
+	tcsetattr(0, TCSANOW, &tc);
 
 	pthread__unblock_sigwinch();
-repeat:
-	delay_msecs = top->delay_secs * 1000;
-	tcsetattr(0, TCSANOW, &tc);
-	/* trash return*/
-	getc(stdin);
 
 	while (!done) {
 		perf_top__print_sym_table(top);
-		/*
-		 * Either timeout expired or we got an EINTR due to SIGWINCH,
-		 * refresh screen in both cases.
-		 */
-		switch (poll(&stdin_poll, 1, delay_msecs)) {
-		case 0:
-			continue;
-		case -1:
-			if (errno == EINTR)
-				continue;
-			/* Fall trhu */
-		default:
-			c = getc(stdin);
-			tcsetattr(0, TCSAFLUSH, &save);
-
-			if (perf_top__handle_keypress(top, c))
-				goto repeat;
-			done = 1;
-		}
+		poller_poll(&poller, top->delay_secs * 1000);
 	}
 
+	tcsetattr(0, TCSAFLUSH, &save);
 	return NULL;
 }
 
