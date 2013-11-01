@@ -959,6 +959,7 @@ struct trace {
 		int		max;
 		struct syscall  *table;
 	} syscalls;
+	struct perf_evlist	*evlist;
 	struct perf_record_opts opts;
 	struct machine		*host;
 	u64			base_time;
@@ -1660,12 +1661,89 @@ static void perf_evlist__add_vfs_getname(struct perf_evlist *evlist)
 	perf_evlist__add(evlist, evsel);
 }
 
+static void perf_trace__mmap_read(struct trace *trace, struct perf_mmap *m)
+{
+	struct perf_evlist *evlist = trace->evlist;
+	struct perf_evsel *evsel;
+	union perf_event *event;
+	int err;
+
+	while ((event = perf_evlist__mmap_read(evlist, m)) != NULL) {
+		const u32 type = event->header.type;
+		tracepoint_handler handler;
+		struct perf_sample sample;
+
+		++trace->nr_events;
+
+		err = perf_evlist__parse_sample(evlist, event, &sample);
+		if (err) {
+			fprintf(trace->output, "Can't parse sample, err = %d, skipping...\n", err);
+			goto next_event;
+		}
+
+		if (!trace->full_time && trace->base_time == 0)
+			trace->base_time = sample.time;
+
+		if (type != PERF_RECORD_SAMPLE) {
+			trace__process_event(trace, trace->host, event);
+			continue;
+		}
+
+		evsel = perf_evlist__id2evsel(evlist, sample.id);
+		if (evsel == NULL) {
+			fprintf(trace->output, "Unknown tp ID %" PRIu64 ", skipping...\n", sample.id);
+			goto next_event;
+		}
+
+		if (sample.raw_data == NULL) {
+			fprintf(trace->output, "%s sample with no payload for tid: %d, cpu %d, raw_size=%d, skipping...\n",
+			       perf_evsel__name(evsel), sample.tid,
+			       sample.cpu, sample.raw_size);
+			goto next_event;
+		}
+
+		handler = evsel->handler.func;
+		handler(trace, evsel, &sample);
+next_event:
+		perf_evlist__mmap_consume(evlist, m);
+
+	}
+}
+
+static void perf_trace__mmap_read_all(struct trace *trace)
+{
+	struct perf_evlist *evlist = trace->evlist;
+	int i;
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		if (evlist->mmap[i].base)
+			perf_trace__mmap_read(trace, &evlist->mmap[i]);
+	}
+}
+
+static int poll_data(struct poller_item *item)
+{
+	struct trace *trace;
+	struct perf_mmap *m;
+
+	trace = item->data;
+	m = container_of(item, struct perf_mmap, poll);
+
+        perf_trace__mmap_read(trace, m);
+        return 0;
+}
+
+static int poll_error(struct poller_item *item __maybe_unused)
+{
+	pr_err("failed: poll error on event\n");
+	return -1;
+}
+
 static int trace__run(struct trace *trace, int argc, const char **argv)
 {
 	struct perf_evlist *evlist = perf_evlist__new();
-	struct perf_evsel *evsel;
-	int err = -1, i;
-	unsigned long before;
+	int err = -1;
+	unsigned long before = 0;
 	const bool forks = argc > 0;
 
 	trace->live = true;
@@ -1674,6 +1752,8 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 		fprintf(trace->output, "Not enough memory to run!\n");
 		goto out;
 	}
+
+	trace->evlist = evlist;
 
 	if (perf_evlist__add_newtp(evlist, "raw_syscalls", "sys_enter", trace__sys_enter) ||
 		perf_evlist__add_newtp(evlist, "raw_syscalls", "sys_exit", trace__sys_exit))
@@ -1722,69 +1802,28 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 		goto out_close_evlist;
 	}
 
+	if (perf_evlist__poller_init(evlist, poll_data, poll_error, trace)) {
+		fprintf(trace->output, "Couldn't initialize polling.\n");
+		goto out_unmap_evlist;
+	}
+
 	perf_evlist__enable(evlist);
 
 	if (forks)
 		perf_evlist__start_workload(evlist);
 
 	trace->multiple_threads = evlist->threads->map[0] == -1 || evlist->threads->nr > 1;
-again:
-	before = trace->nr_events;
 
-	for (i = 0; i < evlist->nr_mmaps; i++) {
-		union perf_event *event;
+	while (!done) {
+		perf_evlist__poll(evlist, -1);
 
-		while ((event = perf_evlist__mmap_read_idx(evlist, i)) != NULL) {
-			const u32 type = event->header.type;
-			tracepoint_handler handler;
-			struct perf_sample sample;
-
-			++trace->nr_events;
-
-			err = perf_evlist__parse_sample(evlist, event, &sample);
-			if (err) {
-				fprintf(trace->output, "Can't parse sample, err = %d, skipping...\n", err);
-				goto next_event;
-			}
-
-			if (!trace->full_time && trace->base_time == 0)
-				trace->base_time = sample.time;
-
-			if (type != PERF_RECORD_SAMPLE) {
-				trace__process_event(trace, trace->host, event);
-				continue;
-			}
-
-			evsel = perf_evlist__id2evsel(evlist, sample.id);
-			if (evsel == NULL) {
-				fprintf(trace->output, "Unknown tp ID %" PRIu64 ", skipping...\n", sample.id);
-				goto next_event;
-			}
-
-			if (sample.raw_data == NULL) {
-				fprintf(trace->output, "%s sample with no payload for tid: %d, cpu %d, raw_size=%d, skipping...\n",
-				       perf_evsel__name(evsel), sample.tid,
-				       sample.cpu, sample.raw_size);
-				goto next_event;
-			}
-
-			handler = evsel->handler.func;
-			handler(trace, evsel, &sample);
-next_event:
-			perf_evlist__mmap_consume_idx(evlist, i);
-
-			if (interrupted)
-				goto out_disable;
-		}
+		if (interrupted)
+			goto out_disable;
 	}
 
-	if (trace->nr_events == before) {
-		int timeout = done ? 100 : -1;
-
-		if (poll(evlist->pollfd, evlist->nr_fds, timeout) > 0)
-			goto again;
-	} else {
-		goto again;
+	while (before != trace->nr_events) {
+		before = trace->nr_events;
+		perf_trace__mmap_read_all(trace);
 	}
 
 out_disable:
@@ -1803,6 +1842,7 @@ out_disable:
 		}
 	}
 
+out_unmap_evlist:
 	perf_evlist__munmap(evlist);
 out_close_evlist:
 	perf_evlist__close(evlist);
