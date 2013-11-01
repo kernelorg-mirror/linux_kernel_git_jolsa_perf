@@ -126,6 +126,7 @@ int perf_evlist__poller_init(struct perf_evlist *evlist,
 			     void *data);
 void perf_evlist__poller_cleanup(struct perf_evlist *evlist);
 int perf_evlist__poll(struct perf_evlist *evlist, int timeout);
+int perf_evlist__poll_raw(struct perf_evlist *evlist, int timeout);
 
 void perf_evlist__disable(struct perf_evlist *evlist);
 void perf_evlist__enable(struct perf_evlist *evlist);

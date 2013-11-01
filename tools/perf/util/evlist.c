@@ -878,6 +878,11 @@ int perf_evlist__poll(struct perf_evlist *evlist, int timeout)
 	return poller_poll(&evlist->poller, timeout);
 }
 
+int perf_evlist__poll_raw(struct perf_evlist *evlist, int timeout)
+{
+	return poller_poll_raw(&evlist->poller, timeout);
+}
+
 int perf_evlist__apply_filters(struct perf_evlist *evlist)
 {
 	struct perf_evsel *evsel;
