@@ -2,6 +2,8 @@
 #include "evsel.h"
 #include "cpumap.h"
 #include "parse-events.h"
+#include "fs.h"
+#include "util.h"
 
 typedef void (*setup_probe_fn_t)(struct perf_evsel *evsel);
 
@@ -105,4 +107,37 @@ void perf_evlist__config(struct perf_evlist *evlist,
 	}
 
 	perf_evlist__set_id_pos(evlist);
+}
+
+static int get_max_rate(unsigned int *rate)
+{
+	const char *procfs;
+	char path[PATH_MAX];
+
+	procfs = procfs_find_mountpoint();
+	if (!procfs)
+		return -1;
+
+	snprintf(path, PATH_MAX,
+		 "%s/sys/kernel/perf_event_max_sample_rate", procfs);
+
+	return filename__read_int(path, (int *) rate);
+}
+
+int perf_opts__check(struct perf_record_opts *opts)
+{
+	unsigned int max_rate;
+
+	if (get_max_rate(&max_rate))
+		return 0;
+
+	if (max_rate < opts->freq) {
+		pr_err("Maximum rate (%u) for frequency reached.\n"
+		   "Please use -F freq option with lower value or consider\n"
+		   "tweaking /proc/sys/kernel/perf_event_max_sample_rate.\n",
+		   max_rate);
+		return -1;
+	}
+
+	return 0;
 }
