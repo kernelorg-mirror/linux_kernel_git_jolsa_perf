@@ -2,5 +2,6 @@
 #define __PERF_FS
 
 const char *sysfs_find_mountpoint(void);
+const char *procfs_find_mountpoint(void);
 
 #endif /* __PERF_FS */
