@@ -240,12 +240,8 @@ out:
 
 static int process_buildids(struct perf_record *rec)
 {
-	struct perf_data_file *file  = &rec->file;
 	struct perf_session *session = rec->session;
-
-	u64 size = lseek(file->fd, 0, SEEK_CUR);
-	if (size == 0)
-		return 0;
+	u64 size = perf_data_file__size(&rec->file);
 
 	return __perf_session__process_events(session, rec->post_processing_offset,
 					      size - rec->post_processing_offset,
@@ -534,6 +530,11 @@ static int __cmd_record(struct perf_record *rec, int argc, const char **argv)
 
 	if (quiet || signr == SIGUSR1)
 		return 0;
+
+	if (perf_data_file__munmap(file)) {
+		pr_err("data file unmap failed\n");
+		goto out_delete_session;
+	}
 
 	fprintf(stderr, "[ perf record: Woken up %ld times to write data ]\n", waking);
 

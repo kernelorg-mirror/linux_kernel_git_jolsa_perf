@@ -2,6 +2,7 @@
 #define __PERF_DATA_H
 
 #include <stdbool.h>
+#include "types.h"
 
 enum perf_data_mode {
 	PERF_DATA_MODE_WRITE,
@@ -15,6 +16,12 @@ struct perf_data_file {
 	bool			 force;
 	unsigned long		 size;
 	enum perf_data_mode	 mode;
+
+	/* for MMAP based file writes */
+	void			*mmap_addr;
+	u64			 mmap_off;
+	u64			 mmap_foff;
+	u64			 mmap_size;
 };
 
 static inline bool perf_data_file__is_read(struct perf_data_file *file)
@@ -46,4 +53,5 @@ int perf_data_file__open(struct perf_data_file *file);
 void perf_data_file__close(struct perf_data_file *file);
 ssize_t perf_data_file__write(struct perf_data_file *file,
 			      void *buf, size_t size);
+int perf_data_file__munmap(struct perf_data_file *file);
 #endif /* __PERF_DATA_H */

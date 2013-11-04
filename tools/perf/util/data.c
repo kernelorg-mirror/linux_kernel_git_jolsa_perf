@@ -4,9 +4,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "data.h"
 #include "util.h"
+
+#define MMAP_WRITE_SIZE   (64*1024*1024)
 
 static bool check_pipe(struct perf_data_file *file)
 {
@@ -111,6 +114,9 @@ int perf_data_file__open(struct perf_data_file *file)
 	if (!file->path)
 		file->path = "perf.data";
 
+	if (!file->mmap_size)
+		file->mmap_size = MMAP_WRITE_SIZE;
+
 	return open_file(file);
 }
 
@@ -119,8 +125,70 @@ void perf_data_file__close(struct perf_data_file *file)
 	close(file->fd);
 }
 
-ssize_t perf_data_file__write(struct perf_data_file *file,
-			      void *buf, size_t size)
+static int do_mmap(struct perf_data_file *file, u64 offset)
+{
+	u64 mmap_size = file->mmap_size;
+
+	file->mmap_off  = offset % mmap_size;
+	file->mmap_foff = (offset / mmap_size) * mmap_size;
+
+	file->mmap_addr = mmap(NULL, mmap_size,
+			       PROT_WRITE | PROT_READ,
+			       MAP_SHARED,
+			       file->fd,
+			       file->mmap_foff);
+
+	if (file->mmap_addr == MAP_FAILED) {
+		pr_err("mmap failed: %d: %s\n", errno, strerror(errno));
+		return -1;
+	}
+
+	/* Expand file to include this mmap segment. */
+	if (ftruncate(file->fd, file->mmap_foff + file->mmap_size) != 0) {
+		pr_err("ftruncate failed: %d: %s\n", errno, strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+static ssize_t write_mmap(struct perf_data_file *file,
+			  void *buf, size_t size)
+{
+	ssize_t total = size;
+
+	if (!file->mmap_addr) {
+		off_t offset = lseek(file->fd, 0, SEEK_CUR);
+		if (offset < 0)
+			return -1;
+
+		if (do_mmap(file, offset))
+			return -1;
+	}
+
+	while (size) {
+		u64 remain = file->mmap_size - file->mmap_off;
+
+		if (size > remain) {
+			memcpy(file->mmap_addr + file->mmap_off, buf, remain);
+			size -= remain;
+			buf  += remain;
+
+			munmap(file->mmap_addr, file->mmap_size);
+			if (do_mmap(file, file->mmap_foff + file->mmap_size))
+				return -1;
+		} else {
+			memcpy(file->mmap_addr + file->mmap_off, buf, size);
+			file->mmap_off += size;
+			size = 0;
+		}
+	}
+
+	return total;
+}
+
+static ssize_t write_raw(struct perf_data_file *file,
+			 void *buf, size_t size)
 {
 	ssize_t total = size;
 
@@ -137,4 +205,32 @@ ssize_t perf_data_file__write(struct perf_data_file *file,
 	}
 
 	return total;
+}
+
+ssize_t perf_data_file__write(struct perf_data_file *file,
+			      void *buf, size_t size)
+{
+	return file->is_pipe ? write_raw(file, buf, size) :
+			       write_mmap(file, buf, size);
+}
+
+int perf_data_file__munmap(struct perf_data_file *file)
+{
+	if (file->mmap_addr) {
+		int ret;
+
+		munmap(file->mmap_addr, file->mmap_size);
+
+		file->mmap_addr = NULL;
+		file->size = file->mmap_foff + file->mmap_off;
+
+		ret = ftruncate(file->fd, file->size);
+		if (ret)
+			pr_err("ftruncate failed: %d: %s\n", errno,
+			       strerror(errno));
+
+		return ret;
+	}
+
+	return 0;
 }
