@@ -399,8 +399,10 @@ static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
 	 * This way does not work with group format read, so bail
 	 * out in that case.
 	 */
-	if (perf_evlist__read_format(evlist) & PERF_FORMAT_GROUP)
+	if (perf_evlist__read_format(evlist) & PERF_FORMAT_GROUP) {
+		SET_ERR(IOCTL_ID_GROUP);
 		return -1;
+	}
 
 	if (!(evsel->attr.read_format & PERF_FORMAT_ID) ||
 	    read(fd, &read_data, sizeof(read_data)) == -1)
@@ -675,6 +677,11 @@ static void __perf_evlist__strerror(struct perf_evlist *evlist,
 		return;
 	case PERF_EVLIST__ERRNO_OPEN:
 		strerror_open(evlist, buf, size);
+		return;
+	case PERF_EVLIST__ERRNO_IOCTL_ID_GROUP:
+		scnprintf(buf, size,
+			"Cannot read event group on this kernel.\n"
+			"Please consider kernel update (v3.12+).\n");
 		return;
 	default:
 		scnprintf(buf, size, "Unknown error\n");
