@@ -900,8 +900,7 @@ try_again:
 	}
 
 	if (perf_evlist__mmap(evlist, opts->mmap_pages, false) < 0) {
-		ui__error("Failed to mmap with %d (%s)\n",
-			    errno, strerror(errno));
+		ui__error("%s", perf_evlist__strerror(evlist));
 		goto out_err;
 	}
 
