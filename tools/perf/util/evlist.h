@@ -17,6 +17,10 @@ struct perf_record_opts;
 #define PERF_EVLIST__HLIST_BITS 8
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
+enum {
+	PERF_EVLIST__ERRNO_SUCCESS		= 0,
+};
+
 struct perf_mmap {
 	void		 *base;
 	int		 mask;
@@ -45,6 +49,14 @@ struct perf_evlist {
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
+
+	/*
+	 * Internal error handling:
+	 *   err      - internal error value of last operation (
+	 *   err_libc - adjacent libc errno value
+	 */
+	int		 err;
+	int		 err_libc;
 };
 
 struct perf_evsel_str_handler {
@@ -172,6 +184,7 @@ size_t perf_evlist__fprintf(struct perf_evlist *evlist, FILE *fp);
 
 int perf_evlist__strerror_tp(struct perf_evlist *evlist, int err, char *buf, size_t size);
 int perf_evlist__strerror_open(struct perf_evlist *evlist, int err, char *buf, size_t size);
+char *perf_evlist__strerror(struct perf_evlist *evlist);
 
 static inline unsigned int perf_mmap__read_head(struct perf_mmap *mm)
 {

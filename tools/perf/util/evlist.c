@@ -28,6 +28,11 @@
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
+#define SET_ERR(_err) ({				\
+	evlist->err      = PERF_EVLIST__ERRNO_##_err;	\
+	evlist->err_libc = errno;			\
+})
+
 void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
 		       struct thread_map *threads)
 {
@@ -600,6 +605,34 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 	return evlist->mmap != NULL ? 0 : -ENOMEM;
 }
 
+static void __perf_evlist__strerror(struct perf_evlist *evlist,
+				    char *buf, size_t size)
+{
+	int err_libc = evlist->err_libc;
+	int err      = evlist->err;
+
+	switch (err) {
+	case PERF_EVLIST__ERRNO_SUCCESS:
+		break;
+	default:
+		scnprintf(buf, size, "Unknown error\n");
+		return;
+	}
+
+	if (!err_libc)
+		scnprintf(buf, size, "Success.");
+	else
+		scnprintf(buf, size, "Failed with %d (%s)\n",
+			  err, strerror(err_libc));
+}
+
+char *perf_evlist__strerror(struct perf_evlist *evlist)
+{
+	static char str[BUFSIZ];
+	__perf_evlist__strerror(evlist, str, BUFSIZ);
+	return str;
+}
+
 static int __perf_evlist__mmap(struct perf_evlist *evlist,
 			       int idx, int prot, int mask, int fd)
 {
@@ -607,6 +640,7 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist,
 	evlist->mmap[idx].mask = mask;
 	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, prot,
 				      MAP_SHARED, fd, 0);
+
 	if (evlist->mmap[idx].base == MAP_FAILED) {
 		pr_debug2("failed to mmap perf event ring buffer, error %d\n",
 			  errno);
