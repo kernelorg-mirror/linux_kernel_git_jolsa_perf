@@ -19,6 +19,7 @@ struct perf_record_opts;
 
 enum {
 	PERF_EVLIST__ERRNO_SUCCESS		= 0,
+	PERF_EVLIST__ERRNO_MMAP			= 1,
 };
 
 struct perf_mmap {

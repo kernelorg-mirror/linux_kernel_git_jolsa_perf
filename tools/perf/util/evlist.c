@@ -605,6 +605,28 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 	return evlist->mmap != NULL ? 0 : -ENOMEM;
 }
 
+static void strerror_mmap(struct perf_evlist *evlist,
+			  char *buf, size_t size)
+{
+	int err_libc = evlist->err_libc;
+
+	switch (evlist->err_libc) {
+	case EPERM:
+		scnprintf(buf, size,
+			"Permission error mapping pages.\n"
+			"Consider increasing "
+			"/proc/sys/kernel/perf_event_mlock_kb,\n"
+			"or try again with a smaller value of -m/--mmap_pages.\n"
+			"(current size: %dB)\n", evlist->mmap_len);
+		break;
+	default:
+		scnprintf(buf, size,
+			"Failed to mmap with %d (%s)\n",
+			err_libc, strerror(err_libc));
+		break;
+	}
+}
+
 static void __perf_evlist__strerror(struct perf_evlist *evlist,
 				    char *buf, size_t size)
 {
@@ -614,6 +636,9 @@ static void __perf_evlist__strerror(struct perf_evlist *evlist,
 	switch (err) {
 	case PERF_EVLIST__ERRNO_SUCCESS:
 		break;
+	case PERF_EVLIST__ERRNO_MMAP:
+		strerror_mmap(evlist, buf, size);
+		return;
 	default:
 		scnprintf(buf, size, "Unknown error\n");
 		return;
@@ -642,6 +667,7 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist,
 				      MAP_SHARED, fd, 0);
 
 	if (evlist->mmap[idx].base == MAP_FAILED) {
+		SET_ERR(MMAP);
 		pr_debug2("failed to mmap perf event ring buffer, error %d\n",
 			  errno);
 		evlist->mmap[idx].base = NULL;
@@ -820,6 +846,8 @@ int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 	const struct cpu_map *cpus = evlist->cpus;
 	const struct thread_map *threads = evlist->threads;
 	int prot = PROT_READ | (overwrite ? 0 : PROT_WRITE), mask;
+
+	SET_ERR(SUCCESS);
 
 	if (evlist->mmap == NULL && perf_evlist__alloc_mmap(evlist) < 0)
 		return -ENOMEM;
