@@ -28,10 +28,7 @@
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
-#define SET_ERR(_err) ({				\
-	evlist->err      = PERF_EVLIST__ERRNO_##_err;	\
-	evlist->err_libc = errno;			\
-})
+#define SET_ERR(_err) PERF_EVLIST__SET_ERR(evlist, _err)
 
 void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
 		       struct thread_map *threads)
@@ -258,9 +255,12 @@ int perf_evlist__add_newtp(struct perf_evlist *evlist,
 {
 	struct perf_evsel *evsel = perf_evsel__newtp(sys, name);
 
-	if (evsel == NULL)
+	if (evsel == NULL) {
+		SET_ERR(NEWTP);
 		return -1;
+	}
 
+	SET_ERR(SUCCESS);
 	evsel->handler = handler;
 	perf_evlist__add(evlist, evsel);
 	return 0;
@@ -663,6 +663,33 @@ static void strerror_open(struct perf_evlist *evlist,
 	}
 }
 
+static void strerror_newtp(struct perf_evlist *evlist,
+			char *buf, size_t size)
+{
+	int err_libc = evlist->err_libc;
+	char sbuf[128];
+
+	switch (err_libc) {
+	case ENOENT:
+		scnprintf(buf, size, "%s",
+			  "Error:\tUnable to find debugfs\n"
+			  "Hint:\tWas your kernel was compiled with debugfs support?\n"
+			  "Hint:\tIs the debugfs filesystem mounted?\n"
+			  "Hint:\tTry 'sudo mount -t debugfs nodev /sys/kernel/debug'");
+		break;
+	case EACCES:
+		scnprintf(buf, size,
+			  "Error:\tNo permissions to read %s/tracing/events/raw_syscalls\n"
+			  "Hint:\tTry 'sudo mount -o remount,mode=755 %s'\n",
+			  debugfs_mountpoint, debugfs_mountpoint);
+		break;
+	default:
+		scnprintf(buf, size, "%s",
+			  strerror_r(err_libc, sbuf, sizeof(sbuf)));
+		break;
+	}
+}
+
 static void __perf_evlist__strerror(struct perf_evlist *evlist,
 				    char *buf, size_t size)
 {
@@ -682,6 +709,9 @@ static void __perf_evlist__strerror(struct perf_evlist *evlist,
 		scnprintf(buf, size,
 			"Cannot read event group on this kernel.\n"
 			"Please consider kernel update (v3.12+).\n");
+		return;
+	case PERF_EVLIST__ERRNO_NEWTP:
+		strerror_newtp(evlist, buf, size);
 		return;
 	default:
 		scnprintf(buf, size, "Unknown error\n");
@@ -1261,31 +1291,4 @@ size_t perf_evlist__fprintf(struct perf_evlist *evlist, FILE *fp)
 	}
 
 	return printed + fprintf(fp, "\n");
-}
-
-int perf_evlist__strerror_tp(struct perf_evlist *evlist __maybe_unused,
-			     int err, char *buf, size_t size)
-{
-	char sbuf[128];
-
-	switch (err) {
-	case ENOENT:
-		scnprintf(buf, size, "%s",
-			  "Error:\tUnable to find debugfs\n"
-			  "Hint:\tWas your kernel was compiled with debugfs support?\n"
-			  "Hint:\tIs the debugfs filesystem mounted?\n"
-			  "Hint:\tTry 'sudo mount -t debugfs nodev /sys/kernel/debug'");
-		break;
-	case EACCES:
-		scnprintf(buf, size,
-			  "Error:\tNo permissions to read %s/tracing/events/raw_syscalls\n"
-			  "Hint:\tTry 'sudo mount -o remount,mode=755 %s'\n",
-			  debugfs_mountpoint, debugfs_mountpoint);
-		break;
-	default:
-		scnprintf(buf, size, "%s", strerror_r(err, sbuf, sizeof(sbuf)));
-		break;
-	}
-
-	return 0;
 }

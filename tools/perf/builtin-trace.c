@@ -199,23 +199,29 @@ static int perf_evlist__add_syscall_newtp(struct perf_evlist *evlist,
 	int ret = -1;
 	struct perf_evsel *sys_enter, *sys_exit;
 
+#define GOTO_ERR(label) ({			\
+	PERF_EVLIST__SET_ERR(evlist, OPEN);	\
+	goto label;				\
+})
+
 	sys_enter = perf_evsel__syscall_newtp("sys_enter", sys_enter_handler);
 	if (sys_enter == NULL)
-		goto out;
+		GOTO_ERR(out);
 
 	if (perf_evsel__init_sc_tp_ptr_field(sys_enter, args))
-		goto out_delete_sys_enter;
+		GOTO_ERR(out_delete_sys_enter);
 
 	sys_exit = perf_evsel__syscall_newtp("sys_exit", sys_exit_handler);
 	if (sys_exit == NULL)
-		goto out_delete_sys_enter;
+		GOTO_ERR(out_delete_sys_enter);
 
 	if (perf_evsel__init_sc_tp_uint_field(sys_exit, ret))
-		goto out_delete_sys_exit;
+		GOTO_ERR(out_delete_sys_exit);
 
 	perf_evlist__add(evlist, sys_enter);
 	perf_evlist__add(evlist, sys_exit);
 
+	PERF_EVLIST__SET_ERR(evlist, SUCCESS);
 	ret = 0;
 out:
 	return ret;
@@ -1851,14 +1857,14 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	}
 
 	if (perf_evlist__add_syscall_newtp(evlist, trace__sys_enter, trace__sys_exit))
-		goto out_error_tp;
+		goto out_error;
 
 	perf_evlist__add_vfs_getname(evlist);
 
 	if (trace->sched &&
 		perf_evlist__add_newtp(evlist, "sched", "sched_stat_runtime",
 				trace__sched_stat_runtime))
-		goto out_error_tp;
+		goto out_error;
 
 	err = perf_evlist__create_maps(evlist, &trace->opts.target);
 	if (err < 0) {
@@ -1888,7 +1894,7 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 
 	err = perf_evlist__open(evlist);
 	if (err < 0)
-		goto out_error_open;
+		goto out_error;
 
 	err = perf_evlist__mmap(evlist, trace->opts.mmap_pages, false);
 	if (err < 0) {
@@ -1988,18 +1994,9 @@ out:
 	trace->live = false;
 	return err;
 
-out_error_open:
+out_error:
 	fprintf(trace->output, "%s\n", perf_evlist__strerror(evlist));
 	goto out_delete_evlist;
-
-{
-	char errbuf[BUFSIZ];
-
-out_error_tp:
-	perf_evlist__strerror_tp(evlist, errno, errbuf, sizeof(errbuf));
-	fprintf(trace->output, "%s\n", errbuf);
-	goto out_delete_evlist;
-}
 }
 
 static int trace__replay(struct trace *trace)

@@ -17,11 +17,17 @@ struct perf_record_opts;
 #define PERF_EVLIST__HLIST_BITS 8
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
+#define PERF_EVLIST__SET_ERR(evlist, _err) ({		\
+	evlist->err      = PERF_EVLIST__ERRNO_##_err;	\
+	evlist->err_libc = errno;			\
+})
+
 enum {
 	PERF_EVLIST__ERRNO_SUCCESS		= 0,
 	PERF_EVLIST__ERRNO_MMAP			= 1,
 	PERF_EVLIST__ERRNO_OPEN			= 2,
 	PERF_EVLIST__ERRNO_IOCTL_ID_GROUP	= 3,
+	PERF_EVLIST__ERRNO_NEWTP		= 4,
 };
 
 struct perf_mmap {
