@@ -1987,17 +1987,16 @@ out_delete_evlist:
 out:
 	trace->live = false;
 	return err;
+
+out_error_open:
+	fprintf(trace->output, "%s\n", perf_evlist__strerror(evlist));
+	goto out_delete_evlist;
+
 {
 	char errbuf[BUFSIZ];
 
 out_error_tp:
 	perf_evlist__strerror_tp(evlist, errno, errbuf, sizeof(errbuf));
-	goto out_error;
-
-out_error_open:
-	perf_evlist__strerror_open(evlist, errno, errbuf, sizeof(errbuf));
-
-out_error:
 	fprintf(trace->output, "%s\n", errbuf);
 	goto out_delete_evlist;
 }

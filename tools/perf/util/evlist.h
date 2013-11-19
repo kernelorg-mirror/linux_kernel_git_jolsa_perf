@@ -20,6 +20,7 @@ struct perf_record_opts;
 enum {
 	PERF_EVLIST__ERRNO_SUCCESS		= 0,
 	PERF_EVLIST__ERRNO_MMAP			= 1,
+	PERF_EVLIST__ERRNO_OPEN			= 2,
 };
 
 struct perf_mmap {
@@ -184,7 +185,6 @@ static inline struct perf_evsel *perf_evlist__last(struct perf_evlist *evlist)
 size_t perf_evlist__fprintf(struct perf_evlist *evlist, FILE *fp);
 
 int perf_evlist__strerror_tp(struct perf_evlist *evlist, int err, char *buf, size_t size);
-int perf_evlist__strerror_open(struct perf_evlist *evlist, int err, char *buf, size_t size);
 char *perf_evlist__strerror(struct perf_evlist *evlist);
 
 static inline unsigned int perf_mmap__read_head(struct perf_mmap *mm)

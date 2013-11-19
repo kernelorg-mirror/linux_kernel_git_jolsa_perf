@@ -627,6 +627,40 @@ static void strerror_mmap(struct perf_evlist *evlist,
 	}
 }
 
+static void strerror_open(struct perf_evlist *evlist,
+			  char *buf, size_t size)
+{
+	int printed, value, err_libc = evlist->err_libc;
+	char sbuf[128], *emsg = strerror_r(err_libc, sbuf, sizeof(sbuf));
+
+	switch (err_libc) {
+	case EACCES:
+	case EPERM:
+		printed = scnprintf(buf, size,
+				    "Error:\t%s.\n"
+				    "Hint:\tCheck /proc/sys/kernel/perf_event_paranoid setting.", emsg);
+
+		if (filename__read_int("/proc/sys/kernel/perf_event_paranoid", &value))
+			break;
+
+		printed += scnprintf(buf + printed, size - printed, "\nHint:\t");
+
+		if (value >= 2) {
+			printed += scnprintf(buf + printed, size - printed,
+					     "For your workloads it needs to be <= 1\nHint:\t");
+		}
+		printed += scnprintf(buf + printed, size - printed,
+				     "For system wide tracing it needs to be set to -1");
+
+		printed += scnprintf(buf + printed, size - printed,
+				    ".\nHint:\tThe current value is %d.", value);
+		break;
+	default:
+		scnprintf(buf, size, "%s", emsg);
+		break;
+	}
+}
+
 static void __perf_evlist__strerror(struct perf_evlist *evlist,
 				    char *buf, size_t size)
 {
@@ -638,6 +672,9 @@ static void __perf_evlist__strerror(struct perf_evlist *evlist,
 		break;
 	case PERF_EVLIST__ERRNO_MMAP:
 		strerror_mmap(evlist, buf, size);
+		return;
+	case PERF_EVLIST__ERRNO_OPEN:
+		strerror_open(evlist, buf, size);
 		return;
 	default:
 		scnprintf(buf, size, "Unknown error\n");
@@ -1089,8 +1126,10 @@ int perf_evlist__open(struct perf_evlist *evlist)
 			goto out_err;
 	}
 
+	SET_ERR(SUCCESS);
 	return 0;
 out_err:
+	SET_ERR(OPEN);
 	perf_evlist__close(evlist);
 	errno = -err;
 	return err;
@@ -1238,42 +1277,6 @@ int perf_evlist__strerror_tp(struct perf_evlist *evlist __maybe_unused,
 		break;
 	default:
 		scnprintf(buf, size, "%s", strerror_r(err, sbuf, sizeof(sbuf)));
-		break;
-	}
-
-	return 0;
-}
-
-int perf_evlist__strerror_open(struct perf_evlist *evlist __maybe_unused,
-			       int err, char *buf, size_t size)
-{
-	int printed, value;
-	char sbuf[128], *emsg = strerror_r(err, sbuf, sizeof(sbuf));
-
-	switch (err) {
-	case EACCES:
-	case EPERM:
-		printed = scnprintf(buf, size,
-				    "Error:\t%s.\n"
-				    "Hint:\tCheck /proc/sys/kernel/perf_event_paranoid setting.", emsg);
-
-		if (filename__read_int("/proc/sys/kernel/perf_event_paranoid", &value))
-			break;
-
-		printed += scnprintf(buf + printed, size - printed, "\nHint:\t");
-
-		if (value >= 2) {
-			printed += scnprintf(buf + printed, size - printed,
-					     "For your workloads it needs to be <= 1\nHint:\t");
-		}
-		printed += scnprintf(buf + printed, size - printed,
-				     "For system wide tracing it needs to be set to -1");
-
-		printed += scnprintf(buf + printed, size - printed,
-				    ".\nHint:\tThe current value is %d.", value);
-		break;
-	default:
-		scnprintf(buf, size, "%s", emsg);
 		break;
 	}
 
