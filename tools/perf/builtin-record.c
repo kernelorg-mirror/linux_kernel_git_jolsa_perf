@@ -76,24 +76,17 @@ struct perf_record {
 	long			samples;
 };
 
-static int perf_record__write(struct perf_record *rec, void *buf, size_t size)
+static ssize_t perf_record__write(struct perf_record *rec,
+				  void *buf, size_t size)
 {
-	struct perf_data_file *file = &rec->file;
+	struct perf_session *session = rec->session;
+	ssize_t ret;
 
-	while (size) {
-		ssize_t ret = write(file->fd, buf, size);
+	ret = perf_data_file__write(session->file, buf, size);
+	if (ret < 0)
+		return -1;
 
-		if (ret < 0) {
-			pr_err("failed to write perf data, error: %m\n");
-			return -1;
-		}
-
-		size -= ret;
-		buf += ret;
-
-		rec->bytes_written += ret;
-	}
-
+	rec->bytes_written += ret;
 	return 0;
 }
 
