@@ -142,6 +142,9 @@ filter out the startup phase of the program, which is often very different.
 
 Print statistics of transactional execution if supported.
 
+--events-file=::
+Specify JSON event list file to use for parsing events.
+
 EXAMPLES
 --------
 

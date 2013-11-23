@@ -15,6 +15,12 @@ DESCRIPTION
 This command displays the symbolic event types which can be selected in the
 various perf commands with the -e option.
 
+OPTIONS
+-------
+--events-file=::
+Specify JSON event list file to use for parsing events.
+
+
 [[EVENT_MODIFIERS]]
 EVENT MODIFIERS
 ---------------
