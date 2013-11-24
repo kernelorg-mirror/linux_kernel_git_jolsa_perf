@@ -14,4 +14,5 @@ LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/dwarf-unwind.o
 endif
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/header.o
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/tsc.o
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/cpustr.o
 LIB_H += arch/$(ARCH)/util/tsc.h
