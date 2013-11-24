@@ -12,6 +12,7 @@ struct perf_data {
 	const char		*path;
 	bool			 force;
 	enum perf_data_mode	 mode;
+	bool			 is_dir;
 	struct perf_data_file	 file;
 };
 
