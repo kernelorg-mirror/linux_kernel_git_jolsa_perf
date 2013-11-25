@@ -100,15 +100,8 @@ static void addfield(char *map, char **dst, const char *sep,
 
 static void fixname(char *s)
 {
-	for (; *s; s++) {
+	for (; *s; s++)
 		*s = tolower(*s);
-		/*
-		 * Remove '.' for now, until the parser
-		 * can deal with it.
-		 */
-		if (*s == '.')
-			*s = '_';
-	}
 }
 
 static void fixdesc(char *s)
