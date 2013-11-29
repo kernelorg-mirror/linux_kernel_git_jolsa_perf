@@ -16,6 +16,7 @@
 #include "parse-events-flex.h"
 #include "pmu.h"
 #include "thread_map.h"
+#include "strlist.h"
 
 #define MAX_NAME_LEN 100
 
@@ -939,6 +940,7 @@ int parse_events(struct perf_evlist *evlist, const char *str)
 		int entries = data.idx - evlist->nr_entries;
 		perf_evlist__splice_list_tail(evlist, &data.list, entries);
 		evlist->nr_groups += data.nr_groups;
+		evlist->formulas = data.formulas;
 		return 0;
 	}
 
@@ -1341,19 +1343,35 @@ void parse_events__free_terms(struct list_head *terms)
 		free(term);
 }
 
+static int formula_add(struct parse_events_evlist *data, char *name)
+{
+	struct strlist *list = data->formulas;
+
+	if (!list) {
+		list = strlist__new(false, NULL);
+		data->formulas = list;
+	}
+
+	return list ? strlist__add(list, name) : -ENOMEM;
+}
+
 static int
 __parse_events_config_process(struct parse_events_evlist *data,
 			      struct parse_events_config *cfg)
 {
+	int err = 0;
+
 	switch (cfg->type) {
 	case PARSE_EVENTS_CONFIG_EVENTS:
 		parse_events_update_lists(cfg->events, &data->list);
 		break;
+	case PARSE_EVENTS_CONFIG_FORMULA:
+		err = formula_add(data, cfg->formula);
 	default:
 		break;
 	}
 
-	return 0;
+	return err;
 }
 
 int parse_events_config_process(struct parse_events_evlist *data,
