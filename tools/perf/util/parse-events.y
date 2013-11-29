@@ -63,6 +63,7 @@ static inc_group_count(struct list_head *list,
 %token PE_PREFIX_MEM PE_PREFIX_RAW PE_PREFIX_GROUP
 %token PE_ERROR
 %token PE_PMU_EVENT_PRE PE_PMU_EVENT_SUF PE_KERNEL_PMU_EVENT
+%token PE_FORMULA PE_FORMULA_NAME
 %type <num> PE_VALUE
 %type <num> PE_VALUE_SYM_HW
 %type <num> PE_VALUE_SYM_SW
@@ -75,6 +76,7 @@ static inc_group_count(struct list_head *list,
 %type <str> PE_MODIFIER_BP
 %type <str> PE_EVENT_NAME
 %type <str> PE_PMU_EVENT_PRE PE_PMU_EVENT_SUF PE_KERNEL_PMU_EVENT
+%type <str> PE_FORMULA_NAME
 %type <num> value_sym
 %type <head> event_config
 %type <term> event_term
@@ -94,6 +96,8 @@ static inc_group_count(struct list_head *list,
 %type <head> group
 %type <head> groups
 %type <cfg> groups_config
+%type <cfg> groups_formula
+%type <str> formula
 
 %union
 {
@@ -127,7 +131,25 @@ groups ',' groups_config
 	$$ = head;
 }
 |
+groups ',' groups_formula
+{
+	struct list_head *head = $1;
+	struct parse_events_config *cfg = $3;
+
+	list_add_tail(&cfg->list, head);
+	$$ = head;
+}
+|
 groups_config
+{
+	struct list_head *head = HEAD();
+	struct parse_events_config *cfg = $1;
+
+	list_add_tail(&cfg->list, head);
+	$$ = head;
+}
+|
+groups_formula
 {
 	struct list_head *head = HEAD();
 	struct parse_events_config *cfg = $1;
@@ -536,6 +558,18 @@ PE_TERM
 
 	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1));
 	$$ = term;
+}
+
+groups_formula:
+formula
+{
+	$$ = CONFIG(FORMULA, $1);
+}
+
+formula:
+PE_FORMULA '-' PE_FORMULA_NAME
+{
+	$$ = strdup($3);
 }
 
 sep_dc: ':' |
