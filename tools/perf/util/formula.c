@@ -19,6 +19,7 @@ void perf_formula__init(struct perf_formula *f)
 {
 	memset(f, 0x0, sizeof(*f));
 	INIT_LIST_HEAD(&f->head_files);
+	INIT_LIST_HEAD(&f->head_sets);
 }
 
 static int scanner_expr(const char *str, void *data)
@@ -469,6 +470,11 @@ static int eval_set_cb(struct perf_formula_set *set, void *data)
 			        counter->name);
 			return CB_FAIL;
 		}
+		if (expr->print && counter->print)
+			fprintf(expr->file,
+				"%'18.8F %-25s\n",
+				expr->result->aggr.result, counter->name);
+
 	}
 
 	return CB_NEXT;
@@ -808,4 +814,30 @@ struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
 	}
 
 	return result;
+}
+
+void perf_formula__loaded(struct perf_formula *f,
+			  struct perf_formula_set *set)
+{
+	if (list_empty(&set->list_sets))
+		list_add_tail(&set->list_sets, &f->head_sets);
+}
+
+int perf_formula__print(FILE *file,
+			struct perf_formula *f,
+			struct perf_evlist *evlist,
+			struct perf_formula_value **values)
+{
+	struct perf_formula_set *set;
+	struct perf_formula_expr expr = {
+		.evlist = evlist,
+		.values = values,
+		.print = true,
+		.file = file,
+	};
+
+	list_for_each_entry(set, &f->head_sets, list)
+		eval_set_cb(set, &expr);
+
+	return 0;
 }
