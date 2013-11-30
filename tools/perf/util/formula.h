@@ -27,6 +27,7 @@
 
 struct perf_formula {
 	struct list_head head_files;
+	struct list_head head_sets;
 };
 
 struct perf_formula_file {
@@ -44,6 +45,8 @@ struct perf_formula_set {
 	struct list_head head_events;
 	struct list_head head_counters;
 	struct list_head list;
+	/* belongs to perf_formula::head_sets */
+	struct list_head list_sets;
 };
 
 struct perf_formula_result_value {
@@ -165,5 +168,19 @@ struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
 
 struct perf_formula_result* perf_formula_expr__resolve(struct perf_formula_expr *expr,
 						       char *name);
+
+void perf_formula__loaded(struct perf_formula *f,
+			  struct perf_formula_set *set);
+
+static inline bool perf_formula__is_loaded(struct perf_formula *f)
+{
+	return !list_empty(&f->head_sets);
+}
+
+int perf_formula__print(FILE *file,
+			struct perf_formula *f,
+			struct perf_evlist *evlist,
+			struct perf_formula_value **values,
+			bool system_wide);
 
 #endif /* __PERF_FORMULA */
