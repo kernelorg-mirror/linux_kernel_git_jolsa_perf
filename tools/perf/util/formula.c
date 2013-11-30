@@ -17,6 +17,7 @@ void perf_formula__init(struct perf_formula *f)
 {
 	memset(f, 0x0, sizeof(*f));
 	INIT_LIST_HEAD(&f->head_files);
+	INIT_LIST_HEAD(&f->head_sets);
 }
 
 static int scanner_expr(const char *str, void *data)
@@ -376,6 +377,7 @@ perf_formula_set__new(char *name, struct list_head *head)
 	INIT_LIST_HEAD(&set->list);
 	INIT_LIST_HEAD(&set->head_counters);
 	INIT_LIST_HEAD(&set->head_events);
+	INIT_LIST_HEAD(&set->list_sets);
 
 	list_for_each_entry(config, head, list) {
 		switch (config->type) {
@@ -430,6 +432,32 @@ static int eval_counter(struct perf_formula_counter *counter,
 	return ret;
 }
 
+static int print_counter(struct perf_formula_counter *counter,
+			 struct perf_formula_expr *expr)
+{
+	/*
+	 * TODO librarize stat command display routines
+	 * and use them in here
+	 */
+	if (!expr->system_wide) {
+		fprintf(expr->file,
+			"%'18.8F %-25s\n",
+			expr->result->aggr.result, counter->name);
+	} else {
+		int cpu;
+
+		pr_debug2("nr_cpus = %d\n", cpu_nr(expr));
+		for (cpu = 0; cpu < cpu_nr(expr); cpu++) {
+			fprintf(expr->file,
+				"CPU%d%'18.8F %-25s\n",
+				expr->evlist->cpus->map[cpu],
+				expr->result->cpu[cpu].result, counter->name);
+		}
+	}
+
+	return 0;
+}
+
 static int eval_set(struct perf_formula_set *set,
 		    struct perf_formula_expr *expr)
 {
@@ -445,6 +473,8 @@ static int eval_set(struct perf_formula_set *set,
 			        counter->name);
 			return -1;
 		}
+		if (expr->print && counter->print)
+			print_counter(counter, expr);
 	}
 
 	return 0;
@@ -788,4 +818,32 @@ struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
 	}
 
 	return result;
+}
+
+void perf_formula__loaded(struct perf_formula *f,
+			  struct perf_formula_set *set)
+{
+	if (list_empty(&set->list_sets))
+		list_add_tail(&set->list_sets, &f->head_sets);
+}
+
+int perf_formula__print(FILE *file,
+			struct perf_formula *f,
+			struct perf_evlist *evlist,
+			struct perf_formula_value **values,
+			bool system_wide)
+{
+	struct perf_formula_set *set;
+	struct perf_formula_expr expr = {
+		.evlist		= evlist,
+		.values		= values,
+		.print		= true,
+		.file		= file,
+		.system_wide	= system_wide,
+	};
+
+	list_for_each_entry(set, &f->head_sets, list_sets)
+		eval_set(set, &expr);
+
+	return 0;
 }
