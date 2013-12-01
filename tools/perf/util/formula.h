@@ -58,7 +58,6 @@ struct perf_formula_counter {
 	char  *name;
 	char  *formula;
 	bool   print;
-	double result;
 
 	struct perf_formula_set *set;
 	struct list_head list;
@@ -67,6 +66,17 @@ struct perf_formula_counter {
 struct perf_formula_value {
 	char   *name;
 	double *ptr;
+};
+
+struct perf_formula_expr {
+	bool   test_only;
+	bool   print;
+
+	FILE  *file;
+
+	struct perf_evlist         *evlist;
+	struct perf_formula_set    *set;
+	struct perf_formula_value **values;
 };
 
 struct perf_formula_ass {
@@ -109,5 +119,8 @@ perf_formula_counter__new(char *name, struct list_head *head);
 
 struct perf_formula_set*
 perf_formula_set__new(char *name, struct list_head *head);
+
+int perf_formula_set__eval(struct perf_formula_set *set,
+			   struct perf_evlist *evlist);
 
 #endif /* __PERF_FORMULA */
