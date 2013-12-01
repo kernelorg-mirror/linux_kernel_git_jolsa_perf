@@ -20,6 +20,29 @@ void perf_formula__init(struct perf_formula *f)
 	INIT_LIST_HEAD(&f->head_files);
 }
 
+static int scanner_expr(const char *str, void *data)
+{
+	YY_BUFFER_STATE buffer;
+	void *scanner;
+	int ret;
+
+	ret = perf_formula_lex_init_extra(PF_START_EXPR, &scanner);
+	if (ret)
+		return ret;
+
+	buffer = perf_formula__scan_string(str, scanner);
+
+#ifdef PARSER_DEBUG
+	perf_formula_debug = 1;
+#endif
+	ret = perf_formula_parse(data, scanner);
+
+	perf_formula__flush_buffer(buffer, scanner);
+	perf_formula__delete_buffer(buffer, scanner);
+	perf_formula_lex_destroy(scanner);
+	return ret;
+}
+
 static int scanner_config(FILE *file, void *data)
 {
 	void *scanner;
@@ -55,14 +78,29 @@ static int config_parse(struct perf_formula_file *file)
 	return ret;
 }
 
+static int counter_init(struct perf_formula_counter *counter)
+{
+	struct perf_formula_expr expr = {
+		.test_only = true,
+	};
+
+	return scanner_expr(counter->formula, &expr);
+}
+
 static int set_init(struct perf_formula_set *set)
 {
 	struct perf_formula_counter *counter;
+	int ret = 0;
 
-	list_for_each_entry(counter, &set->head_counters, list)
+	list_for_each_entry(counter, &set->head_counters, list) {
+		ret = counter_init(counter);
+		if (ret)
+			break;
+
 		counter->set = set;
+	}
 
-	return 0;
+	return ret;
 }
 
 static int file_init(struct perf_formula_file *file)
@@ -371,4 +409,40 @@ perf_formula_set__new(char *name, struct list_head *head)
  out:
 	free(set);
 	return NULL;
+}
+
+static int eval_counter(struct perf_formula_counter *counter,
+			struct perf_formula_expr *expr)
+{
+	return scanner_expr(counter->formula, expr);
+}
+
+static int eval_set_cb(struct perf_formula_set *set, void *data)
+{
+	struct perf_formula_expr *expr = data;
+	struct perf_formula_counter *counter;
+
+	expr->set = set;
+
+	pr_debug2("formula eval %s\n", set->name);
+
+	list_for_each_entry(counter, &set->head_counters, list) {
+		if (eval_counter(counter, expr)) {
+			pr_err("failed to eval counter %s\n",
+			        counter->name);
+			return CB_FAIL;
+		}
+	}
+
+	return CB_NEXT;
+}
+
+int perf_formula__eval(struct perf_formula *f,
+		       struct perf_formula_set *set,
+		       struct perf_formula_expr *expr)
+{
+	if (set != FORMULA_SET_ALL)
+		return eval_set_cb(set, expr);
+
+	return for_each_set(f, eval_set_cb, expr);
 }

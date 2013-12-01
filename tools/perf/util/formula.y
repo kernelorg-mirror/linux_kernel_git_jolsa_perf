@@ -42,7 +42,7 @@ do { \
 
 %}
 
-%token PF_START_CONFIG
+%token PF_START_CONFIG PF_START_EXPR
 %token PF_NAME
 %token PF_VALUE
 %token PF_FORMULA
@@ -66,12 +66,15 @@ do { \
 	double num;
 	struct list_head *head;
 	struct config *config;
+	struct perf_formula_counter *counter;
 }
 
 %%
 
 start:
 PF_START_CONFIG start_config
+|
+PF_START_EXPR start_expr
 
 start_config: sets
 
@@ -171,6 +174,28 @@ PF_NAME '=' PF_EOLN_STR
 
 	$$ = config;
 }
+
+start_expr:
+expr
+{
+}
+
+expr:
+PF_VALUE
+|
+PF_NAME
+|
+'-' expr
+|
+expr '+' expr
+|
+expr '-' expr
+|
+expr '*' expr
+|
+expr '/' expr
+|
+'(' expr ')'
 
 %%
 

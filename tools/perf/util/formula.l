@@ -48,6 +48,7 @@ num_hex		0x[a-fA-F0-9]+
 name		[a-zA-Z_*?][a-zA-Z0-9_*?\.-]*
 
 %x config
+%x expr
 %x config_eoln_str
 
 %%
@@ -60,6 +61,8 @@ name		[a-zA-Z_*?][a-zA-Z0-9_*?\.-]*
 
 		if (start_token == PF_START_CONFIG)
 			BEGIN(config);
+		else if (start_token == PF_START_EXPR)
+			BEGIN(expr);
 
 		if (start_token) {
 			perf_formula_set_extra(NULL, yyscanner);
@@ -91,6 +94,21 @@ print		{ return PF_PRINT; }
 <<EOF>>		{
 			BEGIN(config);
 		}
+}
+
+<expr>{
+"*"		{ return '*'; }
+"-"		{ return '-'; }
+"+"		{ return '+'; }
+"/"		{ return '/'; }
+"("		{ return '('; }
+")"		{ return ')'; }
+
+{name}		{ return str(yyscanner, PF_NAME); }
+{num_dec}	{ return value(yyscanner, 10); }
+{num_hex}	{ return value(yyscanner, 16); }
+
+.		{ }
 }
 
 %%
