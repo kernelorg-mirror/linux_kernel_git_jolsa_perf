@@ -45,12 +45,25 @@ struct perf_formula_set {
 	struct list_head list;
 };
 
+struct perf_formula_result_value {
+	u64    ena;
+	u64    run;
+	double result;
+};
+
+struct perf_formula_result {
+	struct perf_formula_result_value aggr;
+	struct perf_formula_result_value cpu[];
+};
+
 struct perf_formula_event {
 	char *name;
 	char *config;
 
 	struct perf_evsel *evsel;
 	struct list_head list;
+
+	struct perf_formula_result *result;
 };
 
 struct perf_formula_counter {
@@ -60,6 +73,8 @@ struct perf_formula_counter {
 
 	struct perf_formula_set *set;
 	struct list_head list;
+
+	struct perf_formula_result *result;
 };
 
 struct perf_formula_value {
@@ -70,12 +85,16 @@ struct perf_formula_value {
 struct perf_formula_expr {
 	bool   test_only;
 	bool   print;
+	bool   system_wide;
 
+	int    error;
 	FILE  *file;
 
 	struct perf_evlist         *evlist;
 	struct perf_formula_set    *set;
 	struct perf_formula_value **values;
+
+	struct perf_formula_result *result;
 };
 
 struct perf_formula_ass {
@@ -120,6 +139,29 @@ struct perf_formula_set*
 perf_formula_set__new(char *name, struct list_head *head);
 
 int perf_formula_set__eval(struct perf_formula_set *set,
-			   struct perf_evlist *evlist);
+			   struct perf_evlist *evlist,
+			   bool system_wide);
+
+struct perf_formula_result *perf_formula__add(struct perf_formula_expr *expr,
+					      struct perf_formula_result *x,
+					      struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__subtract(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__multiple(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__divide(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x,
+						 struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__negate(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x);
+
+struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
+						double x);
 
 #endif /* __PERF_FORMULA */
