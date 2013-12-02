@@ -7,6 +7,7 @@
 #include "formula-bison.h"
 #define YY_EXTRA_TYPE int
 #include "formula-flex.h"
+#include "cpumap.h"
 
 #define FORMULA_SET_ALL ((void *) -1)
 
@@ -126,8 +127,10 @@ static void file_free(struct perf_formula_file *file)
 	list_for_each_entry(set, &file->head_sets, list) {
 		struct perf_formula_counter *counter;
 
-		list_for_each_entry(counter, &set->head_counters, list)
+		list_for_each_entry(counter, &set->head_counters, list) {
+			free(counter->result);
 			free(counter);
+		}
 
 		free(set);
 	}
@@ -414,7 +417,24 @@ perf_formula_set__new(char *name, struct list_head *head)
 static int eval_counter(struct perf_formula_counter *counter,
 			struct perf_formula_expr *expr)
 {
-	return scanner_expr(counter->formula, expr);
+	int ret;
+
+	pr_debug2("formula: Processing formula %s\n", counter->formula);
+
+	ret = scanner_expr(counter->formula, expr);
+
+	if (expr->error) {
+		pr_err("formula: failed to evaluate expression with %d\n",
+			expr->error);
+		return expr->error;
+	}
+
+	if (!ret) {
+		counter->result = expr->result;
+		pr_debug2("formula counter eval %s\n", counter->name);
+	}
+
+	return ret;
 }
 
 static int eval_set_cb(struct perf_formula_set *set, void *data)
