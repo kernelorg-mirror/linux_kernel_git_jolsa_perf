@@ -60,6 +60,7 @@ do { \
 %type <config> set_token
 %type <config> events_def
 %type <config> ass
+%type <result> expr
 
 %union
 {
@@ -68,6 +69,7 @@ do { \
 	struct list_head *head;
 	struct config *config;
 	struct perf_formula_counter *counter;
+	struct perf_formula_result *result;
 }
 
 %%
@@ -179,24 +181,59 @@ PF_NAME '=' PF_EOLN_STR
 start_expr:
 expr
 {
+	struct perf_formula_expr *expr = _data;
+
+	expr->result = $1;
 }
 
 expr:
 PF_VALUE
+{
+	$$ = perf_formula__value(_data, $1);
+}
 |
 PF_NAME
+{
+}
 |
 '-' expr
+{
+	$$ = perf_formula__negate(_data, $2);
+	free($2);
+}
 |
 expr '+' expr
+{
+	$$ = perf_formula__add(_data, $1, $3);
+	free($1);
+	free($3);
+}
 |
 expr '-' expr
+{
+	$$ = perf_formula__subtract(_data, $1, $3);
+	free($1);
+	free($3);
+}
 |
 expr '*' expr
+{
+	$$ = perf_formula__multiple(_data, $1, $3);
+	free($1);
+	free($3);
+}
 |
 expr '/' expr
+{
+	$$ = perf_formula__divide(_data, $1, $3);
+	free($1);
+	free($3);
+}
 |
 '(' expr ')'
+{
+	$$ = $2;
+}
 
 %%
 
