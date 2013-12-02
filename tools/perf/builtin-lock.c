@@ -83,6 +83,16 @@ struct lock_stat {
 #define SEQ_STATE_ACQUIRED	3
 #define SEQ_STATE_READ_ACQUIRED	4
 #define SEQ_STATE_CONTENDED	5
+#define SEQ_STATE_MAX
+
+static const char *state[SEQ_STATE_MAX] = {
+	"UNINITIALIZED",
+	"RELEASED",
+	"ACQUIRING",
+	"ACQUIRED",
+	"READ_ACQUIRED",
+	"CONTENDED"
+};
 
 /*
  * MAX_LOCK_DEPTH
@@ -455,6 +465,7 @@ static int report_lock_acquire_event(struct perf_evsel *evsel,
 	case SEQ_STATE_CONTENDED:
 broken:
 		/* broken lock sequence, discard it */
+		pr_debug("lock_acquire %s (%s)\n", ls->name, state[seq->state]);
 		ls->discard = 1;
 		bad_hist[BROKEN_ACQUIRE]++;
 		list_del(&seq->list);
@@ -515,6 +526,7 @@ static int report_lock_acquired_event(struct perf_evsel *evsel,
 	case SEQ_STATE_RELEASED:
 	case SEQ_STATE_ACQUIRED:
 	case SEQ_STATE_READ_ACQUIRED:
+		pr_debug("lock_acquired %s (%s)\n", ls->name, state[seq->state]);
 		/* broken lock sequence, discard it */
 		ls->discard = 1;
 		bad_hist[BROKEN_ACQUIRED]++;
@@ -571,6 +583,7 @@ static int report_lock_contended_event(struct perf_evsel *evsel,
 	case SEQ_STATE_READ_ACQUIRED:
 	case SEQ_STATE_CONTENDED:
 		/* broken lock sequence, discard it */
+		pr_debug("lock_contended %s (%s)\n", ls->name, state[seq->state]);
 		ls->discard = 1;
 		bad_hist[BROKEN_CONTENDED]++;
 		list_del(&seq->list);
@@ -632,6 +645,7 @@ static int report_lock_release_event(struct perf_evsel *evsel,
 	case SEQ_STATE_CONTENDED:
 	case SEQ_STATE_RELEASED:
 		/* broken lock sequence, discard it */
+		pr_debug("lock_release %s (%s)\n", ls->name, state[seq->state]);
 		ls->discard = 1;
 		bad_hist[BROKEN_RELEASE]++;
 		goto free_seq;
