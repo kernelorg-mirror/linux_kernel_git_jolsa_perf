@@ -38,6 +38,8 @@ static struct list_head lockhash_table[LOCKHASH_SIZE];
 #define __lockhashfn(key)	hash_long((unsigned long)key, LOCKHASH_BITS)
 #define lockhashentry(key)	(lockhash_table + __lockhashfn((key)))
 
+static size_t lockname_max;
+
 struct lock_stat {
 	struct list_head	hash_entry;
 	struct rb_node		rb;		/* used for sorting */
@@ -314,6 +316,7 @@ static struct lock_stat *lock_stat_findnew(void *addr, const char *name)
 {
 	struct list_head *entry = lockhashentry(addr);
 	struct lock_stat *ret, *new;
+	size_t len;
 
 	list_for_each_entry(ret, entry, hash_entry) {
 		if (ret->addr == addr)
@@ -324,8 +327,12 @@ static struct lock_stat *lock_stat_findnew(void *addr, const char *name)
 	if (!new)
 		goto alloc_failed;
 
+	len = strlen(name) + 1;
+	if (len > lockname_max)
+		lockname_max = len;
+
 	new->addr = addr;
-	new->name = zalloc(sizeof(char) * strlen(name) + 1);
+	new->name = zalloc(lockname_max);
 	if (!new->name) {
 		free(new);
 		goto alloc_failed;
@@ -702,11 +709,20 @@ static void print_bad_events(int bad, int total)
 /* TODO: various way to print, coloring, nano or milli sec */
 static void print_result(void)
 {
+#define LOCKNAME_MAX 60
+	static unsigned int size;
 	struct lock_stat *st;
-	char cut_name[20];
 	int bad, total;
 
-	pr_info("%20s ", "Name");
+	/*
+	 * Assuming we dont feed any more locks
+	 * during report.
+	 */
+	if (!size)
+		size = lockname_max > LOCKNAME_MAX ? LOCKNAME_MAX :
+						     lockname_max;
+
+	pr_info("%*s ", size, "Name");
 	pr_info("%10s ", "acquired");
 	pr_info("%10s ", "contended");
 
@@ -724,19 +740,17 @@ static void print_result(void)
 			bad++;
 			continue;
 		}
-		bzero(cut_name, 20);
 
-		if (strlen(st->name) < 16) {
+		if (strlen(st->name) < size) {
 			/* output raw name */
-			pr_info("%20s ", st->name);
+			pr_info("%*s ", size, st->name);
 		} else {
-			strncpy(cut_name, st->name, 16);
-			cut_name[16] = '.';
-			cut_name[17] = '.';
-			cut_name[18] = '.';
-			cut_name[19] = '\0';
-			/* cut off name for saving output style */
-			pr_info("%20s ", cut_name);
+			unsigned int i;
+
+			for (i = 0; i < size - 3; i++)
+				pr_info("%c", *(st->name + i));
+
+			pr_info("%s", "... ");
 		}
 
 		pr_info("%10u ", st->nr_acquired);
