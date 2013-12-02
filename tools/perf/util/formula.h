@@ -142,4 +142,26 @@ int perf_formula__eval(struct perf_formula *f,
 		       struct perf_formula_set *set,
 		       struct perf_formula_expr *expr);
 
+struct perf_formula_result *perf_formula__add(struct perf_formula_expr *expr,
+					      struct perf_formula_result *x,
+					      struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__subtract(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__multiple(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__divide(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x,
+						 struct perf_formula_result *y);
+
+struct perf_formula_result *perf_formula__negate(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x);
+
+struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
+						double x);
+
 #endif /* __PERF_FORMULA */
