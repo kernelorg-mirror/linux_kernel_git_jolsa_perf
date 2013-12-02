@@ -7,6 +7,7 @@
 #include "formula-bison.h"
 #define YY_EXTRA_TYPE int
 #include "formula-flex.h"
+#include "cpumap.h"
 
 #ifdef PARSER_DEBUG
 extern int perf_formula_debug;
@@ -59,6 +60,23 @@ static int scanner_config(FILE *file, void *data)
 
 	perf_formula_lex_destroy(scanner);
 	return ret;
+}
+
+static int cpu_nr(struct perf_formula_expr *expr)
+{
+	return cpu_map__nr(expr->evlist->cpus);
+}
+
+static struct perf_formula_result*
+alloc_result(struct perf_formula_expr *expr)
+{
+	int nr = 0;
+
+	if (expr->system_wide)
+		nr = cpu_nr(expr);
+
+	return zalloc((sizeof(struct perf_formula_result) +
+		      (nr * sizeof(struct perf_formula_result))));
 }
 
 static int config_parse(struct perf_formula_file *file)
@@ -124,8 +142,10 @@ static void file_free(struct perf_formula_file *file)
 	list_for_each_entry(set, &file->head_sets, list) {
 		struct perf_formula_counter *counter;
 
-		list_for_each_entry(counter, &set->head_counters, list)
+		list_for_each_entry(counter, &set->head_counters, list) {
+			free(counter->result);
 			free(counter);
+		}
 
 		free(set);
 	}
@@ -390,7 +410,24 @@ perf_formula_set__new(char *name, struct list_head *head)
 static int eval_counter(struct perf_formula_counter *counter,
 			struct perf_formula_expr *expr)
 {
-	return scanner_expr(counter->formula, expr);
+	int ret;
+
+	pr_debug2("formula: Processing formula %s\n", counter->formula);
+
+	ret = scanner_expr(counter->formula, expr);
+
+	if (expr->error) {
+		pr_err("formula: failed to evaluate expression with %d\n",
+			expr->error);
+		return expr->error;
+	}
+
+	if (!ret) {
+		counter->result = expr->result;
+		pr_debug2("formula counter eval %s\n", counter->name);
+	}
+
+	return ret;
 }
 
 static int eval_set(struct perf_formula_set *set,
@@ -413,13 +450,235 @@ static int eval_set(struct perf_formula_set *set,
 	return 0;
 }
 
-
 int perf_formula_set__eval(struct perf_formula_set *set,
-			   struct perf_evlist *evlist)
+			   struct perf_evlist *evlist,
+			   bool system_wide)
 {
 	struct perf_formula_expr expr = {
 		.evlist         = evlist,
+		.system_wide	= system_wide,
 	};
 
 	return eval_set(set, &expr);
+}
+
+static int check_expr_errors(struct perf_formula_expr *expr,
+			     struct perf_formula_result *x,
+			     struct perf_formula_result *y)
+{
+	if (!x || !y) {
+		if (!expr->error) {
+			/* NULL pointer should have an error associated with it */
+			pr_err("formula: NULL expression with no error, set %s\n",
+				expr->set->name);
+			expr->error = -EINVAL;
+		}
+		/* error resolving formulas, pass it up */
+		return 1;
+	}
+	return 0;
+}
+
+struct perf_formula_result* perf_formula__add(struct perf_formula_expr *expr,
+					      struct perf_formula_result *x,
+					      struct perf_formula_result *y)
+{
+	struct perf_formula_result *result;
+
+	if (check_expr_errors(expr, x, y))
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		result->aggr.result = x->aggr.result + y->aggr.result;
+		result->aggr.ena = x->aggr.ena + y->aggr.ena;
+		result->aggr.run = x->aggr.run + y->aggr.run;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			result->cpu[i].result = x->cpu[i].result + y->cpu[i].result;
+			result->cpu[i].ena = x->cpu[i].ena + y->cpu[i].ena;
+			result->cpu[i].run = x->cpu[i].run + y->cpu[i].run;
+		}
+	}
+
+	return result;
+}
+
+struct perf_formula_result *perf_formula__subtract(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y)
+{
+	struct perf_formula_result *result;
+
+	if (check_expr_errors(expr, x, y))
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		result->aggr.result = x->aggr.result - y->aggr.result;
+		result->aggr.ena = x->aggr.ena + y->aggr.ena;
+		result->aggr.run = x->aggr.run + y->aggr.run;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			result->cpu[i].result = x->cpu[i].result - y->cpu[i].result;
+			result->cpu[i].ena = x->cpu[i].ena + y->cpu[i].ena;
+			result->cpu[i].run = x->cpu[i].run + y->cpu[i].run;
+		}
+	}
+
+	return result;
+}
+
+struct perf_formula_result* perf_formula__multiple(struct perf_formula_expr *expr,
+						   struct perf_formula_result *x,
+						   struct perf_formula_result *y)
+{
+	struct perf_formula_result *result;
+
+	if (check_expr_errors(expr, x, y))
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		result->aggr.result = x->aggr.result * y->aggr.result;
+		result->aggr.ena = x->aggr.ena + y->aggr.ena;
+		result->aggr.run = x->aggr.run + y->aggr.run;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			result->cpu[i].result = x->cpu[i].result * y->cpu[i].result;
+			result->cpu[i].ena = x->cpu[i].ena + y->cpu[i].ena;
+			result->cpu[i].run = x->cpu[i].run + y->cpu[i].run;
+		}
+	}
+
+	return result;
+}
+
+struct perf_formula_result *perf_formula__divide(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x,
+						 struct perf_formula_result *y)
+{
+
+	struct perf_formula_result *result;
+
+	if (check_expr_errors(expr, x, y))
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		/* check for divide by zero */
+		if (!y->aggr.result) {
+			pr_err("formula: (aggr) divide by zero error\n");
+			result->aggr.result = 0.0;
+		} else {
+			result->aggr.result = x->aggr.result / y->aggr.result;
+		}
+
+		result->aggr.ena = x->aggr.ena + y->aggr.ena;
+		result->aggr.run = x->aggr.run + y->aggr.run;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			/* check for divide by zero */
+			if (!y->cpu[i].result) {
+				pr_err("formula: (system-wide) divide by zero error on cpu(%d)\n", i);
+				result->cpu[i].result = 0.0;
+			} else {
+				result->cpu[i].result = x->cpu[i].result / y->cpu[i].result;
+			}
+			result->cpu[i].ena = x->cpu[i].ena + y->cpu[i].ena;
+			result->cpu[i].run = x->cpu[i].run + y->cpu[i].run;
+		}
+	}
+
+	return result;
+}
+
+struct perf_formula_result *perf_formula__negate(struct perf_formula_expr *expr,
+						 struct perf_formula_result *x)
+{
+	struct perf_formula_result *result;
+
+	if (check_expr_errors(expr, x, x))
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		result->aggr.result =  -(x->aggr.result);
+		result->aggr.ena = x->aggr.ena;
+		result->aggr.run = x->aggr.run;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			result->cpu[i].result = -(x->cpu[i].result);
+			result->cpu[i].ena = x->cpu[i].ena;
+			result->cpu[i].run = x->cpu[i].run;
+		}
+	}
+
+	return result;
+}
+
+struct perf_formula_result *perf_formula__value(struct perf_formula_expr *expr,
+						double x)
+{
+	struct perf_formula_result *result;
+
+	if (expr->test_only)
+		return NULL;
+
+	result = alloc_result(expr);
+	if (!result) {
+		expr->error = -ENOMEM;
+		return NULL;
+	}
+
+	if (!expr->system_wide) {
+		result->aggr.result = x;
+		result->aggr.ena = 1;
+		result->aggr.run = 1;
+	} else {
+		int i;
+
+		for (i = 0; i < cpu_nr(expr); i++) {
+			result->cpu[i].result = x;
+			result->cpu[i].ena = 1;
+			result->cpu[i].run = 1;
+		}
+	}
+
+	return result;
 }
