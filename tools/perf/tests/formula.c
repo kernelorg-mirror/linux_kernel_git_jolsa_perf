@@ -42,6 +42,8 @@ static int __test_basics(char *file)
 {
 	struct perf_formula fml;
 	struct perf_formula_set *set;
+	struct perf_evlist *evlist;
+	struct perf_evsel *evsel;
 	int ret;
 
 	pr_debug("file %s\n", file);
@@ -55,6 +57,35 @@ static int __test_basics(char *file)
 	TEST_ASSERT_VAL("failed to load set", set);
 	TEST_ASSERT_VAL("wrong set name", !strcmp(set->name, "set"));
 
+	evlist = perf_evlist__new();
+	TEST_ASSERT_VAL("failed to create evlist", evlist);
+
+	ret = perf_formula__evlist(&fml, set, evlist);
+	TEST_ASSERT_VAL("failed to load evlist with set", !ret);
+
+	evsel = perf_evlist__first(evlist);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+		PERF_COUNT_HW_CPU_CYCLES == evsel->attr.config);
+	TEST_ASSERT_VAL("wrong exclude_user", !evsel->attr.exclude_user);
+	TEST_ASSERT_VAL("wrong exclude_kernel", evsel->attr.exclude_kernel);
+	TEST_ASSERT_VAL("wrong exclude_hv", evsel->attr.exclude_hv);
+	TEST_ASSERT_VAL("wrong exclude guest", !evsel->attr.exclude_guest);
+	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
+	TEST_ASSERT_VAL("wrong precise_ip", !evsel->attr.precise_ip);
+
+	evsel = perf_evsel__next(evsel);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+		PERF_COUNT_HW_INSTRUCTIONS == evsel->attr.config);
+	TEST_ASSERT_VAL("wrong exclude_user", !evsel->attr.exclude_user);
+	TEST_ASSERT_VAL("wrong exclude_kernel", evsel->attr.exclude_kernel);
+	TEST_ASSERT_VAL("wrong exclude_hv", evsel->attr.exclude_hv);
+	TEST_ASSERT_VAL("wrong exclude guest", !evsel->attr.exclude_guest);
+	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
+	TEST_ASSERT_VAL("wrong precise_ip", !evsel->attr.precise_ip);
+
+	perf_evlist__delete(evlist);
 	perf_formula__free(&fml);
 	return 0;
 }
