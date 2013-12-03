@@ -167,6 +167,50 @@ perf_formula__set(struct perf_formula *f, char *name)
 	return data.set;
 }
 
+static int resolve_events(struct perf_formula_set *set,
+			  struct perf_evlist *evlist,
+			  struct perf_evsel *evsel)
+{
+	struct perf_formula_event *event;
+
+	list_for_each_entry(event, &set->head_events, list) {
+		list_for_each_entry_continue(evsel, &evlist->entries, node) {
+			if (!strcmp(event->config, evsel->name)) {
+				event->evsel = evsel;
+				break;
+			}
+		}
+		if (!event->evsel) {
+			pr_err("formula: no evenst match for %s\n",
+			       event->config);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+int perf_formula__evlist(struct perf_formula *f __maybe_unused,
+			 struct perf_formula_set *set,
+			 struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	if (set->loaded)
+		return 0;
+
+	evsel = list_entry(evlist->entries.prev, struct perf_evsel, node);
+
+	if (parse_events(evlist, set->events))
+		return -1;
+
+	if (resolve_events(set, evlist, evsel))
+		return -1;
+
+	set->loaded = true;
+	return 0;
+}
+
 static struct perf_formula_counter*
 set_counter(struct perf_formula_set *set, struct perf_formula_config *config)
 {

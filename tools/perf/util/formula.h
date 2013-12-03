@@ -99,6 +99,10 @@ int perf_formula__load(struct perf_formula *f, char *path);
 struct perf_formula_set*
 perf_formula__set(struct perf_formula *f, char *name);
 
+int perf_formula__evlist(struct perf_formula *f,
+			 struct perf_formula_set *set,
+			 struct perf_evlist *evlist);
+
 struct perf_formula_counter*
 perf_formula_counter__new(char *name, struct list_head *head);
 
