@@ -9,6 +9,7 @@
 #include "evsel.h"
 #include "util.h"
 #include "debug.h"
+#include "cpumap.h"
 
 static void file_put(const char *file)
 {
@@ -44,6 +45,8 @@ static int __test_basics(char *file)
 	struct perf_formula_set *set;
 	struct perf_evlist *evlist;
 	struct perf_evsel *evsel;
+	struct perf_formula_counter *counter;
+	struct perf_counts *counts;
 	int ret;
 
 	pr_debug("file %s\n", file);
@@ -60,6 +63,9 @@ static int __test_basics(char *file)
 	evlist = perf_evlist__new();
 	TEST_ASSERT_VAL("failed to create evlist", evlist);
 
+	evlist->cpus = cpu_map__new("0,1");
+	TEST_ASSERT_VAL("failed to create evlist cpu maps", evlist->cpus);
+
 	ret = perf_formula__evlist(&fml, set, evlist);
 	TEST_ASSERT_VAL("failed to load evlist with set", !ret);
 
@@ -74,6 +80,18 @@ static int __test_basics(char *file)
 	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->attr.precise_ip);
 
+	ret = perf_evsel__alloc_counts(evsel, 2);
+	TEST_ASSERT_VAL("failed to alloc coiunts for evsel", !ret);
+
+	counts = evsel->counts;
+
+	/* aggregated counts */
+	counts->aggr.val = 1000;
+
+	/* perf cpu counts */
+	counts->cpu[0].val = 1000;
+	counts->cpu[1].val = 1000;
+
 	evsel = perf_evsel__next(evsel);
 	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
 	TEST_ASSERT_VAL("wrong config",
@@ -84,6 +102,55 @@ static int __test_basics(char *file)
 	TEST_ASSERT_VAL("wrong exclude guest", !evsel->attr.exclude_guest);
 	TEST_ASSERT_VAL("wrong exclude host", !evsel->attr.exclude_host);
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->attr.precise_ip);
+
+	ret = perf_evsel__alloc_counts(evsel, 1);
+	TEST_ASSERT_VAL("failed to alloc coiunts for evsel", !ret);
+
+	counts = evsel->counts;
+
+	/* aggregated counts */
+	counts->aggr.val = 500;
+
+	/* perf cpu counts */
+	counts->cpu[0].val = 500;
+	counts->cpu[1].val = 500;
+
+	/* evaluate aggregated counters */
+	perf_formula_set__eval(set, evlist, false);
+
+	counter = list_first_entry(&set->head_counters,
+				   struct perf_formula_counter,
+				   list);
+	TEST_ASSERT_VAL("failed to calculated the counter", !ret);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->aggr.result == 4.5);
+
+	counter = list_entry(counter->list.next,
+			     struct perf_formula_counter,
+			     list);
+	TEST_ASSERT_VAL("failed to calculated the counter", !ret);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->aggr.result == 2);
+
+	/* evaluate per cpu counters */
+	perf_formula_set__eval(set, evlist, true);
+
+	counter = list_first_entry(&set->head_counters,
+				   struct perf_formula_counter,
+				   list);
+	TEST_ASSERT_VAL("failed to calculated the counter", !ret);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->cpu[0].result == 4.5);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->cpu[1].result == 4.5);
+
+	counter = list_entry(counter->list.next,
+			     struct perf_formula_counter,
+			     list);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->cpu[0].result == 2);
+	TEST_ASSERT_VAL("wrong counter final value",
+			counter->result->cpu[1].result == 2);
 
 	perf_evlist__delete(evlist);
 	perf_formula__free(&fml);
