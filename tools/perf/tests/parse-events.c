@@ -6,6 +6,7 @@
 #include <lk/debugfs.h>
 #include "tests.h"
 #include <linux/hw_breakpoint.h>
+#include "strlist.h"
 
 #define PERF_TP_SAMPLE_TYPE (PERF_SAMPLE_RAW | PERF_SAMPLE_TIME | \
 			     PERF_SAMPLE_CPU | PERF_SAMPLE_PERIOD)
@@ -1114,6 +1115,71 @@ static int test__pinned_group(struct perf_evlist *evlist)
 	return 0;
 }
 
+static int test__formula_single(struct perf_evlist *evlist)
+{
+	struct str_node *node;
+
+	/* "formula-cpi */
+	TEST_ASSERT_VAL("no formulas stored", evlist->formulas);
+
+	node = strlist__first(evlist->formulas);
+	TEST_ASSERT_VAL("no formulas stored", node);
+
+	TEST_ASSERT_VAL("wrong formula name", !strcmp(node->s, "cpi"));
+	TEST_ASSERT_VAL("extra formula stored", !strlist__next(node));
+
+	return 0;
+}
+
+static int test__formula_multiple(struct perf_evlist *evlist)
+{
+	struct str_node *node;
+
+	/* "formula-cpi,formula-branch */
+	TEST_ASSERT_VAL("no formulas stored", evlist->formulas);
+
+	node = strlist__first(evlist->formulas);
+	TEST_ASSERT_VAL("no formulas stored", node);
+
+	TEST_ASSERT_VAL("wrong formula name", !strcmp(node->s, "branch"));
+
+	node = strlist__next(node);
+	TEST_ASSERT_VAL("second formula not stored", node);
+
+	TEST_ASSERT_VAL("wrong formula name", !strcmp(node->s, "cpi"));
+	TEST_ASSERT_VAL("extra formula stored", !strlist__next(node));
+
+	return 0;
+}
+
+static int test__formula_mixed(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel, *leader;
+
+	/* "cycles,formula-cpi,cache-misses,formula-branch,instructions" */
+
+	TEST_ASSERT_VAL("wrong number of entries", 3 == evlist->nr_entries);
+
+	/* cycles */
+	evsel = leader = perf_evlist__first(evlist);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+			PERF_COUNT_HW_CPU_CYCLES == evsel->attr.config);
+
+	evsel = perf_evsel__next(evsel);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+			PERF_COUNT_HW_CACHE_MISSES == evsel->attr.config);
+
+	/* branch-misses - ditto */
+	evsel = perf_evsel__next(evsel);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+			PERF_COUNT_HW_BRANCH_MISSES == evsel->attr.config);
+
+	return test__formula_multiple(evlist);
+}
+
 static int count_tracepoints(void)
 {
 	char events_path[PATH_MAX];
@@ -1345,6 +1411,18 @@ static struct evlist_test test__events[] = {
 	[41] = {
 		.name  = "{cycles,cache-misses,branch-misses}:D",
 		.check = test__pinned_group,
+	},
+	[42] = {
+		.name  = "formula-cpi",
+		.check = test__formula_single,
+	},
+	[43] = {
+		.name  = "formula-cpi,formula-branch",
+		.check = test__formula_multiple,
+	},
+	[44] = {
+		.name  = "cycles,formula-cpi,cache-misses,formula-branch,branch-misses",
+		.check = test__formula_mixed,
 	},
 };
 
