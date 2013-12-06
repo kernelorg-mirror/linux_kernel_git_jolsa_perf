@@ -122,6 +122,7 @@ void hists__init(struct hists *hists)
 	hists->entries_in = &hists->entries_in_array[0];
 	hists->entries_collapsed = RB_ROOT;
 	hists->entries = RB_ROOT;
+	INIT_LIST_HEAD(&hists->hist_entry__sort_list);
 	pthread_mutex_init(&hists->lock, NULL);
 }
 

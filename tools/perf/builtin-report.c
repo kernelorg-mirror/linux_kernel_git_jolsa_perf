@@ -765,6 +765,103 @@ parse_percent_limit(const struct option *opt, const char *str,
 	return 0;
 }
 
+struct field_sort_entry {
+	struct format_field *field;
+	struct sort_entry se;
+};
+
+static bool perf_evsel__is_tracepoint(struct perf_evsel *evsel)
+{
+	return evsel->attr.type == PERF_TYPE_TRACEPOINT;
+}
+
+static int64_t sort_entry__cmp(struct sort_entry *se __maybe_unused,
+			       struct hist_entry *left __maybe_unused,
+			       struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+static int64_t sort_entry__collapse(struct sort_entry *se __maybe_unused,
+				    struct hist_entry *left __maybe_unused,
+				    struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+static int sort_entry__snprintf(struct sort_entry *se __maybe_unused,
+				struct hist_entry *he __maybe_unused, char *bf, size_t size,
+				unsigned int width __maybe_unused)
+{
+	return scnprintf(bf, size, "%10s", "krava");
+}
+
+static void sort_entry__init(struct field_sort_entry* fse,
+			     struct format_field *field)
+{
+	memset(fse, 0, sizeof(*fse));
+
+	INIT_LIST_HEAD(&fse->se.list);
+	fse->se.se_header 	= strdup(field->name);
+	fse->se.se_cmp		= sort_entry__cmp;
+	fse->se.se_collapse	= sort_entry__collapse;
+	fse->se.se_snprintf	= sort_entry__snprintf;
+	fse->se.se_width_idx	= 10;
+}
+
+static struct field_sort_entry* sort_entry__new(struct format_field *field)
+{
+	struct field_sort_entry* fse = malloc(sizeof(*fse));
+
+	if (fse)
+		sort_entry__init(fse, field);
+
+	return fse;
+}
+
+static int perf_evsel__add_sort_entries(struct perf_evsel *evsel)
+{
+	struct format_field **fields, **iter, *f;
+	struct hists *hists = &evsel->hists;
+	struct field_sort_entry *fse;
+	int ret = -1;
+
+	iter = fields = pevent_event_fields(evsel->tp_format);
+	if (!iter)
+		return 0;
+
+	while ((f = *iter++)) {
+		fse = sort_entry__new(f);
+		if (!fse)
+			goto out;
+
+		hists__sort_entry_add(hists, &fse->se);
+	}
+
+	ret = 0;
+
+ out:
+	free(fields);
+	return ret;
+}
+
+static int perf_evlist__add_sort_entries(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int ret = 0;
+
+	list_for_each_entry(evsel, &evlist->entries, node) {
+		if (!perf_evsel__is_tracepoint(evsel))
+			continue;
+
+		ret = perf_evsel__add_sort_entries(evsel);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	struct perf_session *session;
@@ -1011,6 +1108,12 @@ repeat:
 	}
 
 	sort__setup_elide(stdout);
+
+	ret = perf_evlist__add_sort_entries(session->evlist);
+	if (ret) {
+		pr_err("failed to add event specific sort entries\n");
+		goto error;
+	}
 
 	ret = __cmd_report(&report);
 	if (ret == K_SWITCH_INPUT_DATA) {
