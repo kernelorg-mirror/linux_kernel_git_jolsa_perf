@@ -329,7 +329,7 @@ static void perf_gtk__show_hists(GtkWidget *window, struct hists *hists,
 			if (se->elide)
 				continue;
 
-			se->se_snprintf(h, s, ARRAY_SIZE(s),
+			se->se_snprintf(se, h, s, ARRAY_SIZE(s),
 					hists__col_len(hists, se->se_width_idx));
 
 			gtk_tree_store_set(store, &iter, col_idx++, s, -1);
