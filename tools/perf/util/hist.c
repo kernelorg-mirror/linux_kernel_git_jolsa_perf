@@ -916,7 +916,7 @@ hist_entry__cmp(struct hist_entry *left, struct hist_entry *right)
 	int64_t cmp = 0;
 
 	list_for_each_entry(se, &hist_entry__sort_list, list) {
-		cmp = se->se_cmp(left, right);
+		cmp = se->se_cmp(se, left, right);
 		if (cmp)
 			break;
 	}
@@ -931,11 +931,12 @@ hist_entry__collapse(struct hist_entry *left, struct hist_entry *right)
 	int64_t cmp = 0;
 
 	list_for_each_entry(se, &hist_entry__sort_list, list) {
-		int64_t (*f)(struct hist_entry *, struct hist_entry *);
+		int64_t (*f)(struct sort_entry *, struct hist_entry *,
+			     struct hist_entry *);
 
 		f = se->se_collapse ?: se->se_cmp;
 
-		cmp = f(left, right);
+		cmp = f(se, left, right);
 		if (cmp)
 			break;
 	}

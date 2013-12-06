@@ -310,7 +310,7 @@ int hist_entry__sort_snprintf(struct hist_entry *he, char *s, size_t size,
 			continue;
 
 		ret += scnprintf(s + ret, size - ret, "%s", sep ?: "  ");
-		ret += se->se_snprintf(he, s + ret, size - ret,
+		ret += se->se_snprintf(se, he, s + ret, size - ret,
 				       hists__col_len(hists, se->se_width_idx));
 	}
 
