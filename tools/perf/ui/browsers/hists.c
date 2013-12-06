@@ -338,7 +338,7 @@ static size_t scnprintf_header_se(struct hists *hists, char *buf, size_t size)
 	unsigned int width;
 	int ret = 0;
 
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
+	hists__for_each_se(hists, se) {
 		if (se->elide)
 			continue;
 
