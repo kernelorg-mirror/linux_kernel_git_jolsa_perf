@@ -305,7 +305,7 @@ int hist_entry__sort_snprintf(struct hist_entry *he, char *s, size_t size,
 	struct sort_entry *se;
 	int ret = 0;
 
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
+	hists__for_each_se(he->hists, se) {
 		if (se->elide)
 			continue;
 
@@ -336,9 +336,10 @@ unsigned int hists__sort_list_width(struct hists *hists)
 		ret += fmt->width(fmt, &dummy_hpp);
 	}
 
-	list_for_each_entry(se, &hist_entry__sort_list, list)
+	hists__for_each_se(hists, se) {
 		if (!se->elide)
 			ret += 2 + hists__col_len(hists, se->se_width_idx);
+	}
 
 	if (verbose) /* Addr + origin */
 		ret += 3 + BITS_PER_LONG / 4;
