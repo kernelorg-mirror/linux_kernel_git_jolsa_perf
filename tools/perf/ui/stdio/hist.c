@@ -408,7 +408,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		fprintf(fp, "%s", bf);
 	}
 
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
+	hists__for_each_se(hists, se) {
 		if (se->elide)
 			continue;
 		if (sep) {
@@ -454,7 +454,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 			fprintf(fp, ".");
 	}
 
-	list_for_each_entry(se, &hist_entry__sort_list, list) {
+	hists__for_each_se(hists, se) {
 		unsigned int i;
 
 		if (se->elide)
