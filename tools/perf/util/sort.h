@@ -194,4 +194,9 @@ void sort__setup_elide(FILE *fp);
 
 int report_parse_ignore_callees_opt(const struct option *opt, const char *arg, int unset);
 
+bool hists__next_se(struct hists *hists, struct sort_entry **sep);
+
+#define hists__for_each_se(hists, se) \
+	for (se = NULL; hists__next_se(hists, &se);)
+
 #endif	/* __PERF_SORT_H */

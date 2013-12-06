@@ -1186,3 +1186,21 @@ void sort__setup_elide(FILE *output)
 	list_for_each_entry(se, &hist_entry__sort_list, list)
 		se->elide = false;
 }
+
+bool hists__next_se(struct hists *hists __maybe_unused, struct sort_entry **sep)
+{
+	struct list_head *head_global = &hist_entry__sort_list;
+	struct sort_entry *se = *sep;
+
+	if (!se) {
+		se = list_first_entry(head_global, struct sort_entry, list);
+	} else {
+		if (list_is_last(&se->list, head_global)) {
+			se = NULL;
+		} else {
+			se = list_next_entry(se, list);
+		}
+	}
+
+	return se ? (*sep = se) : false;
+}
