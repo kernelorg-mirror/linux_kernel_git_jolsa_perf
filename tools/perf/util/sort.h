@@ -215,4 +215,6 @@ bool hists__next_se(struct hists *hists, struct sort_entry **sep);
 #define hists__for_each_se(hists, se) \
 	for (se = NULL; hists__next_se(hists, &se);)
 
+void hists__sort_entry_add(struct hists *hists, struct sort_entry *se);
+
 #endif	/* __PERF_SORT_H */
