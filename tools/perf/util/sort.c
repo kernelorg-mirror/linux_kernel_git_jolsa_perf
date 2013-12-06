@@ -1200,12 +1200,17 @@ void sort__setup_elide(FILE *output)
 bool hists__next_se(struct hists *hists __maybe_unused, struct sort_entry **sep)
 {
 	struct list_head *head_global = &hist_entry__sort_list;
+	struct list_head *head_local  = &hists->hist_entry__sort_list;
 	struct sort_entry *se = *sep;
 
 	if (!se) {
 		se = list_first_entry(head_global, struct sort_entry, list);
 	} else {
 		if (list_is_last(&se->list, head_global)) {
+			se = list_empty(head_local) ? NULL :
+			     list_first_entry(head_local, struct sort_entry,
+					      list);
+		} else if (list_is_last(&se->list, head_local)) {
 			se = NULL;
 		} else {
 			se = list_next_entry(se, list);
@@ -1213,4 +1218,9 @@ bool hists__next_se(struct hists *hists __maybe_unused, struct sort_entry **sep)
 	}
 
 	return se ? (*sep = se) : false;
+}
+
+void hists__sort_entry_add(struct hists *hists, struct sort_entry *se)
+{
+	list_add_tail(&se->list, &hists->hist_entry__sort_list);
 }
