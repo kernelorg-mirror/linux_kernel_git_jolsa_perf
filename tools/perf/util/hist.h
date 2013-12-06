@@ -92,6 +92,7 @@ struct hists {
 	u64			time_base;
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
+	struct list_head	sort_list;
 };
 
 struct hist_entry_iter;
