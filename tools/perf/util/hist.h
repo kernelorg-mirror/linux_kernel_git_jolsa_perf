@@ -13,6 +13,7 @@ extern struct callchain_param callchain_param;
 struct hist_entry;
 struct addr_location;
 struct symbol;
+struct raw_info;
 
 /*
  * The kernel collects the number of events it couldn't send in a stretch and
@@ -110,6 +111,7 @@ struct hist_entry_iter {
 	struct perf_sample *sample;
 	struct hist_entry *he;
 	struct symbol *parent;
+	struct raw_info *raw;
 	void *priv;
 
 	const struct hist_iter_ops *ops;
@@ -127,8 +129,9 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct addr_location *al,
 				      struct symbol *parent,
 				      struct branch_info *bi,
-				      struct mem_info *mi, u64 period,
-				      u64 weight, u64 transaction,
+				      struct mem_info *mi,
+				      struct raw_info *raw,
+				      u64 period, u64 weight, u64 transaction,
 				      u64 time, bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
 			 struct perf_evsel *evsel, const union perf_event *event,
