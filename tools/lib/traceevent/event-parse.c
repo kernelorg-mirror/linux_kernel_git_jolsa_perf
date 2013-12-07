@@ -4028,13 +4028,16 @@ static int is_printable_array(char *p, unsigned int len)
 
 void pevent_field_info(struct trace_seq *s,
 		       struct format_field *field,
-		       void *data, int size __maybe_unused)
+		       void *data, int size __maybe_unused,
+		       bool print_name)
 {
 	struct event_format *event = field->event;
 	unsigned int offset, len, i;
 	unsigned long long val;
 
-	trace_seq_printf(s, " %s=", field->name);
+	if (print_name)
+		trace_seq_printf(s, " %s=", field->name);
+
 	if (field->flags & FIELD_IS_ARRAY) {
 		offset = field->offset;
 		len = field->size;
@@ -4100,7 +4103,7 @@ static void print_event_fields(struct trace_seq *s, void *data, int size,
 
 	field = event->format.fields;
 	while (field) {
-		pevent_field_info(s, field, data, size);
+		pevent_field_info(s, field, data, size, true);
 		field = field->next;
 	}
 }
