@@ -581,6 +581,10 @@ int pevent_pid_is_registered(struct pevent *pevent, int pid);
 void pevent_print_event(struct pevent *pevent, struct trace_seq *s,
 			struct pevent_record *record, bool use_trace_clock);
 
+int pevent_field_cmp(struct format_field *field,
+		     void *a_data, int a_size,
+		     void *b_data, int b_size);
+
 void pevent_field_info(struct trace_seq *s,
 		       struct format_field *field,
 		       void *data, int size __maybe_unused,
