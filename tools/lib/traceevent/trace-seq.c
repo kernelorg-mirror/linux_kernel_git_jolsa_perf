@@ -36,16 +36,22 @@ do {									\
 		die("Usage of trace_seq after it was destroyed");	\
 } while (0)
 
+void trace_seq_init_buf(struct trace_seq *s, char *buffer, unsigned int size)
+{
+	s->len = 0;
+	s->readpos = 0;
+	s->buffer_size = size;
+	s->buffer = buffer;
+}
+
 /**
  * trace_seq_init - initialize the trace_seq structure
  * @s: a pointer to the trace_seq structure to initialize
  */
 void trace_seq_init(struct trace_seq *s)
 {
-	s->len = 0;
-	s->readpos = 0;
-	s->buffer_size = TRACE_SEQ_BUF_SIZE;
-	s->buffer = malloc_or_die(s->buffer_size);
+	trace_seq_init_buf(s, malloc_or_die(TRACE_SEQ_BUF_SIZE),
+			   TRACE_SEQ_BUF_SIZE);
 }
 
 /**
