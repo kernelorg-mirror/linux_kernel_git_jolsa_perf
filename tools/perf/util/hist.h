@@ -81,7 +81,8 @@ struct hists {
 	pthread_mutex_t		lock;
 	struct events_stats	stats;
 	u64			event_stream;
-	u16			col_len[HISTC_NR_COLS];
+	u16			*col_len;
+	int			col_n;
 	struct list_head	hist_entry__sort_list;
 };
 
@@ -117,6 +118,7 @@ void hists__filter_by_dso(struct hists *hists);
 void hists__filter_by_thread(struct hists *hists);
 void hists__filter_by_symbol(struct hists *hists);
 
+int hists__alloc_col_len(struct hists *hists, int n);
 u16 hists__col_len(struct hists *hists, enum hist_column col);
 void hists__set_col_len(struct hists *hists, enum hist_column col, u16 len);
 bool hists__new_col_len(struct hists *hists, enum hist_column col, u16 len);
