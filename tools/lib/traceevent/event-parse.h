@@ -583,7 +583,8 @@ void pevent_print_event(struct pevent *pevent, struct trace_seq *s,
 
 void pevent_field_info(struct trace_seq *s,
 		       struct format_field *field,
-		       void *data, int size);
+		       void *data, int size __maybe_unused,
+		       bool print_name);
 
 int pevent_parse_header_page(struct pevent *pevent, char *buf, unsigned long size,
 			     int long_size);
