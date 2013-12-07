@@ -448,6 +448,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct symbol *sym_parent,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
+				      struct raw_info *raw,
 				      u64 period, u64 weight, u64 transaction,
 				      bool sample_self)
 {
@@ -471,6 +472,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 		.hists	= hists,
 		.branch_info = bi,
 		.mem_info = mi,
+		.raw_info = raw,
 		.transaction = transaction,
 	};
 
@@ -514,6 +516,7 @@ hist_entry__collapse(struct hist_entry *left, struct hist_entry *right)
 
 void hist_entry__free(struct hist_entry *he)
 {
+	zfree(&he->raw_info);
 	zfree(&he->branch_info);
 	zfree(&he->mem_info);
 	free_srcline(he->srcline);

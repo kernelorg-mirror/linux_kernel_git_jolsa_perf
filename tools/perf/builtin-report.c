@@ -47,6 +47,7 @@ struct report {
 	bool			dont_use_callchains;
 	bool			show_full_info;
 	bool			show_threads;
+	bool			show_tp_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -158,8 +159,8 @@ iter_add_single_mem_entry(struct add_entry_iter *iter, struct addr_location *al)
 	 * and this is indirectly achieved by passing period=weight here
 	 * and the he_stat__add_period() function.
 	 */
-	he = __hists__add_entry(&iter->evsel->hists, al, iter->parent, NULL, mi,
-				cost, cost, 0, true);
+	he = __hists__add_entry(&iter->evsel->hists, al, iter->parent, NULL,
+				mi, NULL, cost, cost, 0, true);
 	if (!he)
 		return -ENOMEM;
 
@@ -263,7 +264,8 @@ iter_add_next_branch_entry(struct add_entry_iter *iter, struct addr_location *al
 	 * The report shows the percentage of total branches captured
 	 * and not events sampled. Thus we use a pseudo period of 1.
 	 */
-	he = __hists__add_entry(&evsel->hists, al, iter->parent, &bi[i], NULL,
+	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+				&bi[i], NULL, NULL,
 				1, 1, 0, true);
 	if (he == NULL)
 		return -ENOMEM;
@@ -307,18 +309,45 @@ iter_prepare_normal_entry(struct add_entry_iter *iter,
 	return 0;
 }
 
+static int get_raw_info(struct raw_info **rawp, struct perf_sample *sample)
+{
+	struct raw_info *raw;
+
+	if (!sample->raw_data)
+		return 0;
+
+	raw = malloc(sizeof(*raw) + sample->raw_size);
+	if (raw) {
+		memcpy(&raw->data, sample->raw_data, sample->raw_size);
+		raw->size = sample->raw_size;
+	}
+
+	*rawp = raw;
+	return raw ? 0 : -ENOMEM;
+}
+
 static int
 iter_add_single_normal_entry(struct add_entry_iter *iter, struct addr_location *al)
 {
 	struct perf_evsel *evsel = iter->evsel;
 	struct perf_sample *sample = iter->sample;
+	struct raw_info *raw = NULL;
 	struct hist_entry *he;
 
-	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+	if (iter->rep->show_tp_entries) {
+		int err = get_raw_info(&raw, sample);
+		if (err)
+			return err;
+	}
+
+	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+				NULL, NULL, raw,
 				sample->period, sample->weight,
 				sample->transaction, true);
-	if (he == NULL)
+	if (he == NULL) {
+		free(raw);
 		return -ENOMEM;
+	}
 
 	iter->he = he;
 	return 0;
@@ -390,7 +419,8 @@ iter_add_single_cumulative_entry(struct add_entry_iter *iter,
 	struct hist_entry **he_cache = iter->priv;
 	struct hist_entry *he;
 
-	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+				NULL, NULL, NULL,
 				sample->period, sample->weight,
 				sample->transaction, true);
 	if (he == NULL)
@@ -452,7 +482,8 @@ iter_add_next_cumulative_entry(struct add_entry_iter *iter,
 			return 0;
 	}
 
-	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+				NULL, NULL, NULL,
 				sample->period, sample->weight,
 				sample->transaction, false);
 	if (he == NULL)
@@ -1137,6 +1168,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_BOOLEAN(0, "mem-mode", &report.mem_mode, "mem access profile"),
 	OPT_CALLBACK(0, "percent-limit", &report, "percent",
 		     "Don't show entries under that percent", parse_percent_limit),
+	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
 	OPT_END()
 	};
 	struct perf_data_file file = {

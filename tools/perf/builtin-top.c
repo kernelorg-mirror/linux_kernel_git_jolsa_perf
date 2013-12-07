@@ -253,7 +253,7 @@ static struct hist_entry *perf_evsel__add_hist_entry(struct perf_evsel *evsel,
 	struct hist_entry *he;
 
 	pthread_mutex_lock(&evsel->hists.lock);
-	he = __hists__add_entry(&evsel->hists, al, NULL, NULL, NULL,
+	he = __hists__add_entry(&evsel->hists, al, NULL, NULL, NULL, NULL,
 				sample->period, sample->weight,
 				sample->transaction, true);
 	pthread_mutex_unlock(&evsel->hists.lock);
@@ -722,7 +722,8 @@ static int process_cumulative_entry(struct perf_top *top,
 				goto next;
 		}
 
-		he = __hists__add_entry(&evsel->hists, al, parent, NULL, NULL,
+		he = __hists__add_entry(&evsel->hists, al, parent,
+					NULL, NULL, NULL,
 					sample->period, sample->weight,
 					sample->transaction, false);
 		if (he == NULL) {
