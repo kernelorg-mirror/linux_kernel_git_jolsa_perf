@@ -35,6 +35,7 @@
 #include "util/hist.h"
 #include "util/data.h"
 #include "arch/common.h"
+#include "util/report-tp.h"
 
 #include <dlfcn.h>
 #include <linux/bitmap.h>
@@ -664,6 +665,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		"perf report [<options>]",
 		NULL
 	};
+	enum report_tp_mode tp_mode;
 	struct report report = {
 		.tool = {
 			.sample		 = process_sample_event,
@@ -779,6 +781,9 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
 		     "how to display percentage of filtered entries", parse_percentage),
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
+	OPT_CALLBACK_DEFAULT(0, "tp", &tp_mode, "fields,[format]", NULL,
+			     &report_tp_parse_mode, "format"),
+
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -923,6 +928,15 @@ repeat:
 
 	if (symbol_conf.show_list)
 		sort__setup_list();
+
+	if (tp_mode != REPORT_TO_MODE__NONE) {
+		ret = perf_evlist__add_tp_sort_entries(session->evlist, tp_mode);
+		if (ret) {
+			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+		report.raw_info = true;
+	}
 
 	ret = __cmd_report(&report);
 	if (ret == K_SWITCH_INPUT_DATA) {

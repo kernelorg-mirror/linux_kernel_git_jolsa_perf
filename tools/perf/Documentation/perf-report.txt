@@ -263,6 +263,12 @@ OPTIONS
 --header-only::
 	Show only perf.data header (forces --stdio).
 
+--tp=::
+	Show tracepoint related info, following switches are supported:
+	- fields: shows separated tracepoint fields
+	- format: shows tracepoints 'print fmt' in single column
+		  (This is default if no switch is given.)
+
 SEE ALSO
 --------
 linkperf:perf-stat[1], linkperf:perf-annotate[1]
