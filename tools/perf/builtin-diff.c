@@ -307,8 +307,8 @@ static int hists__add_entry(struct hists *hists,
 			    struct addr_location *al, u64 period,
 			    u64 weight, u64 transaction)
 {
-	if (__hists__add_entry(hists, al, NULL, NULL, NULL, period, weight,
-			       transaction, true) != NULL)
+	if (__hists__add_entry(hists, al, NULL, NULL, NULL, NULL,
+			       period, weight, transaction, true) != NULL)
 		return 0;
 	return -ENOMEM;
 }
