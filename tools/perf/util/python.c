@@ -605,8 +605,7 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 	attr.mmap_data	    = mmap_data;
 	attr.sample_id_all  = sample_id_all;
 
-	perf_evsel__init(&pevsel->evsel, &attr, idx);
-	return 0;
+	return perf_evsel__init(&pevsel->evsel, &attr, idx);
 }
 
 static void pyrf_evsel__delete(struct pyrf_evsel *pevsel)
