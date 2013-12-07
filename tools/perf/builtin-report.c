@@ -47,6 +47,7 @@ struct report {
 	bool			dont_use_callchains;
 	bool			show_full_info;
 	bool			show_threads;
+	bool			show_tp_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -100,6 +101,23 @@ out:
 	return err;
 }
 
+static int get_raw_info(struct raw_info **rawp, struct perf_sample *sample)
+{
+	struct raw_info *raw;
+
+	if (!sample->raw_data)
+		return 0;
+
+	raw = malloc(sizeof(*raw) + sample->raw_size);
+	if (raw) {
+		memcpy(&raw->data, sample->raw_data, sample->raw_size);
+		raw->size = sample->raw_size;
+	}
+
+	*rawp = raw;
+	return raw ? 0 : -ENOMEM;
+}
+
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -109,6 +127,7 @@ static int process_sample_event(struct perf_tool *tool,
 	struct report *rep = container_of(tool, struct report, tool);
 	struct addr_location al;
 	struct hist_entry_iter *iter;
+	struct raw_info *raw = NULL;
 	int ret;
 
 	if (perf_event__preprocess_sample(event, machine, &al, sample) < 0) {
@@ -123,6 +142,12 @@ static int process_sample_event(struct perf_tool *tool,
 	if (rep->cpu_list && !test_bit(sample->cpu, rep->cpu_bitmap))
 		return 0;
 
+	if (rep->show_tp_entries) {
+		ret = get_raw_info(&raw, sample);
+		if (ret)
+			return ret;
+	}
+
 	if (sort__mode == SORT_MODE__BRANCH)
 		iter = &hist_iter_branch;
 	else if (rep->mem_mode == 1)
@@ -135,13 +160,17 @@ static int process_sample_event(struct perf_tool *tool,
 		iter->add_entry_cb = hist_iter_cb;
 	}
 
+	iter->raw = raw;
+
 	if (al.map != NULL)
 		al.map->dso->hit = 1;
 
 	ret = hist_entry_iter__add(iter, &al, evsel, event, sample,
 				   rep->hide_unresolved, rep->max_stack, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_debug("problem adding hist entry, skipping event\n");
+		free(raw);
+	}
 
 	return ret;
 }

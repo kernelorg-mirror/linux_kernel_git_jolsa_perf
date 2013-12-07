@@ -67,6 +67,11 @@ struct hist_entry_diff {
 	s64	wdiff;
 };
 
+struct raw_info {
+	unsigned int	size;
+	unsigned char	data[];
+};
+
 /**
  * struct hist_entry - histogram entry
  *
@@ -109,6 +114,7 @@ struct hist_entry {
 	struct branch_info	*branch_info;
 	struct hists		*hists;
 	struct mem_info		*mem_info;
+	struct raw_info		*raw_info;
 	struct callchain_root	callchain[0]; /* must be last member */
 };
 
