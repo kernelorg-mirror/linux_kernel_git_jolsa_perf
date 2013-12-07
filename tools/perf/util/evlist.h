@@ -196,6 +196,8 @@ bool perf_evlist__can_select_event(struct perf_evlist *evlist, const char *str);
 void perf_evlist__to_front(struct perf_evlist *evlist,
 			   struct perf_evsel *move_evsel);
 
+int perf_evlist__add_tp_sort_entries(struct perf_evlist *evlist);
+
 /**
  * __evlist__for_each - iterate thru all the evsels
  * @list: list_head instance to iterate

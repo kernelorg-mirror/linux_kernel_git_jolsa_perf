@@ -751,6 +751,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK(0, "percent-limit", &report, "percent",
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
+	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -895,6 +896,14 @@ repeat:
 
 	if (symbol_conf.show_list)
 		sort__setup_idx();
+
+	if (report.show_tp_entries) {
+		ret = perf_evlist__add_tp_sort_entries(session->evlist);
+		if (ret) {
+			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+	}
 
 	ret = __cmd_report(&report);
 	if (ret == K_SWITCH_INPUT_DATA) {
