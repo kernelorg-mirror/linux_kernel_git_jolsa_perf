@@ -114,8 +114,8 @@ static inline struct perf_evsel *perf_evsel__newtp(const char *sys, const char *
 
 struct event_format *event_format__new(const char *sys, const char *name);
 
-void perf_evsel__init(struct perf_evsel *evsel,
-		      struct perf_event_attr *attr, int idx);
+int perf_evsel__init(struct perf_evsel *evsel,
+		     struct perf_event_attr *attr, int idx);
 void perf_evsel__exit(struct perf_evsel *evsel);
 void perf_evsel__delete(struct perf_evsel *evsel);
 
@@ -272,7 +272,7 @@ static inline int perf_evsel__read_scaled(struct perf_evsel *evsel,
 	return __perf_evsel__read(evsel, ncpus, nthreads, true);
 }
 
-void hists__init(struct hists *hists);
+int hists__init(struct hists *hists);
 
 int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			     struct perf_sample *sample);
