@@ -21,6 +21,21 @@ struct callchain_param	callchain_param = {
 	.key	= CCKEY_FUNCTION
 };
 
+int hists__alloc_col_len(struct hists *hists, int n)
+{
+	u16 *col_len = hists->col_len;
+	int old_n = hists->col_n;
+
+	col_len = realloc(col_len, n * sizeof(u16));
+	if (col_len) {
+		memset(col_len + old_n, 0, n - old_n);
+		hists->col_len = col_len;
+		hists->col_n   = n;
+	}
+
+	return col_len ? 0 : -ENOMEM;
+}
+
 u16 hists__col_len(struct hists *hists, enum hist_column col)
 {
 	return hists->col_len[col];

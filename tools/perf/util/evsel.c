@@ -115,7 +115,7 @@ void perf_evsel__calc_id_pos(struct perf_evsel *evsel)
 	evsel->is_pos = __perf_evsel__calc_is_pos(evsel->attr.sample_type);
 }
 
-static void hists__init(struct hists *hists)
+static int hists__init(struct hists *hists)
 {
 	memset(hists, 0, sizeof(*hists));
 	hists->entries_in_array[0] = hists->entries_in_array[1] = RB_ROOT;
@@ -124,6 +124,12 @@ static void hists__init(struct hists *hists)
 	hists->entries = RB_ROOT;
 	INIT_LIST_HEAD(&hists->sort_list);
 	pthread_mutex_init(&hists->lock, NULL);
+	return hists__alloc_col_len(hists, HISTC_NR_COLS);
+}
+
+static void hists__exit(struct hists *hists)
+{
+	free(hists->col_len);
 }
 
 void __perf_evsel__set_sample_bit(struct perf_evsel *evsel,
@@ -158,8 +164,8 @@ void perf_evsel__set_sample_id(struct perf_evsel *evsel,
 	evsel->attr.read_format |= PERF_FORMAT_ID;
 }
 
-void perf_evsel__init(struct perf_evsel *evsel,
-		      struct perf_event_attr *attr, int idx)
+int perf_evsel__init(struct perf_evsel *evsel,
+		     struct perf_event_attr *attr, int idx)
 {
 	evsel->idx	   = idx;
 	evsel->attr	   = *attr;
@@ -167,19 +173,20 @@ void perf_evsel__init(struct perf_evsel *evsel,
 	evsel->unit	   = "";
 	evsel->scale	   = 1.0;
 	INIT_LIST_HEAD(&evsel->node);
-	hists__init(&evsel->hists);
 	evsel->sample_size = __perf_evsel__sample_size(attr->sample_type);
 	perf_evsel__calc_id_pos(evsel);
+	return hists__init(&evsel->hists);
 }
 
 struct perf_evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
 {
 	struct perf_evsel *evsel = zalloc(sizeof(*evsel));
+	int err = -ENOMEM;
 
 	if (evsel != NULL)
-		perf_evsel__init(evsel, attr, idx);
+		err = perf_evsel__init(evsel, attr, idx);
 
-	return evsel;
+	return err ? NULL : evsel;
 }
 
 struct perf_evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
@@ -203,7 +210,8 @@ struct perf_evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int 
 		event_attr_init(&attr);
 		attr.config = evsel->tp_format->id;
 		attr.sample_period = 1;
-		perf_evsel__init(evsel, &attr, idx);
+		if (perf_evsel__init(evsel, &attr, idx))
+			goto out_free;
 	}
 
 	return evsel;
@@ -775,6 +783,7 @@ void perf_evsel__exit(struct perf_evsel *evsel)
 	assert(list_empty(&evsel->node));
 	perf_evsel__free_fd(evsel);
 	perf_evsel__free_id(evsel);
+	hists__exit(&evsel->hists);
 }
 
 void perf_evsel__delete(struct perf_evsel *evsel)
