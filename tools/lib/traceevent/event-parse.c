@@ -4026,6 +4026,39 @@ static int is_printable_array(char *p, unsigned int len)
 	return 1;
 }
 
+int pevent_field_cmp(struct format_field *field,
+		     void *a_data, int a_size,
+		     void *b_data, int b_size)
+{
+	struct event_format *event = field->event;
+	unsigned int offset, len, i;
+	unsigned long long a_val = 0, b_val = 0;
+
+	if (a_size != b_size)
+		return a_size - b_size;
+
+	if (field->flags & FIELD_IS_ARRAY) {
+		offset = field->offset;
+		len = field->size;
+		if (field->flags & FIELD_IS_DYNAMIC) {
+			offset = pevent_read_number(event->pevent, a_data + offset, len);
+			len = offset >> 16;
+			offset &= 0xffff;
+		}
+		for (i = 0; (i < len) && (a_val == b_val); i++) {
+			a_val = *((unsigned char *)a_data + offset + i);
+			b_val = *((unsigned char *)b_data + offset + i);
+		}
+	} else {
+		a_val = pevent_read_number(event->pevent, a_data + field->offset,
+					   field->size);
+		b_val = pevent_read_number(event->pevent, b_data + field->offset,
+					   field->size);
+	}
+
+	return a_val - b_val;
+}
+
 void pevent_field_info(struct trace_seq *s,
 		       struct format_field *field,
 		       void *data, int size __maybe_unused,
