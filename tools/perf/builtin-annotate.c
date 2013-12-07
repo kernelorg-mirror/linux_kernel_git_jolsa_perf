@@ -65,8 +65,8 @@ static int perf_evsel__add_sample(struct perf_evsel *evsel,
 		return 0;
 	}
 
-	he = __hists__add_entry(&evsel->hists, al, NULL, NULL, NULL, 1, 1, 0,
-				true);
+	he = __hists__add_entry(&evsel->hists, al, NULL, NULL, NULL, NULL,
+				1, 1, 0, true);
 	if (he == NULL)
 		return -ENOMEM;
 

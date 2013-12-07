@@ -13,6 +13,7 @@ extern struct callchain_param callchain_param;
 struct hist_entry;
 struct addr_location;
 struct symbol;
+struct raw_info;
 
 enum hist_filter {
 	HIST_FILTER__DSO,
@@ -104,6 +105,7 @@ struct hist_entry_iter {
 	struct perf_sample *sample;
 	struct hist_entry *he;
 	struct symbol *parent;
+	struct raw_info *raw;
 	void *priv;
 
 	int (*prepare_entry)(struct hist_entry_iter *, struct addr_location *);
@@ -126,8 +128,9 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct addr_location *al,
 				      struct symbol *parent,
 				      struct branch_info *bi,
-				      struct mem_info *mi, u64 period,
-				      u64 weight, u64 transaction,
+				      struct mem_info *mi,
+				      struct raw_info *raw,
+				      u64 period, u64 weight, u64 transaction,
 				      bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
 			 struct perf_evsel *evsel, const union perf_event *event,
