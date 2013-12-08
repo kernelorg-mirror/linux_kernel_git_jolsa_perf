@@ -124,3 +124,19 @@ ssize_t perf_data_file__write(struct perf_data_file *file,
 {
 	return writen(file->fd, buf, size);
 }
+
+unsigned long perf_data_file__size(struct perf_data_file *file)
+{
+	struct stat st;
+	int err;
+
+	if (file->mode == PERF_DATA_MODE_WRITE) {
+		err = fstat(file->fd, &st);
+		if (err)
+			return 0;
+
+		file->size = st.st_size;
+	}
+
+	return file->size;
+}
