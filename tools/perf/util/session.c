@@ -1282,50 +1282,40 @@ fetch_mmaped_event(struct perf_session *session,
 #define NUM_MMAPS 128
 #endif
 
-struct mmaped_file {
-	u64	head;
-	u64	file_pos;
-	u64	file_size;
-	u64	file_offset;
-	u64	mmap_size;
-
-	char	*mmaps[NUM_MMAPS];
-
-	struct perf_data_file *file;
-};
-
-
-static void mmap_file__init(struct mmaped_file *mfile,
-			    struct perf_data_file *file,
-			    u64 data_offset,
-			    u64 data_size)
+int perf_session__process_file_events(struct perf_session *session,
+				      struct perf_tool *tool)
 {
-	u64 file_size = perf_data_file__size(file);
-	u64 page_offset;
+	struct perf_data_file *file = perf_data__file(session->data);
+	int fd = perf_data_file__fd(file);
+	u64 head, page_offset, file_offset, file_pos;
+	u64 data_offset, data_size, file_size;
+	int err, mmap_prot, mmap_flags, map_idx = 0;
+	size_t	mmap_size;
+	char *buf, *mmaps[NUM_MMAPS];
+	union perf_event *event;
+	uint32_t size;
+	struct ui_progress prog;
+
+	perf_tool__fill_defaults(tool);
+
+	data_offset = session->header.data_offset;
+	data_size   = session->header.data_size;
+	file_size   = perf_data_file__size(file);
+
+	page_offset = page_size * (data_offset / page_size);
+	file_offset = page_offset;
+	head = data_offset - page_offset;
 
 	if (data_size && (data_offset + data_size < file_size))
 		file_size = data_offset + data_size;
 
-	page_offset = page_size * (data_offset / page_size);
+	ui_progress__init(&prog, file_size, "Processing events...");
 
-	memset(mfile, 0, sizeof(*mfile));
-	mfile->file        = file;
-	mfile->file_offset = page_offset;
-	mfile->head        = data_offset - page_offset;
-	mfile->file_size   = file_size;
-	mfile->mmap_size   = file_size < MMAP_SIZE ? file_size : MMAP_SIZE;
-}
+	mmap_size = MMAP_SIZE;
+	if (mmap_size > file_size)
+		mmap_size = file_size;
 
-static int process_file_events(struct perf_session *session,
-			       struct perf_tool *tool,
-			       struct mmap_file *mfile,
-			       struct ui_progress *prog)
-{
-	u64 mmap_size = mfile->mmap_size;
-	int err, mmap_prot, mmap_flags, map_idx = 0;
-	char *buf, **mmaps = (char **) mfile->mmaps;
-	union perf_event *event;
-	uint32_t size;
+	memset(mmaps, 0, sizeof(mmaps));
 
 	mmap_prot  = PROT_READ;
 	mmap_flags = MAP_SHARED;
@@ -1335,14 +1325,13 @@ static int process_file_events(struct perf_session *session,
 		mmap_flags = MAP_PRIVATE;
 	}
 remap:
-	buf = mmap(NULL, mmap_size, mmap_prot, mmap_flags,
-		   mfile->file->fd, mfile->file_offset);
+	buf = mmap(NULL, mmap_size, mmap_prot, mmap_flags, fd,
+		   file_offset);
 	if (buf == MAP_FAILED) {
 		pr_err("failed to mmap file\n");
 		err = -errno;
 		goto out_err;
 	}
-
 	mmaps[map_idx] = buf;
 	map_idx = (map_idx + 1) & (ARRAY_SIZE(mmaps) - 1);
 	file_pos = file_offset + head;
@@ -1392,23 +1381,6 @@ out_err:
 	perf_session__warn_about_errors(session, tool);
 	perf_session_free_sample_buffers(session);
 	return err;
-}
-
-int perf_session__process_file_events(struct perf_session *session,
-				      struct perf_tool *tool)
-{
-	struct ui_progress prog;
-	struct mmaped_file mfile;
-
-	perf_tool__fill_defaults(tool);
-
-	mmap_file__init(mfile, perf_data__file(session->data),
-			session->header.data_offset,
-			session->header.data_size);
-
-	ui_progress__init(&prog, file_size, "Processing events...");
-	return process_file_events(session, tool, &mfile, &prog);
-
 }
 
 int perf_session__process_events(struct perf_session *session,
