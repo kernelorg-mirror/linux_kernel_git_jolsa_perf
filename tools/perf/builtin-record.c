@@ -236,17 +236,8 @@ out:
 
 static int process_buildids(struct perf_record *rec)
 {
-	struct perf_data_file *file  = &rec->file;
-	struct perf_session *session = rec->session;
-	u64 start = session->header.data_offset;
-
-	u64 size = lseek(file->fd, 0, SEEK_CUR);
-	if (size == 0)
-		return 0;
-
-	return __perf_session__process_events(session, start,
-					      size - start,
-					      size, &build_id__mark_dso_hit_ops);
+	return perf_session__process_file_events(rec->session,
+						 &build_id__mark_dso_hit_ops);
 }
 
 static void perf_record__exit(int status, void *arg)

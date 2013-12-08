@@ -1149,8 +1149,8 @@ static void perf_session__warn_about_errors(const struct perf_session *session,
 
 volatile int session_done;
 
-static int __perf_session__process_pipe_events(struct perf_session *session,
-					       struct perf_tool *tool)
+static int perf_session__process_pipe_events(struct perf_session *session,
+					     struct perf_tool *tool)
 {
 	int fd = perf_data_file__fd(session->file);
 	union perf_event *event;
@@ -1280,12 +1280,12 @@ fetch_mmaped_event(struct perf_session *session,
 #define NUM_MMAPS 128
 #endif
 
-int __perf_session__process_events(struct perf_session *session,
-				   u64 data_offset, u64 data_size,
-				   u64 file_size, struct perf_tool *tool)
+int perf_session__process_file_events(struct perf_session *session,
+				      struct perf_tool *tool)
 {
 	int fd = perf_data_file__fd(session->file);
 	u64 head, page_offset, file_offset, file_pos;
+	u64 data_offset, data_size, file_size;
 	int err, mmap_prot, mmap_flags, map_idx = 0;
 	size_t	mmap_size;
 	char *buf, *mmaps[NUM_MMAPS];
@@ -1294,6 +1294,10 @@ int __perf_session__process_events(struct perf_session *session,
 	struct ui_progress prog;
 
 	perf_tool__fill_defaults(tool);
+
+	data_offset = session->header.data_offset;
+	data_size   = session->header.data_size;
+	file_size   = perf_data_file__size(session->file);
 
 	page_offset = page_size * (data_offset / page_size);
 	file_offset = page_offset;
@@ -1379,19 +1383,15 @@ out_err:
 int perf_session__process_events(struct perf_session *session,
 				 struct perf_tool *tool)
 {
-	u64 size = perf_data_file__size(session->file);
 	int err;
 
 	if (perf_session__register_idle_thread(session) == NULL)
 		return -ENOMEM;
 
 	if (!perf_data_file__is_pipe(session->file))
-		err = __perf_session__process_events(session,
-						     session->header.data_offset,
-						     session->header.data_size,
-						     size, tool);
+		err = perf_session__process_file_events(session, tool);
 	else
-		err = __perf_session__process_pipe_events(session, tool);
+		err = perf_session__process_pipe_events(session, tool);
 
 	return err;
 }

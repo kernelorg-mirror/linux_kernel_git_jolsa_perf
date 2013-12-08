@@ -54,9 +54,8 @@ void perf_session__delete(struct perf_session *session);
 
 void perf_event_header__bswap(struct perf_event_header *hdr);
 
-int __perf_session__process_events(struct perf_session *session,
-				   u64 data_offset, u64 data_size, u64 size,
-				   struct perf_tool *tool);
+int perf_session__process_file_events(struct perf_session *session,
+				      struct perf_tool *tool);
 int perf_session__process_events(struct perf_session *session,
 				 struct perf_tool *tool);
 
