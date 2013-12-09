@@ -407,23 +407,6 @@ static int access_dso_mem(struct unwind_info *ui, unw_word_t addr,
 	return !(size == sizeof(*data));
 }
 
-static int reg_value(unw_word_t *valp, struct regs_dump *regs, int id,
-		     u64 sample_regs)
-{
-	int i, idx = 0;
-
-	if (!(sample_regs & (1 << id)))
-		return -EINVAL;
-
-	for (i = 0; i < id; i++) {
-		if (sample_regs & (1 << i))
-			idx++;
-	}
-
-	*valp = regs->regs[idx];
-	return 0;
-}
-
 static int access_mem(unw_addr_space_t __maybe_unused as,
 		      unw_word_t addr, unw_word_t *valp,
 		      int __write, void *arg)
@@ -440,8 +423,8 @@ static int access_mem(unw_addr_space_t __maybe_unused as,
 		return 0;
 	}
 
-	ret = reg_value(&start, &ui->sample->user_regs, PERF_REG_SP,
-			ui->sample_uregs);
+	ret = perf_reg_value(&start, &ui->sample->user_regs, PERF_REG_SP,
+			     ui->sample_uregs);
 	if (ret)
 		return ret;
 
@@ -491,7 +474,8 @@ static int access_reg(unw_addr_space_t __maybe_unused as,
 	if (id < 0)
 		return -EINVAL;
 
-	ret = reg_value(valp, &ui->sample->user_regs, id, ui->sample_uregs);
+	ret = perf_reg_value(valp, &ui->sample->user_regs, id,
+			     ui->sample_uregs);
 	if (ret) {
 		pr_err("unwind: can't read reg %d\n", regnum);
 		return ret;
@@ -603,7 +587,7 @@ int unwind__get_entries(unwind_entry_cb_t cb, void *arg,
 	if (!data->user_regs.regs)
 		return -EINVAL;
 
-	ret = reg_value(&ip, &data->user_regs, PERF_REG_IP, sample_uregs);
+	ret = perf_reg_value(&ip, &data->user_regs, PERF_REG_IP, sample_uregs);
 	if (ret)
 		return ret;
 
