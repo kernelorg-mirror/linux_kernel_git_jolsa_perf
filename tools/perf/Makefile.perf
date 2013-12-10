@@ -55,6 +55,9 @@ include config/utilities.mak
 # Define NO_LIBAUDIT if you do not want libaudit support
 #
 # Define NO_LIBBIONIC if you do not want bionic support
+#
+# Define NO_LIBDW_DWARF_UNWIND if you do not want libdw support
+# for dwarf backtrace post unwind.
 
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(shell pwd)))
