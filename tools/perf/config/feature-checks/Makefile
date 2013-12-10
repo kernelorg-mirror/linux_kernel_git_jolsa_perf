@@ -27,7 +27,8 @@ FILES=					\
 	test-on-exit			\
 	test-stackprotector-all		\
 	test-timerfd			\
-	test-udis86
+	test-udis86			\
+	test-libdw-dwarf-unwind
 
 CC := $(CC) -MD
 
@@ -139,6 +140,9 @@ test-backtrace:
 	$(BUILD)
 
 test-timerfd:
+	$(BUILD)
+
+test-libdw-dwarf-unwind:
 	$(BUILD)
 
 -include *.d
