@@ -26,7 +26,8 @@ FILES=					\
 	test-libunwind-debug-frame	\
 	test-on-exit			\
 	test-stackprotector-all		\
-	test-timerfd
+	test-timerfd			\
+	test-udis86
 
 CC := $(CC) -MD
 
