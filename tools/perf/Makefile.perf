@@ -477,6 +477,10 @@ ifndef NO_DWARF
 endif # NO_DWARF
 endif # NO_LIBELF
 
+ifndef NO_LIBDW_DWARF_UNWIND
+  LIB_OBJS += $(OUTPUT)util/unwind-libdw.o
+endif
+
 ifndef NO_LIBUNWIND
   LIB_OBJS += $(OUTPUT)util/unwind-libunwind.o
 endif
