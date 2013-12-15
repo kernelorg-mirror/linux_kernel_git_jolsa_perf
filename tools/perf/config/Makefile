@@ -377,6 +377,7 @@ ifeq ($(dwarf-post-unwind),1)
   endif
   ifndef NO_LIBUNWIND
     msg := $(info Dwarf post unwind handled by libunwind.);
+    CFLAGS += -DDWARF_UNWIND_LIBUNWIND
   endif
 endif
 

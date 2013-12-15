@@ -19,7 +19,12 @@ int unwind__get_entries(unwind_entry_cb_t cb, void *arg,
 			struct thread *thread,
 			u64 sample_uregs,
 			struct perf_sample *data, int max_stack);
+
+/* libunwind specific */
+#ifdef DWARF_UNWIND_LIBUNWIND
 int libunwind__arch_reg_id(int regnum);
+#endif
+
 #else
 static inline int
 unwind__get_entries(unwind_entry_cb_t cb __maybe_unused,
