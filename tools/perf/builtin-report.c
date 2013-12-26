@@ -418,9 +418,16 @@ iter_add_single_cumulative_entry(struct add_entry_iter *iter,
 	struct perf_sample *sample = iter->sample;
 	struct hist_entry **he_cache = iter->priv;
 	struct hist_entry *he;
+	struct raw_info *raw = NULL;
+
+	if (iter->rep->show_tp_entries) {
+		int err = get_raw_info(&raw, sample);
+		if (err)
+			return err;
+	}
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, NULL,
+				NULL, NULL, raw,
 				sample->period, sample->weight,
 				sample->transaction, true);
 	if (he == NULL)
@@ -471,19 +478,30 @@ iter_add_next_cumulative_entry(struct add_entry_iter *iter,
 		},
 		.parent = iter->parent,
 	};
+	struct raw_info *raw = NULL;
 	int i;
+
+	if (iter->rep->show_tp_entries) {
+		int err = get_raw_info(&raw, sample);
+		if (err)
+			return err;
+	}
+
+	he_tmp.raw_info = raw;
 
 	/*
 	 * Check if there's duplicate entries in the callchain.
 	 * It's possible that it has cycles or recursive calls.
 	 */
 	for (i = 0; i < iter->curr; i++) {
-		if (hist_entry__cmp(he_cache[i], &he_tmp) == 0)
+		if (hist_entry__cmp(he_cache[i], &he_tmp) == 0) {
+			free(raw);
 			return 0;
+		}
 	}
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, NULL,
+				NULL, NULL, raw,
 				sample->period, sample->weight,
 				sample->transaction, false);
 	if (he == NULL)
@@ -1074,13 +1092,15 @@ static int tp_sort_entry__snprintf(struct sort_entry *se,
 {
 	struct field_sort_entry *fse = container_of(se, struct field_sort_entry, se);
 	struct raw_info *raw = he->raw_info;
-	struct trace_seq s;
-#define SEQ_SIZE 100
-	char buf[SEQ_SIZE];
+	static struct trace_seq s;
 
-	trace_seq_init_buf(&s, buf, SEQ_SIZE);
+	if (!s.len)
+		trace_seq_init(&s);
+	else
+		trace_seq_reset(&s);
+
 	pevent_field_info(&s, fse->field, raw->data, raw->size, false);
-	return scnprintf(bf, size, "%*s", width, buf);
+	return scnprintf(bf, size, "%*s", width, s.buffer);
 }
 
 static struct field_sort_entry*
@@ -1102,7 +1122,7 @@ tp_sort_entry__new(struct format_field *field, int width_idx)
 
 static int tp_col_width(struct format_field *field)
 {
-	int len = field->size * 2;
+	int len = field->size * 2 + 2 /* '0x' */;
 
 	if (field->flags & FIELD_IS_ARRAY)
 		len = 30;
