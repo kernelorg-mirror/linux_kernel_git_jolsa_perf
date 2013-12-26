@@ -364,7 +364,7 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 
 	ret = fprintf(fp, "%s\n", bf);
 
-	if (symbol_conf.use_callchain)
+	if (symbol_conf.use_callchain && !symbol_conf.cumulate_callchain)
 		ret += hist_entry__callchain_fprintf(he, hists, fp);
 
 	return ret;
@@ -487,11 +487,18 @@ print_entries:
 
 	for (nd = rb_first(&hists->entries); nd; nd = rb_next(nd)) {
 		struct hist_entry *h = rb_entry(nd, struct hist_entry, rb_node);
-		float percent = h->stat.period * 100.0 /
-					hists->stats.total_period;
+		float percent;
 
 		if (h->filtered)
 			continue;
+
+		if (symbol_conf.cumulate_callchain) {
+			percent = h->stat_acc->period * 100.0 /
+					hists->stats.total_period;
+		} else {
+			percent = h->stat.period * 100.0 /
+					hists->stats.total_period;
+		}
 
 		if (percent < min_pcnt)
 			continue;

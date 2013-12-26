@@ -87,6 +87,16 @@ static void perf_top__sig_winch(int sig __maybe_unused,
 	perf_top__update_print_entries(top);
 }
 
+static int top__config(const char *var, const char *value, void *cb)
+{
+	if (!strcmp(var, "top.children")) {
+		symbol_conf.cumulate_callchain = perf_config_bool(var, value);
+		return 0;
+	}
+
+	return perf_default_config(var, value, cb);
+}
+
 static int perf_top__parse_source(struct perf_top *top, struct hist_entry *he)
 {
 	struct symbol *sym;
@@ -245,7 +255,7 @@ static struct hist_entry *perf_evsel__add_hist_entry(struct perf_evsel *evsel,
 	pthread_mutex_lock(&evsel->hists.lock);
 	he = __hists__add_entry(&evsel->hists, al, NULL, NULL, NULL,
 				sample->period, sample->weight,
-				sample->transaction);
+				sample->transaction, true);
 	pthread_mutex_unlock(&evsel->hists.lock);
 	if (he == NULL)
 		return NULL;
@@ -657,6 +667,99 @@ static int symbol_filter(struct map *map __maybe_unused, struct symbol *sym)
 	return 0;
 }
 
+static int process_cumulative_entry(struct perf_top *top,
+				    struct hist_entry *he,
+				    struct perf_evsel *evsel,
+				    struct addr_location *al,
+				    struct perf_sample *sample,
+				    struct symbol *parent)
+{
+	struct hist_entry **he_cache;
+	struct callchain_cursor_node *node;
+	int idx = 0, err;
+
+	he_cache = malloc(sizeof(*he_cache) * (PERF_MAX_STACK_DEPTH + 1));
+	if (he_cache == NULL)
+		return -ENOMEM;
+
+	pthread_mutex_lock(&evsel->hists.lock);
+
+	he_cache[idx++] = he;
+
+	/*
+	 * This is for putting parents upward during output resort iff
+	 * only a child gets sampled.  See hist_entry__sort_on_period().
+	 */
+	he->callchain->max_depth = PERF_MAX_STACK_DEPTH + 1;
+
+	callchain_cursor_commit(&callchain_cursor);
+
+	node = callchain_cursor_current(&callchain_cursor);
+	while (node) {
+		int i;
+		struct hist_entry he_tmp = {
+			.cpu = al->cpu,
+			.thread = al->thread,
+			.comm = thread__comm(al->thread),
+			.parent = parent,
+		};
+
+		fill_callchain_info(al, node, false);
+
+		he_tmp.ip = al->addr;
+		he_tmp.ms.map = al->map;
+		he_tmp.ms.sym = al->sym;
+
+		if (al->sym && al->sym->ignore)
+			goto next;
+
+		/*
+		 * Check if there's duplicate entries in the callchain.
+		 * It's possible that it has cycles or recursive calls.
+		 */
+		for (i = 0; i < idx; i++) {
+			if (hist_entry__cmp(he_cache[i], &he_tmp) == 0)
+				goto next;
+		}
+
+		he = __hists__add_entry(&evsel->hists, al, parent, NULL, NULL,
+					sample->period, sample->weight,
+					sample->transaction, false);
+		if (he == NULL) {
+			err = -ENOMEM;
+			break;;
+		}
+
+		he_cache[idx++] = he;
+
+		/*
+		 * This is for putting parents upward during output resort iff
+		 * only a child gets sampled.  See hist_entry__sort_on_period().
+		 */
+		he->callchain->max_depth = callchain_cursor.nr - callchain_cursor.pos;
+
+		if (sort__has_sym) {
+			u64 ip;
+
+			if (al->map)
+				ip = al->map->unmap_ip(al->map, al->addr);
+			else
+				ip = al->addr;
+
+			perf_top__record_precise_ip(top, he, evsel->idx, ip);
+		}
+
+next:
+		callchain_cursor_advance(&callchain_cursor);
+		node = callchain_cursor_current(&callchain_cursor);
+	}
+
+	pthread_mutex_unlock(&evsel->hists.lock);
+
+	free(he_cache);
+	return err;
+}
+
 static void perf_event__process_sample(struct perf_tool *tool,
 				       const union perf_event *event,
 				       struct perf_evsel *evsel,
@@ -743,15 +846,10 @@ static void perf_event__process_sample(struct perf_tool *tool,
 	if (al.sym == NULL || !al.sym->ignore) {
 		struct hist_entry *he;
 
-		if ((sort__has_parent || symbol_conf.use_callchain) &&
-		    sample->callchain) {
-			err = machine__resolve_callchain(machine, evsel,
-							 al.thread, sample,
-							 &parent, &al,
-							 top->max_stack);
-			if (err)
-				return;
-		}
+		err = sample__resolve_callchain(sample, &parent, evsel, &al,
+						top->max_stack);
+		if (err)
+			return;
 
 		he = perf_evsel__add_hist_entry(evsel, &al, sample);
 		if (he == NULL) {
@@ -759,9 +857,13 @@ static void perf_event__process_sample(struct perf_tool *tool,
 			return;
 		}
 
-		if (symbol_conf.use_callchain) {
-			err = callchain_append(he->callchain, &callchain_cursor,
-					       sample->period);
+		if (symbol_conf.cumulate_callchain) {
+			err = process_cumulative_entry(top, he, evsel, &al,
+						       sample, parent);
+			if (err)
+				return;
+		} else {
+			err = hist_entry__append_callchain(he, sample);
 			if (err)
 				return;
 		}
@@ -1087,6 +1189,8 @@ int cmd_top(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK(0, "call-graph", &top.record_opts,
 		     "mode[,dump_size]", record_callchain_help,
 		     &parse_callchain_opt),
+	OPT_BOOLEAN(0, "children", &symbol_conf.cumulate_callchain,
+		    "Accumulate callchains of children and show total overhead as well"),
 	OPT_INTEGER(0, "max-stack", &top.max_stack,
 		    "Set the maximum stack depth when parsing the callchain. "
 		    "Default: " __stringify(PERF_MAX_STACK_DEPTH)),
@@ -1122,6 +1226,8 @@ int cmd_top(int argc, const char **argv, const char *prefix __maybe_unused)
 	top.evlist = perf_evlist__new();
 	if (top.evlist == NULL)
 		return -ENOMEM;
+
+	perf_config(top__config, &top);
 
 	argc = parse_options(argc, argv, options, top_usage, 0);
 	if (argc)
@@ -1185,6 +1291,11 @@ int cmd_top(int argc, const char **argv, const char *prefix __maybe_unused)
 	}
 
 	top.sym_evsel = perf_evlist__first(top.evlist);
+
+	if (!symbol_conf.use_callchain) {
+		symbol_conf.cumulate_callchain = false;
+		perf_hpp__cancel_cumulate();
+	}
 
 	symbol_conf.priv_size = sizeof(struct annotation);
 
