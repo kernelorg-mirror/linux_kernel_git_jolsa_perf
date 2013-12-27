@@ -717,9 +717,9 @@ $(LIB_FILE): $(LIB_OBJS)
 # libtraceevent.a
 TE_SOURCES = $(wildcard $(TRACE_EVENT_DIR)*.[ch])
 
-LIBTRACEEVENT_FLAGS  = $(QUIET_SUBDIR1) O=$(OUTPUT)
+LIBTRACEEVENT_FLAGS  = $(QUIET_SUBDIR1)
 LIBTRACEEVENT_FLAGS += CFLAGS="-g -Wall $(EXTRA_CFLAGS)"
-LIBTRACEEVENT_FLAGS += plugin_dir=$(plugindir_SQ)
+LIBTRACEEVENT_FLAGS += plugin_dir="$(plugindir_SQ)"
 
 $(LIBTRACEEVENT): $(TE_SOURCES) $(OUTPUT)PERF-CFLAGS
 	$(QUIET_SUBDIR0)$(TRACE_EVENT_DIR) $(LIBTRACEEVENT_FLAGS) libtraceevent.a plugins
@@ -902,4 +902,5 @@ endif
 .PHONY: all install clean config-clean strip install-gtk
 .PHONY: shell_compatibility_test please_set_SHELL_PATH_to_a_more_modern_shell
 .PHONY: $(GIT-HEAD-PHONY) TAGS tags cscope .FORCE-PERF-CFLAGS
+.PHONY: install-traceevent-plugins
 

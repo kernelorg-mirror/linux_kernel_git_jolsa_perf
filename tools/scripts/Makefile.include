@@ -55,7 +55,7 @@ descend = \
 	+mkdir -p $(OUTPUT)$(1) && \
 	$(MAKE) $(COMMAND_O) subdir=$(if $(subdir),$(subdir)/$(1),$(1)) $(PRINT_DIR) -C $(1) $(2)
 
-QUIET_SUBDIR0  = +$(MAKE) $(COMMAND_O) -C # space to separate -C and subdir
+QUIET_SUBDIR0  = +$(MAKE) $(COMMAND_O) -sC # space to separate -C and subdir
 QUIET_SUBDIR1  =
 
 ifneq ($(findstring $(MAKEFLAGS),s),s)
