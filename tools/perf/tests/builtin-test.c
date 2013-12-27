@@ -115,6 +115,12 @@ static struct test {
 		.desc = "Test parsing with no sample_id_all bit set",
 		.func = test__parse_no_sample_id_all,
 	},
+#ifdef HAVE_DWARF_UNWIND_SUPPORT
+	{
+		.desc = "Test dwarf unwind",
+		.func = test__dwarf_unwind,
+	},
+#endif
 	{
 		.func = NULL,
 	},

@@ -40,5 +40,6 @@ int test__code_reading(void);
 int test__sample_parsing(void);
 int test__keep_tracking(void);
 int test__parse_no_sample_id_all(void);
+int test__dwarf_unwind(void);
 
 #endif /* TESTS_H */

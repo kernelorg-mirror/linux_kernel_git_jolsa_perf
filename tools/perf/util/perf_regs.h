@@ -8,7 +8,6 @@
 #include <perf_regs.h>
 
 int perf_reg_value(u64 *valp, struct regs_dump *regs, int id);
-
 #else
 #define PERF_REGS_MASK	0
 
@@ -20,6 +19,11 @@ static inline const char *perf_reg_name(int id __maybe_unused)
 static inline int perf_reg_value(u64 *valp __maybe_unused,
 				 struct regs_dump *regs __maybe_unused,
 				 int id __maybe_unused)
+{
+	return 0;
+}
+
+static inline int perf_regs_load(u64 *regs __maybe_unused)
 {
 	return 0;
 }

@@ -10,4 +10,5 @@ LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/unwind-libdw.o
 endif
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/header.o
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/tsc.o
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/regs_load.o
 LIB_H += arch/$(ARCH)/util/tsc.h
