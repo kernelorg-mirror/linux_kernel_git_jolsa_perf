@@ -13,5 +13,6 @@ LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_64.o
 else
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_32.o
 endif
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/dwarf-unwind.o
 endif # NO_LIBUNWIND
 LIB_H += arch/$(ARCH)/util/tsc.h
