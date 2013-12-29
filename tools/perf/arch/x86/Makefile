@@ -7,4 +7,11 @@ LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/unwind.o
 endif
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/header.o
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/tsc.o
+ifndef NO_LIBUNWIND
+ifeq ($(RAW_ARCH),x86_64)
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_64.o
+else
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_32.o
+endif
+endif # NO_LIBUNWIND
 LIB_H += arch/$(ARCH)/util/tsc.h
