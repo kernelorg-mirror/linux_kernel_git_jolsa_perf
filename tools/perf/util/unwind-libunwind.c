@@ -412,7 +412,7 @@ static int access_mem(unw_addr_space_t __maybe_unused as,
 {
 	struct unwind_info *ui = arg;
 	struct stack_dump *stack = &ui->sample->user_stack;
-	unw_word_t start, end;
+	u64 start, end;
 	int offset;
 	int ret;
 
@@ -435,8 +435,9 @@ static int access_mem(unw_addr_space_t __maybe_unused as,
 	if (addr < start || addr + sizeof(unw_word_t) >= end) {
 		ret = access_dso_mem(ui, addr, valp);
 		if (ret) {
-			pr_debug("unwind: access_mem %p not inside range %p-%p\n",
-				(void *)addr, (void *)start, (void *)end);
+			pr_debug("unwind: access_mem %p not inside range"
+				 " 0x%" PRIx64 "-0x%" PRIx64 "\n",
+				 (void *) addr, start, end);
 			*valp = 0;
 			return ret;
 		}
@@ -445,8 +446,8 @@ static int access_mem(unw_addr_space_t __maybe_unused as,
 
 	offset = addr - start;
 	*valp  = *(unw_word_t *)&stack->data[offset];
-	pr_debug("unwind: access_mem addr %p, val %lx, offset %d\n",
-		 (void *)addr, (unsigned long)*valp, offset);
+	pr_debug("unwind: access_mem addr %p val %lx, offset %d\n",
+		 (void *) addr, (unsigned long)*valp, offset);
 	return 0;
 }
 
@@ -456,6 +457,7 @@ static int access_reg(unw_addr_space_t __maybe_unused as,
 {
 	struct unwind_info *ui = arg;
 	int id, ret;
+	u64 val;
 
 	/* Don't support write, I suspect we don't need it. */
 	if (__write) {
@@ -472,12 +474,13 @@ static int access_reg(unw_addr_space_t __maybe_unused as,
 	if (id < 0)
 		return -EINVAL;
 
-	ret = perf_reg_value(valp, &ui->sample->user_regs, id);
+	ret = perf_reg_value(&val, &ui->sample->user_regs, id);
 	if (ret) {
 		pr_err("unwind: can't read reg %d\n", regnum);
 		return ret;
 	}
 
+	*valp = (unw_word_t) val;
 	pr_debug("unwind: reg %d, val %lx\n", regnum, (unsigned long)*valp);
 	return 0;
 }
@@ -571,7 +574,7 @@ int unwind__get_entries(unwind_entry_cb_t cb, void *arg,
 			struct machine *machine, struct thread *thread,
 			struct perf_sample *data, int max_stack)
 {
-	unw_word_t ip;
+	u64 ip;
 	struct unwind_info ui = {
 		.sample       = data,
 		.thread       = thread,

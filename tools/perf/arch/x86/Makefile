@@ -11,11 +11,7 @@ endif
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/header.o
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/util/tsc.o
 ifndef NO_DWARF_UNWIND
-ifeq ($(RAW_ARCH),x86_64)
-LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_64.o
-else
-LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load_32.o
-endif
+LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/regs_load.o
 LIB_OBJS += $(OUTPUT)arch/$(ARCH)/tests/dwarf-unwind.o
 endif # NO_DWARF_UNWIND
 LIB_H += arch/$(ARCH)/util/tsc.h

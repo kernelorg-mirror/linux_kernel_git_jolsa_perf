@@ -44,7 +44,7 @@ int test__arch_unwind_sample(struct perf_sample *sample,
 	struct regs_dump *regs = &sample->user_regs;
 	u64 *buf;
 
-	buf = malloc(sizeof(u64) * PERF_REG_X86_64_MAX);
+	buf = malloc(sizeof(u64) * PERF_REGS_MAX);
 	if (!buf) {
 		pr_debug("failed to allocate sample uregs data\n");
 		return -1;

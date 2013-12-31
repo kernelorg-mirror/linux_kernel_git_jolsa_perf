@@ -26,7 +26,10 @@
 #define R14	22 * 8
 #define R15	23 * 8
 
+
 .text
+
+#ifdef HAVE_ARCH_X86_64_SUPPORT
 ENTRY(perf_regs_load)
 	movq %rax, AX(%rdi)
 	movq %rbx, BX(%rdi)
@@ -60,3 +63,32 @@ ENTRY(perf_regs_load)
 	movq %r15, R15(%rdi)
 	ret
 ENDPROC(perf_regs_load)
+#else
+ENTRY(perf_regs_load)
+	push %edi
+	movl 8(%esp), %edi
+	movl %eax, AX(%edi)
+	movl %ebx, BX(%edi)
+	movl %ecx, CX(%edi)
+	movl %edx, DX(%edi)
+	movl %esi, SI(%edi)
+	pop %eax
+	movl %eax, DI(%edi)
+	movl %ebp, BP(%edi)
+
+	leal 4(%esp), %eax /* exclude this call.  */
+	movl %eax, SP(%edi)
+
+	movl 0(%esp), %eax
+	movl %eax, IP(%edi)
+
+	movl $0, FLAGS(%edi)
+	movl $0, CS(%edi)
+	movl $0, SS(%edi)
+	movl $0, DS(%edi)
+	movl $0, ES(%edi)
+	movl $0, FS(%edi)
+	movl $0, GS(%edi)
+	ret
+ENDPROC(perf_regs_load)
+#endif

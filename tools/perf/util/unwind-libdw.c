@@ -125,8 +125,9 @@ static bool memory_read(Dwfl *dwfl __maybe_unused, Dwarf_Addr addr, Dwarf_Word *
 	if (addr < start || addr + sizeof(Dwarf_Word) >= end) {
 		ret = access_dso_mem(ui, addr, result);
 		if (ret) {
-			pr_debug("unwind: access_mem %p not inside range %p-%p\n",
-				(void *)addr, (void *)start, (void *)end);
+			pr_debug("unwind: access_mem 0x%" PRIx64 " not inside range"
+				 " 0x%" PRIx64 "-0x%" PRIx64 "\n",
+				addr, start, end);
 			*result = 0;
 			return false;
 		}
@@ -135,8 +136,8 @@ static bool memory_read(Dwfl *dwfl __maybe_unused, Dwarf_Addr addr, Dwarf_Word *
 
 	offset  = addr - start;
 	*result = *(Dwarf_Word *)&stack->data[offset];
-	pr_debug("unwind: access_mem addr %p, val %lx, offset %d\n",
-		 (void *)addr, (unsigned long)*result, offset);
+	pr_debug("unwind: access_mem addr 0x%" PRIx64 ", val %lx, offset %d\n",
+		 addr, (unsigned long)*result, offset);
 	return true;
 }
 

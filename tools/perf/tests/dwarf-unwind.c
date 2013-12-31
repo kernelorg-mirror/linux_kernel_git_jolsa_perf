@@ -48,11 +48,11 @@ static int unwind_entry(struct unwind_entry *entry, void *arg)
 	}
 
 	if (!symbol) {
-		pr_debug("failed: got unresolved address 0x%lx\n", entry->ip);
+		pr_debug("failed: got unresolved address 0x%" PRIx64 "\n", entry->ip);
 		return -1;
 	}
 
-	pr_debug("got: %s 0x%lx\n", symbol, entry->ip);
+	pr_debug("got: %s 0x%" PRIx64 "\n", symbol, entry->ip);
 	return strcmp((const char *) symbol, funcs[(*cnt)++]);
 }
 
