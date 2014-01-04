@@ -71,51 +71,83 @@ static int report__config(const char *var, const char *value, void *cb)
 		rep->min_percent = strtof(value, NULL);
 		return 0;
 	}
+	if (!strcmp(var, "report.children")) {
+		symbol_conf.cumulate_callchain = perf_config_bool(var, value);
+		return 0;
+	}
 
 	return perf_default_config(var, value, cb);
 }
 
-static int report__resolve_callchain(struct report *rep, struct symbol **parent,
-				     struct perf_evsel *evsel, struct addr_location *al,
-				     struct perf_sample *sample)
+struct add_entry_iter {
+	int total;
+	int curr;
+
+	struct report *rep;
+	struct perf_evsel *evsel;
+	struct perf_sample *sample;
+	struct machine *machine;
+	struct hist_entry *he;
+	struct symbol *parent;
+	void *priv;
+
+	int (*prepare_entry)(struct add_entry_iter *, struct machine *,
+			     struct perf_evsel *, struct addr_location *,
+			     struct perf_sample *);
+	int (*add_single_entry)(struct add_entry_iter *, struct addr_location *);
+	int (*next_entry)(struct add_entry_iter *, struct addr_location *);
+	int (*add_next_entry)(struct add_entry_iter *, struct addr_location *);
+	int (*finish_entry)(struct add_entry_iter *, struct addr_location *);
+};
+
+static int
+iter_next_nop_entry(struct add_entry_iter *iter __maybe_unused,
+		    struct addr_location *al __maybe_unused)
 {
-	if ((sort__has_parent || symbol_conf.use_callchain) && sample->callchain) {
-		return machine__resolve_callchain(al->machine, evsel, al->thread, sample,
-						  parent, al, rep->max_stack);
-	}
 	return 0;
 }
 
-static int hist_entry__append_callchain(struct hist_entry *he, struct perf_sample *sample)
+static int
+iter_add_next_nop_entry(struct add_entry_iter *iter __maybe_unused,
+			struct addr_location *al __maybe_unused)
 {
-	if (!symbol_conf.use_callchain)
-		return 0;
-	return callchain_append(he->callchain, &callchain_cursor, sample->period);
+	return 0;
 }
 
-static int report__add_mem_hist_entry(struct perf_tool *tool, struct addr_location *al,
-				      struct perf_sample *sample, struct perf_evsel *evsel,
-				      union perf_event *event)
+static int
+iter_prepare_mem_entry(struct add_entry_iter *iter, struct machine *machine,
+		       struct perf_evsel *evsel, struct addr_location *al,
+		       struct perf_sample *sample)
 {
-	struct report *rep = container_of(tool, struct report, tool);
-	struct symbol *parent = NULL;
-	u8 cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
-	struct hist_entry *he;
-	struct mem_info *mi, *mx;
-	uint64_t cost;
-	int err = report__resolve_callchain(rep, &parent, evsel, al, sample);
+	union perf_event *event = iter->priv;
+	struct mem_info *mi;
+	u8 cpumode;
 
-	if (err)
-		return err;
+	BUG_ON(event == NULL);
 
-	mi = machine__resolve_mem(al->machine, al->thread, sample, cpumode);
-	if (!mi)
+	cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
+
+	mi = machine__resolve_mem(machine, al->thread, sample, cpumode);
+	if (mi == NULL)
 		return -ENOMEM;
 
-	if (rep->hide_unresolved && !al->sym)
+	iter->evsel = evsel;
+	iter->sample = sample;
+	iter->priv = mi;
+	return 0;
+}
+
+static int
+iter_add_single_mem_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	u64 cost;
+	struct mem_info *mi = iter->priv;
+	struct hist_entry *he;
+
+	if (iter->rep->hide_unresolved && !al->sym)
 		return 0;
 
-	cost = sample->weight;
+	cost = iter->sample->weight;
 	if (!cost)
 		cost = 1;
 
@@ -126,10 +158,26 @@ static int report__add_mem_hist_entry(struct perf_tool *tool, struct addr_locati
 	 * and this is indirectly achieved by passing period=weight here
 	 * and the he_stat__add_period() function.
 	 */
-	he = __hists__add_entry(&evsel->hists, al, parent, NULL, mi,
-				cost, cost, 0);
+	he = __hists__add_entry(&iter->evsel->hists, al, iter->parent, NULL, mi,
+				cost, cost, 0, true);
 	if (!he)
 		return -ENOMEM;
+
+	iter->he = he;
+	return 0;
+}
+
+static int
+iter_finish_mem_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct hist_entry *he = iter->he;
+	struct mem_info *mx;
+	int err = -ENOMEM;
+	u64 cost;
+
+	if (he == NULL)
+		return 0;
 
 	err = hist_entry__inc_addr_samples(he, evsel->idx, al->addr);
 	if (err)
@@ -140,96 +188,367 @@ static int report__add_mem_hist_entry(struct perf_tool *tool, struct addr_locati
 	if (err)
 		goto out;
 
+	cost = iter->sample->weight;
+	if (!cost)
+		cost = 1;
+
 	evsel->hists.stats.total_period += cost;
 	hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
-	err = hist_entry__append_callchain(he, sample);
+
+	err = hist_entry__append_callchain(he, iter->sample);
+
 out:
+	iter->he = NULL;
 	return err;
 }
 
-static int report__add_branch_hist_entry(struct perf_tool *tool, struct addr_location *al,
-					 struct perf_sample *sample, struct perf_evsel *evsel)
+static int
+iter_prepare_branch_entry(struct add_entry_iter *iter, struct machine *machine,
+			  struct perf_evsel *evsel, struct addr_location *al,
+			  struct perf_sample *sample)
 {
-	struct report *rep = container_of(tool, struct report, tool);
-	struct symbol *parent = NULL;
-	unsigned i;
-	struct hist_entry *he;
-	struct branch_info *bi, *bx;
-	int err = report__resolve_callchain(rep, &parent, evsel, al, sample);
+	struct branch_info *bi;
 
-	if (err)
-		return err;
-
-	bi = machine__resolve_bstack(al->machine, al->thread,
+	bi = machine__resolve_bstack(machine, al->thread,
 				     sample->branch_stack);
 	if (!bi)
 		return -ENOMEM;
 
-	for (i = 0; i < sample->branch_stack->nr; i++) {
-		if (rep->hide_unresolved && !(bi[i].from.sym && bi[i].to.sym))
-			continue;
+	iter->curr = 0;
+	iter->total = sample->branch_stack->nr;
 
-		err = -ENOMEM;
-
-		/* overwrite the 'al' to branch-to info */
-		al->map = bi[i].to.map;
-		al->sym = bi[i].to.sym;
-		al->addr = bi[i].to.addr;
-		/*
-		 * The report shows the percentage of total branches captured
-		 * and not events sampled. Thus we use a pseudo period of 1.
-		 */
-		he = __hists__add_entry(&evsel->hists, al, parent, &bi[i], NULL,
-					1, 1, 0);
-		if (he) {
-			bx = he->branch_info;
-			err = addr_map_symbol__inc_samples(&bx->from, evsel->idx);
-			if (err)
-				goto out;
-
-			err = addr_map_symbol__inc_samples(&bx->to, evsel->idx);
-			if (err)
-				goto out;
-
-			evsel->hists.stats.total_period += 1;
-			hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
-		} else
-			goto out;
-	}
-	err = 0;
-out:
-	free(bi);
-	return err;
+	iter->evsel = evsel;
+	iter->sample = sample;
+	iter->priv = bi;
+	return 0;
 }
 
-static int report__add_hist_entry(struct perf_tool *tool, struct perf_evsel *evsel,
-				  struct addr_location *al, struct perf_sample *sample)
+static int
+iter_add_single_branch_entry(struct add_entry_iter *iter __maybe_unused,
+			     struct addr_location *al __maybe_unused)
 {
-	struct report *rep = container_of(tool, struct report, tool);
-	struct symbol *parent = NULL;
+	return 0;
+}
+
+static int
+iter_next_branch_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	struct branch_info *bi = iter->priv;
+	int i = iter->curr;
+
+	if (iter->curr >= iter->total)
+		return 0;
+
+	al->map = bi[i].to.map;
+	al->sym = bi[i].to.sym;
+	al->addr = bi[i].to.addr;
+	return 1;
+}
+
+static int
+iter_add_next_branch_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	struct branch_info *bi, *bx;
+	struct perf_evsel *evsel = iter->evsel;
 	struct hist_entry *he;
-	int err = report__resolve_callchain(rep, &parent, evsel, al, sample);
+	int i = iter->curr;
+	int err = 0;
 
-	if (err)
-		return err;
+	bi = iter->priv;
 
-	he = __hists__add_entry(&evsel->hists, al, parent, NULL, NULL,
-				sample->period, sample->weight,
-				sample->transaction);
+	if (iter->rep->hide_unresolved && !(bi[i].from.sym && bi[i].to.sym))
+		goto out;
+
+	/*
+	 * The report shows the percentage of total branches captured
+	 * and not events sampled. Thus we use a pseudo period of 1.
+	 */
+	he = __hists__add_entry(&evsel->hists, al, iter->parent, &bi[i], NULL,
+				1, 1, 0, true);
 	if (he == NULL)
 		return -ENOMEM;
 
-	err = hist_entry__append_callchain(he, sample);
+	bx = he->branch_info;
+	err = addr_map_symbol__inc_samples(&bx->from, evsel->idx);
 	if (err)
 		goto out;
 
-	err = hist_entry__inc_addr_samples(he, evsel->idx, al->addr);
-	evsel->hists.stats.total_period += sample->period;
+	err = addr_map_symbol__inc_samples(&bx->to, evsel->idx);
+	if (err)
+		goto out;
+
+	evsel->hists.stats.total_period += 1;
 	hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
+
 out:
+	iter->curr++;
 	return err;
 }
 
+static int
+iter_finish_branch_entry(struct add_entry_iter *iter,
+			 struct addr_location *al __maybe_unused)
+{
+	free(iter->priv);
+	iter->priv = NULL;
+
+	return iter->curr >= iter->total ? 0 : -1;
+}
+
+static int
+iter_prepare_normal_entry(struct add_entry_iter *iter,
+			  struct machine *machine __maybe_unused,
+			  struct perf_evsel *evsel,
+			  struct addr_location *al __maybe_unused,
+			  struct perf_sample *sample)
+{
+	iter->evsel = evsel;
+	iter->sample = sample;
+	return 0;
+}
+
+static int
+iter_add_single_normal_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+	struct hist_entry *he;
+
+	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+				sample->period, sample->weight,
+				sample->transaction, true);
+	if (he == NULL)
+		return -ENOMEM;
+
+	iter->he = he;
+	return 0;
+}
+
+static int
+iter_finish_normal_entry(struct add_entry_iter *iter, struct addr_location *al)
+{
+	int err;
+	struct hist_entry *he = iter->he;
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+
+	if (he == NULL)
+		return 0;
+
+	iter->he = NULL;
+
+	err = hist_entry__inc_addr_samples(he, evsel->idx, al->addr);
+	if (err)
+		return err;
+
+	evsel->hists.stats.total_period += sample->period;
+	hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
+
+	return hist_entry__append_callchain(he, sample);
+}
+
+static int
+iter_prepare_cumulative_entry(struct add_entry_iter *iter,
+			      struct machine *machine,
+			      struct perf_evsel *evsel,
+			      struct addr_location *al __maybe_unused,
+			      struct perf_sample *sample)
+{
+	struct callchain_cursor_node *node;
+	struct hist_entry **he_cache;
+
+	callchain_cursor_commit(&callchain_cursor);
+
+	/*
+	 * This is for detecting cycles or recursions so that they're
+	 * cumulated only one time to prevent entries more than 100%
+	 * overhead.
+	 */
+	he_cache = malloc(sizeof(*he_cache) * (PERF_MAX_STACK_DEPTH + 1));
+	if (he_cache == NULL)
+		return -ENOMEM;
+
+	iter->priv = he_cache;
+	iter->curr = 0;
+
+	node = callchain_cursor_current(&callchain_cursor);
+	if (node == NULL)
+		return 0;
+
+	iter->evsel = evsel;
+	iter->sample = sample;
+	iter->machine = machine;
+	return 0;
+}
+
+static int
+iter_add_single_cumulative_entry(struct add_entry_iter *iter,
+				 struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+	struct hist_entry **he_cache = iter->priv;
+	struct hist_entry *he;
+
+	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+				sample->period, sample->weight,
+				sample->transaction, true);
+	if (he == NULL)
+		return -ENOMEM;
+
+	he_cache[iter->curr++] = he;
+
+	/*
+	 * This is for putting parents upward during output resort iff
+	 * only a child gets sampled.  See hist_entry__sort_on_period().
+	 */
+	he->callchain->max_depth = PERF_MAX_STACK_DEPTH + 1;
+
+	return hist_entry__inc_addr_samples(he, evsel->idx, al->addr);
+}
+
+static int
+iter_next_cumulative_entry(struct add_entry_iter *iter,
+			   struct addr_location *al)
+{
+	struct callchain_cursor_node *node;
+
+	node = callchain_cursor_current(&callchain_cursor);
+	if (node == NULL)
+		return 0;
+
+	callchain_cursor_advance(&callchain_cursor);
+
+	return fill_callchain_info(al, node, iter->rep->hide_unresolved);
+}
+
+static int
+iter_add_next_cumulative_entry(struct add_entry_iter *iter,
+			       struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+	struct hist_entry **he_cache = iter->priv;
+	struct hist_entry *he;
+	struct hist_entry he_tmp = {
+		.cpu = al->cpu,
+		.thread = al->thread,
+		.comm = thread__comm(al->thread),
+		.ip = al->addr,
+		.ms = {
+			.map = al->map,
+			.sym = al->sym,
+		},
+		.parent = iter->parent,
+	};
+	int i;
+
+	/*
+	 * Check if there's duplicate entries in the callchain.
+	 * It's possible that it has cycles or recursive calls.
+	 */
+	for (i = 0; i < iter->curr; i++) {
+		if (hist_entry__cmp(he_cache[i], &he_tmp) == 0)
+			return 0;
+	}
+
+	he = __hists__add_entry(&evsel->hists, al, iter->parent, NULL, NULL,
+				sample->period, sample->weight,
+				sample->transaction, false);
+	if (he == NULL)
+		return -ENOMEM;
+
+	he_cache[iter->curr++] = he;
+
+	/*
+	 * This is for putting parents upward during output resort iff
+	 * only a child gets sampled.  See hist_entry__sort_on_period().
+	 */
+	he->callchain->max_depth = callchain_cursor.nr - callchain_cursor.pos;
+
+	return hist_entry__inc_addr_samples(he, evsel->idx, al->addr);
+}
+
+static int
+iter_finish_cumulative_entry(struct add_entry_iter *iter,
+			     struct addr_location *al __maybe_unused)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+
+	evsel->hists.stats.total_period += sample->period;
+	hists__inc_nr_events(&evsel->hists, PERF_RECORD_SAMPLE);
+
+	free(iter->priv);
+	iter->priv = NULL;
+	return 0;
+}
+
+static struct add_entry_iter mem_iter = {
+	.prepare_entry 		= iter_prepare_mem_entry,
+	.add_single_entry 	= iter_add_single_mem_entry,
+	.next_entry 		= iter_next_nop_entry,
+	.add_next_entry 	= iter_add_next_nop_entry,
+	.finish_entry 		= iter_finish_mem_entry,
+};
+
+static struct add_entry_iter branch_iter = {
+	.prepare_entry 		= iter_prepare_branch_entry,
+	.add_single_entry 	= iter_add_single_branch_entry,
+	.next_entry 		= iter_next_branch_entry,
+	.add_next_entry 	= iter_add_next_branch_entry,
+	.finish_entry 		= iter_finish_branch_entry,
+};
+
+static struct add_entry_iter normal_iter = {
+	.prepare_entry 		= iter_prepare_normal_entry,
+	.add_single_entry 	= iter_add_single_normal_entry,
+	.next_entry 		= iter_next_nop_entry,
+	.add_next_entry 	= iter_add_next_nop_entry,
+	.finish_entry 		= iter_finish_normal_entry,
+};
+
+static struct add_entry_iter cumulative_iter = {
+	.prepare_entry 		= iter_prepare_cumulative_entry,
+	.add_single_entry 	= iter_add_single_cumulative_entry,
+	.next_entry 		= iter_next_cumulative_entry,
+	.add_next_entry 	= iter_add_next_cumulative_entry,
+	.finish_entry 		= iter_finish_cumulative_entry,
+};
+
+static int
+perf_evsel__add_entry(struct perf_evsel *evsel, struct addr_location *al,
+		      struct perf_sample *sample, struct machine *machine,
+		      struct add_entry_iter *iter)
+{
+	int err, err2;
+
+	err = sample__resolve_callchain(sample, &iter->parent, evsel, al,
+					iter->rep->max_stack);
+	if (err)
+		return err;
+
+	err = iter->prepare_entry(iter, machine, evsel, al, sample);
+	if (err)
+		goto out;
+
+	err = iter->add_single_entry(iter, al);
+	if (err)
+		goto out;
+
+	while (iter->next_entry(iter, al)) {
+		err = iter->add_next_entry(iter, al);
+		if (err)
+			break;
+	}
+
+out:
+	err2 = iter->finish_entry(iter, al);
+	if (!err)
+		err = err2;
+
+	return err;
+}
 
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
@@ -239,6 +558,7 @@ static int process_sample_event(struct perf_tool *tool,
 {
 	struct report *rep = container_of(tool, struct report, tool);
 	struct addr_location al;
+	struct add_entry_iter *iter;
 	int ret;
 
 	if (perf_event__preprocess_sample(event, machine, &al, sample) < 0) {
@@ -253,22 +573,24 @@ static int process_sample_event(struct perf_tool *tool,
 	if (rep->cpu_list && !test_bit(sample->cpu, rep->cpu_bitmap))
 		return 0;
 
-	if (sort__mode == SORT_MODE__BRANCH) {
-		ret = report__add_branch_hist_entry(tool, &al, sample, evsel);
-		if (ret < 0)
-			pr_debug("problem adding lbr entry, skipping event\n");
-	} else if (rep->mem_mode == 1) {
-		ret = report__add_mem_hist_entry(tool, &al, sample, evsel, event);
-		if (ret < 0)
-			pr_debug("problem adding mem entry, skipping event\n");
-	} else {
-		if (al.map != NULL)
-			al.map->dso->hit = 1;
+	if (sort__mode == SORT_MODE__BRANCH)
+		iter = &branch_iter;
+	else if (rep->mem_mode == 1) {
+		iter = &mem_iter;
+		iter->priv = event;
+	} else if (symbol_conf.cumulate_callchain)
+		iter = &cumulative_iter;
+	else
+		iter = &normal_iter;
 
-		ret = report__add_hist_entry(tool, evsel, &al, sample);
-		if (ret < 0)
-			pr_debug("problem incrementing symbol period, skipping event\n");
-	}
+	if (al.map != NULL)
+		al.map->dso->hit = 1;
+
+	iter->rep = rep;
+	ret = perf_evsel__add_entry(evsel, &al, sample, machine, iter);
+	if (ret < 0)
+		pr_debug("problem adding hist entry, skipping event\n");
+
 	return ret;
 }
 
@@ -323,6 +645,14 @@ static int report__setup_sample_type(struct report *rep)
 				ui__error("Can't register callchain params.\n");
 				return -EINVAL;
 			}
+	}
+
+	if (symbol_conf.cumulate_callchain) {
+		/* Silently ignore if callchain is not used */
+		if (!symbol_conf.use_callchain) {
+			symbol_conf.cumulate_callchain = false;
+			perf_hpp__cancel_cumulate();
+		}
 	}
 
 	if (sort__mode == SORT_MODE__BRANCH) {
@@ -755,6 +1085,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK_DEFAULT('g', "call-graph", &report, "output_type,min_percent[,print_limit],call_order",
 		     "Display callchains using output_type (graph, flat, fractal, or none) , min percent threshold, optional print limit, callchain order, key (function or address). "
 		     "Default: fractal,0.5,callee,function", &parse_callchain_opt, callchain_default_opt),
+	OPT_BOOLEAN(0, "children", &symbol_conf.cumulate_callchain,
+		    "Accumulate callchains of children and show total overhead as well"),
 	OPT_INTEGER(0, "max-stack", &report.max_stack,
 		    "Set the maximum stack depth when parsing the callchain, "
 		    "anything beyond the specified depth will be ignored. "
