@@ -17,6 +17,7 @@
 #include "../util.h"
 #include "../ui.h"
 #include "map.h"
+#include "../../util/report-lock.h"
 
 struct hist_browser {
 	struct ui_browser   b;
@@ -2074,4 +2075,58 @@ single_entry:
 
 	return __perf_evlist__tui_browse_hists(evlist, nr_entries, help,
 					       hbt, min_pcnt, env);
+}
+
+static unsigned int lock_browser__header(struct ui_browser *b)
+{
+	struct hist_browser *browser;
+	char title[] = "lock usage";
+	char header[500];
+	size_t size = min(b->width, (u16) sizeof(header));
+
+	browser = container_of(b, struct hist_browser, b);
+	hist_browser__refresh_dimensions(browser);
+	hists__scnprintf_header(header, size, browser->hists);
+
+	if (__ui_browser__show(b, title, header,
+		"Press '?' for help on key bindings") < 0)
+		return -1;
+
+	return 0;
+}
+
+int lock__hists_browse(struct hists *hists)
+{
+	struct hist_browser browser = {
+		.hists = hists,
+		.b = {
+			.ops = {
+				.header = lock_browser__header,
+				.refresh = hist_browser__refresh,
+				.seek = ui_browser__hists_seek,
+			},
+			.use_navkeypressed = true,
+		},
+	};
+	int key = -1;
+
+	while (1) {
+		key = hist_browser__run(&browser, NULL);
+
+		switch (key) {
+		case K_ESC:
+			ui_browser__dialog_yesno(&browser.b,
+				       "Do you really want to exit?");
+				continue;
+			/* Fall thru */
+		case 'q':
+		case CTRL('c'):
+			goto out;
+
+		default:
+			continue;
+		}
+	}
+ out:
+	return 0;
 }

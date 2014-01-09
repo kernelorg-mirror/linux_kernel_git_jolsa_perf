@@ -95,6 +95,8 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 		hists__set_unres_dso_col_len(hists, HISTC_DSO);
 	}
 
+	hists__new_col_len(hists, HISTC_TIME, 20);
+
 	len = thread__comm_len(h->thread);
 	if (hists__new_col_len(hists, HISTC_COMM, len))
 		hists__set_col_len(hists, HISTC_THREAD, len + 6);
@@ -410,6 +412,9 @@ static struct hist_entry *add_hist_entry(struct hists *hists,
 			 */
 			zfree(&entry->mem_info);
 
+			/* TODO comment */
+			zfree(&entry->lock_info);
+
 			/* If the map of an existing hist_entry has
 			 * become out-of-date due to an exec() or
 			 * similar, update it.  Otherwise we will
@@ -451,6 +456,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      struct raw_info *raw,
+				      struct lock_info *lock_info,
 				      u64 period, u64 weight, u64 transaction,
 				      u64 t, bool sample_self)
 {
@@ -476,6 +482,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 		.branch_info = bi,
 		.mem_info = mi,
 		.raw_info = raw,
+		.lock_info = lock_info,
 		.transaction = transaction,
 		.time = t,
 		.idx  = idx++,
@@ -538,7 +545,7 @@ iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al
 	 * and the he_stat__add_period() function.
 	 */
 	he = __hists__add_entry(&iter->evsel->hists, al, iter->parent, NULL,
-				mi, NULL, cost, cost, 0, 0, true);
+				mi, NULL, NULL, cost, cost, 0, 0, true);
 	if (!he)
 		return -ENOMEM;
 
@@ -650,7 +657,7 @@ iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *a
 	 * and not events sampled. Thus we use a pseudo period of 1.
 	 */
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				&bi[i], NULL, NULL,
+				&bi[i], NULL, NULL, NULL,
 				1, 1, 0, 0, true);
 	if (he == NULL)
 		return -ENOMEM;
@@ -696,7 +703,7 @@ iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location 
 	struct hist_entry *he;
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, sample->time, true);
 	if (he == NULL)
@@ -753,7 +760,7 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 	struct hist_entry *he;
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, sample->time, true);
 	if (he == NULL)
@@ -827,7 +834,7 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 	}
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, sample->time, false);
 	if (he == NULL)
@@ -972,6 +979,7 @@ void hist_entry__free(struct hist_entry *he)
 	zfree(&he->raw_info);
 	zfree(&he->branch_info);
 	zfree(&he->mem_info);
+	zfree(&he->lock_info);
 	zfree(&he->stat_acc);
 	free_srcline(he->srcline);
 	free(he);

@@ -36,6 +36,7 @@
 #include "util/data.h"
 #include "arch/common.h"
 #include "util/report-tp.h"
+#include "util/report-lock.h"
 
 #include <dlfcn.h>
 #include <linux/bitmap.h>
@@ -49,6 +50,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			raw_info;
+	int			show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -166,6 +168,9 @@ static int process_sample_event(struct perf_tool *tool,
 	else if (symbol_conf.cumulate_callchain) {
 		iter.ops = &hist_iter_cumulative;
 		iter.add_entry_cb = hist_iter_cb;
+	} else if (rep->show_lock_entries) {
+		iter.ops = &hist_iter_lock;
+		iter.add_entry_cb = hist_lock_iter_cb;
 	} else {
 		iter.ops = &hist_iter_normal;
 		iter.add_entry_cb = hist_iter_cb;
@@ -494,7 +499,10 @@ static int __cmd_report(struct report *rep)
 		}
 	}
 
-	nr_samples = report__collapse_hists(rep);
+	if (rep->show_lock_entries)
+		nr_samples = lock_hists_nr_samples();
+	else
+		nr_samples = report__collapse_hists(rep);
 
 	if (session_done())
 		return 0;
@@ -503,6 +511,9 @@ static int __cmd_report(struct report *rep)
 		ui__error("The %s file has no samples!\n", file->path);
 		return 0;
 	}
+
+	if (rep->show_lock_entries)
+		return report__browse_lock_hists();
 
 	evlist__for_each(session->evlist, pos)
 		hists__output_resort(&pos->hists);
@@ -783,7 +794,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
 	OPT_CALLBACK_DEFAULT(0, "tp", &tp_mode, "fields,[format]", NULL,
 			     &report_tp_parse_mode, "format"),
-
+	OPT_CALLBACK_DEFAULT(0, "lock", &report.show_lock_entries, "cnt,list", NULL,
+			     &parse_lock_mode, "cnt"),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -851,6 +863,11 @@ repeat:
 		 */
 		if (sort_order == default_sort_order)
 			sort_order = "local_weight,mem,sym,dso,symbol_daddr,dso_daddr,snoop,tlb,locked";
+	}
+
+	if (report.show_lock_entries) {
+		sort_order = "pid";
+		symbol_conf.cumulate_callchain = false;
 	}
 
 	if (setup_sorting() < 0) {
@@ -929,10 +946,22 @@ repeat:
 	if (symbol_conf.show_list)
 		sort__setup_list();
 
+	if ((tp_mode != REPORT_TO_MODE__NONE) && report.show_lock_entries)
+		tp_mode = REPORT_TO_MODE__NONE;
+
 	if (tp_mode != REPORT_TO_MODE__NONE) {
 		ret = perf_evlist__add_tp_sort_entries(session->evlist, tp_mode);
 		if (ret) {
 			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+		report.raw_info = true;
+	}
+
+	if (report.show_lock_entries) {
+		ret = perf_lock__setup(session->evlist, report.show_lock_entries);
+		if (ret) {
+			pr_err("failed to setup lock report\n");
 			goto error;
 		}
 		report.raw_info = true;

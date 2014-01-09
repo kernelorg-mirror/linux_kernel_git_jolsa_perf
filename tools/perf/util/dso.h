@@ -99,6 +99,7 @@ struct dso {
 	const char	 *long_name;
 	u16		 long_name_len;
 	u16		 short_name_len;
+	int 		 lock_indent;
 	char		 name[0];
 };
 
