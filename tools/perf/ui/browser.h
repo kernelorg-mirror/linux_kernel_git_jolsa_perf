@@ -20,6 +20,7 @@ struct ui_browser {
 	int	      current_color;
 	void	      *priv;
 	const char    *title;
+	char	      *header;
 	char	      *helpline;
 	unsigned int  (*refresh)(struct ui_browser *browser);
 	void	      (*write)(struct ui_browser *browser, void *entry, int row);
@@ -28,6 +29,7 @@ struct ui_browser {
 	u32	      nr_entries;
 	bool	      navkeypressed;
 	bool	      use_navkeypressed;
+	bool	      show_header;
 };
 
 int  ui_browser__set_color(struct ui_browser *browser, int color);
@@ -44,7 +46,7 @@ void __ui_browser__line_arrow(struct ui_browser *browser, unsigned int column,
 void __ui_browser__show_title(struct ui_browser *browser, const char *title);
 void ui_browser__show_title(struct ui_browser *browser, const char *title);
 int ui_browser__show(struct ui_browser *browser, const char *title,
-		     const char *helpline, ...);
+		     char *header, const char *helpline, ...);
 void ui_browser__hide(struct ui_browser *browser);
 int ui_browser__refresh(struct ui_browser *browser);
 int ui_browser__run(struct ui_browser *browser, int delay_secs);
