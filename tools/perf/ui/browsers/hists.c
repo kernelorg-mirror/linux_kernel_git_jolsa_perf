@@ -17,6 +17,7 @@
 #include "../util.h"
 #include "../ui.h"
 #include "map.h"
+#include "../../util/report-lock.h"
 
 struct hist_browser {
 	struct ui_browser   b;
@@ -2061,4 +2062,39 @@ single_entry:
 
 	return __perf_evlist__tui_browse_hists(evlist, nr_entries, help,
 					       hbt, min_pcnt, env);
+}
+
+int lock__hists_browse(struct hists *hists)
+{
+	struct hist_browser browser = {
+		.hists = hists,
+		.b = {
+			.ops = {
+				.refresh = hist_browser__refresh,
+				.seek = ui_browser__hists_seek,
+			},
+			.use_navkeypressed = true,
+		},
+	};
+	int key = -1;
+
+	ui_browser__show(&browser.b, "krava1", "krava2");
+
+	while (1) {
+		key = hist_browser__run(&browser, NULL);
+
+		switch (key) {
+		case K_ESC:
+			ui_browser__dialog_yesno(&browser.b,
+				       "Do you really want to exit?");
+				continue;
+			/* Fall thru */
+		case 'q':
+		case CTRL('c'):
+			break;
+		default:
+			continue;
+		}
+	}
+	return 0;
 }

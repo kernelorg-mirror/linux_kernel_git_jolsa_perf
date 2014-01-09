@@ -35,6 +35,7 @@
 #include "util/hist.h"
 #include "util/data.h"
 #include "arch/common.h"
+#include "report-lock.h"
 
 #include <dlfcn.h>
 #include <linux/bitmap.h>
@@ -48,6 +49,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			show_tp_entries;
+	int			show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -140,7 +142,7 @@ static int process_sample_event(struct perf_tool *tool,
 	if (rep->cpu_list && !test_bit(sample->cpu, rep->cpu_bitmap))
 		return 0;
 
-	if (rep->show_tp_entries) {
+	if (rep->show_tp_entries || rep->show_lock_entries) {
 		ret = get_raw_info(&raw, sample);
 		if (ret)
 			return ret;
@@ -153,6 +155,9 @@ static int process_sample_event(struct perf_tool *tool,
 	else if (symbol_conf.cumulate_callchain) {
 		iter.ops = &hist_iter_cumulative;
 		iter.add_entry_cb = hist_iter_cb;
+	} else if (rep->show_lock_entries) {
+		iter.ops = &hist_iter_lock;
+		iter.add_entry_cb = hist_lock_iter_cb;
 	} else {
 		iter.ops = &hist_iter_normal;
 		iter.add_entry_cb = hist_iter_cb;
@@ -481,7 +486,10 @@ static int __cmd_report(struct report *rep)
 		}
 	}
 
-	nr_samples = report__collapse_hists(rep);
+	if (rep->show_lock_entries)
+		nr_samples = lock_hists_nr_samples();
+	else
+		nr_samples = report__collapse_hists(rep);
 
 	if (session_done())
 		return 0;
@@ -490,6 +498,9 @@ static int __cmd_report(struct report *rep)
 		ui__error("The %s file has no samples!\n", file->path);
 		return 0;
 	}
+
+	if (rep->show_lock_entries)
+		return report__browse_lock_hists();
 
 	evlist__for_each(session->evlist, pos)
 		hists__output_resort(&pos->hists);
@@ -752,6 +763,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
 	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
+	OPT_CALLBACK_DEFAULT(0, "lock", &report.show_lock_entries, "cnt,list", NULL,
+			     &parse_lock_mode, "cnt"),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -819,6 +832,11 @@ repeat:
 		 */
 		if (sort_order == default_sort_order)
 			sort_order = "local_weight,mem,sym,dso,symbol_daddr,dso_daddr,snoop,tlb,locked";
+	}
+
+	if (report.show_lock_entries) {
+		sort_order = "pid";
+		symbol_conf.cumulate_callchain = false;
 	}
 
 	if (setup_sorting() < 0) {
@@ -897,10 +915,21 @@ repeat:
 	if (symbol_conf.show_list)
 		sort__setup_idx();
 
+	if (report.show_tp_entries && report.show_lock_entries)
+		report.show_tp_entries = false;
+
 	if (report.show_tp_entries) {
 		ret = perf_evlist__add_tp_sort_entries(session->evlist);
 		if (ret) {
 			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+	}
+
+	if (report.show_lock_entries) {
+		ret = perf_lock__setup(session->evlist, report.show_lock_entries);
+		if (ret) {
+			pr_err("failed to setup lock report\n");
 			goto error;
 		}
 	}
