@@ -223,7 +223,7 @@ static int add_hist_entries(struct perf_evlist *evlist, struct machine *machine)
 				goto out;
 
 			he = __hists__add_entry(&evsel->hists, &al, NULL,
-						NULL, NULL, NULL, 1, 1, 0, 0,
+						NULL, NULL, NULL, NULL, 1, 1, 0, 0,
 						true);
 			if (he == NULL)
 				goto out;
@@ -247,7 +247,7 @@ static int add_hist_entries(struct perf_evlist *evlist, struct machine *machine)
 				goto out;
 
 			he = __hists__add_entry(&evsel->hists, &al, NULL,
-						NULL, NULL, NULL, 1, 1, 0, 0,
+						NULL, NULL, NULL, NULL, 1, 1, 0, 0,
 						true);
 			if (he == NULL)
 				goto out;
