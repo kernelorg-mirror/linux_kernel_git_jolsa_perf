@@ -48,6 +48,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			show_tp_entries;
+	bool			show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -837,6 +838,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK(0, "percent-limit", &report, "percent",
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
+	OPT_BOOLEAN(0, "lock", &report.show_lock_entries, "Show/sort lock entries."),
 	OPT_END()
 	};
 	struct perf_data_file file = {
