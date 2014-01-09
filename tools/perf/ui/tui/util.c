@@ -28,7 +28,7 @@ static int popup_menu__run(struct ui_browser *menu)
 {
 	int key;
 
-	if (ui_browser__show(menu, " ", "ESC: exit, ENTER|->: Select option") < 0)
+	if (ui_browser__show(menu, " ", NULL, "ESC: exit, ENTER|->: Select option") < 0)
 		return -1;
 
 	while (1) {

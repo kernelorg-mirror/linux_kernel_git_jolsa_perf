@@ -88,7 +88,7 @@ static int script_browser__run(struct perf_script_browser *browser)
 {
 	int key;
 
-	if (ui_browser__show(&browser->b, browser->script_name,
+	if (ui_browser__show(&browser->b, browser->script_name, NULL,
 			     "Press <- or ESC to exit") < 0)
 		return -1;
 

@@ -38,7 +38,7 @@ static int list_menu__run(struct ui_browser *menu)
 	"LEFT/RIGHT    Navigate\n"
 	"q/ESC/CTRL+C  Exit browser";
 
-	if (ui_browser__show(menu, "Header information", "Press 'q' to exit") < 0)
+	if (ui_browser__show(menu, "Header information", NULL, "Press 'q' to exit") < 0)
 		return -1;
 
 	while (1) {

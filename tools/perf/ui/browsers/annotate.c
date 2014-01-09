@@ -668,7 +668,7 @@ static int annotate_browser__run(struct annotate_browser *browser,
 	char title[SYM_TITLE_MAX_SIZE];
 
 	sym_title(sym, ms->map, title, sizeof(title));
-	if (ui_browser__show(&browser->b, title, help) < 0)
+	if (ui_browser__show(&browser->b, title, NULL, help) < 0)
 		return -1;
 
 	annotate_browser__calc_percent(browser, evsel);

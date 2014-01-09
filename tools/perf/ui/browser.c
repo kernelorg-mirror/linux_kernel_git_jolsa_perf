@@ -165,16 +165,18 @@ bool ui_browser__is_current_entry(struct ui_browser *browser, unsigned row)
 
 void ui_browser__refresh_dimensions(struct ui_browser *browser)
 {
+	u16 header = browser->show_header ? 1 : 0;
+
 	browser->width = SLtt_Screen_Cols - 1;
-	browser->height = SLtt_Screen_Rows - 2;
-	browser->y = 1;
+	browser->height = SLtt_Screen_Rows - 2 - header;
+	browser->y = 1 + header;
 	browser->x = 0;
 }
 
 void ui_browser__handle_resize(struct ui_browser *browser)
 {
 	ui__refresh_dimensions(false);
-	ui_browser__show(browser, browser->title, ui_helpline__current);
+	ui_browser__show(browser, browser->title, NULL, ui_helpline__current);
 	ui_browser__refresh(browser);
 }
 
@@ -244,8 +246,15 @@ void ui_browser__show_title(struct ui_browser *browser, const char *title)
 	pthread_mutex_unlock(&ui__lock);
 }
 
+static void __ui_browser__show_header(struct ui_browser *browser, char *header)
+{
+	SLsmg_gotorc(1, 0);
+	ui_browser__set_color(browser, HE_COLORSET_ROOT);
+	slsmg_write_nstring(header, browser->width + 1);
+}
+
 int ui_browser__show(struct ui_browser *browser, const char *title,
-		     const char *helpline, ...)
+		    char *header, const char *helpline, ...)
 {
 	int err;
 	va_list ap;
@@ -254,6 +263,17 @@ int ui_browser__show(struct ui_browser *browser, const char *title,
 
 	pthread_mutex_lock(&ui__lock);
 	__ui_browser__show_title(browser, title);
+
+	if (browser->show_header) {
+		if (!header)
+			header = browser->header;
+
+		if (header) {
+			__ui_browser__show_header(browser, header);
+			free(browser->header);
+			browser->header = strdup(header);
+		}
+	}
 
 	browser->title = title;
 	zfree(&browser->helpline);
