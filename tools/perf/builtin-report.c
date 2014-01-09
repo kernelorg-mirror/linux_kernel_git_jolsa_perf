@@ -39,6 +39,9 @@
 #include <dlfcn.h>
 #include <linux/bitmap.h>
 
+static struct hists lock_hists;
+static struct hist_iter_ops hist_iter_lock;
+
 struct report {
 	struct perf_tool	tool;
 	struct perf_session	*session;
@@ -48,6 +51,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			show_tp_entries;
+	bool			show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -86,6 +90,18 @@ static int report__config(const char *var, const char *value, void *cb)
 	}
 
 	return perf_default_config(var, value, cb);
+}
+
+static int hist_lock_iter_cb(struct hist_entry_iter *iter,
+			     struct addr_location *al __maybe_unused,
+			     bool single __maybe_unused,
+			     void *arg __maybe_unused)
+{
+	struct perf_sample *sample = iter->sample;
+
+	lock_hists.stats.total_period += sample->period;
+	hists__inc_nr_events(&lock_hists, PERF_RECORD_SAMPLE);
+	return 0;
 }
 
 static int hist_iter_cb(struct hist_entry_iter *iter,
@@ -152,7 +168,7 @@ static int process_sample_event(struct perf_tool *tool,
 	if (rep->cpu_list && !test_bit(sample->cpu, rep->cpu_bitmap))
 		return 0;
 
-	if (rep->show_tp_entries) {
+	if (rep->show_tp_entries || rep->show_lock_entries) {
 		ret = get_raw_info(&raw, sample);
 		if (ret)
 			return ret;
@@ -165,6 +181,9 @@ static int process_sample_event(struct perf_tool *tool,
 	else if (symbol_conf.cumulate_callchain) {
 		iter.ops = &hist_iter_cumulative;
 		iter.add_entry_cb = hist_iter_cb;
+	} else if (rep->show_lock_entries) {
+		iter.ops = &hist_iter_lock;
+		iter.add_entry_cb = hist_lock_iter_cb;
 	} else {
 		iter.ops = &hist_iter_normal;
 		iter.add_entry_cb = hist_iter_cb;
@@ -377,6 +396,26 @@ static int report__gtk_browse_hists(struct report *rep, const char *help)
 	return hist_browser(rep->session->evlist, help, NULL, rep->min_percent);
 }
 
+static int report__browse_lock_hists(struct report *rep)
+{
+	struct perf_session *session = rep->session;
+	int ret;
+
+	switch (use_browser) {
+	case 1:
+	case 2:
+		ret = hists__browse_tui(&lock_hists, 1, "krava", false, NULL, 0,
+					&session->header.env);
+		break;
+	default:
+		ret = hists__fprintf(&lock_hists, true, 0, 0, rep->min_percent, stdout);
+		fprintf(stdout, "\n\n");
+		break;
+	}
+
+	return ret > 0 ? 0 : -1;
+}
+
 static int report__browse_hists(struct report *rep)
 {
 	int ret;
@@ -493,7 +532,10 @@ static int __cmd_report(struct report *rep)
 		}
 	}
 
-	nr_samples = report__collapse_hists(rep);
+	if (rep->show_lock_entries)
+		nr_samples = lock_hists.stats.nr_events[PERF_RECORD_SAMPLE];
+	else
+		nr_samples = report__collapse_hists(rep);
 
 	if (session_done())
 		return 0;
@@ -501,6 +543,11 @@ static int __cmd_report(struct report *rep)
 	if (nr_samples == 0) {
 		ui__error("The %s file has no samples!\n", file->path);
 		return 0;
+	}
+
+	if (rep->show_lock_entries) {
+		hists__output_resort(&lock_hists);
+		return report__browse_lock_hists(rep);
 	}
 
 	evlist__for_each(session->evlist, pos)
@@ -715,7 +762,7 @@ static int tp_col_width(struct format_field *field)
 	int len = field->size * 2 + 2 /* '0x' */;
 
 	if (field->flags & FIELD_IS_ARRAY)
-		len = 30;
+		len = 50;
 
 	return len;
 }
@@ -768,6 +815,178 @@ static int perf_evlist__add_tp_sort_entries(struct perf_evlist *evlist)
 	}
 
 	return ret;
+}
+
+static int
+iter_add_single_lock_entry(struct hist_entry_iter *iter,
+			   struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+	struct hist_entry *he;
+
+	he = __hists__add_entry(&lock_hists, al, iter->parent,
+				NULL, NULL, iter->raw, evsel->handler,
+				sample->period, sample->weight,
+				sample->transaction, 0, true);
+	if (he == NULL)
+		return -ENOMEM;
+
+	iter->he = he;
+	return 0;
+}
+
+enum {
+	LOCK_FIELD__LOCK_DEP_ADDR,
+	LOCK_FIELD__NAME,
+	LOCK_FIELD__MAX,
+};
+
+struct lock_sort_entry {
+	unsigned idx;
+	struct sort_entry se;
+};
+
+static int64_t lock_sort_entry__cmp(struct sort_entry *se,
+				    struct hist_entry *left,
+				    struct hist_entry *right)
+{
+	struct lock_sort_entry *lse = container_of(se, struct lock_sort_entry, se);
+
+	struct raw_info *raw_left  = left->raw_info;
+	struct raw_info *raw_right = right->raw_info;
+
+	struct format_field **fields_left  = left->lock_info;
+	struct format_field **fields_right = right->lock_info;
+
+	struct format_field *field_left  = fields_left[lse->idx];
+	struct format_field *field_right = fields_right[lse->idx];
+
+	return pevent_field_cmp2(field_left, field_right,
+				raw_left->data,  raw_left->size,
+				raw_right->data, raw_right->size);
+}
+
+static int lock_sort_entry__snprintf(struct sort_entry *se,
+				     struct hist_entry *he,
+				     char *bf, size_t size,
+				     unsigned int width)
+{
+	struct lock_sort_entry *lse = container_of(se, struct lock_sort_entry, se);
+	struct format_field **fields = he->lock_info;
+	struct format_field *field   = fields[lse->idx];
+	struct raw_info *raw = he->raw_info;
+	static struct trace_seq s;
+
+	if (!s.len)
+		trace_seq_init(&s);
+	else
+		trace_seq_reset(&s);
+
+	pevent_field_info(&s, field, raw->data, raw->size, false);
+	return scnprintf(bf, size, "%*s", width, s.buffer);
+}
+
+
+static struct lock_sort_entry lock_field__lockdep_addr = {
+	.idx	= LOCK_FIELD__LOCK_DEP_ADDR,
+	.se	= {
+		.se_header	= "lockdep_addr",
+		.se_cmp		= lock_sort_entry__cmp,
+		.se_snprintf	= lock_sort_entry__snprintf,
+	},
+};
+
+static struct lock_sort_entry lock_field__se_name = {
+	.idx	= LOCK_FIELD__NAME,
+	.se	= {
+		.se_header	= "name",
+		.se_cmp		= lock_sort_entry__cmp,
+		.se_snprintf	= lock_sort_entry__snprintf,
+	},
+};
+
+static const char *lock_common_fields[LOCK_FIELD__MAX] = {
+	"lockdep_addr",
+	"name",
+};
+
+static int lock_field_add(struct lock_sort_entry *lse, int width_idx, int len)
+{
+	if (hists__alloc_col_len(&lock_hists, width_idx + 1))
+		return -1;
+
+	lse->se.se_width_idx = width_idx;
+	hists__set_col_len(&lock_hists, width_idx, len);
+	hists__sort_entry_add(&lock_hists, &lse->se);
+	return 0;
+}
+
+static int setup_lock_fields(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	struct tp {
+		const char *name;
+		struct format_field *fields[LOCK_FIELD__MAX];
+	};
+	static struct tp tps[] = {
+		{ .name = "lock:lock_acquire",	},
+		{ .name = "lock:lock_acquired",	},
+		{ .name = "lock:lock_contended",},
+		{ .name = "lock:lock_release",	},
+	};
+	int len_lockdep_addr = 0, len_name = 0;
+	unsigned i, j;
+
+	for (i = 0; i < ARRAY_SIZE(tps); i++) {
+		struct tp *t = &tps[i];
+
+		evsel = perf_evlist__find_tracepoint_by_name(evlist, t->name);
+		if (!evsel) {
+			pr_err("Could not find %s tracepoint.\n", t->name);
+			return -1;
+		}
+
+		for (j = 0; j < LOCK_FIELD__MAX; j++) {
+			const char *fname = lock_common_fields[j];
+			struct format_field *field;
+
+			field = pevent_find_field(evsel->tp_format, fname);
+			if (!field) {
+				pr_err("Could not find %s field.\n", fname);
+				return -1;
+			}
+
+			if (!len_lockdep_addr && j == LOCK_FIELD__LOCK_DEP_ADDR)
+				len_lockdep_addr = tp_col_width(field);
+
+			if (!len_name && j == LOCK_FIELD__NAME)
+				len_name = tp_col_width(field);
+
+			t->fields[j] = field;
+		}
+
+		evsel->handler = &t->fields;
+	}
+
+	if (lock_field_add(&lock_field__lockdep_addr, HISTC_NR_COLS, len_lockdep_addr) ||
+	    lock_field_add(&lock_field__se_name, HISTC_NR_COLS + 1, len_name)) {
+		pr_err("Couldn't register lock sort entry\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int setup_lock(struct perf_session *session)
+{
+	if (hists__init(&lock_hists))
+		return -1;
+
+	hist_iter_lock = hist_iter_normal;
+	hist_iter_lock.add_single_entry = iter_add_single_lock_entry;
+
+	return setup_lock_fields(session->evlist);
 }
 
 int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
@@ -898,6 +1117,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "how to display percentage of filtered entries", parse_percentage),
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
 	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
+	OPT_BOOLEAN(0, "lock", &report.show_lock_entries, "Show/sort lock entries."),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -965,6 +1185,11 @@ repeat:
 		 */
 		if (sort_order == default_sort_order)
 			sort_order = "local_weight,mem,sym,dso,symbol_daddr,dso_daddr,snoop,tlb,locked";
+	}
+
+	if (report.show_lock_entries) {
+		sort_order = "pid";
+		symbol_conf.cumulate_callchain = false;
 	}
 
 	if (setup_sorting() < 0) {
@@ -1043,10 +1268,21 @@ repeat:
 	if (symbol_conf.show_list)
 		sort__setup_idx();
 
+	if (report.show_tp_entries && report.show_lock_entries)
+		report.show_tp_entries = false;
+
 	if (report.show_tp_entries) {
 		ret = perf_evlist__add_tp_sort_entries(session->evlist);
 		if (ret) {
 			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+	}
+
+	if (report.show_lock_entries) {
+		ret = setup_lock(session);
+		if (ret) {
+			pr_err("failed to setup lock report\n");
 			goto error;
 		}
 	}

@@ -137,6 +137,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      struct raw_info *raw,
+				      void *lock_info,
 				      u64 period, u64 weight, u64 transaction,
 				      u64 time, bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,

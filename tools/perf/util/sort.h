@@ -117,6 +117,7 @@ struct hist_entry {
 	struct hists		*hists;
 	struct mem_info		*mem_info;
 	struct raw_info		*raw_info;
+	void			*lock_info;
 	struct callchain_root	callchain[0]; /* must be last member */
 };
 
