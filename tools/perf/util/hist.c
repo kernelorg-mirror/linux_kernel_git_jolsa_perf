@@ -688,8 +688,10 @@ iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location 
 	struct perf_evsel *evsel = iter->evsel;
 	struct perf_sample *sample = iter->sample;
 	struct hist_entry *he;
+	struct hists *hists = iter->lock_hists ?
+			      iter->lock_hists : &evsel->hists;
 
-	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+	he = __hists__add_entry(hists, al, iter->parent,
 				NULL, NULL, iter->raw,
 				sample->period, sample->weight,
 				sample->transaction, true);
@@ -843,6 +845,41 @@ iter_finish_cumulative_entry(struct hist_entry_iter *iter,
 	return 0;
 }
 
+static int
+iter_prepare_lock_entry(struct hist_entry_iter *iter __maybe_unused,
+			struct addr_location *al __maybe_unused)
+{
+	return 0;
+}
+
+static int
+iter_add_single_lock_entry(struct hist_entry_iter *iter __maybe_unused,
+			   struct addr_location *al __maybe_unused)
+{
+	return 0;
+}
+
+static int
+iter_next_lock_entry(struct hist_entry_iter *iter __maybe_unused,
+		     struct addr_location *al __maybe_unused)
+{
+	return 0;
+}
+
+static int
+iter_add_next_lock_entry(struct hist_entry_iter *iter __maybe_unused,
+			 struct addr_location *al __maybe_unused)
+{
+	return 0;
+}
+
+static int
+iter_finish_lock_entry(struct hist_entry_iter *iter __maybe_unused,
+		       struct addr_location *al __maybe_unused)
+{
+	return 0;
+}
+
 struct hist_entry_iter hist_iter_mem = {
 	.prepare_entry 		= iter_prepare_mem_entry,
 	.add_single_entry 	= iter_add_single_mem_entry,
@@ -873,6 +910,14 @@ struct hist_entry_iter hist_iter_cumulative = {
 	.next_entry 		= iter_next_cumulative_entry,
 	.add_next_entry 	= iter_add_next_cumulative_entry,
 	.finish_entry 		= iter_finish_cumulative_entry,
+};
+
+struct hist_entry_iter hist_iter_lock = {
+	.prepare_entry 		= iter_prepare_lock_entry,
+	.add_single_entry 	= iter_add_single_lock_entry,
+	.next_entry 		= iter_next_lock_entry,
+	.add_next_entry 	= iter_add_next_lock_entry,
+	.finish_entry 		= iter_finish_lock_entry,
 };
 
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,

@@ -48,6 +48,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			show_tp_entries;
+	bool			show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -155,9 +156,13 @@ static int process_sample_event(struct perf_tool *tool,
 	else if (symbol_conf.cumulate_callchain) {
 		iter = &hist_iter_cumulative;
 		iter->add_entry_cb = hist_iter_cb;
+	} else if (rep->show_lock_entries) {
+		iter = &hist_iter_lock;
 	} else {
 		iter = &hist_iter_normal;
 		iter->add_entry_cb = hist_iter_cb;
+		iter->lock_hists = rep->show_lock_entries ?
+				   iter->lock_hists : NULL;
 	}
 
 	iter->raw = raw;
@@ -746,6 +751,113 @@ static int perf_evlist__add_tp_sort_entries(struct perf_evlist *evlist)
 	return ret;
 }
 
+static struct hists lock_hists;
+
+static int perf_evsel__process_lock_acquire(struct perf_evsel *evsel __maybe_unused,
+					     struct perf_sample *sample __maybe_unused)
+{
+	return 0;
+}
+
+static int perf_evsel__process_lock_acquired(struct perf_evsel *evsel __maybe_unused,
+					      struct perf_sample *sample __maybe_unused)
+{
+	return 0;
+}
+
+static int perf_evsel__process_lock_contended(struct perf_evsel *evsel __maybe_unused,
+					      struct perf_sample *sample __maybe_unused)
+{
+	return 0;
+}
+
+static int perf_evsel__process_lock_release(struct perf_evsel *evsel __maybe_unused,
+					    struct perf_sample *sample __maybe_unused)
+{
+	return 0;
+}
+
+static const struct perf_evsel_str_handler lock_tracepoints[] = {
+	{ "lock:lock_acquire",   perf_evsel__process_lock_acquire,   }, /* CONFIG_LOCKDEP */
+	{ "lock:lock_acquired",  perf_evsel__process_lock_acquired,  }, /* CONFIG_LOCKDEP, CONFIG_LOCK_STAT */
+	{ "lock:lock_contended", perf_evsel__process_lock_contended, }, /* CONFIG_LOCKDEP, CONFIG_LOCK_STAT */
+	{ "lock:lock_release",   perf_evsel__process_lock_release,   }, /* CONFIG_LOCKDEP */
+};
+
+static int setup_lock_field(struct perf_evsel *evsel, int width_idx,
+			    struct field_sort_entry *field_se,
+			    const char *name)
+{
+	struct format_field *field;
+
+	field = pevent_find_field(evsel->tp_format, name);
+	if (!field) {
+		pr_err("Could not find %s field.\n", name);
+		return -1;
+	}
+
+	field_se->se.se_header    = strdup(field->name);
+	field_se->se.se_cmp       = tp_sort_entry__cmp;
+	field_se->se.se_snprintf  = tp_sort_entry__snprintf;
+	field_se->se.se_width_idx = width_idx;
+	field_se->field           = field;
+	return 0;
+}
+
+static int setup_lock_fields(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	static struct tp {
+		const char *name;
+		struct field_sort_entry field_lockdep_addr;
+		struct field_sort_entry field_name;
+	} tps[] = {
+		{ .name = "lock:lock_acquire"	},
+		{ .name = "lock:lock_acquired"	},
+		{ .name = "lock:lock_contended"	},
+		{ .name = "lock:lock_release"	},
+	};
+	int width_idx = HISTC_NR_COLS;
+	unsigned i;
+
+	for (i = 0; i < sizeof(tps); i++, width_idx++) {
+		struct tp *t = &tps[i];
+
+		evsel = perf_evlist__find_tracepoint_by_name(evlist, t->name);
+		if (!evsel) {
+			pr_err("Could not find %s tracepoint.\n", t->name);
+			return -1;
+		}
+
+		if (setup_lock_field(evsel, width_idx, &t->field_lockdep_addr,
+				     "lockdep_addr")) {
+			pr_err("could not setup lockdep_addr field for %s event\n", t->name);
+			return -1;
+		}
+
+		if (setup_lock_field(evsel, width_idx, &t->field_name,
+				     "name")) {
+			pr_err("could not setup name field for %s event\n", t->name);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static int setup_lock(struct perf_session *session)
+{
+	if (hists__init(&lock_hists))
+		return -1;
+
+	if (perf_session__set_tracepoints_handlers(session, lock_tracepoints)) {
+		pr_err("Initializing perf session tracepoint handlers failed\n");
+		return -1;
+	}
+
+	return setup_lock_fields(session->evlist);
+}
+
 int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	struct perf_session *session;
@@ -871,6 +983,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_CALLBACK(0, "percent-limit", &report, "percent",
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
+	OPT_BOOLEAN(0, "lock", &report.show_lock_entries, "Show/sort lock entries."),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -939,6 +1052,9 @@ repeat:
 		if (sort_order == default_sort_order)
 			sort_order = "local_weight,mem,sym,dso,symbol_daddr,dso_daddr,snoop,tlb,locked";
 	}
+
+	if (report.show_lock_entries)
+		sort_order = "dso";
 
 	if (setup_sorting() < 0) {
 		parse_options_usage(report_usage, options, "s", 1);
@@ -1013,10 +1129,21 @@ repeat:
 
 	sort__setup_elide(stdout);
 
+	if (report.show_tp_entries && report.show_lock_entries)
+		report.show_tp_entries = false;
+
 	if (report.show_tp_entries) {
 		ret = perf_evlist__add_tp_sort_entries(session->evlist);
 		if (ret) {
 			pr_err("failed to add tracepoints sort entries\n");
+			goto error;
+		}
+	}
+
+	if (report.show_lock_entries) {
+		ret = setup_lock(session);
+		if (ret) {
+			pr_err("failed to setup lock report\n");
 			goto error;
 		}
 	}
