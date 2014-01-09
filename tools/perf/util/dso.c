@@ -484,6 +484,7 @@ struct dso *dso__new(const char *name)
 		dso->a2l_fails = 1;
 		dso->kernel = DSO_TYPE_USER;
 		dso->needs_swap = DSO_SWAP__UNSET;
+		dso->lock_indent = 0;
 		INIT_LIST_HEAD(&dso->node);
 	}
 

@@ -123,6 +123,9 @@ extern const struct hist_iter_ops hist_iter_normal;
 extern const struct hist_iter_ops hist_iter_branch;
 extern const struct hist_iter_ops hist_iter_mem;
 extern const struct hist_iter_ops hist_iter_cumulative;
+extern const struct hist_iter_ops hist_iter_lock;
+
+struct lock_info;
 
 struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct addr_location *al,
@@ -130,6 +133,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      struct raw_info *raw,
+				      struct lock_info *lock_info,
 				      u64 period, u64 weight, u64 transaction,
 				      u64 time, bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
