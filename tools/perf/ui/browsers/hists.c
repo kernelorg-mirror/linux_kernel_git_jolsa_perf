@@ -1445,14 +1445,10 @@ static void hist_browser__update_pcnt_entries(struct hist_browser *hb)
 	hb->nr_pcnt_entries = nr_entries;
 }
 
-static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
-				    const char *helpline,
-				    bool left_exits,
-				    struct hist_browser_timer *hbt,
-				    float min_pcnt,
-				    struct perf_session_env *env)
+int hists__browse_tui(struct hists *hists, int nr_events, const char *helpline,
+		      bool left_exits, struct hist_browser_timer *hbt,
+		      float min_pcnt, struct perf_session_env *env)
 {
-	struct hists *hists = &evsel->hists;
 	struct hist_browser *browser = hist_browser__new(hists);
 	struct branch_info *bi;
 	struct pstack *fstack;
@@ -1739,7 +1735,7 @@ do_annotate:
 			 * Don't let this be freed, say, by hists__decay_entry.
 			 */
 			he->used = true;
-			err = hist_entry__tui_annotate(he, evsel, hbt);
+			err = hist_entry__tui_annotate(he, hists_to_evsel(hists), hbt);
 			he->used = false;
 			/*
 			 * offer option to annotate the other branch source or target
@@ -1824,6 +1820,17 @@ out:
 	hist_browser__delete(browser);
 	free_popup_options(options, nr_options - 1);
 	return key;
+}
+
+static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
+				    const char *helpline,
+				    bool left_exits,
+				    struct hist_browser_timer *hbt,
+				    float min_pcnt,
+				    struct perf_session_env *env)
+{
+	return hists__browse_tui(&evsel->hists, nr_events, helpline, left_exits,
+				 hbt, min_pcnt, env);
 }
 
 struct perf_evsel_menu {
