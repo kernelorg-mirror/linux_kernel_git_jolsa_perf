@@ -255,6 +255,11 @@ int perf_evlist__tui_browse_hists(struct perf_evlist *evlist, const char *help,
 				  struct hist_browser_timer *hbt,
 				  float min_pcnt,
 				  struct perf_session_env *env);
+
+int hists__browse_tui(struct hists *hists, int nr_events, const char *helpline,
+		      bool left_exits, struct hist_browser_timer *hbt,
+		      float min_pcnt, struct perf_session_env *env);
+
 int script_browse(const char *script_opt);
 #else
 static inline
