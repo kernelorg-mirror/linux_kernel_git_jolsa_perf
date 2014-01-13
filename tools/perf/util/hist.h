@@ -106,7 +106,6 @@ struct hist_entry_iter {
 	struct hist_entry *he;
 	struct symbol *parent;
 	struct raw_info *raw;
-	struct hists *lock_hists;
 	void *priv;
 
 	int (*prepare_entry)(struct hist_entry_iter *, struct addr_location *);
@@ -124,7 +123,6 @@ extern struct hist_entry_iter hist_iter_normal;
 extern struct hist_entry_iter hist_iter_branch;
 extern struct hist_entry_iter hist_iter_mem;
 extern struct hist_entry_iter hist_iter_cumulative;
-extern struct hist_entry_iter hist_iter_lock;
 
 struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct addr_location *al,
@@ -132,6 +130,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      struct raw_info *raw,
+				      void *lock_info,
 				      u64 period, u64 weight, u64 transaction,
 				      bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,

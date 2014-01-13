@@ -448,6 +448,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      struct raw_info *raw,
+				      void *lock_info,
 				      u64 period, u64 weight, u64 transaction,
 				      bool sample_self)
 {
@@ -472,6 +473,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 		.branch_info = bi,
 		.mem_info = mi,
 		.raw_info = raw,
+		.lock_info = lock_info,
 		.transaction = transaction,
 	};
 
@@ -532,7 +534,7 @@ iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al
 	 * and the he_stat__add_period() function.
 	 */
 	he = __hists__add_entry(&iter->evsel->hists, al, iter->parent, NULL,
-				mi, NULL, cost, cost, 0, true);
+				mi, NULL, NULL, cost, cost, 0, true);
 	if (!he)
 		return -ENOMEM;
 
@@ -644,7 +646,7 @@ iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *a
 	 * and not events sampled. Thus we use a pseudo period of 1.
 	 */
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				&bi[i], NULL, NULL,
+				&bi[i], NULL, NULL, NULL,
 				1, 1, 0, true);
 	if (he == NULL)
 		return -ENOMEM;
@@ -688,11 +690,9 @@ iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location 
 	struct perf_evsel *evsel = iter->evsel;
 	struct perf_sample *sample = iter->sample;
 	struct hist_entry *he;
-	struct hists *hists = iter->lock_hists ?
-			      iter->lock_hists : &evsel->hists;
 
-	he = __hists__add_entry(hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+	he = __hists__add_entry(&evsel->hists, al, iter->parent,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, true);
 	if (he == NULL)
@@ -750,7 +750,7 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 	struct hist_entry *he;
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, true);
 	if (he == NULL)
@@ -823,7 +823,7 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 	}
 
 	he = __hists__add_entry(&evsel->hists, al, iter->parent,
-				NULL, NULL, iter->raw,
+				NULL, NULL, iter->raw, NULL,
 				sample->period, sample->weight,
 				sample->transaction, false);
 	if (he == NULL)
@@ -842,41 +842,6 @@ iter_finish_cumulative_entry(struct hist_entry_iter *iter,
 			     struct addr_location *al __maybe_unused)
 {
 	zfree(&iter->priv);
-	return 0;
-}
-
-static int
-iter_prepare_lock_entry(struct hist_entry_iter *iter __maybe_unused,
-			struct addr_location *al __maybe_unused)
-{
-	return 0;
-}
-
-static int
-iter_add_single_lock_entry(struct hist_entry_iter *iter __maybe_unused,
-			   struct addr_location *al __maybe_unused)
-{
-	return 0;
-}
-
-static int
-iter_next_lock_entry(struct hist_entry_iter *iter __maybe_unused,
-		     struct addr_location *al __maybe_unused)
-{
-	return 0;
-}
-
-static int
-iter_add_next_lock_entry(struct hist_entry_iter *iter __maybe_unused,
-			 struct addr_location *al __maybe_unused)
-{
-	return 0;
-}
-
-static int
-iter_finish_lock_entry(struct hist_entry_iter *iter __maybe_unused,
-		       struct addr_location *al __maybe_unused)
-{
 	return 0;
 }
 
@@ -910,14 +875,6 @@ struct hist_entry_iter hist_iter_cumulative = {
 	.next_entry 		= iter_next_cumulative_entry,
 	.add_next_entry 	= iter_add_next_cumulative_entry,
 	.finish_entry 		= iter_finish_cumulative_entry,
-};
-
-struct hist_entry_iter hist_iter_lock = {
-	.prepare_entry 		= iter_prepare_lock_entry,
-	.add_single_entry 	= iter_add_single_lock_entry,
-	.next_entry 		= iter_next_lock_entry,
-	.add_next_entry 	= iter_add_next_lock_entry,
-	.finish_entry 		= iter_finish_lock_entry,
 };
 
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
