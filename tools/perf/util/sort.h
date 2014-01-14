@@ -89,6 +89,7 @@ struct hist_entry {
 	u64			transaction;
 	s32			cpu;
 	u64			time;
+	u64			idx;
 
 	struct hist_entry_diff	diff;
 
@@ -165,6 +166,7 @@ enum sort_type {
 	SORT_GLOBAL_WEIGHT,
 	SORT_TRANSACTION,
 	SORT_TIME,
+	SORT_IDX,
 
 	/* branch stack specific sort keys */
 	__SORT_BRANCH_STACK,

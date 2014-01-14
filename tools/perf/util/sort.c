@@ -55,6 +55,28 @@ static int64_t cmp_null(const void *l, const void *r)
 		return 1;
 }
 
+/* --sort idx */
+
+static int64_t
+sort__idx_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return right->idx - left->idx;
+}
+
+static int hist_entry__idx_snprintf(struct hist_entry *he, char *bf,
+				    size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*lu", width, he->idx);
+}
+
+struct sort_entry sort_idx = {
+	.se_header	= "Idx:",
+	.se_cmp		= sort__idx_cmp,
+	.se_snprintf	= hist_entry__idx_snprintf,
+	.se_width_idx	= HISTC_IDX,
+};
+
+
 /* --sort time */
 
 static int64_t
@@ -1048,6 +1070,7 @@ static struct sort_dimension common_sort_dimensions[] = {
 	DIM(SORT_GLOBAL_WEIGHT, "weight", sort_global_weight),
 	DIM(SORT_TRANSACTION, "transaction", sort_transaction),
 	DIM(SORT_TIME, "time", sort_time),
+	DIM(SORT_IDX, "idx", sort_idx),
 };
 
 #undef DIM
