@@ -54,6 +54,27 @@ static int64_t cmp_null(const void *l, const void *r)
 		return 1;
 }
 
+/* --sort time */
+
+static int64_t
+sort__time_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return right->time - left->time;
+}
+
+static int hist_entry__time_snprintf(struct hist_entry *he, char *bf,
+				       size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*lu", width, he->time);
+}
+
+struct sort_entry sort_time = {
+	.se_header	= "Time:",
+	.se_cmp		= sort__time_cmp,
+	.se_snprintf	= hist_entry__time_snprintf,
+	.se_width_idx	= HISTC_THREAD,
+};
+
 /* --sort pid */
 
 static int64_t
@@ -996,6 +1017,7 @@ static struct sort_dimension common_sort_dimensions[] = {
 	DIM(SORT_LOCAL_WEIGHT, "local_weight", sort_local_weight),
 	DIM(SORT_GLOBAL_WEIGHT, "weight", sort_global_weight),
 	DIM(SORT_TRANSACTION, "transaction", sort_transaction),
+	DIM(SORT_TIME, "time", sort_time),
 };
 
 #undef DIM
