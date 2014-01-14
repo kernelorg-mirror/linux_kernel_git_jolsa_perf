@@ -62,6 +62,7 @@ enum hist_column {
 	HISTC_MEM_LVL,
 	HISTC_MEM_SNOOP,
 	HISTC_TRANSACTION,
+	HISTC_TIME,
 	HISTC_NR_COLS, /* Last entry */
 };
 
@@ -80,6 +81,7 @@ struct hists {
 	const char		*symbol_filter_str;
 	pthread_mutex_t		lock;
 	struct events_stats	stats;
+	u64			time_base;
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
 };
@@ -124,7 +126,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi, u64 period,
 				      u64 weight, u64 transaction,
-				      bool sample_self);
+				      u64 time, bool sample_self);
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
 			 struct perf_evsel *evsel, const union perf_event *event,
 			 struct perf_sample *sample, int max_stack_depth,

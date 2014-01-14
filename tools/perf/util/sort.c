@@ -2,6 +2,7 @@
 #include "hist.h"
 #include "comm.h"
 #include "symbol.h"
+#include "util.h"
 
 regex_t		parent_regex;
 const char	default_parent_pattern[] = "^sys_|^do_page_fault";
@@ -53,6 +54,56 @@ static int64_t cmp_null(const void *l, const void *r)
 	else
 		return 1;
 }
+
+/* --sort time */
+
+static int64_t
+sort__time_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return right->time - left->time;
+}
+
+static u64 get_time_base(struct hist_entry *he)
+{
+	struct hists *hists = he->hists;
+
+	if (!hists->time_base)
+		hists->time_base = he->time;
+
+	return hists->time_base;
+}
+
+static int hist_entry__time_snprintf(struct hist_entry *he, char *bf,
+				       size_t size, unsigned int width)
+{
+	char buf[100];
+	u64 time_base = get_time_base(he);
+	unsigned long time_sec, time_usec;
+	unsigned long base_sec, base_usec;
+	long delta_sec, delta_usec;
+	bool neg = (s64)(he->time - time_base) < 0;
+
+	time_sec  = nanotime_get_sec(he->time);
+	time_usec = nanotime_get_usec(he->time);
+	base_sec  = nanotime_get_sec(time_base);
+	base_usec = nanotime_get_usec(time_base);
+
+        delta_sec  = abs(time_sec - base_sec);
+        delta_usec = abs(time_usec - base_usec);
+
+	scnprintf(buf, 100, "%6lu.%06lu %s%06lu.%06lu",
+		  time_sec, time_usec,
+		  neg ? "-" : "+",
+		  delta_sec, delta_usec);
+	return repsep_snprintf(bf, size, "%*s", width, buf);
+}
+
+struct sort_entry sort_time = {
+	.se_header	= "Time",
+	.se_cmp		= sort__time_cmp,
+	.se_snprintf	= hist_entry__time_snprintf,
+	.se_width_idx	= HISTC_TIME,
+};
 
 /* --sort pid */
 
@@ -996,6 +1047,7 @@ static struct sort_dimension common_sort_dimensions[] = {
 	DIM(SORT_LOCAL_WEIGHT, "local_weight", sort_local_weight),
 	DIM(SORT_GLOBAL_WEIGHT, "weight", sort_global_weight),
 	DIM(SORT_TRANSACTION, "transaction", sort_transaction),
+	DIM(SORT_TIME, "time", sort_time),
 };
 
 #undef DIM
