@@ -593,6 +593,11 @@ int pevent_field_cmp(struct format_field *field,
 		     void *a_data, int a_size,
 		     void *b_data, int b_size);
 
+int pevent_field_cmp2(struct format_field *a_field,
+		      struct format_field *b_field,
+		      void *a_data, int a_size,
+		      void *b_data, int b_size);
+
 void pevent_field_info(struct trace_seq *s,
 		       struct format_field *field,
 		       void *data, int size __maybe_unused,
