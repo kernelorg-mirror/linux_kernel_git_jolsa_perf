@@ -211,6 +211,7 @@ extern struct list_head hist_entry__sort_list;
 int setup_sorting(void);
 extern int sort_dimension__add(const char *);
 void sort__setup_elide(FILE *fp);
+void sort__setup_idx(void);
 
 int report_parse_ignore_callees_opt(const struct option *opt, const char *arg, int unset);
 
