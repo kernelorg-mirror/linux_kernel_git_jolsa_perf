@@ -70,6 +70,7 @@ enum hist_column {
 	HISTC_MEM_SNOOP,
 	HISTC_TRANSACTION,
 	HISTC_TIME,
+	HISTC_IDX,
 	HISTC_NR_COLS, /* Last entry */
 };
 

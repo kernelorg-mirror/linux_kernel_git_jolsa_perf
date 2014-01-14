@@ -436,6 +436,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      u64 period, u64 weight, u64 transaction,
 				      u64 time, bool sample_self)
 {
+	static u64 idx;
 	struct hist_entry entry = {
 		.thread	= al->thread,
 		.comm = thread__comm(al->thread),
@@ -458,6 +459,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 		.mem_info = mi,
 		.transaction = transaction,
 		.time = time,
+		.idx  = idx++,
 	};
 
 	return add_hist_entry(hists, &entry, al, sample_self);
