@@ -1079,6 +1079,9 @@ static int hist_entry__sort_on_period(struct hist_entry *a,
 	struct hist_entry *pair;
 	u64 *periods_a, *periods_b;
 
+	if (symbol_conf.show_list)
+		return b->idx - a->idx;
+
 	if (symbol_conf.cumulate_callchain) {
 		/*
 		 * Put caller above callee when they have equal period.
