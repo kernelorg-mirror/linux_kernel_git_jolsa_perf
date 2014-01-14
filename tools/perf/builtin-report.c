@@ -731,7 +731,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 	OPT_BOOLEAN(0, "source", &symbol_conf.annotate_src,
 		    "Interleave source code with assembly code (default)"),
 	OPT_BOOLEAN(0, "asm-raw", &symbol_conf.annotate_asm_raw,
-		    "Display raw encoding of assembly instructions (default)"),
+		    "display raw encoding of assembly instructions (default)"),
 	OPT_STRING('M', "disassembler-style", &disassembler_style, "disassembler style",
 		   "Specify disassembler style (e.g. -M intel for intel syntax)"),
 	OPT_BOOLEAN(0, "show-total-period", &symbol_conf.show_total_period,
@@ -749,6 +749,7 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
 		     "how to display percentage of filtered entries", parse_percentage),
+	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -890,6 +891,9 @@ repeat:
 	}
 
 	sort__setup_elide(stdout);
+
+	if (symbol_conf.show_list)
+		sort__setup_list();
 
 	ret = __cmd_report(&report);
 	if (ret == K_SWITCH_INPUT_DATA) {

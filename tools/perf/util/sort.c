@@ -1102,6 +1102,20 @@ static struct sort_dimension memory_sort_dimensions[] = {
 
 #undef DIM
 
+static void __sort_dimension__prep(struct sort_dimension *sd, enum sort_type idx)
+{
+	if (sd->taken)
+		return;
+
+	if (sd->entry->se_collapse)
+		sort__need_collapse = 1;
+
+	sort__first_dimension = idx;
+
+	list_add(&sd->entry->list, &hist_entry__sort_list);
+	sd->taken = 1;
+}
+
 static void __sort_dimension__add(struct sort_dimension *sd, enum sort_type idx)
 {
 	if (sd->taken)
@@ -1270,4 +1284,15 @@ void sort__setup_elide(FILE *output)
 
 	list_for_each_entry(se, &hist_entry__sort_list, list)
 		se->elide = false;
+}
+
+void sort__setup_list(void)
+{
+	struct sort_dimension *sd_idx  = &common_sort_dimensions[SORT_IDX];
+	struct sort_dimension *sd_time = &common_sort_dimensions[SORT_TIME];
+
+	__sort_dimension__prep(sd_time, SORT_TIME);
+	__sort_dimension__prep(sd_idx, SORT_IDX);
+
+	sd_idx->entry->elide = true;
 }
