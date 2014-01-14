@@ -75,6 +75,9 @@
 #include <termios.h>
 #include <linux/bitops.h>
 
+#define NSECS_PER_SEC	1000000000ULL
+#define NSECS_PER_USEC	1000ULL
+
 extern const char *graph_line;
 extern const char *graph_dotted_line;
 extern char buildid_dir[];
@@ -293,6 +296,20 @@ static inline unsigned long next_pow2_l(unsigned long x)
 #else
 	return next_pow2(x);
 #endif
+}
+
+static inline unsigned long nanotime_get_sec(u64 t)
+{
+	return t / NSECS_PER_SEC;
+}
+
+static inline unsigned long nanotime_get_usec(u64 t)
+{
+	unsigned long long secs;
+
+	secs = t / NSECS_PER_SEC;
+	t -= secs * NSECS_PER_SEC;
+	return t / NSECS_PER_USEC;
 }
 
 size_t hex_width(u64 v);
