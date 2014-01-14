@@ -118,6 +118,9 @@ struct hist_entry {
 	struct mem_info		*mem_info;
 	struct raw_info		*raw_info;
 	void			*lock_info;
+	int			lock_indent;
+	int			lock_flag;
+	int			lock_acquire;
 	struct callchain_root	callchain[0]; /* must be last member */
 };
 

@@ -42,6 +42,12 @@
 static struct hists lock_hists;
 static struct hist_iter_ops hist_iter_lock;
 
+enum lock_mode {
+	LOCK__NONE = 0,
+	LOCK__CNT,
+	LOCK__LIST,
+};
+
 struct report {
 	struct perf_tool	tool;
 	struct perf_session	*session;
@@ -51,7 +57,7 @@ struct report {
 	bool			show_full_info;
 	bool			show_threads;
 	bool			show_tp_entries;
-	bool			show_lock_entries;
+	enum lock_mode		show_lock_entries;
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			header;
@@ -818,21 +824,21 @@ static int perf_evlist__add_tp_sort_entries(struct perf_evlist *evlist)
 }
 
 static int
-iter_add_single_lock_entry(struct hist_entry_iter *iter,
-			   struct addr_location *al)
+parse_lock_mode(const struct option *opt,
+		const char *str, int unset)
 {
-	struct perf_evsel *evsel = iter->evsel;
-	struct perf_sample *sample = iter->sample;
-	struct hist_entry *he;
+	int *lock_mode = opt->value;
 
-	he = __hists__add_entry(&lock_hists, al, iter->parent,
-				NULL, NULL, iter->raw, evsel->handler,
-				sample->period, sample->weight,
-				sample->transaction, 0, true);
-	if (he == NULL)
-		return -ENOMEM;
+	if (unset) {
+		*lock_mode = LOCK__NONE;
+		return 0;
+	}
 
-	iter->he = he;
+	if (!str || !strcmp(str, "cnt")) {
+		*lock_mode = LOCK__CNT;
+	} else if (!strcmp(str, "list"))
+		*lock_mode = LOCK__LIST;
+
 	return 0;
 }
 
@@ -842,10 +848,80 @@ enum {
 	LOCK_FIELD__MAX,
 };
 
+enum lock_tp {
+	LOCK_TP__ACQUIRE,
+	LOCK_TP__ACQUIRED,
+	LOCK_TP__CONTENDED,
+	LOCK_TP__RELEASE,
+	LOCK_TP__MAX,
+};
+
+static const char *lock_tp_names[LOCK_TP__MAX] = {
+	[LOCK_TP__ACQUIRE]	= "[a] ",
+	[LOCK_TP__ACQUIRED]	= "[A] ",
+	[LOCK_TP__CONTENDED]	= "[c] ",
+	[LOCK_TP__RELEASE]	= "[r] ",
+};
+
 struct lock_sort_entry {
 	unsigned idx;
 	struct sort_entry se;
 };
+
+struct lock_info {
+	enum lock_mode		mode;
+	enum lock_tp		tp;
+	struct format_field	*fields[LOCK_FIELD__MAX];
+};
+
+static int lock_indent(struct hist_entry *he, struct lock_info *info)
+{
+	int indent = 0;
+	struct dso *dso;
+
+	if (he->ms.map)
+		dso = he->ms.map->dso;
+
+	if (!dso)
+		return 0;
+
+	indent = dso->lock_indent;
+
+	if (info->tp == LOCK_TP__ACQUIRE)
+		dso->lock_indent++;
+	if ((info->tp == LOCK_TP__RELEASE) && 
+	    (dso->lock_indent > 0)) {
+		dso->lock_indent--;
+	}
+
+	return indent < 0 ? 0 : indent;	
+}
+
+static int
+iter_add_single_lock_entry(struct hist_entry_iter *iter,
+			   struct addr_location *al)
+{
+	struct perf_evsel *evsel = iter->evsel;
+	struct perf_sample *sample = iter->sample;
+	struct lock_info *info = evsel->handler;
+	struct hist_entry *he;
+	int flag = perf_evsel__intval(evsel, sample, "flag");
+
+	he = __hists__add_entry(&lock_hists, al, iter->parent,
+				NULL, NULL, iter->raw, info,
+				sample->period, sample->weight,
+				sample->transaction, sample->time, true);
+	if (he == NULL)
+		return -ENOMEM;
+
+	if (info->mode == LOCK__LIST) {
+		he->lock_indent = lock_indent(he, info);
+		he->lock_flag = flag;
+	}
+
+	iter->he = he;
+	return 0;
+}
 
 static int64_t lock_sort_entry__cmp(struct sort_entry *se,
 				    struct hist_entry *left,
@@ -856,8 +932,11 @@ static int64_t lock_sort_entry__cmp(struct sort_entry *se,
 	struct raw_info *raw_left  = left->raw_info;
 	struct raw_info *raw_right = right->raw_info;
 
-	struct format_field **fields_left  = left->lock_info;
-	struct format_field **fields_right = right->lock_info;
+	struct lock_info *info_left  = left->lock_info;
+	struct lock_info *info_right = right->lock_info;
+
+	struct format_field **fields_left  = (struct format_field **) &info_left->fields;
+	struct format_field **fields_right = (struct format_field **) &info_right->fields;
 
 	struct format_field *field_left  = fields_left[lse->idx];
 	struct format_field *field_right = fields_right[lse->idx];
@@ -867,31 +946,71 @@ static int64_t lock_sort_entry__cmp(struct sort_entry *se,
 				raw_right->data, raw_right->size);
 }
 
+static const char *lock_op(enum lock_tp tp)
+{
+	return lock_tp_names[tp];
+}
+
 static int lock_sort_entry__snprintf(struct sort_entry *se,
 				     struct hist_entry *he,
 				     char *bf, size_t size,
 				     unsigned int width)
 {
 	struct lock_sort_entry *lse = container_of(se, struct lock_sort_entry, se);
-	struct format_field **fields = he->lock_info;
+	struct lock_info *info = he->lock_info;
+	struct format_field **fields = (struct format_field **) &info->fields;
 	struct format_field *field   = fields[lse->idx];
 	struct raw_info *raw = he->raw_info;
 	static struct trace_seq s;
+	int indent = 0;
+	const char *op = "";
 
 	if (!s.len)
 		trace_seq_init(&s);
 	else
 		trace_seq_reset(&s);
 
+	if ((info->mode == LOCK__LIST) && (lse->idx == LOCK_FIELD__NAME)) {
+		op     = lock_op(info->tp);
+		indent = he->lock_indent;
+	}
+
 	pevent_field_info(&s, field, raw->data, raw->size, false);
-	return scnprintf(bf, size, "%*s", width, s.buffer);
+	return scnprintf(bf, size, "%s%*s%-*s", op, indent * 2, "", width, s.buffer);
+}
+
+enum acquire_flags {
+	TRY_LOCK = 1,
+	READ_LOCK = 2,
+};
+
+static int lock_sort_entry_flag__snprintf(struct sort_entry *se __maybe_unused,
+					  struct hist_entry *he,
+					  char *bf, size_t size,
+					  unsigned int width)
+{
+	const char *str = "L";
+
+	if (he->lock_flag & TRY_LOCK)
+		str = "T";
+	if (he->lock_flag & READ_LOCK)
+		str = "R";
+
+	return scnprintf(bf, size, "%*s", width, str);
+}
+
+static int64_t lock_sort_entry_flag__cmp(struct sort_entry *se __maybe_unused,
+					 struct hist_entry *left __maybe_unused,
+					 struct hist_entry *right __maybe_unused)
+{
+	return 0;
 }
 
 
 static struct lock_sort_entry lock_field__lockdep_addr = {
 	.idx	= LOCK_FIELD__LOCK_DEP_ADDR,
 	.se	= {
-		.se_header	= "lockdep_addr",
+		.se_header	= "Lockdep_addr",
 		.se_cmp		= lock_sort_entry__cmp,
 		.se_snprintf	= lock_sort_entry__snprintf,
 	},
@@ -900,9 +1019,18 @@ static struct lock_sort_entry lock_field__lockdep_addr = {
 static struct lock_sort_entry lock_field__se_name = {
 	.idx	= LOCK_FIELD__NAME,
 	.se	= {
-		.se_header	= "name",
+		.se_header	= "Name",
 		.se_cmp		= lock_sort_entry__cmp,
 		.se_snprintf	= lock_sort_entry__snprintf,
+	},
+};
+
+static struct lock_sort_entry lock_field__se_flag __maybe_unused = {
+	.idx	= LOCK_FIELD__NAME,
+	.se	= {
+		.se_header	= "Flag",
+		.se_cmp		= lock_sort_entry_flag__cmp,
+		.se_snprintf	= lock_sort_entry_flag__snprintf,
 	},
 };
 
@@ -922,18 +1050,41 @@ static int lock_field_add(struct lock_sort_entry *lse, int width_idx, int len)
 	return 0;
 }
 
-static int setup_lock_fields(struct perf_evlist *evlist)
+static int setup_lock_fields(struct report *report)
 {
+	struct perf_session *session = report->session;
+	struct perf_evlist *evlist = session->evlist;
 	struct perf_evsel *evsel;
 	struct tp {
-		const char *name;
-		struct format_field *fields[LOCK_FIELD__MAX];
+		const char	 *name;
+		enum lock_tp	  idx;
+		struct lock_info  info;
 	};
 	static struct tp tps[] = {
-		{ .name = "lock:lock_acquire",	},
-		{ .name = "lock:lock_acquired",	},
-		{ .name = "lock:lock_contended",},
-		{ .name = "lock:lock_release",	},
+		{
+			.name = "lock:lock_acquire",
+			.info = {
+				.tp	= LOCK_TP__ACQUIRE,
+			},
+		},
+		{
+			.name = "lock:lock_acquired",
+			.info = {
+				.tp	= LOCK_TP__ACQUIRED,
+			},
+		},
+		{
+			.name = "lock:lock_contended",
+			.info = {
+				.tp	= LOCK_TP__CONTENDED,
+			},
+		},
+		{
+			.name = "lock:lock_release",
+			.info = {
+				.tp	= LOCK_TP__RELEASE,
+			},
+		},
 	};
 	int len_lockdep_addr = 0, len_name = 0;
 	unsigned i, j;
@@ -963,10 +1114,11 @@ static int setup_lock_fields(struct perf_evlist *evlist)
 			if (!len_name && j == LOCK_FIELD__NAME)
 				len_name = tp_col_width(field);
 
-			t->fields[j] = field;
+			t->info.fields[j] = field;
 		}
 
-		evsel->handler = &t->fields;
+		t->info.mode = report->show_lock_entries;
+		evsel->handler = &t->info;
 	}
 
 	if (lock_field_add(&lock_field__lockdep_addr, HISTC_NR_COLS, len_lockdep_addr) ||
@@ -975,10 +1127,13 @@ static int setup_lock_fields(struct perf_evlist *evlist)
 		return -1;
 	}
 
+	if (report->show_lock_entries == LOCK__LIST)
+		sort__setup_idx();
+
 	return 0;
 }
 
-static int setup_lock(struct perf_session *session)
+static int setup_lock(struct report *report)
 {
 	if (hists__init(&lock_hists))
 		return -1;
@@ -986,7 +1141,7 @@ static int setup_lock(struct perf_session *session)
 	hist_iter_lock = hist_iter_normal;
 	hist_iter_lock.add_single_entry = iter_add_single_lock_entry;
 
-	return setup_lock_fields(session->evlist);
+	return setup_lock_fields(report);
 }
 
 int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
@@ -1117,7 +1272,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "how to display percentage of filtered entries", parse_percentage),
 	OPT_BOOLEAN(0, "list", &symbol_conf.show_list, "Show events list"),
 	OPT_BOOLEAN(0, "tp", &report.show_tp_entries, "Show/sort tracepoints entries."),
-	OPT_BOOLEAN(0, "lock", &report.show_lock_entries, "Show/sort lock entries."),
+	OPT_CALLBACK_DEFAULT(0, "lock", &report.show_lock_entries, "cnt,list", NULL,
+			     &parse_lock_mode, "cnt"),
 	OPT_END()
 	};
 	struct perf_data_file file = {
@@ -1280,7 +1436,7 @@ repeat:
 	}
 
 	if (report.show_lock_entries) {
-		ret = setup_lock(session);
+		ret = setup_lock(&report);
 		if (ret) {
 			pr_err("failed to setup lock report\n");
 			goto error;

@@ -95,6 +95,8 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 		hists__set_unres_dso_col_len(hists, HISTC_DSO);
 	}
 
+	hists__new_col_len(hists, HISTC_TIME, 20);
+
 	len = thread__comm_len(h->thread);
 	if (hists__new_col_len(hists, HISTC_COMM, len))
 		hists__set_col_len(hists, HISTC_THREAD, len + 6);
