@@ -87,4 +87,5 @@ int common_pc(struct scripting_context *context);
 int common_flags(struct scripting_context *context);
 int common_lock_depth(struct scripting_context *context);
 
+int perf_format_field__width(struct format_field *field);
 #endif /* _PERF_UTIL_TRACE_EVENT_H */
