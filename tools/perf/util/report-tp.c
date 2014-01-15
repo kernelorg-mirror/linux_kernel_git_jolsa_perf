@@ -1,4 +1,5 @@
 #include <traceevent/event-parse.h>
+#include "trace-event.h"
 #include "evlist.h"
 #include "evsel.h"
 #include "sort.h"
@@ -27,6 +28,7 @@ static int64_t tp_sort_entry__cmp(struct sort_entry *se,
 }
 
 static int tp_sort_entry__snprintf(struct sort_entry *se,
+				   bool selected __maybe_unused,
 				   struct hist_entry *he,
 				   char *bf, size_t size,
 				   unsigned int width)
@@ -61,7 +63,7 @@ tp_sort_entry__new(struct format_field *field, int width_idx)
 	return fse;
 }
 
-static int perf_format_field__width(struct format_field *field)
+int perf_format_field__width(struct format_field *field)
 {
 	int len = field->size * 2 + 2 /* '0x' */;
 
