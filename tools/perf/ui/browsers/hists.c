@@ -790,7 +790,8 @@ static int hist_browser__show_entry(struct hist_browser *browser,
 		if (!browser->b.navkeypressed)
 			width += 1;
 
-		hist_entry__sort_snprintf(entry, s, sizeof(s), browser->hists);
+		hist_entry__sort_snprintf(entry, current_entry, s, sizeof(s),
+					  browser->hists);
 		slsmg_write_nstring(s, width);
 		++row;
 		++printed;
@@ -1124,7 +1125,7 @@ static int hist_browser__fprintf_entry(struct hist_browser *browser,
 	if (symbol_conf.use_callchain)
 		folded_sign = hist_entry__folded(he);
 
-	hist_entry__sort_snprintf(he, s, sizeof(s), browser->hists);
+	hist_entry__sort_snprintf(he, false, s, sizeof(s), browser->hists);
 	percent = (he->stat.period * 100.0) / browser->hists->stats.total_period;
 
 	if (symbol_conf.use_callchain)

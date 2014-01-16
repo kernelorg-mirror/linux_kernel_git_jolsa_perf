@@ -298,7 +298,8 @@ void perf_hpp__cancel_cumulate(void)
 	perf_hpp__format[PERF_HPP__OVERHEAD].header = hpp__header_overhead;
 }
 
-int hist_entry__sort_snprintf(struct hist_entry *he, char *s, size_t size,
+int hist_entry__sort_snprintf(struct hist_entry *he, bool selected,
+			      char *s, size_t size,
 			      struct hists *hists)
 {
 	const char *sep = symbol_conf.field_sep;
@@ -310,7 +311,7 @@ int hist_entry__sort_snprintf(struct hist_entry *he, char *s, size_t size,
 			continue;
 
 		ret += scnprintf(s + ret, size - ret, "%s", sep ?: "  ");
-		ret += se->se_snprintf(se, false, he, s + ret, size - ret,
+		ret += se->se_snprintf(se, selected, he, s + ret, size - ret,
 				       hists__col_len(hists, se->se_width_idx));
 	}
 
