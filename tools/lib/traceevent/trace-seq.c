@@ -49,19 +49,28 @@ do {						\
 #define TRACE_SEQ_CHECK_RET0(s)  TRACE_SEQ_CHECK_RET_N(s, 0)
 
 /**
+ * trace_seq_init_buf - initialize the trace_seq structure with custom buffer
+ * @s: a pointer to the trace_seq structure to initialize
+ */
+void trace_seq_init_buf(struct trace_seq *s, char *buffer, unsigned int size)
+{
+	s->len = 0;
+	s->readpos = 0;
+	s->buffer_size = size;
+	s->buffer = buffer;
+	if (s->buffer != NULL)
+		s->state = TRACE_SEQ__GOOD;
+	else
+		s->state = TRACE_SEQ__MEM_ALLOC_FAILED;
+}
+
+/**
  * trace_seq_init - initialize the trace_seq structure
  * @s: a pointer to the trace_seq structure to initialize
  */
 void trace_seq_init(struct trace_seq *s)
 {
-	s->len = 0;
-	s->readpos = 0;
-	s->buffer_size = TRACE_SEQ_BUF_SIZE;
-	s->buffer = malloc(s->buffer_size);
-	if (s->buffer != NULL)
-		s->state = TRACE_SEQ__GOOD;
-	else
-		s->state = TRACE_SEQ__MEM_ALLOC_FAILED;
+	trace_seq_init_buf(s, malloc(TRACE_SEQ_BUF_SIZE), TRACE_SEQ_BUF_SIZE);
 }
 
 /**
