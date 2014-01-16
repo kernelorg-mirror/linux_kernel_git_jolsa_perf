@@ -360,7 +360,7 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 		size = hpp.size = bfsz;
 
 	ret = hist_entry__period_snprintf(&hpp, he);
-	hist_entry__sort_snprintf(he, bf + ret, size - ret, hists);
+	hist_entry__sort_snprintf(he, false, bf + ret, size - ret, hists);
 
 	ret = fprintf(fp, "%s\n", bf);
 

@@ -136,7 +136,8 @@ int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
 int64_t hist_entry__cmp(struct hist_entry *left, struct hist_entry *right);
 int64_t hist_entry__collapse(struct hist_entry *left, struct hist_entry *right);
 int hist_entry__transaction_len(void);
-int hist_entry__sort_snprintf(struct hist_entry *he, char *bf, size_t size,
+int hist_entry__sort_snprintf(struct hist_entry *he, bool selected,
+			      char *bf, size_t size,
 			      struct hists *hists);
 void hist_entry__free(struct hist_entry *);
 
