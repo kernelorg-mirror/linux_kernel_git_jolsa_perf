@@ -201,7 +201,8 @@ struct sort_entry {
 			  struct hist_entry *);
 	int64_t (*se_collapse)(struct sort_entry *, struct hist_entry *,
 			       struct hist_entry *);
-	int	(*se_snprintf)(struct sort_entry *, struct hist_entry *he,
+	int	(*se_snprintf)(struct sort_entry *, bool selected,
+			       struct hist_entry *he,
 			       char *bf, size_t size, unsigned int width);
 	u8	se_width_idx;
 	bool	elide;

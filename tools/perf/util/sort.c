@@ -65,6 +65,7 @@ sort__idx_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__idx_snprintf(struct sort_entry *se __maybe_unused,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -100,6 +101,7 @@ static u64 get_time_base(struct hist_entry *he)
 }
 
 static int hist_entry__time_snprintf(struct sort_entry *se __maybe_unused,
+				     bool selected __maybe_unused,
 				     struct hist_entry *he, char *bf,
 				     size_t size, unsigned int width)
 {
@@ -142,6 +144,7 @@ sort__thread_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__thread_snprintf(struct sort_entry *se __maybe_unused,
+				       bool selected __maybe_unused,
 				       struct hist_entry *he, char *bf,
 				       size_t size, unsigned int width)
 {
@@ -176,6 +179,7 @@ sort__comm_collapse(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__comm_snprintf(struct sort_entry *se __maybe_unused,
+				     bool selected __maybe_unused,
 				     struct hist_entry *he, char *bf,
 				     size_t size, unsigned int width)
 {
@@ -234,6 +238,7 @@ static int _hist_entry__dso_snprintf(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__dso_snprintf(struct sort_entry *se,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -331,6 +336,7 @@ static int _hist_entry__sym_snprintf(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__sym_snprintf(struct sort_entry *se __maybe_unused,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -373,6 +379,7 @@ sort__srcline_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__srcline_snprintf(struct sort_entry *se __maybe_unused,
+					bool selected __maybe_unused,
 					struct hist_entry *he, char *bf,
 					size_t size,
 					unsigned int width __maybe_unused)
@@ -403,6 +410,7 @@ sort__parent_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__parent_snprintf(struct sort_entry *se __maybe_unused,
+				       bool selected __maybe_unused,
 				       struct hist_entry *he, char *bf,
 				       size_t size, unsigned int width)
 {
@@ -427,6 +435,7 @@ sort__cpu_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__cpu_snprintf(struct sort_entry *se __maybe_unused,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -451,8 +460,9 @@ sort__dso_from_cmp(struct sort_entry *se,
 }
 
 static int hist_entry__dso_from_snprintf(struct sort_entry *se,
+					 bool selected __maybe_unused,
 					 struct hist_entry *he, char *bf,
-				    size_t size, unsigned int width)
+					 size_t size, unsigned int width)
 {
 	return _hist_entry__dso_snprintf(se, he->branch_info->from.map,
 					 bf, size, width);
@@ -467,6 +477,7 @@ sort__dso_to_cmp(struct sort_entry *se,
 }
 
 static int hist_entry__dso_to_snprintf(struct sort_entry *se __maybe_unused,
+				       bool selected __maybe_unused,
 				       struct hist_entry *he, char *bf,
 				       size_t size, unsigned int width)
 {
@@ -501,6 +512,7 @@ sort__sym_to_cmp(struct sort_entry *se,
 }
 
 static int hist_entry__sym_from_snprintf(struct sort_entry *se,
+					 bool selected __maybe_unused,
 					 struct hist_entry *he, char *bf,
 					 size_t size, unsigned int width)
 {
@@ -511,6 +523,7 @@ static int hist_entry__sym_from_snprintf(struct sort_entry *se,
 }
 
 static int hist_entry__sym_to_snprintf(struct sort_entry *se __maybe_unused,
+				       bool selected __maybe_unused,
 				       struct hist_entry *he, char *bf,
 				       size_t size, unsigned int width)
 {
@@ -561,6 +574,7 @@ sort__mispredict_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__mispredict_snprintf(struct sort_entry *se __maybe_unused,
+					   bool selected __maybe_unused,
 					   struct hist_entry *he, char *bf,
 					   size_t size, unsigned int width){
 	static const char *out = "N/A";
@@ -589,6 +603,7 @@ sort__daddr_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__daddr_snprintf(struct sort_entry *se,
+				      bool selected __maybe_unused,
 				      struct hist_entry *he, char *bf,
 				      size_t size, unsigned int width)
 {
@@ -621,6 +636,7 @@ sort__dso_daddr_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__dso_daddr_snprintf(struct sort_entry *se,
+					  bool selected __maybe_unused,
 					  struct hist_entry *he, char *bf,
 					  size_t size, unsigned int width)
 {
@@ -653,6 +669,7 @@ sort__locked_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__locked_snprintf(struct sort_entry *se __maybe_unused,
+				       bool selected __maybe_unused,
 				       struct hist_entry *he, char *bf,
 				       size_t size, unsigned int width)
 {
@@ -704,6 +721,7 @@ static const char * const tlb_access[] = {
 #define NUM_TLB_ACCESS (sizeof(tlb_access)/sizeof(const char *))
 
 static int hist_entry__tlb_snprintf(struct sort_entry *se __maybe_unused,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -783,6 +801,7 @@ static const char * const mem_lvl[] = {
 #define NUM_MEM_LVL (sizeof(mem_lvl)/sizeof(const char *))
 
 static int hist_entry__lvl_snprintf(struct sort_entry *se __maybe_unused,
+				    bool selected __maybe_unused,
 				    struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
@@ -853,6 +872,7 @@ static const char * const snoop_access[] = {
 #define NUM_SNOOP_ACCESS (sizeof(snoop_access)/sizeof(const char *))
 
 static int hist_entry__snoop_snprintf(struct sort_entry *se __maybe_unused,
+				      bool selected __maybe_unused,
 				      struct hist_entry *he, char *bf,
 				      size_t size, unsigned int width)
 {
@@ -903,8 +923,9 @@ sort__local_weight_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__local_weight_snprintf(struct sort_entry *se __maybe_unused,
+					     bool selected __maybe_unused,
 					     struct hist_entry *he, char *bf,
-				    size_t size, unsigned int width)
+					     size_t size, unsigned int width)
 {
 	return repsep_snprintf(bf, size, "%-*llu", width, he_weight(he));
 }
@@ -924,6 +945,7 @@ sort__global_weight_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__global_weight_snprintf(struct sort_entry *se __maybe_unused,
+					      bool selected __maybe_unused,
 					      struct hist_entry *he, char *bf,
 					      size_t size, unsigned int width)
 {
@@ -988,6 +1010,7 @@ sort__abort_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__abort_snprintf(struct sort_entry *se __maybe_unused,
+				      bool selected __maybe_unused,
 				      struct hist_entry *he, char *bf,
 				      size_t size, unsigned int width)
 {
@@ -1014,6 +1037,7 @@ sort__in_tx_cmp(struct sort_entry *se __maybe_unused,
 }
 
 static int hist_entry__in_tx_snprintf(struct sort_entry *se __maybe_unused,
+				      bool selected __maybe_unused,
 				      struct hist_entry *he, char *bf,
 				      size_t size, unsigned int width)
 {
@@ -1075,6 +1099,7 @@ int hist_entry__transaction_len(void)
 }
 
 static int hist_entry__transaction_snprintf(struct sort_entry *se __maybe_unused,
+					    bool selected __maybe_unused,
 					    struct hist_entry *he, char *bf,
 					    size_t size, unsigned int width)
 {
