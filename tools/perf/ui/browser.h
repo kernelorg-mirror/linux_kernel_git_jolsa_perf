@@ -50,6 +50,8 @@ void __ui_browser__line_arrow(struct ui_browser *browser, unsigned int column,
 			      u64 start, u64 end);
 void __ui_browser__show_title(struct ui_browser *browser, const char *title);
 void ui_browser__show_title(struct ui_browser *browser, const char *title);
+int __ui_browser__show(struct ui_browser *browser, const char *title,
+		       const char *helpline, ...);
 int ui_browser__show(struct ui_browser *browser, const char *title,
 		     const char *helpline, ...);
 void ui_browser__hide(struct ui_browser *browser);
