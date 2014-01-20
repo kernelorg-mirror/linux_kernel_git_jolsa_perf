@@ -1202,8 +1202,8 @@ static struct hist_browser *hist_browser__new(struct hists *hists)
 
 	if (browser) {
 		browser->hists = hists;
-		browser->b.refresh = hist_browser__refresh;
-		browser->b.seek = ui_browser__hists_seek;
+		browser->b.ops.refresh = hist_browser__refresh;
+		browser->b.ops.seek = ui_browser__hists_seek;
 		browser->b.use_navkeypressed = true;
 	}
 
@@ -1930,11 +1930,13 @@ static int __perf_evlist__tui_browse_hists(struct perf_evlist *evlist,
 	struct perf_evsel *pos;
 	struct perf_evsel_menu menu = {
 		.b = {
+			.ops = {
+				.refresh    = ui_browser__list_head_refresh,
+				.seek	    = ui_browser__list_head_seek,
+				.write	    = perf_evsel_menu__write,
+				.filter	    = filter_group_entries,
+			},
 			.entries    = &evlist->entries,
-			.refresh    = ui_browser__list_head_refresh,
-			.seek	    = ui_browser__list_head_seek,
-			.write	    = perf_evsel_menu__write,
-			.filter	    = filter_group_entries,
 			.nr_entries = nr_entries,
 			.priv	    = evlist,
 		},
