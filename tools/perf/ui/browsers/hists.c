@@ -316,7 +316,6 @@ static int hist_browser__run(struct hist_browser *browser,
 			     struct hist_browser_timer *hbt)
 {
 	int key;
-	char title[160];
 	int delay_secs = hbt ? hbt->refresh : 0;
 
 	browser->b.entries = &browser->hists->entries;
@@ -325,11 +324,6 @@ static int hist_browser__run(struct hist_browser *browser,
 		browser->b.nr_entries = browser->nr_pcnt_entries;
 
 	hist_browser__refresh_dimensions(browser);
-	hists__browser_title(browser->hists, title, sizeof(title));
-
-	if (ui_browser__show(&browser->b, title,
-			     "Press '?' for help on key bindings") < 0)
-		return -1;
 
 	while (1) {
 		key = ui_browser__run(&browser->b, delay_secs);
@@ -355,8 +349,6 @@ static int hist_browser__run(struct hist_browser *browser,
 				ui_browser__warn_lost_events(&browser->b);
 			}
 
-			hists__browser_title(browser->hists, title, sizeof(title));
-			ui_browser__show_title(&browser->b, title);
 			continue;
 		}
 		case 'D': { /* Debug */
@@ -1209,12 +1201,29 @@ static int hist_browser__dump(struct hist_browser *browser)
 	return 0;
 }
 
+static unsigned int hist_browser__header(struct ui_browser *b)
+{
+	struct hist_browser *browser;
+	char title[160];
+
+	browser = container_of(b, struct hist_browser, b);
+	ui_browser__refresh_dimensions(b);
+	hists__browser_title(browser->hists, title, sizeof(title));
+
+	if (__ui_browser__show(b, title,
+		"Press '?' for help on key bindings") < 0)
+		return -1;
+
+	return 0;
+}
+
 static struct hist_browser *hist_browser__new(struct hists *hists)
 {
 	struct hist_browser *browser = zalloc(sizeof(*browser));
 
 	if (browser) {
 		browser->hists = hists;
+		browser->b.ops.header = hist_browser__header;
 		browser->b.ops.refresh = hist_browser__refresh;
 		browser->b.ops.seek = ui_browser__hists_seek;
 		browser->b.use_navkeypressed = true;

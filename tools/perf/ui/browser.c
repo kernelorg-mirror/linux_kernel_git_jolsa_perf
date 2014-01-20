@@ -250,26 +250,49 @@ void ui_browser__show_title(struct ui_browser *browser, const char *title)
 	pthread_mutex_unlock(&ui__lock);
 }
 
-int ui_browser__show(struct ui_browser *browser, const char *title,
-		     const char *helpline, ...)
+static int ui_browser__show_va(struct ui_browser *browser, const char *title,
+			const char *helpline, va_list args)
 {
 	int err;
-	va_list ap;
 
-	ui_browser__refresh_dimensions(browser);
-
-	pthread_mutex_lock(&ui__lock);
 	__ui_browser__show_title(browser, title);
 
 	browser->title = title;
 	zfree(&browser->helpline);
 
-	va_start(ap, helpline);
-	err = vasprintf(&browser->helpline, helpline, ap);
-	va_end(ap);
+	err = vasprintf(&browser->helpline, helpline, args);
 	if (err > 0)
 		ui_helpline__push(browser->helpline);
+
+	return err;
+}
+
+int __ui_browser__show(struct ui_browser *browser, const char *title,
+		       const char *helpline, ...)
+{
+	va_list args;
+	int err;
+
+        va_start(args, helpline);
+	err = ui_browser__show_va(browser, title, helpline, args);
+	va_end(args);
+
+	return err ? 0 : -1;
+}
+
+int ui_browser__show(struct ui_browser *browser, const char *title,
+		     const char *helpline, ...)
+{
+	va_list args;
+	int err;
+
+	pthread_mutex_lock(&ui__lock);
+	ui_browser__refresh_dimensions(browser);
+        va_start(args, helpline);
+	err = ui_browser__show_va(browser, title, helpline, args);
+	va_end(args);
 	pthread_mutex_unlock(&ui__lock);
+
 	return err ? 0 : -1;
 }
 
@@ -311,13 +334,14 @@ static void __ui_browser__header(struct ui_browser *browser)
 
 static int __ui_browser__refresh(struct ui_browser *browser)
 {
-	int row;
-	int width = browser->width;
+	int row, width;
 
 	__ui_browser__header(browser);
 
 	row = browser->ops.refresh(browser);
 	ui_browser__set_color(browser, HE_COLORSET_NORMAL);
+
+	width = browser->width;
 
 	if (!browser->use_navkeypressed || browser->navkeypressed)
 		ui_browser__scrollbar_set(browser);
