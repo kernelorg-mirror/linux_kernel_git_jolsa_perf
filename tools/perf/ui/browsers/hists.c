@@ -574,7 +574,7 @@ static int hist_browser__show_callchain(struct hist_browser *browser,
 }
 
 struct hpp_arg {
-	struct ui_browser *b;
+	struct hist_browser *hb;
 	char folded_sign;
 	bool current_entry;
 };
@@ -600,7 +600,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 	if (hists->stats.total_period)
 		percent = 100.0 * get_field(he) / hists->stats.total_period;
 
-	ui_browser__set_percent_color(arg->b, percent, arg->current_entry);
+	ui_browser__set_percent_color(&arg->hb->b, percent, arg->current_entry);
 
 	if (callchain_cb)
 		ret += callchain_cb(arg);
@@ -634,7 +634,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 				 * zero-fill group members in the middle which
 				 * have no sample
 				 */
-				ui_browser__set_percent_color(arg->b, 0.0,
+				ui_browser__set_percent_color(&arg->hb->b, 0.0,
 							arg->current_entry);
 				ret += scnprintf(hpp->buf, hpp->size,
 						 " %6.2f%%", 0.0);
@@ -642,7 +642,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 			}
 
 			percent = 100.0 * period / total;
-			ui_browser__set_percent_color(arg->b, percent,
+			ui_browser__set_percent_color(&arg->hb->b, percent,
 						      arg->current_entry);
 			ret += scnprintf(hpp->buf, hpp->size,
 					 " %6.2f%%", percent);
@@ -657,7 +657,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 			/*
 			 * zero-fill group members at last which have no sample
 			 */
-			ui_browser__set_percent_color(arg->b, 0.0,
+			ui_browser__set_percent_color(&arg->hb->b, 0.0,
 						      arg->current_entry);
 			ret += scnprintf(hpp->buf, hpp->size,
 					 " %6.2f%%", 0.0);
@@ -665,8 +665,8 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 		}
 	}
 out:
-	if (!arg->current_entry || !arg->b->navkeypressed)
-		ui_browser__set_color(arg->b, HE_COLORSET_NORMAL);
+	if (!arg->current_entry || !arg->hb->b.navkeypressed)
+		ui_browser__set_color(&arg->hb->b, HE_COLORSET_NORMAL);
 
 	return ret;
 }
@@ -751,7 +751,7 @@ static int hist_browser__show_entry(struct hist_browser *browser,
 
 	if (row_offset == 0) {
 		struct hpp_arg arg = {
-			.b 		= &browser->b,
+			.hb 		= browser,
 			.folded_sign	= folded_sign,
 			.current_entry	= current_entry,
 		};
