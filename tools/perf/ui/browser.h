@@ -16,6 +16,7 @@
 struct ui_browser;
 
 struct ui_browser_ops {
+	unsigned int  (*header)(struct ui_browser *browser);
 	unsigned int  (*refresh)(struct ui_browser *browser);
 	void	      (*write)(struct ui_browser *browser, void *entry, int row);
 	void	      (*seek)(struct ui_browser *browser, off_t offset, int whence);

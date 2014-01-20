@@ -303,10 +303,18 @@ static void ui_browser__scrollbar_set(struct ui_browser *browser)
 	SLsmg_set_char_set(0);
 }
 
+static void __ui_browser__header(struct ui_browser *browser)
+{
+	if (browser->ops.header)
+		browser->ops.header(browser);
+}
+
 static int __ui_browser__refresh(struct ui_browser *browser)
 {
 	int row;
 	int width = browser->width;
+
+	__ui_browser__header(browser);
 
 	row = browser->ops.refresh(browser);
 	ui_browser__set_color(browser, HE_COLORSET_NORMAL);
