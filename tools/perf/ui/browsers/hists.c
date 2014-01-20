@@ -25,6 +25,7 @@ struct hist_browser {
 	struct map_symbol   *selection;
 	int		     print_seq;
 	bool		     show_dso;
+	bool		     show_col_headers;
 	float		     min_pcnt;
 	u64		     nr_pcnt_entries;
 	u64		     time_base;
@@ -36,9 +37,12 @@ static int hists__browser_title(struct hists *hists, char *bf, size_t size);
 
 static void hist_browser__refresh_dimensions(struct hist_browser *browser)
 {
-	/* 3 == +/- toggle symbol before actual hist_entry rendering */
-	browser->b.width = 3 + (hists__sort_list_width(browser->hists) +
-			     sizeof("[k]"));
+	u16 header = browser->show_col_headers ? 1 : 0;
+
+	browser->b.width = SLtt_Screen_Cols - 1;
+	browser->b.height = SLtt_Screen_Rows - 2 - header;
+	browser->b.y = 1 + header;
+	browser->b.x = 0;
 }
 
 static void hist_browser__reset(struct hist_browser *browser)
@@ -310,6 +314,60 @@ static void ui_browser__warn_lost_events(struct ui_browser *browser)
 		"Or reduce the sampling frequency.");
 }
 
+static size_t scnprintf_header_fmt(char *buf, size_t size)
+{
+	struct perf_hpp_fmt *fmt;
+	bool first = true;
+	size_t ret = 0;
+
+	perf_hpp__for_each_format(fmt) {
+		struct perf_hpp hpp = { .ptr = NULL, };
+
+		if (!first)
+			ret += scnprintf(buf + ret, size, "  ");
+
+		hpp.buf	 = buf + ret,
+		hpp.size = size - ret,
+
+		first = false;
+
+		ret += fmt->header(fmt, &hpp);
+	}
+	return ret;
+}
+
+static size_t scnprintf_header_se(struct hists *hists, char *buf, size_t size)
+{
+	struct sort_entry *se;
+	unsigned int width;
+	int ret = 0;
+
+	list_for_each_entry(se, &hist_entry__sort_list, list) {
+		if (se->elide)
+			continue;
+
+		width = strlen(se->se_header);
+		if (!hists__new_col_len(hists, se->se_width_idx, width))
+			width = hists__col_len(hists, se->se_width_idx);
+
+		ret += scnprintf(buf + ret, size - ret, "  %*s", width, se->se_header);
+        }
+	return ret;
+}
+
+static int hists__scnprintf_header(char *buf, size_t size, struct hists *hists)
+{
+	size_t ret = 0;
+
+	if (symbol_conf.use_callchain)
+		ret += scnprintf(buf, size, "  ");
+
+	ret += scnprintf_header_fmt(buf + ret, size - ret);
+	ret += scnprintf_header_se(hists, buf + ret, size - ret);
+
+	return ret;
+}
+
 static void hist_browser__update_pcnt_entries(struct hist_browser *hb);
 
 static int hist_browser__run(struct hist_browser *browser,
@@ -373,6 +431,9 @@ static int hist_browser__run(struct hist_browser *browser,
 			/* Expand the whole world. */
 			hist_browser__set_folding(browser, true);
 			break;
+		case 'H':
+			browser->show_col_headers = !browser->show_col_headers;
+			continue;
 		case K_ENTER:
 			if (hist_browser__toggle_fold(browser))
 				break;
@@ -596,6 +657,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 	double percent = 0.0;
 	struct hists *hists = he->hists;
 	struct hpp_arg *arg = hpp->ptr;
+	const char *fmt = arg->hb->show_col_headers ? " %6.2f%%" : "%6.2f%%";
 
 	if (hists->stats.total_period)
 		percent = 100.0 * get_field(he) / hists->stats.total_period;
@@ -605,7 +667,7 @@ static int __hpp__color_fmt(struct perf_hpp *hpp, struct hist_entry *he,
 	if (callchain_cb)
 		ret += callchain_cb(arg);
 
-	ret += scnprintf(hpp->buf, hpp->size, "%6.2f%%", percent);
+	ret += scnprintf(hpp->buf, hpp->size, fmt, percent);
 	slsmg_printf("%s", hpp->buf);
 
 	if (symbol_conf.event_group) {
@@ -1205,12 +1267,15 @@ static unsigned int hist_browser__header(struct ui_browser *b)
 {
 	struct hist_browser *browser;
 	char title[160];
+	char header[500];
+	size_t size = min(b->width, (u16) sizeof(header));
 
 	browser = container_of(b, struct hist_browser, b);
-	ui_browser__refresh_dimensions(b);
+	hist_browser__refresh_dimensions(browser);
 	hists__browser_title(browser->hists, title, sizeof(title));
+	hists__scnprintf_header(header, size, browser->hists);
 
-	if (__ui_browser__show(b, title,
+	if (__ui_browser__show(b, title, header,
 		"Press '?' for help on key bindings") < 0)
 		return -1;
 

@@ -243,6 +243,13 @@ void __ui_browser__show_title(struct ui_browser *browser, const char *title)
 	slsmg_write_nstring(title, browser->width + 1);
 }
 
+static void __ui_browser__show_header(struct ui_browser *browser, char *header)
+{
+	SLsmg_gotorc(1, 0);
+	ui_browser__set_color(browser, HE_COLORSET_ROOT);
+	slsmg_write_nstring(header, browser->width + 1);
+}
+
 void ui_browser__show_title(struct ui_browser *browser, const char *title)
 {
 	pthread_mutex_lock(&ui__lock);
@@ -268,7 +275,7 @@ static int ui_browser__show_va(struct ui_browser *browser, const char *title,
 }
 
 int __ui_browser__show(struct ui_browser *browser, const char *title,
-		       const char *helpline, ...)
+		       char *header, const char *helpline, ...)
 {
 	va_list args;
 	int err;
@@ -276,6 +283,9 @@ int __ui_browser__show(struct ui_browser *browser, const char *title,
         va_start(args, helpline);
 	err = ui_browser__show_va(browser, title, helpline, args);
 	va_end(args);
+
+	if (header)
+		__ui_browser__show_header(browser, header);
 
 	return err ? 0 : -1;
 }
