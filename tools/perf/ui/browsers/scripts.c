@@ -116,7 +116,7 @@ int script_browse(const char *script_opt)
 	struct script_line *sline;
 
 	struct perf_script_browser script = {
-		.b = {
+		.b.ops = {
 			.refresh    = ui_browser__list_head_refresh,
 			.seek	    = ui_browser__list_head_seek,
 			.write	    = script_browser__write,
