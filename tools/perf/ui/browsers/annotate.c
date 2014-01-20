@@ -388,8 +388,9 @@ static bool annotate_browser__toggle_source(struct annotate_browser *browser)
 	struct disasm_line *dl;
 	struct browser_disasm_line *bdl;
 	off_t offset = browser->b.index - browser->b.top_idx;
+	struct ui_browser_ops *ops = &browser->b.ops;
 
-	browser->b.seek(&browser->b, offset, SEEK_CUR);
+	ops->seek(&browser->b, offset, SEEK_CUR);
 	dl = list_entry(browser->b.top, struct disasm_line, node);
 	bdl = disasm_line__browser(dl);
 
@@ -399,13 +400,13 @@ static bool annotate_browser__toggle_source(struct annotate_browser *browser)
 
 		browser->b.nr_entries = browser->nr_entries;
 		annotate_browser__opts.hide_src_code = false;
-		browser->b.seek(&browser->b, -offset, SEEK_CUR);
+		ops->seek(&browser->b, -offset, SEEK_CUR);
 		browser->b.top_idx = bdl->idx - offset;
 		browser->b.index = bdl->idx;
 	} else {
 		if (bdl->idx_asm < 0) {
 			ui_helpline__puts("Only available for assembly lines.");
-			browser->b.seek(&browser->b, -offset, SEEK_CUR);
+			ops->seek(&browser->b, -offset, SEEK_CUR);
 			return false;
 		}
 
@@ -414,7 +415,7 @@ static bool annotate_browser__toggle_source(struct annotate_browser *browser)
 
 		browser->b.nr_entries = browser->nr_asm_entries;
 		annotate_browser__opts.hide_src_code = true;
-		browser->b.seek(&browser->b, -offset, SEEK_CUR);
+		ops->seek(&browser->b, -offset, SEEK_CUR);
 		browser->b.top_idx = bdl->idx_asm - offset;
 		browser->b.index = bdl->idx_asm;
 	}
@@ -882,10 +883,12 @@ int symbol__tui_annotate(struct symbol *sym, struct map *map,
 	};
 	struct annotate_browser browser = {
 		.b = {
-			.refresh = annotate_browser__refresh,
-			.seek	 = ui_browser__list_head_seek,
-			.write	 = annotate_browser__write,
-			.filter  = disasm_line__filter,
+			.ops = {
+				.refresh = annotate_browser__refresh,
+				.seek	 = ui_browser__list_head_seek,
+				.write	 = annotate_browser__write,
+				.filter  = disasm_line__filter,
+			},
 			.priv	 = &ms,
 			.use_navkeypressed = true,
 		},

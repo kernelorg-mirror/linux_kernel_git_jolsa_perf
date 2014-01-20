@@ -81,10 +81,12 @@ static int ui__list_menu(int argc, char * const argv[])
 {
 	struct ui_browser menu = {
 		.entries    = (void *)argv,
-		.refresh    = ui_browser__argv_refresh,
-		.seek	    = ui_browser__argv_seek,
-		.write	    = ui_browser__argv_write,
 		.nr_entries = argc,
+		.ops = {
+			.refresh    = ui_browser__argv_refresh,
+			.seek	    = ui_browser__argv_seek,
+			.write	    = ui_browser__argv_write,
+		},
 	};
 
 	return list_menu__run(&menu);

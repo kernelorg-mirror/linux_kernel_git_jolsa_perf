@@ -11,21 +11,27 @@
 #define HE_COLORSET_ADDR	55
 #define HE_COLORSET_ROOT	56
 
-struct ui_browser {
-	u64	      index, top_idx;
-	void	      *top, *entries;
-	u16	      y, x, width, height;
-	int	      current_color;
-	void	      *priv;
-	const char    *title;
-	char	      *helpline;
+struct ui_browser;
+
+struct ui_browser_ops {
 	unsigned int  (*refresh)(struct ui_browser *browser);
 	void	      (*write)(struct ui_browser *browser, void *entry, int row);
 	void	      (*seek)(struct ui_browser *browser, off_t offset, int whence);
 	bool	      (*filter)(struct ui_browser *browser, void *entry);
-	u32	      nr_entries;
-	bool	      navkeypressed;
-	bool	      use_navkeypressed;
+};
+
+struct ui_browser {
+	u64			index, top_idx;
+	void			*top, *entries;
+	u16			y, x, width, height;
+	int			current_color;
+	void			*priv;
+	const char		*title;
+	char			*helpline;
+	u32			nr_entries;
+	bool			navkeypressed;
+	bool			use_navkeypressed;
+	struct ui_browser_ops	ops;
 };
 
 int  ui_browser__set_color(struct ui_browser *browser, int color);
