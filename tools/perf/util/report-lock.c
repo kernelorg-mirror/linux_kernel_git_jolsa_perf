@@ -200,6 +200,7 @@ static int lock_sort_entry__snprintf(struct sort_entry *se,
 	int indent = 0;
 	const char *op = "";
 	const char *flags_str = " ";
+	const char *pair = "";
 
 	if (!s.len)
 		trace_seq_init(&s);
@@ -209,6 +210,19 @@ static int lock_sort_entry__snprintf(struct sort_entry *se,
 	if ((info->mode == LOCK__LIST) && (lse->idx == LOCK_FIELD__NAME)) {
 		op     = lock_op(info->tp);
 		indent = he->lock_info->lock_indent;
+	}
+
+	if (lse->idx == LOCK_FIELD__LOCK_DEP_ADDR) {
+		struct hists *hists = he->hists;
+		unsigned long long addr;
+
+		pair = " ";
+		pevent_read_number_field(field, raw->data, &addr);
+		if (selected)
+			hists->lockdep_addr_base = addr;
+		else if (hists->lockdep_addr_base &&
+			 hists->lockdep_addr_base == addr)
+			pair = ">";
 	}
 
 	if (info->field_flags && (lse->idx == LOCK_FIELD__NAME)) {
@@ -224,7 +238,7 @@ static int lock_sort_entry__snprintf(struct sort_entry *se,
 	}
 
 	pevent_field_info(&s, field, raw->data, raw->size, false);
-	return scnprintf(bf, size, "%s %s%*s%-*s", flags_str, op, indent * 2, "", width, s.buffer);
+	return scnprintf(bf, size, "%s%s %s%*s%-*s", pair, flags_str, op, indent * 2, "", width, s.buffer);
 }
 
 static struct lock_sort_entry lock_field__lockdep_addr = {

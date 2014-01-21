@@ -2095,6 +2095,17 @@ static unsigned int lock_browser__header(struct ui_browser *b)
 	return 0;
 }
 
+static unsigned int lock_browser__refresh(struct ui_browser *b)
+{
+	struct hist_browser *browser;
+	struct hists *hists;
+
+	browser = container_of(b, struct hist_browser, b);
+	hists = browser->hists;
+	hists->lockdep_addr_base = 0;
+	return hist_browser__refresh(b);
+}
+
 int lock__hists_browse(struct hists *hists)
 {
 	struct hist_browser browser = {
@@ -2102,7 +2113,7 @@ int lock__hists_browse(struct hists *hists)
 		.b = {
 			.ops = {
 				.header = lock_browser__header,
-				.refresh = hist_browser__refresh,
+				.refresh = lock_browser__refresh,
 				.seek = ui_browser__hists_seek,
 			},
 			.use_navkeypressed = true,

@@ -88,6 +88,7 @@ struct hists {
 	u16			*col_len;
 	int			col_n;
 	struct list_head	sort_list;
+	u64			lockdep_addr_base;
 };
 
 struct hist_entry_iter;
