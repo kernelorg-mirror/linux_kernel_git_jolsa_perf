@@ -28,6 +28,7 @@ struct hist_browser {
 	bool		     show_col_headers;
 	float		     min_pcnt;
 	u64		     nr_pcnt_entries;
+	u64		     time_base;
 };
 
 extern void hist_browser__init_hpp(void);
@@ -872,12 +873,24 @@ static void ui_browser__hists_init_top(struct ui_browser *browser)
 	}
 }
 
+static void init_time_base(struct hist_browser *hb)
+{
+	struct hists *hists = hb->hists;
+
+	if (hb->time_base)
+		hists->time_base = hb->time_base;
+
+	if (hists->time_base && !hb->time_base)
+		hb->time_base = hists->time_base;
+}
+
 static unsigned int hist_browser__refresh(struct ui_browser *browser)
 {
 	unsigned row = 0;
 	struct rb_node *nd;
 	struct hist_browser *hb = container_of(browser, struct hist_browser, b);
 
+	init_time_base(hb);
 	ui_browser__hists_init_top(browser);
 
 	for (nd = browser->top; nd; nd = rb_next(nd)) {
