@@ -90,11 +90,11 @@ sort__time_cmp(struct sort_entry *se __maybe_unused,
 	return right->time - left->time;
 }
 
-static u64 get_time_base(struct hist_entry *he)
+static u64 get_time_base(struct hist_entry *he, bool selected)
 {
 	struct hists *hists = he->hists;
 
-	if (!hists->time_base)
+	if (!hists->time_base || selected)
 		hists->time_base = he->time;
 
 	return hists->time_base;
@@ -106,7 +106,7 @@ static int hist_entry__time_snprintf(struct sort_entry *se __maybe_unused,
 				     size_t size, unsigned int width)
 {
 	char buf[100];
-	u64 time_base = get_time_base(he);
+	u64 time_base = get_time_base(he, selected);
 	unsigned long time_sec, time_usec;
 	unsigned long base_sec, base_usec;
 	long delta_sec, delta_usec;
