@@ -4238,10 +4238,15 @@ perf_output_sample_regs(struct perf_output_handle *handle,
 	}
 }
 
+__weak void
+arch_sample_regs_user_fixup(struct perf_regs_user *regs_user, int kernel) { }
+
 static void perf_sample_regs_user(struct perf_regs_user *regs_user,
-				  struct pt_regs *regs)
+				 struct pt_regs *regs)
 {
-	if (!user_mode(regs)) {
+	int kernel = !user_mode(regs);
+
+	if (kernel) {
 		if (current->mm)
 			regs = task_pt_regs(current);
 		else
@@ -4251,6 +4256,7 @@ static void perf_sample_regs_user(struct perf_regs_user *regs_user,
 	if (regs) {
 		regs_user->regs = regs;
 		regs_user->abi  = perf_reg_abi(current);
+		arch_sample_regs_user_fixup(regs_user, kernel);
 	}
 }
 

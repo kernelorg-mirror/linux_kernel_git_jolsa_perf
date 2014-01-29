@@ -81,6 +81,7 @@ struct perf_branch_stack {
 struct perf_regs_user {
 	__u64		abi;
 	struct pt_regs	*regs;
+	struct pt_regs  regs_copy;
 };
 
 struct task_struct;

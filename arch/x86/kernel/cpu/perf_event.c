@@ -34,6 +34,7 @@
 #include <asm/timer.h>
 #include <asm/desc.h>
 #include <asm/ldt.h>
+#include <asm/syscall.h>
 
 #include "perf_event.h"
 
@@ -1905,6 +1906,42 @@ void arch_perf_update_userpage(struct perf_event_mmap_page *userpg, u64 now)
 
 	cyc2ns_read_end(data);
 }
+
+#ifdef CONFIG_X86_64
+void arch_sample_regs_user_fixup(struct perf_regs_user *uregs, int kernel)
+{
+	/*
+	 * If the perf event was triggered within the kernel code
+	 * path, then it was either syscall or interrupt. While
+	 * interrupt stores almost all user registers, the syscall
+	 * fast path does not. At this point we can at least set
+	 * rsp register right, which is crucial for dwarf unwind.
+	 *
+	 * The syscall_get_nr function returns -1 (orig_ax) for
+	 * interrupt, and positive value for syscall.
+	 *
+	 * We have two race windows in here:
+	 *
+	 * 1) Few instructions from syscall entry until old_rsp is
+	 *    set.
+	 *
+	 * 2) In syscall/interrupt path from entry until the orig_ax
+	 *    is set.
+	 *
+	 * Above described race windows are fractional opposed to
+	 * the syscall fast path, so we get much better results
+	 * fixing rsp this way.
+	 */
+	if (kernel && (syscall_get_nr(current, uregs->regs) >= 0)) {
+		/* Make a copy and link it to regs pointer. */
+		memcpy(&uregs->regs_copy, uregs->regs, sizeof(*uregs->regs));
+		uregs->regs = &uregs->regs_copy;
+
+		/* And fix the rsp. */
+		uregs->regs->sp = this_cpu_read(old_rsp);
+	}
+}
+#endif
 
 /*
  * callchain support
