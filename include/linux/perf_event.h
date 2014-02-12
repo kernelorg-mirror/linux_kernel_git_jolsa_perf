@@ -437,6 +437,14 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
+	union {
+		atomic_t		share_id_gen;
+		int			share_id;
+	};
+	union {
+		struct list_head	share_list;
+		struct list_head	share_entry;
+	};
 #endif /* CONFIG_PERF_EVENTS */
 };
 
