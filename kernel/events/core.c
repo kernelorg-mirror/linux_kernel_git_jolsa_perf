@@ -7074,14 +7074,10 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & PERF_FLAG_FD_CLOEXEC)
 		f_flags |= O_CLOEXEC;
 
-	event_fd = get_unused_fd_flags(f_flags);
-	if (event_fd < 0)
-		return event_fd;
-
 	if (group_fd != -1) {
 		err = perf_fget_light(group_fd, &group);
 		if (err)
-			goto err_fd;
+			return err;
 		group_leader = group.file->private_data;
 		if (flags & PERF_FLAG_FD_OUTPUT)
 			output_event = group_leader;
@@ -7089,11 +7085,15 @@ SYSCALL_DEFINE5(perf_event_open,
 			group_leader = NULL;
 	}
 
+	event_fd = err = get_unused_fd_flags(f_flags);
+	if (err < 0)
+		goto err_group_fd;
+
 	if (pid != -1 && !(flags & PERF_FLAG_PID_CGROUP)) {
 		task = find_lively_task_by_vpid(pid);
 		if (IS_ERR(task)) {
 			err = PTR_ERR(task);
-			goto err_group_fd;
+			goto err_fd;
 		}
 	}
 
@@ -7283,10 +7283,10 @@ err_cpus:
 err_task:
 	if (task)
 		put_task_struct(task);
-err_group_fd:
-	fdput(group);
 err_fd:
 	put_unused_fd(event_fd);
+err_group_fd:
+	fdput(group);
 	return err;
 }
 
