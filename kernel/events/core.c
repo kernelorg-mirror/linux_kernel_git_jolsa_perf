@@ -4051,6 +4051,19 @@ again:
 	ring_buffer_put(rb); /* could be last */
 }
 
+static void mmap_fds(struct perf_event *fd_master)
+{
+	struct perf_event *event;
+	struct perf_event_context *ctx = fd_master->ctx;
+
+	mutex_lock(&ctx->mutex);
+
+	list_for_each_entry(event, &fd_master->sibling_list, fd_entry)
+		perf_event_set_output(event, fd_master);
+
+	mutex_unlock(&ctx->mutex);
+}
+
 static const struct vm_operations_struct perf_mmap_vmops = {
 	.open		= perf_mmap_open,
 	.close		= perf_mmap_close,
@@ -4181,6 +4194,9 @@ unlock:
 	 */
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP;
 	vma->vm_ops = &perf_mmap_vmops;
+
+	if (!ret)
+		mmap_fds(event);
 
 	return ret;
 }
