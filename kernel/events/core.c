@@ -3606,6 +3606,27 @@ unlock:
 	return ret;
 }
 
+static int get_fd_id(struct perf_event *fd_master, u64 *id, u64 __user *arg)
+{
+	struct perf_event *event;
+	u64 fd_id;
+
+	if (list_empty(&fd_master->fd_list))
+		return 0;
+
+	if (copy_from_user(&fd_id, arg, sizeof(fd_id)))
+		return -EFAULT;
+
+	list_for_each_entry(event, &fd_master->fd_list, fd_entry) {
+		if (event->fd_id == fd_id) {
+			*id = primary_event_id(event);
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static const struct file_operations perf_fops;
 
 static inline int perf_fget_light(int fd, struct fd *p)
@@ -3652,6 +3673,9 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case PERF_EVENT_IOC_ID:
 	{
 		u64 id = primary_event_id(event);
+
+		if (get_fd_id(event, &id, (u64 __user *) arg))
+			return -EINVAL;
 
 		if (copy_to_user((void __user *)arg, &id, sizeof(id)))
 			return -EFAULT;
