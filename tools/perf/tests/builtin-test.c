@@ -136,6 +136,10 @@ static struct test {
 		.func = test__thread_mg_share,
 	},
 	{
+		.desc = "Test control group",
+		.func = test__control_group,
+	},
+	{
 		.func = NULL,
 	},
 };
