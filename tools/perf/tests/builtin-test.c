@@ -124,6 +124,10 @@ static struct test {
 #endif
 #endif
 	{
+		.desc = "Test control group",
+		.func = test__control_group,
+	},
+	{
 		.func = NULL,
 	},
 };
