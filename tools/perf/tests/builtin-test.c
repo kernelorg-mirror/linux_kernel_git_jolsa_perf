@@ -128,6 +128,10 @@ static struct test {
 		.func = test__mmap_output_setup,
 	},
 	{
+		.desc = "Test share group",
+		.func = test__share_group,
+	},
+	{
 		.func = NULL,
 	},
 };
