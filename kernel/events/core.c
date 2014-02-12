@@ -121,7 +121,8 @@ static int cpu_function_call(int cpu, int (*func) (void *info), void *info)
 #define PERF_FLAG_ALL (PERF_FLAG_FD_NO_GROUP |\
 		       PERF_FLAG_FD_OUTPUT  |\
 		       PERF_FLAG_PID_CGROUP |\
-		       PERF_FLAG_FD_CLOEXEC)
+		       PERF_FLAG_FD_CLOEXEC |\
+		       PERF_FLAG_FD_MASTER)
 
 /*
  * branch priv levels that need permission checks
@@ -3267,6 +3268,16 @@ static void free_event(struct perf_event *event)
 	__free_event(event);
 }
 
+static void
+perf_event_for_each_fd_entry(struct perf_event *event,
+			     void (*func)(struct perf_event *))
+{
+	struct perf_event *entry;
+
+	list_for_each_entry(entry, &event->fd_list, fd_entry)
+		func(entry);
+}
+
 int perf_event_release_kernel(struct perf_event *event)
 {
 	struct perf_event_context *ctx = event->ctx;
@@ -3289,8 +3300,10 @@ int perf_event_release_kernel(struct perf_event *event)
 	perf_group_detach(event);
 	raw_spin_unlock_irq(&ctx->lock);
 	perf_remove_from_context(event);
+	perf_event_for_each_fd_entry(event, perf_remove_from_context);
 	mutex_unlock(&ctx->mutex);
 
+	perf_event_for_each_fd_entry(event, free_event);
 	free_event(event);
 
 	return 0;
@@ -6702,6 +6715,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	INIT_LIST_HEAD(&event->sibling_list);
 	INIT_LIST_HEAD(&event->rb_entry);
 	INIT_LIST_HEAD(&event->active_entry);
+	INIT_LIST_HEAD(&event->fd_list);
 	INIT_HLIST_NODE(&event->hlist_entry);
 
 
@@ -7004,7 +7018,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		struct perf_event_attr __user *, attr_uptr,
 		pid_t, pid, int, cpu, int, group_fd, unsigned long, flags)
 {
-	struct perf_event *group_leader = NULL, *output_event = NULL;
+	struct perf_event *group_leader = NULL, *output_event = NULL, *fd_master = NULL;
 	struct perf_event *event, *sibling;
 	struct perf_event_attr attr;
 	struct perf_event_context *ctx;
@@ -7012,7 +7026,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	struct fd group = {NULL, 0};
 	struct task_struct *task = NULL;
 	struct pmu *pmu;
-	int event_fd;
+	int event_fd = -1;
 	int move_group = 0;
 	int err;
 	int f_flags = O_RDWR;
@@ -7054,13 +7068,17 @@ SYSCALL_DEFINE5(perf_event_open,
 		group_leader = group.file->private_data;
 		if (flags & PERF_FLAG_FD_OUTPUT)
 			output_event = group_leader;
+		if (flags & PERF_FLAG_FD_MASTER)
+			fd_master = group_leader;;
 		if (flags & PERF_FLAG_FD_NO_GROUP)
 			group_leader = NULL;
 	}
 
-	event_fd = err = get_unused_fd_flags(f_flags);
-	if (err < 0)
-		goto err_group_fd;
+	if (!fd_master) {
+		event_fd = err = get_unused_fd_flags(f_flags);
+		if (err < 0)
+			goto err_group_fd;
+	}
 
 	if (pid != -1 && !(flags & PERF_FLAG_PID_CGROUP)) {
 		task = find_lively_task_by_vpid(pid);
@@ -7169,11 +7187,16 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
-	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
-					f_flags);
-	if (IS_ERR(event_file)) {
-		err = PTR_ERR(event_file);
-		goto err_context;
+	if (!fd_master) {
+		event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
+						f_flags);
+		if (IS_ERR(event_file)) {
+			err = PTR_ERR(event_file);
+			goto err_context;
+		}
+	} else {
+		event_fd = atomic_inc_return(&fd_master->fd_id_gen);
+		event->fd_id = event_fd;
 	}
 
 	if (move_group) {
@@ -7222,6 +7245,8 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	mutex_lock(&current->perf_event_mutex);
 	list_add_tail(&event->owner_entry, &current->perf_event_list);
+	if (fd_master)
+		list_add_tail(&event->fd_entry, &fd_master->fd_list);
 	mutex_unlock(&current->perf_event_mutex);
 
 	/*
@@ -7237,7 +7262,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	 * perf_group_detach().
 	 */
 	fdput(group);
-	fd_install(event_fd, event_file);
+	if (!fd_master)
+		fd_install(event_fd, event_file);
 	return event_fd;
 
 err_context:
@@ -7250,7 +7276,8 @@ err_task:
 	if (task)
 		put_task_struct(task);
 err_fd:
-	put_unused_fd(event_fd);
+	if (!fd_master)
+		put_unused_fd(event_fd);
 err_group_fd:
 	fdput(group);
 	return err;

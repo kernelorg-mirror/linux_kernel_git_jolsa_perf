@@ -438,6 +438,14 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
+	union {
+		atomic_t		fd_id_gen;
+		int			fd_id;
+	};
+	union {
+		struct list_head	fd_list;
+		struct list_head	fd_entry;
+	};
 #endif /* CONFIG_PERF_EVENTS */
 };
 
