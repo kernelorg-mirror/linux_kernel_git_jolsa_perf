@@ -3278,6 +3278,16 @@ static void free_event(struct perf_event *event)
 	__free_event(event);
 }
 
+static void
+perf_event_for_each_control_entry(struct perf_event *event,
+				  void (*func)(struct perf_event *))
+{
+	struct perf_event *entry;
+
+	list_for_each_entry(entry, &event->control_list, control_entry)
+		func(entry);
+}
+
 int perf_event_release_kernel(struct perf_event *event)
 {
 	struct perf_event_context *ctx = event->ctx;
@@ -3300,8 +3310,10 @@ int perf_event_release_kernel(struct perf_event *event)
 	perf_group_detach(event);
 	raw_spin_unlock_irq(&ctx->lock);
 	perf_remove_from_context(event);
+	perf_event_for_each_control_entry(event, perf_remove_from_context);
 	mutex_unlock(&ctx->mutex);
 
+	perf_event_for_each_control_entry(event, free_event);
 	free_event(event);
 
 	return 0;
@@ -6703,6 +6715,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	INIT_LIST_HEAD(&event->sibling_list);
 	INIT_LIST_HEAD(&event->rb_entry);
 	INIT_LIST_HEAD(&event->active_entry);
+	INIT_LIST_HEAD(&event->control_list);
 	INIT_HLIST_NODE(&event->hlist_entry);
 
 
@@ -7012,7 +7025,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	struct fd group = {NULL, 0};
 	struct task_struct *task = NULL;
 	struct pmu *pmu;
-	int event_fd;
+	int create_fd;
+	int event_fd = -1;
 	int move_group = 0;
 	int err;
 	int f_flags = O_RDWR;
@@ -7058,9 +7072,14 @@ SYSCALL_DEFINE5(perf_event_open,
 			group_leader = NULL;
 	}
 
-	event_fd = err = get_unused_fd_flags(f_flags);
-	if (err < 0)
-		goto err_group_fd;
+	create_fd = !group_leader ||
+		    (group_leader && !is_group_control_event(group_leader));
+
+	if (create_fd) {
+		event_fd = err = get_unused_fd_flags(f_flags);
+		if (err < 0)
+			goto err_group_fd;
+	}
 
 	if (pid != -1 && !(flags & PERF_FLAG_PID_CGROUP)) {
 		task = find_lively_task_by_vpid(pid);
@@ -7169,11 +7188,16 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
-	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
-					f_flags);
-	if (IS_ERR(event_file)) {
-		err = PTR_ERR(event_file);
-		goto err_context;
+	if (create_fd) {
+		event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
+						f_flags);
+		if (IS_ERR(event_file)) {
+			err = PTR_ERR(event_file);
+			goto err_context;
+		}
+	} else {
+		event_fd = atomic_inc_return(&group_leader->control_group_id_gen);
+		event->control_group_id = event_fd;
 	}
 
 	if (move_group) {
@@ -7222,6 +7246,8 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	mutex_lock(&current->perf_event_mutex);
 	list_add_tail(&event->owner_entry, &current->perf_event_list);
+	if (!create_fd)
+		list_add_tail(&event->control_entry, &group_leader->control_list);
 	mutex_unlock(&current->perf_event_mutex);
 
 	/*
@@ -7237,7 +7263,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	 * perf_group_detach().
 	 */
 	fdput(group);
-	fd_install(event_fd, event_file);
+	if (create_fd)
+		fd_install(event_fd, event_file);
 	return event_fd;
 
 err_context:
@@ -7250,7 +7277,8 @@ err_task:
 	if (task)
 		put_task_struct(task);
 err_fd:
-	put_unused_fd(event_fd);
+	if (create_fd)
+		put_unused_fd(event_fd);
 err_group_fd:
 	fdput(group);
 	return err;
