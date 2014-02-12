@@ -625,6 +625,11 @@ static inline bool is_sampling_event(struct perf_event *event)
 	return event->attr.sample_period != 0;
 }
 
+static inline bool is_group_share_fd(struct perf_event *event)
+{
+	return event->attr.group_share_fd;
+}
+
 /*
  * Return 1 for a software event, 0 for a hardware event
  */
