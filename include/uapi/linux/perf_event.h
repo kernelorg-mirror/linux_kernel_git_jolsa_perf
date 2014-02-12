@@ -302,7 +302,9 @@ struct perf_event_attr {
 				exclude_callchain_user   : 1, /* exclude user callchains */
 				mmap2          :  1, /* include mmap with inode data     */
 
-				__reserved_1   : 40;
+				group_control  :  1, /* group control */
+
+				__reserved_1   : 39;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
