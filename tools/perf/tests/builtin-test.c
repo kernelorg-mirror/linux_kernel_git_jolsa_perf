@@ -140,6 +140,10 @@ static struct test {
 		.func = test__hists_output,
 	},
 	{
+		.desc = "Test control group",
+		.func = test__control_group,
+	},
+	{
 		.func = NULL,
 	},
 };
