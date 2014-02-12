@@ -3613,6 +3613,28 @@ unlock:
 	return ret;
 }
 
+static int perf_event_group_share_id(struct perf_event *event, u64 *id,
+				     u64 __user *arg)
+{
+	struct perf_event *sibling;
+	u64 share_id;
+
+	if (copy_from_user(&share_id, arg, sizeof(share_id)))
+		return -EFAULT;
+
+	if (!share_id)
+		return 0;
+
+	list_for_each_entry(sibling, &event->sibling_list, group_entry) {
+		if (sibling->share_id == share_id) {
+			*id = primary_event_id(sibling);
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static const struct file_operations perf_fops;
 
 static inline int perf_fget_light(int fd, struct fd *p)
@@ -3659,6 +3681,10 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case PERF_EVENT_IOC_ID:
 	{
 		u64 id = primary_event_id(event);
+
+		if ((is_group_share_fd(event)) &&
+		    perf_event_group_share_id(event, &id, (u64 __user *) arg))
+			return -EINVAL;
 
 		if (copy_to_user((void __user *)arg, &id, sizeof(id)))
 			return -EFAULT;
