@@ -4062,6 +4062,19 @@ again:
 	ring_buffer_put(rb); /* could be last */
 }
 
+static void group_control_rb(struct perf_event *event)
+{
+	struct perf_event *sibling;
+	struct perf_event_context *ctx = event->ctx;
+
+	mutex_lock(&ctx->mutex);
+
+	list_for_each_entry(sibling, &event->sibling_list, group_entry)
+		perf_event_set_output(sibling, event);
+
+	mutex_unlock(&ctx->mutex);
+}
+
 static const struct vm_operations_struct perf_mmap_vmops = {
 	.open		= perf_mmap_open,
 	.close		= perf_mmap_close,
@@ -4192,6 +4205,9 @@ unlock:
 	 */
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP;
 	vma->vm_ops = &perf_mmap_vmops;
+
+	if (!ret && is_group_control_event(event))
+		group_control_rb(event);
 
 	return ret;
 }
