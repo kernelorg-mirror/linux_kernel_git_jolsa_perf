@@ -61,11 +61,11 @@ struct perf_evsel {
 	char			*filter;
 	struct xyarray		*fd;
 	struct xyarray		*sample_id;
-	u64			*id;
+	u64			*header_id;
 	struct perf_counts	*counts;
 	struct perf_counts	*prev_raw_counts;
 	int			idx;
-	u32			ids;
+	u32			header_ids;
 	struct hists		hists;
 	char			*name;
 	double			scale;
