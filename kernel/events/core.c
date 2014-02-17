@@ -3685,6 +3685,8 @@ static int perf_event_group_set_output(struct perf_event *leader, u64 id)
 }
 
 static int perf_event_set_filter(struct perf_event *event, void __user *arg);
+static int perf_event_group_set_filter(struct perf_event *event,
+				       void __user *arg);
 
 static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -3745,6 +3747,9 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
+
+	case PERF_EVENT_IOC_GROUP_SET_FILTER:
+		return perf_event_group_set_filter(event, (void __user *)arg);
 
 	default:
 		return -ENOTTY;
@@ -6059,6 +6064,28 @@ static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 	ret = ftrace_profile_set_filter(event, event->attr.config, filter_str);
 
 	kfree(filter_str);
+	return ret;
+}
+
+static int perf_event_group_set_filter(struct perf_event *leader,
+				       void __user *_arg)
+{
+	struct perf_event *event;
+	struct {
+		u64	id;
+		char	filter[];
+	} *arg = _arg;
+
+	u64 id;
+	int ret = -EINVAL;
+
+	if (copy_from_user(&id, &arg->id, sizeof(id)))
+		return -EFAULT;
+
+	event = perf_event_sibling_id(leader, id);
+	if (event)
+		ret = perf_event_set_filter(event, arg->filter);
+
 	return ret;
 }
 
