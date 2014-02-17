@@ -3651,8 +3651,39 @@ static inline int perf_fget_light(int fd, struct fd *p)
 	return 0;
 }
 
+struct perf_event* perf_event_sibling_id(struct perf_event *leader, u64 id)
+{
+	struct perf_event_context *ctx = leader->ctx;
+	struct perf_event *event;
+
+	raw_spin_lock_irq(&ctx->lock);
+
+	list_for_each_entry(event, &leader->sibling_list, group_entry) {
+		if (primary_event_id(event) == id)
+			goto out;
+	}
+
+	event = NULL;
+out:
+	raw_spin_unlock_irq(&ctx->lock);
+	return event;
+}
+
 static int perf_event_set_output(struct perf_event *event,
 				 struct perf_event *output_event);
+
+static int perf_event_group_set_output(struct perf_event *leader, u64 id)
+{
+	struct perf_event* event;
+	int ret = -EINVAL;
+
+	event = perf_event_sibling_id(leader, id);
+	if (event)
+		ret = perf_event_set_output(event, leader);
+
+	return ret;
+}
+
 static int perf_event_set_filter(struct perf_event *event, void __user *arg);
 
 static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -3708,6 +3739,9 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 		return ret;
 	}
+
+	case PERF_EVENT_IOC_GROUP_SET_OUTPUT:
+		return perf_event_group_set_output(event, (u64) arg);
 
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
