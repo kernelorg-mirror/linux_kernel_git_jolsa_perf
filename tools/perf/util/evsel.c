@@ -29,7 +29,13 @@ static struct {
 	bool sample_id_all;
 	bool exclude_guest;
 	bool mmap2;
+	bool group_share_fd;
 } perf_missing_features;
+
+bool missing_features__group_share_fd(void)
+{
+	return perf_missing_features.group_share_fd;
+}
 
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 #define ID(e, x, y) (*(u64 *)xyarray__entry(e->id, x, y))
@@ -1082,6 +1088,10 @@ fallback_missing_features:
 		evsel->attr.mmap2 = 0;
 	if (perf_missing_features.exclude_guest)
 		evsel->attr.exclude_guest = evsel->attr.exclude_host = 0;
+	if (perf_missing_features.group_share_fd) {
+		evsel->attr.group_share_fd = 0;
+		evsel->attr.read_format &= ~(PERF_FORMAT_ID|PERF_FORMAT_GROUP);
+	}
 retry_sample_id:
 	if (perf_missing_features.sample_id_all)
 		evsel->attr.sample_id_all = 0;
@@ -1152,6 +1162,9 @@ try_fallback:
 	} else if (!perf_missing_features.exclude_guest &&
 		   (evsel->attr.exclude_guest || evsel->attr.exclude_host)) {
 		perf_missing_features.exclude_guest = true;
+		goto fallback_missing_features;
+	} else if (!perf_missing_features.group_share_fd) {
+		perf_missing_features.group_share_fd = true;
 		goto fallback_missing_features;
 	} else if (!perf_missing_features.sample_id_all) {
 		perf_missing_features.sample_id_all = true;
@@ -2152,6 +2165,64 @@ static int perf_evsel__alloc_ids(struct perf_evsel *evsel,
 {
 	evsel->id = xyarray__new(nr_cpus, nr_threads, sizeof(u64));
 	return evsel->id ? 0 : -ENOMEM;
+}
+
+static int
+perf_evsel__read_id_share(struct perf_evsel *evsel, struct perf_evsel *sibling,
+			  u64 *id, int cpu, int thread)
+{
+	int fd = FD(evsel, cpu, thread);
+
+	*id = (u64) FD(sibling, cpu, thread);
+        return ioctl(fd, PERF_EVENT_IOC_ID, id);
+}
+
+static int read_ids_share(struct perf_evsel *evsel,
+			  int cpu, int thread)
+{
+	struct perf_evsel *sibling;
+	u64 id;
+	int err;
+
+	err = perf_evsel__read_id(evsel, &id, cpu, thread);
+	if (err)
+		return err;
+
+	ID(evsel, cpu, thread) = id;
+
+	for_each_group_member(sibling, evsel) {
+		err = perf_evsel__read_id_share(evsel, sibling,
+						&id, cpu, thread);
+		if (err)
+			return err;
+
+		ID(sibling, cpu, thread) = id;
+	}
+
+	return 0;
+}
+
+int perf_evsel__read_ids_share(struct perf_evsel *evsel,
+			       int nr_cpus, int nr_threads)
+{
+	int cpu, thread;
+	int err;
+
+	if (!evsel->id &&
+	    perf_evsel__alloc_ids(evsel, nr_cpus, nr_threads))
+		return -ENOMEM;
+
+	for (thread = 0; thread < nr_threads; thread++) {
+		for (cpu = 0; cpu < nr_cpus; cpu++) {
+			err = read_ids_share(evsel, cpu, thread);
+			if (err)
+				goto out;
+		}
+	}
+
+	err = 0;
+out:
+	return err;
 }
 
 int perf_evsel__read_ids(struct perf_evsel *evsel,

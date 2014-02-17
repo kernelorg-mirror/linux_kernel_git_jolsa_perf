@@ -299,4 +299,10 @@ int perf_evsel__read_id(struct perf_evsel *evsel, u64 *id,
 
 int perf_evsel__read_ids(struct perf_evsel *evsel,
 			 int nr_cpus, int nr_thread);
+
+int perf_evsel__read_ids_share(struct perf_evsel *evsel,
+			       int nr_cpus, int nr_threads);
+
+bool missing_features__group_share_fd(void);
+
 #endif /* __PERF_EVSEL_H */

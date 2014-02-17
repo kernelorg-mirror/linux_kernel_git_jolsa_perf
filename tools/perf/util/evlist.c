@@ -1219,13 +1219,19 @@ void perf_evlist__to_front(struct perf_evlist *evlist,
 
 int perf_evlist__read_ids(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct perf_evsel *evsel, *leader = NULL;
 	int nr_threads = thread_map__nr(evlist->threads);
 	int nr_cpus    = cpu_map__nr(evlist->cpus);
 	int err = 0;
 
 	evlist__for_each(evlist, evsel) {
-		err = perf_evsel__read_ids(evsel, nr_cpus, nr_threads);
+		if (perf_evsel__is_group_leader(evsel) &&
+		    evsel->attr.group_share_fd) {
+			leader = evsel;
+			err = perf_evsel__read_ids_share(evsel, nr_cpus, nr_threads);
+		} else if (evsel->leader != leader)
+			err = perf_evsel__read_ids(evsel, nr_cpus, nr_threads);
+
 		if (err)
 			break;
 	}

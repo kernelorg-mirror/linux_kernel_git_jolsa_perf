@@ -144,6 +144,7 @@ static bool			forever				= false;
 static struct timespec		ref_time;
 static struct cpu_map		*aggr_map;
 static int			(*aggr_get_id)(struct cpu_map *m, int cpu);
+static bool			share_group			= false;
 
 static volatile int done = 0;
 
@@ -288,6 +289,7 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	struct perf_evsel *leader = evsel->leader;
+	int err;
 
 	if (scale)
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
@@ -298,8 +300,15 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 
 	attr->inherit = !no_inherit;
 
-	if (target__has_cpu(&target))
-		return perf_evsel__open_per_cpu(evsel, perf_evsel__cpus(evsel));
+	if (share_group && perf_evsel__is_group_leader(evsel)) {
+		attr->group_share_fd = 1;
+		attr->read_format |= PERF_FORMAT_ID|PERF_FORMAT_GROUP;
+	}
+
+	if (target__has_cpu(&target)) {
+		err = perf_evsel__open_per_cpu(evsel, perf_evsel__cpus(evsel));
+		goto out;
+	}
 
 	if (!target__has_task(&target) && perf_evsel__is_group_leader(evsel)) {
 		attr->disabled = 1;
@@ -307,7 +316,15 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 			attr->enable_on_exec = 1;
 	}
 
-	return perf_evsel__open_per_thread(evsel, evsel_list->threads);
+	err = perf_evsel__open_per_thread(evsel, evsel_list->threads);
+
+ out:
+	if (share_group && missing_features__group_share_fd()) {
+		pr_info("Cannot share group fd, no kernel support\n");
+		share_group = false;
+	}
+
+	return err;
 }
 
 /*
