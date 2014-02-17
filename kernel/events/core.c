@@ -6924,7 +6924,9 @@ err_size:
 }
 
 static int
-perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
+perf_event_ctx_set_output(struct perf_event *event,
+			  struct perf_event_context *ctx,
+			  struct perf_event *output_event)
 {
 	struct ring_buffer *rb = NULL, *old_rb = NULL;
 	int ret = -EINVAL;
@@ -6945,7 +6947,7 @@ perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
 	/*
 	 * If its not a per-cpu rb, it must be the same task.
 	 */
-	if (output_event->cpu == -1 && output_event->ctx != event->ctx)
+	if (output_event->cpu == -1 && output_event->ctx != ctx)
 		goto out;
 
 set:
@@ -6987,6 +6989,13 @@ unlock:
 
 out:
 	return ret;
+}
+
+static int
+perf_event_set_output(struct perf_event *event,
+		      struct perf_event *output_event)
+{
+	return perf_event_ctx_set_output(event, event->ctx, output_event);
 }
 
 /**
@@ -7161,7 +7170,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	}
 
 	if (output_event) {
-		err = perf_event_set_output(event, output_event);
+		err = perf_event_ctx_set_output(event, ctx, output_event);
 		if (err)
 			goto err_context;
 	}
