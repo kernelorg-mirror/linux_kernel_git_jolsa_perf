@@ -341,4 +341,8 @@ for ((_evsel) = list_entry((_leader)->node.next, struct perf_evsel, node); 	\
 
 int perf_count_values__scale(struct perf_counts_values *count, bool scale);
 
+void perf_evsel__compute_deltas(struct perf_evsel *evsel,
+				int cpu,
+				struct perf_counts_values *count);
+
 #endif /* __PERF_EVSEL_H */
