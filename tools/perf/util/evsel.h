@@ -339,4 +339,6 @@ for ((_evsel) = list_entry((_leader)->node.next, struct perf_evsel, node); 	\
      (_evsel) && (_evsel)->leader == (_leader);					\
      (_evsel) = list_entry((_evsel)->node.next, struct perf_evsel, node))
 
+int perf_count_values__scale(struct perf_counts_values *count, bool scale);
+
 #endif /* __PERF_EVSEL_H */
