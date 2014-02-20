@@ -33,8 +33,8 @@ int test__open_syscall_event(void)
 		close(fd);
 	}
 
-	if (perf_evsel__read_on_cpu(evsel, 0, 0) < 0) {
-		pr_debug("perf_evsel__read_on_cpu\n");
+	if (perf_evsel__read(evsel, 1, 1, false) < 0) {
+		pr_debug("perf_evsel__read_counters\n");
 		goto out_close_fd;
 	}
 

@@ -70,6 +70,7 @@ static void print_stat(int argc, const char **argv);
 static void print_counter_aggr(struct perf_evsel *counter, char *prefix);
 static void print_counter(struct perf_evsel *counter, char *prefix);
 static void print_aggr(char *prefix);
+static int perf_evlist__read_counters(struct perf_evlist *evlist);
 
 /* Default events used for perf stat -T */
 static const char * const transaction_attrs[] = {
@@ -380,6 +381,48 @@ static void update_shadow_stats(struct perf_evsel *counter, u64 *count)
 		update_stats(&runtime_itlb_cache_stats[0], count[0]);
 }
 
+static void aggregate_counter(struct perf_evlist *evlist,
+			      struct perf_evsel *counter)
+{
+	struct perf_counts_values *aggr = &counter->counts->aggr, *count;
+	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_cpus = perf_evsel__nr_cpus(counter);
+	int cpu, thread;
+
+	aggr->val = aggr->ena = aggr->run = 0;
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		for (thread = 0; thread < nr_threads; thread++) {
+			count = &counter->counts->cpu[cpu];
+
+			aggr->val += count->val;
+			if (scale) {
+				aggr->ena += count->ena;
+				aggr->run += count->run;
+			}
+		}
+	}
+}
+
+static void update_counter(struct perf_evsel *counter, int cpu)
+{
+	struct perf_counts *counts = counter->counts;
+	struct perf_counts_values *count;
+
+	count = cpu != -1 ? &counts->cpu[cpu] : &counts->aggr;
+
+	perf_evsel__compute_deltas(counter, cpu, count);
+	counts->scaled = perf_count_values__scale(count, scale);
+
+	if (verbose) {
+		fprintf(output, "%s: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+			perf_evsel__name(counter),
+			count->values[0], count->values[1], count->values[2]);
+	}
+
+	update_shadow_stats(counter, count->values);
+}
+
 /*
  * Read out the results of a single counter:
  * aggregate counts across CPUs in system-wide mode
@@ -390,22 +433,11 @@ static int read_counter_aggr(struct perf_evsel *counter)
 	u64 *count = counter->counts->aggr.values;
 	int i;
 
-	if (__perf_evsel__read(counter, perf_evsel__nr_cpus(counter),
-			       thread_map__nr(evsel_list->threads), scale) < 0)
-		return -1;
+	aggregate_counter(evsel_list, counter);
+	update_counter(counter, -1);
 
 	for (i = 0; i < 3; i++)
 		update_stats(&ps->res_stats[i], count[i]);
-
-	if (verbose) {
-		fprintf(output, "%s: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
-			perf_evsel__name(counter), count[0], count[1], count[2]);
-	}
-
-	/*
-	 * Save the full runtime - to allow normalization during printout:
-	 */
-	update_shadow_stats(counter, count);
 
 	return 0;
 }
@@ -416,17 +448,10 @@ static int read_counter_aggr(struct perf_evsel *counter)
  */
 static int read_counter(struct perf_evsel *counter)
 {
-	u64 *count;
 	int cpu;
 
-	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-		if (__perf_evsel__read_on_cpu(counter, cpu, 0, scale) < 0)
-			return -1;
-
-		count = counter->counts->cpu[cpu].values;
-
-		update_shadow_stats(counter, count);
-	}
+	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++)
+		update_counter(counter, cpu);
 
 	return 0;
 }
@@ -438,6 +463,9 @@ static void print_interval(void)
 	struct perf_stat *ps;
 	struct timespec ts, rs;
 	char prefix[64];
+
+	if (perf_evlist__read_counters(evsel_list))
+		return;
 
 	if (aggr_mode == AGGR_GLOBAL) {
 		evlist__for_each(evsel_list, counter) {
@@ -522,6 +550,23 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 	workload_exec_errno = info->si_value.sival_int;
 }
 
+static int perf_evlist__read_counters(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int err = 0;
+
+	evlist__for_each(evlist, evsel) {
+		int nr_threads = thread_map__nr(evlist->threads);
+		int nr_cpus    = perf_evsel__nr_cpus(evsel);
+
+		err = perf_evsel__read(evsel, nr_cpus, nr_threads, scale);
+		if (err)
+			break;
+	}
+
+	return err;
+}
+
 static int __run_perf_stat(int argc, const char **argv)
 {
 	char msg[512];
@@ -531,6 +576,7 @@ static int __run_perf_stat(int argc, const char **argv)
 	size_t l;
 	int status = 0;
 	const bool forks = (argc > 0);
+	int err;
 
 	if (interval) {
 		ts.tv_sec  = interval / 1000;
@@ -628,6 +674,10 @@ static int __run_perf_stat(int argc, const char **argv)
 	t1 = rdclock();
 
 	update_stats(&walltime_nsecs_stats, t1 - t0);
+
+	err = perf_evlist__read_counters(evsel_list);
+	if (err)
+		return err;
 
 	if (aggr_mode == AGGR_GLOBAL) {
 		evlist__for_each(evsel_list, counter) {

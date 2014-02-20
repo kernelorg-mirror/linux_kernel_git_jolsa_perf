@@ -828,55 +828,29 @@ int perf_count_values__scale(struct perf_counts_values *count, bool scale)
 	return scaled;
 }
 
-int __perf_evsel__read_on_cpu(struct perf_evsel *evsel,
-			      int cpu, int thread, bool scale)
+int perf_evsel__read(struct perf_evsel *evsel, int nr_cpus, int nr_threads,
+		     bool scale)
 {
-	struct perf_counts_values count;
-	size_t nv = scale ? 3 : 1;
-
-	if (FD(evsel, cpu, thread) < 0)
-		return -EINVAL;
-
-	if (evsel->counts == NULL && perf_evsel__alloc_counts(evsel, cpu + 1) < 0)
-		return -ENOMEM;
-
-	if (readn(FD(evsel, cpu, thread), &count, nv * sizeof(u64)) < 0)
-		return -errno;
-
-	perf_evsel__compute_deltas(evsel, cpu, &count);
-	perf_count_values__scale(&count, scale);
-	evsel->counts->cpu[cpu] = count;
-	return 0;
-}
-
-int __perf_evsel__read(struct perf_evsel *evsel,
-		       int ncpus, int nthreads, bool scale)
-{
+	struct perf_counts_values *count;
 	size_t nv = scale ? 3 : 1;
 	int cpu, thread;
-	struct perf_counts_values *aggr = &evsel->counts->aggr, count;
 
-	aggr->val = aggr->ena = aggr->run = 0;
+	if (!evsel->counts && perf_evsel__alloc_counts(evsel, nr_cpus + 1) < 0)
+		return -ENOMEM;
 
-	for (cpu = 0; cpu < ncpus; cpu++) {
-		for (thread = 0; thread < nthreads; thread++) {
-			if (FD(evsel, cpu, thread) < 0)
+	for (thread = 0; thread < nr_threads; thread++) {
+		for (cpu = 0; cpu < nr_cpus; cpu++) {
+			int fd = FD(evsel, cpu, thread);
+
+			if (fd < 0)
 				continue;
 
-			if (readn(FD(evsel, cpu, thread),
-				  &count, nv * sizeof(u64)) < 0)
+			count = &evsel->counts->cpu[cpu];
+			if (readn(fd, count, nv * sizeof(u64)) < 0)
 				return -errno;
-
-			aggr->val += count.val;
-			if (scale) {
-				aggr->ena += count.ena;
-				aggr->run += count.run;
-			}
 		}
 	}
 
-	perf_evsel__compute_deltas(evsel, -1, aggr);
-	evsel->counts->scaled = perf_count_values__scale(aggr, scale);
 	return 0;
 }
 

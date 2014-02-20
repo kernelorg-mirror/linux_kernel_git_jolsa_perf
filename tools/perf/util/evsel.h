@@ -214,63 +214,8 @@ static inline bool perf_evsel__match2(struct perf_evsel *e1,
 	 (a)->attr.type == (b)->attr.type &&	\
 	 (a)->attr.config == (b)->attr.config)
 
-int __perf_evsel__read_on_cpu(struct perf_evsel *evsel,
-			      int cpu, int thread, bool scale);
-
-/**
- * perf_evsel__read_on_cpu - Read out the results on a CPU and thread
- *
- * @evsel - event selector to read value
- * @cpu - CPU of interest
- * @thread - thread of interest
- */
-static inline int perf_evsel__read_on_cpu(struct perf_evsel *evsel,
-					  int cpu, int thread)
-{
-	return __perf_evsel__read_on_cpu(evsel, cpu, thread, false);
-}
-
-/**
- * perf_evsel__read_on_cpu_scaled - Read out the results on a CPU and thread, scaled
- *
- * @evsel - event selector to read value
- * @cpu - CPU of interest
- * @thread - thread of interest
- */
-static inline int perf_evsel__read_on_cpu_scaled(struct perf_evsel *evsel,
-						 int cpu, int thread)
-{
-	return __perf_evsel__read_on_cpu(evsel, cpu, thread, true);
-}
-
-int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads,
-		       bool scale);
-
-/**
- * perf_evsel__read - Read the aggregate results on all CPUs
- *
- * @evsel - event selector to read value
- * @ncpus - Number of cpus affected, from zero
- * @nthreads - Number of threads affected, from zero
- */
-static inline int perf_evsel__read(struct perf_evsel *evsel,
-				    int ncpus, int nthreads)
-{
-	return __perf_evsel__read(evsel, ncpus, nthreads, false);
-}
-
-/**
- * perf_evsel__read_scaled - Read the aggregate results on all CPUs, scaled
- *
- * @evsel - event selector to read value
- * @ncpus - Number of cpus affected, from zero
- * @nthreads - Number of threads affected, from zero
- */
-static inline int perf_evsel__read_scaled(struct perf_evsel *evsel,
-					  int ncpus, int nthreads)
-{
-	return __perf_evsel__read(evsel, ncpus, nthreads, true);
-}
+int perf_evsel__read(struct perf_evsel *evsel, int nr_cpus, int nr_threads,
+		     bool scale);
 
 void hists__init(struct hists *hists);
 
