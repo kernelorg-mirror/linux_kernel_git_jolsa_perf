@@ -1216,3 +1216,19 @@ void perf_evlist__to_front(struct perf_evlist *evlist,
 
 	list_splice(&move, &evlist->entries);
 }
+
+int perf_evlist__read_ids(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_cpus    = cpu_map__nr(evlist->cpus);
+	int err = 0;
+
+	evlist__for_each(evlist, evsel) {
+		err = perf_evsel__read_ids(evsel, nr_cpus, nr_threads);
+		if (err)
+			break;
+	}
+
+	return err;
+}

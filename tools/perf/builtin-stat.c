@@ -636,6 +636,12 @@ static int __run_perf_stat(int argc, const char **argv)
 		return -1;
 	}
 
+	if (perf_evlist__read_ids(evsel_list)) {
+		error("failed to read event IDs %d (%s)\n", errno,
+			strerror(errno));
+		return -1;
+	}
+
 	/*
 	 * Enable counters and exec the command:
 	 */

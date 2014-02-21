@@ -32,6 +32,7 @@ static struct {
 } perf_missing_features;
 
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
+#define ID(e, x, y) (*(u64 *)xyarray__entry(e->id, x, y))
 
 int __perf_evsel__sample_size(u64 sample_type)
 {
@@ -2019,4 +2020,36 @@ int perf_evsel__read_id(struct perf_evsel *evsel, u64 *id,
 
 	*id = read_data[id_idx];
 	return 0;
+}
+
+static int perf_evsel__alloc_ids(struct perf_evsel *evsel,
+				 int nr_cpus, int nr_threads)
+{
+	evsel->id = xyarray__new(nr_cpus, nr_threads, sizeof(u64));
+	return evsel->id ? 0 : -ENOMEM;
+}
+
+int perf_evsel__read_ids(struct perf_evsel *evsel,
+			 int nr_cpus, int nr_threads)
+{
+	int cpu, thread;
+	int err = 0;
+
+	if (!evsel->id &&
+	    perf_evsel__alloc_ids(evsel, nr_cpus, nr_threads))
+		return -ENOMEM;
+
+	for (thread = 0; thread < nr_threads; thread++) {
+		for (cpu = 0; cpu < nr_cpus; cpu++) {
+			u64 id;
+
+			err = perf_evsel__read_id(evsel, &id, cpu, thread);
+			if (err)
+				break;
+
+			ID(evsel, cpu, thread) = id;
+		}
+	}
+
+	return err;
 }

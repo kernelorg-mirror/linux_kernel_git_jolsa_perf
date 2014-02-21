@@ -61,6 +61,7 @@ struct perf_evsel {
 	char			*filter;
 	struct xyarray		*fd;
 	struct xyarray		*sample_id;
+	struct xyarray		*id;
 	u64			*header_id;
 	struct perf_counts	*counts;
 	struct perf_counts	*prev_raw_counts;
@@ -292,4 +293,7 @@ void perf_evsel__compute_deltas(struct perf_evsel *evsel,
 
 int perf_evsel__read_id(struct perf_evsel *evsel, u64 *id,
 			int cpu, int thread);
+
+int perf_evsel__read_ids(struct perf_evsel *evsel,
+			 int nr_cpus, int nr_thread);
 #endif /* __PERF_EVSEL_H */
