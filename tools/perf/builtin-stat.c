@@ -287,10 +287,14 @@ static void perf_stat__reset_stats(struct perf_evlist *evlist)
 static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
+	struct perf_evsel *leader = evsel->leader;
 
 	if (scale)
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 				    PERF_FORMAT_TOTAL_TIME_RUNNING;
+
+	if (leader->nr_members > 1)
+		attr->read_format |= PERF_FORMAT_GROUP | PERF_FORMAT_ID;
 
 	attr->inherit = !no_inherit;
 
@@ -552,14 +556,27 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 
 static int perf_evlist__read_counters(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct perf_evsel *evsel, *leader = NULL;
 	int err = 0;
 
 	evlist__for_each(evlist, evsel) {
 		int nr_threads = thread_map__nr(evlist->threads);
 		int nr_cpus    = perf_evsel__nr_cpus(evsel);
 
-		err = perf_evsel__read(evsel, nr_cpus, nr_threads, scale);
+		/*
+		 * Do we have group leader with multiple events?
+		 */
+		if (perf_evsel__is_group_leader(evsel) &&
+		    evsel->nr_members > 1) {
+			leader = evsel;
+			err = perf_evsel__read_group(evsel, nr_cpus, nr_threads, scale);
+
+		/*
+		 * Or just single event.
+		 */
+		} else if (evsel->leader != leader)
+			err = perf_evsel__read(evsel, nr_cpus, nr_threads, scale);
+
 		if (err)
 			break;
 	}

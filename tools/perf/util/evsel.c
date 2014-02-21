@@ -829,6 +829,131 @@ int perf_count_values__scale(struct perf_counts_values *count, bool scale)
 	return scaled;
 }
 
+static struct perf_evsel*
+perf_evsel__find_group_id(struct perf_evsel *evsel, u64 id,
+			  int cpu, int thread)
+{
+	struct perf_evsel *sibling;
+
+	for_each_group_member(sibling, evsel) {
+		if (ID(sibling, cpu, thread) == id)
+			return sibling;
+	}
+
+	return NULL;
+}
+
+#define LEADER_ENA 0
+#define LEADER_RUN 1
+#define LEADER_VAL_SCALE 2
+#define LEADER_VAL 0
+#define LEADER_ID_SCALE 3
+#define LEADER_ID 1
+
+struct leader_counts {
+	u64 nr;
+	u64 values[5];
+};
+
+struct member_counts {
+	u64 val;
+	u64 id;
+};
+
+static int read_group_buf(struct perf_evsel *evsel, char *buf,
+			  int cpu, int thread, bool scale)
+{
+	struct perf_counts_values *count;
+	struct leader_counts *lc;
+	struct member_counts *mc;
+	u64 ena = 0, run = 0, val;
+
+	lc = (struct leader_counts *) buf;
+	if (lc->nr != (u64) (evsel->nr_members + 1))
+		return -EINVAL;
+
+	if (scale) {
+		ena = lc->values[LEADER_ENA];
+		run = lc->values[LEADER_RUN];
+		val = lc->values[LEADER_VAL_SCALE];
+	} else
+		val = lc->values[LEADER_VAL];
+
+	count = &evsel->counts->cpu[cpu];
+
+	count->ena = ena;
+	count->run = run;
+	count->val = val;
+
+	mc = (struct member_counts *) (buf + (int) (scale ? 6 : 4));
+
+	while (lc->nr--) {
+		struct perf_evsel *sibling;
+
+		sibling = perf_evsel__find_group_id(evsel, mc->id, cpu, thread);
+		if (!sibling)
+			return -EINVAL;
+
+		count = &sibling->counts->cpu[cpu];
+		count->ena = ena;
+		count->run = run;
+		count->val = mc->val;
+
+		mc++;
+	}
+
+	return 0;
+}
+
+static int read_group(struct perf_evsel *evsel, int cpu,
+		      int thread, bool scale)
+{
+	size_t sz = sizeof(struct leader_counts) +
+		    evsel->nr_members * sizeof(struct member_counts);
+	char *buf;
+	int fd = FD(evsel, cpu, thread);
+	int err;
+
+	if (fd < 0)
+		return -EINVAL;
+
+	buf = zalloc(sz);
+	if (!buf)
+		return -ENOMEM;
+
+	if (readn(fd, buf, sz) < 0)
+		return -errno;
+
+	err = read_group_buf(evsel, buf, cpu, thread, scale);
+
+	free(buf);
+	return err;
+}
+
+int perf_evsel__read_group(struct perf_evsel *evsel, int nr_cpus,
+			   int nr_threads, bool scale)
+{
+	int cpu, thread;
+	int err = 0;
+
+	if (!perf_evsel__is_group_leader(evsel) ||
+	    evsel->nr_members < 2)
+		return -EINVAL;
+
+	if (!evsel->counts && perf_evsel__alloc_counts(evsel, nr_cpus + 1) < 0)
+		return -ENOMEM;
+
+	for (thread = 0; thread < nr_threads; thread++) {
+		for (cpu = 0; cpu < nr_cpus; cpu++) {
+			err = read_group(evsel, cpu, thread, scale);
+			if (err)
+				break;
+		}
+	}
+
+	return err;
+}
+
 int perf_evsel__read(struct perf_evsel *evsel, int nr_cpus, int nr_threads,
 		     bool scale)
 {
