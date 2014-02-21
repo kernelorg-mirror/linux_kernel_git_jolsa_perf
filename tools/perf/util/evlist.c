@@ -378,43 +378,16 @@ void perf_evlist__id_add(struct perf_evlist *evlist, struct perf_evsel *evsel,
 
 static int perf_evlist__id_add_fd(struct perf_evlist *evlist,
 				  struct perf_evsel *evsel,
-				  int cpu, int thread, int fd)
+				  int cpu, int thread)
 {
-	u64 read_data[4] = { 0, };
-	int id_idx = 1; /* The first entry is the counter value */
 	u64 id;
-	int ret;
+	int err;
 
-	ret = ioctl(fd, PERF_EVENT_IOC_ID, &id);
-	if (!ret)
-		goto add;
+	err = perf_evsel__read_id(evsel, &id, cpu, thread);
+	if (!err)
+		perf_evlist__id_add(evlist, evsel, cpu, thread, id);
 
-	if (errno != ENOTTY)
-		return -1;
-
-	/* Legacy way to get event id.. All hail to old kernels! */
-
-	/*
-	 * This way does not work with group format read, so bail
-	 * out in that case.
-	 */
-	if (perf_evlist__read_format(evlist) & PERF_FORMAT_GROUP)
-		return -1;
-
-	if (!(evsel->attr.read_format & PERF_FORMAT_ID) ||
-	    read(fd, &read_data, sizeof(read_data)) == -1)
-		return -1;
-
-	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
-		++id_idx;
-	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
-		++id_idx;
-
-	id = read_data[id_idx];
-
- add:
-	perf_evlist__id_add(evlist, evsel, cpu, thread, id);
-	return 0;
+	return err;
 }
 
 struct perf_sample_id *perf_evlist__id2sid(struct perf_evlist *evlist, u64 id)
@@ -644,7 +617,7 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
 		}
 
 		if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
-		    perf_evlist__id_add_fd(evlist, evsel, cpu, thread, fd) < 0)
+		    perf_evlist__id_add_fd(evlist, evsel, cpu, thread) < 0)
 			return -1;
 	}
 

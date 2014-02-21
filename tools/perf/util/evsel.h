@@ -290,4 +290,6 @@ void perf_evsel__compute_deltas(struct perf_evsel *evsel,
 				int cpu,
 				struct perf_counts_values *count);
 
+int perf_evsel__read_id(struct perf_evsel *evsel, u64 *id,
+			int cpu, int thread);
 #endif /* __PERF_EVSEL_H */

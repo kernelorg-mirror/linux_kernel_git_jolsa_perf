@@ -1983,3 +1983,40 @@ int perf_evsel__open_strerror(struct perf_evsel *evsel, struct target *target,
 	"No CONFIG_PERF_EVENTS=y kernel support configured?\n",
 			 err, strerror(err), perf_evsel__name(evsel));
 }
+
+int perf_evsel__read_id(struct perf_evsel *evsel, u64 *id,
+			int cpu, int thread)
+{
+	int fd = FD(evsel, cpu, thread);
+	u64 read_data[4] = { 0, };
+	int id_idx = 1; /* The first entry is the counter value */
+	int ret;
+
+	ret = ioctl(fd, PERF_EVENT_IOC_ID, id);
+	if (!ret)
+		return 0;
+
+	if (errno != ENOTTY)
+		return -1;
+
+	/* Legacy way to get event id.. All hail to old kernels! */
+
+	/*
+	 * This way does not work with group format read, so bail
+	 * out in that case.
+	 */
+	if (evsel->attr.read_format & PERF_FORMAT_GROUP)
+		return -1;
+
+	if (!(evsel->attr.read_format & PERF_FORMAT_ID) ||
+	    read(fd, &read_data, sizeof(read_data)) == -1)
+		return -1;
+
+	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
+		++id_idx;
+	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+		++id_idx;
+
+	*id = read_data[id_idx];
+	return 0;
+}
