@@ -407,7 +407,7 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 		 */
 		cmp = hist_entry__cmp(he, entry);
 
-		if (!cmp) {
+		if (!cmp && !sort__wants_unique) {
 			if (sample_self)
 				he_stat__add_period(&he->stat, period, weight);
 			if (symbol_conf.cumulate_callchain)
