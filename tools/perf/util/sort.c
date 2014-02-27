@@ -22,6 +22,7 @@ int		sort__has_parent = 0;
 int		sort__has_sym = 0;
 int		sort__has_dso = 0;
 int		sort__has_socket = 0;
+int		sort__wants_unique = 0;
 enum sort_mode	sort__mode = SORT_MODE__NORMAL;
 
 
