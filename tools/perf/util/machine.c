@@ -1046,8 +1046,7 @@ int machine__process_mmap2_event(struct machine *machine,
 	if (map == NULL)
 		goto out_problem;
 
-	thread__insert_map(thread, map);
-	return 0;
+	return thread__insert_map(thread, map);
 
 out_problem:
 	dump_printf("problem processing PERF_RECORD_MMAP2, skipping event.\n");
@@ -1093,8 +1092,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 	if (map == NULL)
 		goto out_problem;
 
-	thread__insert_map(thread, map);
-	return 0;
+	return thread__insert_map(thread, map);
 
 out_problem:
 	dump_printf("problem processing PERF_RECORD_MMAP, skipping event.\n");

@@ -15,7 +15,6 @@ struct thread *thread__new(pid_t pid, pid_t tid)
 	struct thread *thread = zalloc(sizeof(*thread));
 
 	if (thread != NULL) {
-		map_groups__init(&thread->mg);
 		thread->pid_ = pid;
 		thread->tid = tid;
 		thread->ppid = -1;
@@ -45,12 +44,15 @@ void thread__delete(struct thread *thread)
 {
 	struct comm *comm, *tmp;
 
-	map_groups__exit(&thread->mg);
+	if (thread->mg)
+		map_groups__exit(thread->mg);
+
 	list_for_each_entry_safe(comm, tmp, &thread->comm_list, list) {
 		list_del(&comm->list);
 		comm__free(comm);
 	}
 
+	thread__map_groups_put(thread);
 	free(thread);
 }
 
@@ -111,18 +113,82 @@ int thread__comm_len(struct thread *thread)
 size_t thread__fprintf(struct thread *thread, FILE *fp)
 {
 	return fprintf(fp, "Thread %d %s\n", thread->tid, thread__comm_str(thread)) +
-	       map_groups__fprintf(&thread->mg, verbose, fp);
+	       map_groups__fprintf(thread->mg, verbose, fp);
 }
 
-void thread__insert_map(struct thread *thread, struct map *map)
+int thread__insert_map(struct thread *thread, struct map *map)
 {
-	map_groups__fixup_overlappings(&thread->mg, map, verbose, stderr);
-	map_groups__insert(&thread->mg, map);
+	struct map_groups *mg = thread->mg;
+
+	if (!mg) {
+		mg = thread__map_groups_get(thread);
+		if (!mg)
+			return -ENOMEM;
+	}
+
+	map_groups__fixup_overlappings(mg, map, verbose, stderr);
+	map_groups__insert(mg, map);
+	return 0;
+}
+
+static struct map_groups* thread__map_groups_alloc(struct thread *thread)
+{
+	struct map_groups* mg = zalloc(sizeof(*mg));
+
+	if (mg) {
+		map_groups__init(mg);
+		thread->mg = mg;
+	}
+
+	return mg;
+}
+
+struct map_groups* thread__map_groups_get(struct thread *thread)
+{
+	struct map_groups* mg = thread->mg;
+
+	if (!mg)
+		mg = thread__map_groups_alloc(thread);
+
+	return mg;
+}
+
+void thread__map_groups_put(struct thread *thread)
+{
+	zfree(&thread->mg);
+}
+
+static int thread__clone_map_groups(struct thread *thread,
+				    struct thread *parent)
+{
+	struct map_groups* mg;
+	int i;
+
+	/* This is new thread, we share map groups for process. */
+	if (thread->pid_ == parent->pid_)
+		return 0;
+
+	/*
+	 * But this one is new process, copy maps.. if there's
+	 * anything to copy ;-)
+	 */
+	if (!parent->mg)
+		return 0;
+
+	mg = thread__map_groups_alloc(thread);
+	if (!mg)
+		return -ENOMEM;
+
+	for (i = 0; i < MAP__NR_TYPES; ++i)
+		if (map_groups__clone(mg, parent->mg, i) < 0)
+			return -ENOMEM;
+
+	return 0;
 }
 
 int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp)
 {
-	int i, err;
+	int err;
 
 	if (parent->comm_set) {
 		const char *comm = thread__comm_str(parent);
@@ -134,11 +200,7 @@ int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp)
 		thread->comm_set = true;
 	}
 
-	for (i = 0; i < MAP__NR_TYPES; ++i)
-		if (map_groups__clone(&thread->mg, &parent->mg, i) < 0)
-			return -ENOMEM;
-
 	thread->ppid = parent->tid;
 
-	return 0;
+	return thread__clone_map_groups(thread, parent);
 }

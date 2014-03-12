@@ -655,7 +655,7 @@ void thread__find_addr_map(struct thread *thread,
 			   enum map_type type, u64 addr,
 			   struct addr_location *al)
 {
-	struct map_groups *mg = &thread->mg;
+	struct map_groups *mg = thread__map_groups_get(thread);
 	bool load_map = false;
 
 	al->machine = machine;
@@ -664,7 +664,7 @@ void thread__find_addr_map(struct thread *thread,
 	al->cpumode = cpumode;
 	al->filtered = false;
 
-	if (machine == NULL) {
+	if ((machine == NULL) || (mg == NULL)) {
 		al->map = NULL;
 		return;
 	}

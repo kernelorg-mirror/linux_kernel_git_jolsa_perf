@@ -13,7 +13,7 @@ struct thread {
 		struct rb_node	 rb_node;
 		struct list_head node;
 	};
-	struct map_groups	mg;
+	struct map_groups	*mg;
 	pid_t			pid_; /* Not all tools update this */
 	pid_t			tid;
 	pid_t			ppid;
@@ -40,14 +40,14 @@ int thread__set_comm(struct thread *thread, const char *comm, u64 timestamp);
 int thread__comm_len(struct thread *thread);
 struct comm *thread__comm(const struct thread *thread);
 const char *thread__comm_str(const struct thread *thread);
-void thread__insert_map(struct thread *thread, struct map *map);
+int thread__insert_map(struct thread *thread, struct map *map);
 int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp);
 size_t thread__fprintf(struct thread *thread, FILE *fp);
 
 static inline struct map *thread__find_map(struct thread *thread,
 					   enum map_type type, u64 addr)
 {
-	return thread ? map_groups__find(&thread->mg, type, addr) : NULL;
+	return thread ? map_groups__find(thread->mg, type, addr) : NULL;
 }
 
 void thread__find_addr_map(struct thread *thread, struct machine *machine,
@@ -77,5 +77,9 @@ static inline bool thread__is_filtered(struct thread *thread)
 
 	return false;
 }
+
+struct map_groups* thread__map_groups_get(struct thread *thread);
+
+void thread__map_groups_put(struct thread *thread);
 
 #endif	/* __PERF_THREAD_H */
