@@ -311,7 +311,7 @@ static struct thread *__machine__findnew_thread(struct machine *machine,
 	if (!create)
 		return NULL;
 
-	th = thread__new(pid, tid);
+	th = thread__new(pid, tid, machine);
 	if (th != NULL) {
 		rb_link_node(&th->rb_node, parent, p);
 		rb_insert_color(&th->rb_node, &machine->threads);

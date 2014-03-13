@@ -7,12 +7,14 @@
 #include <sys/types.h>
 #include "symbol.h"
 #include <strlist.h>
+#include "machine.h"
 
 struct thread {
 	union {
 		struct rb_node	 rb_node;
 		struct list_head node;
 	};
+	struct machine		*machine;
 	struct map_groups	*mg;
 	pid_t			pid_; /* Not all tools update this */
 	pid_t			tid;
@@ -29,7 +31,8 @@ struct thread {
 struct machine;
 struct comm;
 
-struct thread *thread__new(pid_t pid, pid_t tid);
+struct thread *thread__new(pid_t pid, pid_t tid,
+			   struct machine *machine);
 void thread__delete(struct thread *thread);
 static inline void thread__exited(struct thread *thread)
 {

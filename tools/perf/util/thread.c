@@ -8,13 +8,15 @@
 #include "debug.h"
 #include "comm.h"
 
-struct thread *thread__new(pid_t pid, pid_t tid)
+struct thread *thread__new(pid_t pid, pid_t tid,
+			   struct machine *machine)
 {
 	char *comm_str;
 	struct comm *comm;
 	struct thread *thread = zalloc(sizeof(*thread));
 
 	if (thread != NULL) {
+		thread->machine = machine;
 		thread->pid_ = pid;
 		thread->tid = tid;
 		thread->ppid = -1;
