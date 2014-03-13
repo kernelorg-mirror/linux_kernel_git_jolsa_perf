@@ -133,6 +133,16 @@ int thread__insert_map(struct thread *thread, struct map *map)
 	return 0;
 }
 
+static struct thread* thread__get_leader(struct thread *thread)
+{
+	pid_t pid = thread->pid_;
+
+	if (pid == thread->tid)
+		return thread;
+
+	return machine__findnew_thread(thread->machine, pid, pid);
+}
+
 static struct map_groups* thread__map_groups_alloc(struct thread *thread)
 {
 	struct map_groups* mg = zalloc(sizeof(*mg));
@@ -149,15 +159,36 @@ struct map_groups* thread__map_groups_get(struct thread *thread)
 {
 	struct map_groups* mg = thread->mg;
 
-	if (!mg)
-		mg = thread__map_groups_alloc(thread);
+	if (!mg) {
+		struct thread *leader = thread__get_leader(thread);
+
+		if (!leader)
+			return NULL;
+
+		if (leader->mg)
+			mg = leader->mg;
+		else
+			mg = thread__map_groups_alloc(leader);
+
+		if (leader != thread)
+			thread->mg = mg;
+
+		mg->refcnt++;
+	}
 
 	return mg;
 }
 
 void thread__map_groups_put(struct thread *thread)
 {
-	zfree(&thread->mg);
+	struct map_groups* mg = thread->mg;
+
+	if (mg) {
+		BUG_ON(!mg->refcnt);
+
+		if (!--mg->refcnt)
+			zfree(&thread->mg);
+	}
 }
 
 static int thread__clone_map_groups(struct thread *thread,

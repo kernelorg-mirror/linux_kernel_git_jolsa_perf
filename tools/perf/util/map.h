@@ -59,6 +59,8 @@ struct map_groups {
 	struct rb_root	 maps[MAP__NR_TYPES];
 	struct list_head removed_maps[MAP__NR_TYPES];
 	struct machine	 *machine;
+	/* Used for thread sharing */
+	int		  refcnt;
 };
 
 static inline struct kmap *map__kmap(struct map *map)
