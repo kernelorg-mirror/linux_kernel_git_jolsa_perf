@@ -1,4 +1,6 @@
 #include <asm/bug.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include "symbol.h"
 #include "dso.h"
 #include "machine.h"
@@ -180,27 +182,80 @@ static int open_dso(struct dso *dso, struct machine *machine)
 
 static void close_data_fd(struct dso *dso)
 {
-	if (dso->data.fd >= 0) {
-		close(dso->data.fd);
-		dso->data.fd = -1;
-	}
+	close(dso->data.fd);
+	dso->data.fd = -1;
 }
 
 static void close_dso(struct dso *dso)
 {
-	if (dso->data.fd >= 0) {
-		list_del(&dso->data.open_entry);
-		WARN_ONCE(dso__data_open_cnt <= 0,
-			  "DSO data fd counter out of bounds.");
-		dso__data_open_cnt--;
-	}
+	/*
+	 * No need to check for dso->data.fd >= 0 here. We are
+	 * called only from dso__data_close after this check.
+	 */
+	list_del(&dso->data.open_entry);
+	WARN_ONCE(dso__data_open_cnt <= 0,
+		  "DSO data fd counter out of bounds.");
+	dso__data_open_cnt--;
 
 	close_data_fd(dso);
 }
 
-void dso__data_close(struct dso *dso)
+static void close_first_dso(void)
 {
+	struct dso *dso;
+
+	dso = list_first_entry(&dso__data_open, struct dso, data.open_entry);
 	close_dso(dso);
+}
+
+static rlim_t get_fd_limit(void)
+{
+	struct rlimit l;
+	rlim_t limit = 0;
+
+	/* Allow half of the current open fd limit. */
+	if (getrlimit(RLIMIT_NOFILE, &l) == 0) {
+		if (l.rlim_cur == RLIM_INFINITY)
+			limit = l.rlim_cur;
+		else
+			limit = l.rlim_cur / 2;
+	} else {
+		pr_err("failed to get fd limit\n");
+		limit = 1;
+	}
+
+	return limit;
+}
+
+static bool may_cache_fd(void)
+{
+	static rlim_t limit;
+
+	if (!limit)
+		limit = get_fd_limit();
+
+	if (limit == RLIM_INFINITY)
+		return true;
+
+	return limit > (rlim_t) dso__data_open_cnt;
+}
+
+static void data_close(void)
+{
+	bool cache_fd = may_cache_fd();
+
+	if (!cache_fd)
+		close_first_dso();
+}
+
+void dso__data_close(struct dso *dso, bool cache)
+{
+	if (dso->data.fd >= 0) {
+		if (!cache)
+			close_dso(dso);
+		else
+			data_close();
+	}
 }
 
 int dso__data_fd(struct dso *dso, struct machine *machine)
@@ -350,7 +405,7 @@ dso_cache__read(struct dso *dso, struct machine *machine,
 	if (ret <= 0)
 		free(cache);
 
-	dso__data_close(dso);
+	dso__data_close(dso, true);
 	return ret;
 }
 
@@ -557,7 +612,7 @@ void dso__delete(struct dso *dso)
 		dso->long_name_allocated = false;
 	}
 
-	dso__data_close(dso);
+	dso__data_close(dso, false);
 	dso_cache__free(&dso->data.cache);
 	dso__free_a2l(dso);
 	zfree(&dso->symsrc_filename);
