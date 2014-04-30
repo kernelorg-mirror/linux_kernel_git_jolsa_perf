@@ -54,6 +54,10 @@ static struct test {
 		.func = test__dso_data,
 	},
 	{
+		.desc = "Test dso data cache interface",
+		.func = test__dso_data_cache,
+	},
+	{
 		.desc = "roundtrip evsel->name check",
 		.func = test__perf_evsel__roundtrip_name_test,
 	},
