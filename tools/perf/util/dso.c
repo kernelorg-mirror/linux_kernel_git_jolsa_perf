@@ -1,3 +1,4 @@
+#include <asm/bug.h>
 #include "symbol.h"
 #include "dso.h"
 #include "machine.h"
@@ -160,17 +161,20 @@ static int __open_dso(struct dso *dso, struct machine *machine)
 }
 
 /*
- * Global list of open DSOs.
- * Updated by open_dso/dso__data_close.
+ * Global list of open DSOs and the counter.
+ * Both updated by open_dso/dso__data_close.
  */
 static LIST_HEAD(dso__data_open);
+static long dso__data_open_cnt;
 
 static int open_dso(struct dso *dso, struct machine *machine)
 {
 	int fd = __open_dso(dso, machine);
 
-	if (fd > 0)
+	if (fd > 0) {
 		list_add_tail(&dso->data.open_entry, &dso__data_open);
+		dso__data_open_cnt++;
+	}
 	return fd;
 }
 
@@ -184,8 +188,12 @@ static void close_data_fd(struct dso *dso)
 
 static void close_dso(struct dso *dso)
 {
-	if (dso->data.fd >= 0)
+	if (dso->data.fd >= 0) {
 		list_del(&dso->data.open_entry);
+		WARN_ONCE(dso__data_open_cnt <= 0,
+			  "DSO data fd counter out of bounds.");
+		dso__data_open_cnt--;
+	}
 
 	close_data_fd(dso);
 }
