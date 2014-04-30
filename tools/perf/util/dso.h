@@ -1,12 +1,15 @@
 #ifndef __PERF_DSO
 #define __PERF_DSO
 
+#include <sys/resource.h>
 #include <linux/types.h>
 #include <linux/rbtree.h>
 #include <stdbool.h>
 #include <linux/types.h>
 #include "map.h"
 #include "build-id.h"
+
+extern rlim_t test_dso_data__fd_limit;
 
 enum dso_binary_type {
 	DSO_BINARY_TYPE__KALLSYMS = 0,
