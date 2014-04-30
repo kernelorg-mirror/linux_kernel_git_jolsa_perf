@@ -7,6 +7,8 @@
 #include "util.h"
 #include "debug.h"
 
+rlim_t test_dso_data__fd_limit;
+
 char dso__symtab_origin(const struct dso *dso)
 {
 	static const char origin[] = {
@@ -261,6 +263,9 @@ static bool may_cache_fd(void)
 
 	if (!limit)
 		limit = get_fd_limit();
+
+	if (unlikely(test_dso_data__fd_limit))
+		limit = test_dso_data__fd_limit;
 
 	if (limit == RLIM_INFINITY)
 		return true;
