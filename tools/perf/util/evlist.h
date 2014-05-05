@@ -17,6 +17,8 @@ struct record_opts;
 #define PERF_EVLIST__HLIST_BITS 8
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
+#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
+
 struct perf_mmap {
 	void		 *base;
 	int		 mask;
