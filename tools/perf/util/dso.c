@@ -421,8 +421,8 @@ static ssize_t dso_cache_read(struct dso *dso, struct machine *machine,
 		return dso_cache__read(dso, machine, offset, data, size);
 }
 
-ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
-			      u64 offset, u8 *data, ssize_t size)
+static ssize_t cached_read(struct dso *dso, struct machine *machine,
+			   u64 offset, u8 *data, ssize_t size)
 {
 	ssize_t r = 0;
 	u8 *p = data;
@@ -448,6 +448,12 @@ ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
 	} while (size);
 
 	return r;
+}
+
+ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
+			      u64 offset, u8 *data, ssize_t size)
+{
+	return cached_read(dso, machine, offset, data, size);
 }
 
 ssize_t dso__data_read_addr(struct dso *dso, struct map *map,
