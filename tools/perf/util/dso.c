@@ -173,6 +173,27 @@ static void dso__data_mmap_dec(void)
 	dso__data_mmap_cnt--;
 }
 
+static void close_first_dso(bool map_only);
+
+static int do_open(char *name)
+{
+	int fd;
+
+	do {
+		fd = open(name, O_RDONLY);
+		if (fd >= 0)
+			return fd;
+
+		if (!dso__data_open_cnt || errno != EMFILE)
+			break;
+
+		close_first_dso(false);
+	} while (1);
+
+	pr_debug("dso open failed, mmap: %s\n", strerror(errno));
+	return -1;
+}
+
 static int __open_dso(struct dso *dso, struct machine *machine)
 {
 	int fd;
@@ -191,7 +212,7 @@ static int __open_dso(struct dso *dso, struct machine *machine)
 		return -EINVAL;
 	}
 
-	fd = open(name, O_RDONLY);
+	fd = do_open(name);
 	free(name);
 	return fd;
 }
