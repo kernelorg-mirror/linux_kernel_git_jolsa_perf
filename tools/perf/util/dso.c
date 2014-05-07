@@ -500,6 +500,52 @@ static int data_mremap(struct dso *dso, u64 offset, ssize_t size)
 	return 0;
 }
 
+static bool next_maped_dso(struct dso *dso, struct dso **iter)
+{
+	list_for_each_entry_continue((*iter), &dso__data_open, data.open_entry) {
+		/* exclude current dso we try to map */
+		if (*iter == dso)
+			continue;
+		/* exclude not mapped dso */
+		if ((*iter)->data.ptr)
+			return true;
+	}
+
+	return false;
+}
+
+static char* do_mmap(struct dso *dso, ssize_t mmap_size, u64 offset)
+{
+	struct dso *iter = list_entry(&dso__data_open, struct dso,
+				      data.open_entry);
+	bool found;
+
+	do {
+		char *ptr;
+
+		ptr = mmap(0, mmap_size, PROT_READ, MAP_SHARED,
+			   dso->data.fd, offset);
+		if (ptr != MAP_FAILED)
+			return ptr;
+
+		if (!dso__data_mmap_cnt || errno != ENOMEM)
+			break;
+
+		/*
+		 * In case we have some maped dso, unmap
+		 * it and try again.
+		 */
+		found = next_maped_dso(dso, &iter);
+		if (found)
+			unmap_data_fd(iter);
+
+	} while (found);
+
+	pr_debug("dso mmap failed: %s\n", strerror(errno));
+	dso->data.cached_read = true;
+	return MAP_FAILED;
+}
+
 static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
 {
 	ssize_t mmap_size = PAGE_ALIGN(size);
@@ -509,12 +555,9 @@ static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
 
 	offset &= ~(page_size - 1);
 
-	ptr = mmap(0, mmap_size, PROT_READ, MAP_SHARED, dso->data.fd, offset);
-	if (ptr == MAP_FAILED) {
-		pr_debug("dso mmap failed, mmap: %s\n", strerror(errno));
-		dso->data.cached_read = true;
+	ptr = do_mmap(dso, mmap_size, offset);
+	if (ptr == MAP_FAILED)
 		return -1;
-	}
 
 	dso__data_mmap_inc();
 
