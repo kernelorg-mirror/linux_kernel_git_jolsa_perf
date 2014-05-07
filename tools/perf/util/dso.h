@@ -102,8 +102,13 @@ struct dso {
 	/* dso data file */
 	struct {
 		struct rb_root	 cache;
+		bool		 cached_read;
 		int		 fd;
 		struct list_head open_entry;
+		size_t		 file_size;
+		size_t		 mmap_size;
+		u64		 offset;
+		char		 *ptr;
 	} data;
 
 	char		 name[0];

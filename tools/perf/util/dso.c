@@ -1,6 +1,7 @@
 #include <asm/bug.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/mman.h>
 #include "symbol.h"
 #include "dso.h"
 #include "machine.h"
@@ -192,6 +193,18 @@ static int open_dso(struct dso *dso, struct machine *machine)
 	return fd;
 }
 
+static void unmap_data_fd(struct dso *dso)
+{
+	if (dso->data.ptr) {
+		if (munmap(dso->data.ptr, dso->data.mmap_size)) {
+			pr_err("dso mmap failed, munmap: %s\n",
+			       strerror(errno));
+		}
+
+		dso->data.ptr = NULL;
+	}
+}
+
 static void close_data_fd(struct dso *dso)
 {
 	if (dso->data.fd >= 0) {
@@ -203,6 +216,7 @@ static void close_data_fd(struct dso *dso)
 
 static void close_dso(struct dso *dso)
 {
+	unmap_data_fd(dso);
 	close_data_fd(dso);
 }
 
@@ -456,10 +470,145 @@ static ssize_t cached_read(struct dso *dso, struct machine *machine,
 	return r;
 }
 
+static int data_mremap(struct dso *dso, u64 offset, ssize_t size)
+{
+	ssize_t mmap_size = PAGE_ALIGN(offset - dso->data.offset + size);
+	char *ptr;
+
+	pr_debug("dso mremap-ing: %s size %ld\n", dso->name, mmap_size);
+
+	ptr = mremap(dso->data.ptr, dso->data.mmap_size,
+		     mmap_size, MREMAP_MAYMOVE);
+	if (ptr == MAP_FAILED) {
+		pr_err("dso mremap failed, mmap: %s\n", strerror(errno));
+		unmap_data_fd(dso);
+		return -1;
+	}
+
+	/* offset stays */
+	dso->data.ptr       = ptr;
+	dso->data.mmap_size = mmap_size;
+	return 0;
+}
+
+static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
+{
+	ssize_t mmap_size = PAGE_ALIGN(size);
+	char *ptr;
+
+	pr_debug("dso mmap-ing: %s size %ld\n", dso->name, mmap_size);
+
+	offset &= ~(page_size - 1);
+
+	ptr = mmap(0, mmap_size, PROT_READ, MAP_SHARED, dso->data.fd, offset);
+	if (ptr == MAP_FAILED) {
+		pr_debug("dso mmap failed, mmap: %s\n", strerror(errno));
+		return -1;
+	}
+
+	dso->data.ptr       = ptr;
+	dso->data.offset    = offset;
+	dso->data.mmap_size = mmap_size;
+	return 0;
+}
+
+static int __dso__data_mmap(struct dso *dso, u64 offset, ssize_t size)
+{
+	bool remap = offset > dso->data.offset;
+	int ret = -1;
+
+	/* Try to remmap first if possible. */
+	if (dso->data.ptr && remap)
+		ret = data_mremap(dso, offset, size);
+
+	return ret ? data_mmap(dso, offset, size) : 0;
+}
+
+static bool is_covered(struct dso *dso, u64 offset, ssize_t size)
+{
+	size_t dso_mmap_end = dso->data.offset + dso->data.mmap_size;
+
+	/*
+	 * We cover the request by current mmap if:
+	 *  - offset is below current base and
+	 *  - the request size fits in
+	 */
+	return (offset > dso->data.offset) &&
+	       ((size_t) offset + size <= dso_mmap_end);
+}
+
+static int dso__data_mmap(struct dso *dso, u64 offset, ssize_t size)
+{
+	int ret = 0;
+
+	if (!dso->data.ptr || !is_covered(dso, offset, size))
+		ret = __dso__data_mmap(dso, offset, size);
+
+	return ret;
+}
+
+static int data_file_size(struct dso *dso)
+{
+	struct stat st;
+
+	if (!dso->data.file_size) {
+		if (fstat(dso->data.fd, &st)) {
+			pr_err("dso mmap failed, fstat: %s\n", strerror(errno));
+			return -1;
+		}
+
+		dso->data.file_size = st.st_size;
+	}
+
+	return 0;
+}
+
+static ssize_t mmaped_read(struct dso *dso, struct machine *machine,
+			   u64 offset, u8 *data, ssize_t size)
+{
+	ssize_t rsize = -1;
+	int fd;
+
+	fd = dso__data_fd(dso, machine);
+	if (fd < 0)
+		return fd;
+
+	if (data_file_size(dso))
+		goto out;
+
+	if (offset > dso->data.file_size)
+		goto out;
+
+	if (offset + size < offset)
+		goto out;
+
+	if (dso__data_mmap(dso, offset, size))
+		goto out;
+
+	if (offset + size > dso->data.file_size)
+		rsize = dso->data.file_size - offset;
+	else
+		rsize = size;
+
+	memcpy(data, dso->data.ptr + offset - dso->data.offset, rsize);
+
+out:
+	dso__data_close(dso, true);
+	return rsize;
+}
+
 ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
 			      u64 offset, u8 *data, ssize_t size)
 {
-	return cached_read(dso, machine, offset, data, size);
+	ssize_t ret = -1;
+
+	if (!dso->data.cached_read) {
+		ret = mmaped_read(dso, machine, offset, data, size);
+		if (ret == -1)
+			dso->data.cached_read = true;
+	}
+
+	return ret == -1 ? cached_read(dso, machine, offset, data, size) : ret;
 }
 
 ssize_t dso__data_read_addr(struct dso *dso, struct map *map,
