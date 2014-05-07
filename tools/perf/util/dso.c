@@ -306,6 +306,16 @@ static void data_close(void)
 		close_first_dso();
 }
 
+/**
+ * dso__data_close - close dso's data file
+ * @dso: dso object
+ * @cache: true if we cache fd, false to close directly
+ *
+ * Close dso data file. If @cache is true it will
+ * leave the data file opened/mmaped in case there's
+ * less than half of the RLIMIT_NOFILE files opened.
+ * Otherwise it closes/unmaps the data file.
+ */
 void dso__data_close(struct dso *dso, bool cache)
 {
 	if (dso->data.fd >= 0) {
@@ -316,6 +326,14 @@ void dso__data_close(struct dso *dso, bool cache)
 	}
 }
 
+/**
+ * dso__data_fd - Get dso's data file descriptor
+ * @dso: dso object
+ * @machine: machine object
+ *
+ * Find dso's file, open it and returns file descriptor,
+ * which needs to be closed later by dso__data_close.
+ */
 int dso__data_fd(struct dso *dso, struct machine *machine)
 {
 	enum dso_binary_type binary_type_data[] = {
@@ -706,6 +724,18 @@ static ssize_t data_read_offset(struct dso *dso, u64 offset,
 	return __data_read_offset(dso, offset, data, size);
 }
 
+/**
+ * dso__data_read_offset - Read data from dso file offset
+ * @dso: dso object
+ * @machine: machine object
+ * @offset: file offset
+ * @data: buffer to store data
+ * @size: size of the @data buffer
+ *
+ * Read data from dso file offset. It first tries to read
+ * dso data file via open/mmap. If thats fails, we go back
+ * to the standard (cached) read.
+ */
 ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
 			      u64 offset, u8 *data, ssize_t size)
 {
@@ -723,6 +753,16 @@ ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
 	return ret;
 }
 
+/**
+ * dso__data_read_addr - Read data from dso address
+ * @dso: dso object
+ * @machine: machine object
+ * @offset: file offset
+ * @data: buffer to store data
+ * @size: size of the @data buffer
+ *
+ * Read data from dso address.
+ */
 ssize_t dso__data_read_addr(struct dso *dso, struct map *map,
 			    struct machine *machine, u64 addr,
 			    u8 *data, ssize_t size)
