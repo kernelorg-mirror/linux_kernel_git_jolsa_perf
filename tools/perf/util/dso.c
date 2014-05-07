@@ -506,6 +506,26 @@ static int data_mremap(struct dso *dso, u64 offset, ssize_t size)
 	return 0;
 }
 
+static char* do_mmap(struct dso *dso, ssize_t mmap_size, u64 offset)
+{
+	char *ptr;
+
+	do {
+		ptr = mmap(0, mmap_size, PROT_READ, MAP_SHARED,
+			   dso->data.fd, offset);
+		if (ptr != MAP_FAILED)
+			return ptr;
+
+		if (!dso__data_mmap_cnt || errno != ENOMEM)
+			break;
+
+		close_first_dso(true);
+	} while (1);
+
+	pr_debug("dso mmap failed, mmap: %s\n", strerror(errno));
+	return MAP_FAILED;
+}
+
 static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
 {
 	ssize_t mmap_size = PAGE_ALIGN(size);
@@ -515,11 +535,9 @@ static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
 
 	offset &= ~(page_size - 1);
 
-	ptr = mmap(0, mmap_size, PROT_READ, MAP_SHARED, dso->data.fd, offset);
-	if (ptr == MAP_FAILED) {
-		pr_debug("dso mmap failed, mmap: %s\n", strerror(errno));
+	ptr = do_mmap(dso, mmap_size, offset);
+	if (ptr == MAP_FAILED)
 		return -1;
-	}
 
 	dso__data_mmap_inc();
 
