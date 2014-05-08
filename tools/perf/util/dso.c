@@ -145,6 +145,7 @@ int dso__read_binary_type_filename(const struct dso *dso,
  */
 static LIST_HEAD(dso__data_open);
 static long dso__data_open_cnt;
+static long dso__data_mmap_cnt;
 
 static void dso__list_add(struct dso *dso)
 {
@@ -158,6 +159,18 @@ static void dso__list_del(struct dso *dso)
 	WARN_ONCE(dso__data_open_cnt <= 0,
 		  "DSO data fd counter out of bounds.");
 	dso__data_open_cnt--;
+}
+
+static void dso__data_mmap_inc(void)
+{
+	dso__data_mmap_cnt++;
+}
+
+static void dso__data_mmap_dec(void)
+{
+	WARN_ONCE(dso__data_mmap_cnt <= 0,
+		  "DSO data mmap counter out of bounds.");
+	dso__data_mmap_cnt--;
 }
 
 static int __open_dso(struct dso *dso, struct machine *machine)
@@ -202,6 +215,7 @@ static void unmap_data_fd(struct dso *dso)
 		}
 
 		dso->data.ptr = NULL;
+		dso__data_mmap_dec();
 	}
 }
 
@@ -505,6 +519,8 @@ static int data_mmap(struct dso *dso, u64 offset, ssize_t size)
 		pr_debug("dso mmap failed, mmap: %s\n", strerror(errno));
 		return -1;
 	}
+
+	dso__data_mmap_inc();
 
 	dso->data.ptr       = ptr;
 	dso->data.offset    = offset;
