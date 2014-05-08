@@ -228,18 +228,19 @@ static void close_data_fd(struct dso *dso)
 	}
 }
 
-static void close_dso(struct dso *dso)
+static void close_dso(struct dso *dso, bool map_only)
 {
 	unmap_data_fd(dso);
-	close_data_fd(dso);
+	if (!map_only)
+		close_data_fd(dso);
 }
 
-static void close_first_dso(void)
+static void close_first_dso(bool map_only)
 {
 	struct dso *dso;
 
 	dso = list_first_entry(&dso__data_open, struct dso, data.open_entry);
-	close_dso(dso);
+	close_dso(dso, map_only);
 }
 
 static rlim_t get_fd_limit(void)
@@ -279,14 +280,14 @@ static void data_close(void)
 	bool cache_fd = may_cache_fd();
 
 	if (!cache_fd)
-		close_first_dso();
+		close_first_dso(false);
 }
 
 void dso__data_close(struct dso *dso, bool cache)
 {
 	if (dso->data.fd >= 0) {
 		if (!cache)
-			close_dso(dso);
+			close_dso(dso, false);
 		else
 			data_close();
 	}
