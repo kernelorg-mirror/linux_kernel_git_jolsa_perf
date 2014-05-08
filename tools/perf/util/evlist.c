@@ -729,7 +729,7 @@ static long parse_pages_arg(const char *str, unsigned long min,
 	val = parse_tag_value(str, tags);
 	if (val != (unsigned long) -1) {
 		/* we got file size value */
-		pages = PERF_ALIGN(val, page_size) / page_size;
+		pages = PAGE_ALIGN(val) / page_size;
 	} else {
 		/* we got pages count value */
 		char *eptr;
