@@ -305,6 +305,8 @@ void dump_stack(void);
 
 extern unsigned int page_size;
 
+#define PAGE_ALIGN(x) PERF_ALIGN(x, page_size)
+
 void get_term_dimensions(struct winsize *ws);
 
 struct parse_tag {
