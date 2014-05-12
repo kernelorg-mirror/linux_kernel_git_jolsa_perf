@@ -428,3 +428,90 @@ int test__dso_data_reopen(void)
 	TEST_ASSERT_VAL("failed leadking files", nr == open_files_cnt());
 	return 0;
 }
+
+static unsigned long vmsize(void)
+{
+	FILE *file;
+	char buf[4096];
+	long vm = 0;
+
+	file = fopen("/proc/self/status", "r");
+	if (!file)
+		return 0;
+
+	while (fgets(buf, sizeof(buf), file)) {
+		if (1 == sscanf(buf, "VmSize: %ld kB", &vm))
+			break;
+	}
+
+	fclose(file);
+	return vm * 1024;
+}
+
+static int set_as_limit(rlim_t n)
+{
+	struct rlimit rlim;
+
+	if (getrlimit(RLIMIT_AS, &rlim))
+		return -1;
+
+	pr_debug("AS limit %ld, new %ld\n", rlim.rlim_cur, n);
+
+	rlim.rlim_cur = n;
+	return setrlimit(RLIMIT_AS, &rlim);
+}
+
+int test__dso_data_remap(void)
+{
+	struct machine machine;
+	long nr = open_files_cnt();
+#define FILESIZE 20*4096 /* 20 pages */
+	u8 buf[FILESIZE];
+	u8 c __maybe_unused;
+	long vm;
+	ssize_t n;
+
+	memset(&machine, 0, sizeof(machine));
+
+	/*
+	 * Test scenario:
+	 * - create 3 dso objects
+	 * - set process virtual memory size limit to current
+	 *   value + dso file size
+	 * - test that the first dso gets unmapped when we
+	 *   reach virtual memory size limit
+	 */
+
+	TEST_ASSERT_VAL("failed to create dsos\n", !dsos__create(FILESIZE));
+
+	/* get size of the process's virtual memory */
+	vm = vmsize();
+	TEST_ASSERT_VAL("failed to get VmSize value\n", vm);
+	pr_debug("VmSize %ld\n", vm);
+
+	/*
+	 * set process virtual memory size limit to current
+         * value + FILESIZE
+	 */
+	TEST_ASSERT_VAL("failed to set AS limit\n", !set_as_limit(vm + FILESIZE));
+
+	/* mmap dso_0 */
+	n = dso__data_read_offset(dso_0, &machine, 0, buf, (ssize_t) FILESIZE);
+	TEST_ASSERT_VAL("failed to read dso", n == FILESIZE);
+
+	/* mmap dso_1 */
+	n = dso__data_read_offset(dso_1, &machine, 0, buf, (ssize_t) FILESIZE);
+	TEST_ASSERT_VAL("failed to read dso", n == FILESIZE);
+
+	/* in order to mmap dso_1, dso_0 should get unmapped */
+	TEST_ASSERT_VAL("failed to unmap dso_0", !dso_0->data.ptr);
+
+	/* cleanup everything */
+	dsos__delete();
+
+	pr_debug("nr start %ld, nr stop %ld\n", nr, open_files_cnt());
+
+	/* Make sure we did not leak any file descriptor. */
+	TEST_ASSERT_VAL("failed leadking files", nr == open_files_cnt());
+	return 0;
+}
