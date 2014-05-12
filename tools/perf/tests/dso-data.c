@@ -93,18 +93,12 @@ struct test_data_offset offsets[] = {
 	},
 };
 
-int test__dso_data(void)
+static int read_dso_data(struct dso *dso)
 {
 	struct machine machine;
-	struct dso *dso;
-	char *file = test_file(TEST_FILE_SIZE);
 	size_t i;
 
-	TEST_ASSERT_VAL("No test file", file);
-
 	memset(&machine, 0, sizeof(machine));
-
-	dso = dso__new((const char *)file);
 
 	/* Basic 10 bytes tests. */
 	for (i = 0; i < ARRAY_SIZE(offsets); i++) {
@@ -145,6 +139,34 @@ int test__dso_data(void)
 
 		free(buf);
 	}
+
+	return 0;
+}
+
+int test__dso_data(void)
+{
+	struct dso *dso;
+	char *file = test_file(TEST_FILE_SIZE);
+
+	TEST_ASSERT_VAL("No test file", file);
+
+	/*
+	 * Test scenario:
+	 * - create dso object
+	 * - read and validate predefined regions (offsets)
+	 *   of the dso data file
+	 * - do above for both mmaped and cached read
+	 */
+
+	dso = dso__new((const char *)file);
+	TEST_ASSERT_VAL("failed to create dso\n", dso);
+
+	/* test mmaped read */
+	TEST_ASSERT_VAL("failed ", !read_dso_data(dso));
+
+	/* test cached read */
+	dso->data.cached_read = true;
+	TEST_ASSERT_VAL("failed ", !read_dso_data(dso));
 
 	dso__delete(dso);
 	unlink(file);
