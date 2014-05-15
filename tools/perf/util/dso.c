@@ -203,6 +203,7 @@ static void unmap_data_fd(struct dso *dso)
 
 		pr_debug("dso munmap %s\n", dso->name);
 		dso->data.ptr = NULL;
+		dso->data.all_mmaped = false;
 	}
 }
 
@@ -542,6 +543,19 @@ static int dso__data_mmap(struct dso *dso, u64 offset, ssize_t size)
 {
 	int ret = 0;
 
+	if (dso->data.all_mmaped)
+		return 0;
+
+	/* Try to mmap whole file first */
+	if (!dso->data.ptr) {
+		ret = __dso__data_mmap(dso, 0, dso->data.file_size);
+		if (!ret) {
+			dso->data.all_mmaped = true;
+			return 0;
+		}
+	}
+
+	/* nope.. let's try parts */
 	if (!dso->data.ptr || !is_covered(dso, offset, size))
 		ret = __dso__data_mmap(dso, offset, size);
 

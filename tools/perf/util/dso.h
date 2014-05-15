@@ -108,6 +108,7 @@ struct dso {
 		size_t		 mmap_size;
 		u64		 offset;
 		char		 *ptr;
+		bool		 all_mmaped;
 		struct list_head open_entry;
 	} data;
 
