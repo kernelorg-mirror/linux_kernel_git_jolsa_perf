@@ -437,6 +437,10 @@ struct perf_event {
 	struct perf_cgroup		*cgrp; /* cgroup event is attach to */
 	int				cgrp_defer_enabled;
 #endif
+	union {
+		atomic_t                fd_id_gen;
+		int                     fd_id;
+	};
 
 #endif /* CONFIG_PERF_EVENTS */
 };

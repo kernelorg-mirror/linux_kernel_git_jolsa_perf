@@ -1534,6 +1534,21 @@ retry:
 	raw_spin_unlock_irq(&ctx->lock);
 }
 
+static bool is_fd_master_event(struct perf_event *event)
+{
+	return event->attr.fd_master;
+}
+
+static void perf_remove_group_from_context(struct perf_event *event)
+{
+	struct perf_event *sibling;
+
+	list_for_each_entry(sibling, &event->sibling_list, group_entry)
+		perf_remove_from_context(sibling, true);
+
+	perf_remove_from_context(event, true);
+}
+
 /*
  * Cross CPU call to disable a performance event
  */
@@ -3357,7 +3372,10 @@ static void put_event(struct perf_event *event)
 	 *     to trigger the AB-BA case.
 	 */
 	mutex_lock_nested(&ctx->mutex, SINGLE_DEPTH_NESTING);
-	perf_remove_from_context(event, true);
+	if (is_fd_master_event(event))
+		perf_remove_group_from_context(event);
+	else
+		perf_remove_from_context(event, true);
 	mutex_unlock(&ctx->mutex);
 
 	_free_event(event);
@@ -7019,6 +7037,18 @@ out:
 	return ret;
 }
 
+static int get_fd(struct perf_event *group_leader, unsigned long f_flags)
+{
+	int fd;
+
+	if (is_fd_master_event(group_leader))
+		fd = atomic_inc_return(&group_leader->fd_id_gen);
+	else
+		fd = get_unused_fd_flags(f_flags);
+
+	return fd;
+}
+
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
  *
@@ -7085,7 +7115,12 @@ SYSCALL_DEFINE5(perf_event_open,
 			group_leader = NULL;
 	}
 
-	event_fd = err = get_unused_fd_flags(f_flags);
+	if (is_fd_master_event(group_leader) && attr.fd_master) {
+		err = -EINVAL;
+		goto err_group_fd;
+	}
+
+	event_fd = err = get_fd(group_leader, f_flags);
 	if (err < 0)
 		goto err_group_fd;
 
@@ -7202,11 +7237,13 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
-	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
-					f_flags);
-	if (IS_ERR(event_file)) {
-		err = PTR_ERR(event_file);
-		goto err_context;
+	if (!is_fd_master_event(group_leader)) {
+		event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
+						f_flags);
+		if (IS_ERR(event_file)) {
+			err = PTR_ERR(event_file);
+			goto err_context;
+		}
 	}
 
 	if (move_group) {
@@ -7263,6 +7300,11 @@ SYSCALL_DEFINE5(perf_event_open,
 	perf_event__header_size(event);
 	perf_event__id_header_size(event);
 
+	if (is_fd_master_event(group_leader))
+		event->fd_id = event_fd;
+	else
+		fd_install(event_fd, event_file);
+
 	/*
 	 * Drop the reference on the group_event after placing the
 	 * new event on the sibling_list. This ensures destruction
@@ -7270,7 +7312,6 @@ SYSCALL_DEFINE5(perf_event_open,
 	 * perf_group_detach().
 	 */
 	fdput(group);
-	fd_install(event_fd, event_file);
 	return event_fd;
 
 err_context:
