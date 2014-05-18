@@ -3690,6 +3690,38 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return 0;
 	}
 
+	case PERF_EVENT_IOC_FD_ID:
+	{
+		struct perf_event_context *ctx = event->ctx;
+		struct perf_event *sibling;
+		u64 fd_id, id = 0;
+
+		if (!is_fd_master_event(event))
+			return -EINVAL;
+
+		if (copy_from_user(&fd_id, (void __user *) arg, sizeof(fd_id)))
+			return -EFAULT;
+
+		mutex_lock(&ctx->mutex);
+
+		list_for_each_entry(sibling, &event->sibling_list, group_entry) {
+			if (event->fd_id == (int) fd_id) {
+				id = primary_event_id(sibling);
+				break;
+			}
+		}
+
+		mutex_unlock(&ctx->mutex);
+
+		if (!id)
+			return -EINVAL;
+
+		if (copy_to_user((void __user *)arg, &id, sizeof(id)))
+			return -EFAULT;
+
+		return 0;
+	}
+
 	case PERF_EVENT_IOC_SET_OUTPUT:
 	{
 		int ret;
