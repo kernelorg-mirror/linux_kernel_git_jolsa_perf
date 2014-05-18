@@ -3740,6 +3740,29 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return ret;
 	}
 
+	case PERF_EVENT_IOC_GROUP_OUTPUT:
+	{
+		struct perf_event_context *ctx = event->ctx;
+		struct perf_event *sibling;
+		int ret = 0;
+
+		mutex_lock(&ctx->mutex);
+
+		list_for_each_entry(sibling, &event->sibling_list, group_entry) {
+			ret = perf_event_set_output(sibling, event);
+			if (ret)
+				break;
+		}
+
+		if (ret) {
+			list_for_each_entry(sibling, &event->sibling_list, group_entry)
+				ret = perf_event_set_output(event, NULL);
+		}
+
+		mutex_unlock(&ctx->mutex);
+		return ret;
+	}
+
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
 
