@@ -453,6 +453,7 @@ struct sample_queue {
 	u64			timestamp;
 	u64			file_offset;
 	union perf_event	*event;
+	struct perf_sample	sample;
 	struct list_head	list;
 };
 
@@ -546,7 +547,6 @@ static int __flush_sample_queue(struct perf_session *s,
 	struct ordered_samples *os = &s->ordered_samples;
 	struct list_head *head = &os->samples;
 	struct sample_queue *tmp, *iter;
-	struct perf_sample sample;
 	u64 limit = os->next_flush;
 	u64 last_ts = os->last_sample ? os->last_sample->timestamp : 0ULL;
 	bool show_progress = limit == ULLONG_MAX;
@@ -566,15 +566,10 @@ static int __flush_sample_queue(struct perf_session *s,
 		if (iter->timestamp > limit)
 			break;
 
-		ret = perf_evlist__parse_sample(s->evlist, iter->event, &sample);
+		ret = perf_session_deliver_event(s, iter->event, &iter->sample, tool,
+						 iter->file_offset);
 		if (ret)
-			pr_err("Can't parse sample, err = %d\n", ret);
-		else {
-			ret = perf_session_deliver_event(s, iter->event, &sample, tool,
-							 iter->file_offset);
-			if (ret)
-				return ret;
-		}
+			return ret;
 
 		os->last_flush = iter->timestamp;
 		sample_queue__put(iter, os);
@@ -722,8 +717,7 @@ static void __queue_event(struct sample_queue *new, struct perf_session *s)
 }
 
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
-			     struct perf_tool *tool, struct perf_sample *sample,
-			     u64 file_offset)
+			     struct perf_sample *sample, u64 file_offset)
 {
 	u64 timestamp = sample->time;
 	struct sample_queue *new;
@@ -736,10 +730,7 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 		return -EINVAL;
 	}
 
-	new = sample_queue__get(s, tool);
-	if (!new)
-		return -ENOMEM;
-
+	new = container_of(sample, struct sample_queue, sample);
 	new->timestamp = timestamp;
 	new->file_offset = file_offset;
 	new->event = event;
@@ -1125,12 +1116,31 @@ static void event_swap(union perf_event *event, bool sample_id_all)
 		swap(event, sample_id_all);
 }
 
+static struct perf_sample* sample__get(struct perf_session *session,
+				       struct perf_tool *tool)
+{
+	struct sample_queue *q;
+
+	q = sample_queue__get(session, tool);
+	return q ? &q->sample : NULL;
+}
+
+static void sample__put(struct perf_sample *sample,
+			struct perf_session *session)
+{
+	struct sample_queue *q;
+
+	q = container_of(sample, struct sample_queue, sample);
+	sample_queue__put(q, &session->ordered_samples);
+}
+
 static int perf_session__process_event(struct perf_session *session,
 				       union perf_event *event,
 				       struct perf_tool *tool,
 				       u64 file_offset)
 {
-	struct perf_sample sample;
+	struct perf_sample __sample;
+	struct perf_sample *sample = &__sample;
 	int ret;
 
 	if (session->header.needs_swap)
@@ -1144,22 +1154,30 @@ static int perf_session__process_event(struct perf_session *session,
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
 		return perf_session__process_user_event(session, event, tool, file_offset);
 
+	if (tool->ordered_samples)
+		sample = sample__get(session, tool);
+
 	/*
 	 * For all kernel events we get the sample data
 	 */
-	ret = perf_evlist__parse_sample(session->evlist, event, &sample);
+	ret = perf_evlist__parse_sample(session->evlist, event, sample);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (tool->ordered_samples) {
-		ret = perf_session_queue_event(session, event, tool, &sample,
-					       file_offset);
+		ret = perf_session_queue_event(session, event, sample, file_offset);
 		if (ret != -ETIME)
 			return ret;
 	}
 
-	return perf_session_deliver_event(session, event, &sample, tool,
-					  file_offset);
+	ret = perf_session_deliver_event(session, event, sample, tool,
+					 file_offset);
+
+out:
+	if (tool->ordered_samples)
+		sample__put(sample, session);
+
+	return ret;
 }
 
 void perf_event_header__bswap(struct perf_event_header *hdr)
