@@ -466,6 +466,40 @@ static void perf_session_free_sample_buffers(struct perf_session *session)
 	}
 }
 
+#define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct sample_queue))
+
+static struct sample_queue* sample_queue__get(struct perf_session *session)
+{
+	struct ordered_samples *os = &session->ordered_samples;
+	struct list_head *sc = &os->sample_cache;
+	struct sample_queue *new;
+
+	if (!list_empty(sc)) {
+		new = list_entry(sc->next, struct sample_queue, list);
+		list_del(&new->list);
+	} else if (os->sample_buffer) {
+		new = os->sample_buffer + os->sample_buffer_idx;
+		if (++os->sample_buffer_idx == MAX_SAMPLE_BUFFER)
+			os->sample_buffer = NULL;
+	} else {
+		os->sample_buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
+		if (!os->sample_buffer)
+			return NULL;
+		list_add(&os->sample_buffer->list, &os->to_free);
+		os->sample_buffer_idx = 2;
+		new = os->sample_buffer + 1;
+	}
+
+	return new;
+}
+
+static void sample_queue__put(struct sample_queue *sample,
+			      struct ordered_samples *os)
+{
+	list_del(&sample->list);
+	list_add(&sample->list, &os->sample_cache);
+}
+
 static int perf_session_deliver_event(struct perf_session *session,
 				      union perf_event *event,
 				      struct perf_sample *sample,
@@ -509,8 +543,7 @@ static int flush_sample_queue(struct perf_session *s,
 		}
 
 		os->last_flush = iter->timestamp;
-		list_del(&iter->list);
-		list_add(&iter->list, &os->sample_cache);
+		sample_queue__put(iter, os);
 
 		if (show_progress)
 			ui_progress__update(&prog, 1);
@@ -624,13 +657,9 @@ static void __queue_event(struct sample_queue *new, struct perf_session *s)
 	}
 }
 
-#define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct sample_queue))
-
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 				    struct perf_sample *sample, u64 file_offset)
 {
-	struct ordered_samples *os = &s->ordered_samples;
-	struct list_head *sc = &os->sample_cache;
 	u64 timestamp = sample->time;
 	struct sample_queue *new;
 
@@ -642,21 +671,9 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 		return -EINVAL;
 	}
 
-	if (!list_empty(sc)) {
-		new = list_entry(sc->next, struct sample_queue, list);
-		list_del(&new->list);
-	} else if (os->sample_buffer) {
-		new = os->sample_buffer + os->sample_buffer_idx;
-		if (++os->sample_buffer_idx == MAX_SAMPLE_BUFFER)
-			os->sample_buffer = NULL;
-	} else {
-		os->sample_buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
-		if (!os->sample_buffer)
-			return -ENOMEM;
-		list_add(&os->sample_buffer->list, &os->to_free);
-		os->sample_buffer_idx = 2;
-		new = os->sample_buffer + 1;
-	}
+	new = sample_queue__get(s);
+	if (!new)
+		return -ENOMEM;
 
 	new->timestamp = timestamp;
 	new->file_offset = file_offset;
