@@ -15,6 +15,7 @@
 #include "cpumap.h"
 #include "perf_regs.h"
 #include "vdso.h"
+#include "asm/bug.h"
 
 static int perf_session__open(struct perf_session *session)
 {
@@ -79,6 +80,8 @@ struct perf_session *perf_session__new(struct perf_data_file *file,
 	INIT_LIST_HEAD(&session->ordered_samples.samples);
 	INIT_LIST_HEAD(&session->ordered_samples.sample_cache);
 	INIT_LIST_HEAD(&session->ordered_samples.to_free);
+	session->ordered_samples.max_alloc_size = (u64) -1;
+	session->ordered_samples.cur_alloc_size = 0;
 	machines__init(&session->machines);
 
 	if (file) {
@@ -468,11 +471,11 @@ static void perf_session_free_sample_buffers(struct perf_session *session)
 
 #define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct sample_queue))
 
-static struct sample_queue* sample_queue__get(struct perf_session *session)
+static struct sample_queue* __sample_queue__get(struct perf_session *session)
 {
 	struct ordered_samples *os = &session->ordered_samples;
 	struct list_head *sc = &os->sample_cache;
-	struct sample_queue *new;
+	struct sample_queue *new = NULL;
 
 	if (!list_empty(sc)) {
 		new = list_entry(sc->next, struct sample_queue, list);
@@ -481,13 +484,44 @@ static struct sample_queue* sample_queue__get(struct perf_session *session)
 		new = os->sample_buffer + os->sample_buffer_idx;
 		if (++os->sample_buffer_idx == MAX_SAMPLE_BUFFER)
 			os->sample_buffer = NULL;
-	} else {
-		os->sample_buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
+	} else if (os->cur_alloc_size < os->max_alloc_size) {
+		size_t size = MAX_SAMPLE_BUFFER * sizeof(*new);
+
+		os->sample_buffer = malloc(size);
 		if (!os->sample_buffer)
 			return NULL;
+
+		os->cur_alloc_size += size;
 		list_add(&os->sample_buffer->list, &os->to_free);
 		os->sample_buffer_idx = 2;
 		new = os->sample_buffer + 1;
+	}
+
+	if (new)
+		INIT_LIST_HEAD(&new->list);
+
+	return new;
+}
+
+enum fsq_how {
+	FSQ__FINAL,
+	FSQ__ROUND,
+	FSQ__HALF,
+};
+
+
+static int flush_sample_queue(struct perf_session *s, struct perf_tool *tool,
+			      enum fsq_how how);
+
+static struct sample_queue* sample_queue__get(struct perf_session *session,
+					      struct perf_tool *tool)
+{
+	struct sample_queue *new;
+
+	new = __sample_queue__get(session);
+	if (!new) {
+		flush_sample_queue(session, tool, FSQ__HALF);
+		new = __sample_queue__get(session);
 	}
 
 	return new;
@@ -561,11 +595,6 @@ static int __flush_sample_queue(struct perf_session *s,
 	return 0;
 }
 
-enum fsq_how {
-	FSQ__FINAL,
-	FSQ__ROUND,
-};
-
 static int flush_sample_queue(struct perf_session *s, struct perf_tool *tool,
 			      enum fsq_how how)
 {
@@ -575,6 +604,22 @@ static int flush_sample_queue(struct perf_session *s, struct perf_tool *tool,
 	case FSQ__FINAL:
 		os->next_flush = ULLONG_MAX;
 		break;
+
+	case FSQ__HALF:
+	{
+		struct sample_queue *first, *last;
+		struct list_head *head = &os->samples;
+
+		first = list_entry(head->next, struct sample_queue, list);
+		last = os->last_sample;
+
+		if (WARN_ONCE(!last || list_empty(head), "empty queue"))
+			return 0;
+
+		os->next_flush  = first->timestamp;
+		os->next_flush += (last->timestamp - first->timestamp) / 2;
+		break;
+	}
 
 	case FSQ__ROUND:
 	default:
@@ -677,7 +722,8 @@ static void __queue_event(struct sample_queue *new, struct perf_session *s)
 }
 
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
-				    struct perf_sample *sample, u64 file_offset)
+			     struct perf_tool *tool, struct perf_sample *sample,
+			     u64 file_offset)
 {
 	u64 timestamp = sample->time;
 	struct sample_queue *new;
@@ -690,7 +736,7 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 		return -EINVAL;
 	}
 
-	new = sample_queue__get(s);
+	new = sample_queue__get(s, tool);
 	if (!new)
 		return -ENOMEM;
 
@@ -1100,7 +1146,7 @@ static int perf_session__process_event(struct perf_session *session,
 		return ret;
 
 	if (tool->ordered_samples) {
-		ret = perf_session_queue_event(session, event, &sample,
+		ret = perf_session_queue_event(session, event, tool, &sample,
 					       file_offset);
 		if (ret != -ETIME)
 			return ret;
