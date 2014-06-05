@@ -506,8 +506,8 @@ static int perf_session_deliver_event(struct perf_session *session,
 				      struct perf_tool *tool,
 				      u64 file_offset);
 
-static int flush_sample_queue(struct perf_session *s,
-		       struct perf_tool *tool)
+static int __flush_sample_queue(struct perf_session *s,
+				struct perf_tool *tool)
 {
 	struct ordered_samples *os = &s->ordered_samples;
 	struct list_head *head = &os->samples;
@@ -561,6 +561,29 @@ static int flush_sample_queue(struct perf_session *s,
 	return 0;
 }
 
+enum fsq_how {
+	FSQ__FINAL,
+	FSQ__ROUND,
+};
+
+static int flush_sample_queue(struct perf_session *s, struct perf_tool *tool,
+			      enum fsq_how how)
+{
+	struct ordered_samples *os = &s->ordered_samples;
+
+	switch (how) {
+	case FSQ__FINAL:
+		os->next_flush = ULLONG_MAX;
+		break;
+
+	case FSQ__ROUND:
+	default:
+		break;
+	};
+
+	return __flush_sample_queue(s, tool);
+}
+
 /*
  * When perf record finishes a pass on every buffers, it records this pseudo
  * event.
@@ -604,7 +627,7 @@ static int process_finished_round(struct perf_tool *tool,
 				  union perf_event *event __maybe_unused,
 				  struct perf_session *session)
 {
-	return flush_sample_queue(session, tool);
+	return flush_sample_queue(session, tool, FSQ__ROUND);
 }
 
 /* The queue is ordered by time */
@@ -1235,8 +1258,7 @@ more:
 		goto more;
 done:
 	/* do the final flush for ordered samples */
-	session->ordered_samples.next_flush = ULLONG_MAX;
-	err = flush_sample_queue(session, tool);
+	err = flush_sample_queue(session, tool, FSQ__FINAL);
 out_err:
 	free(buf);
 	perf_session__warn_about_errors(session, tool);
@@ -1371,8 +1393,7 @@ more:
 
 out:
 	/* do the final flush for ordered samples */
-	session->ordered_samples.next_flush = ULLONG_MAX;
-	err = flush_sample_queue(session, tool);
+	err = flush_sample_queue(session, tool, FSQ__FINAL);
 out_err:
 	ui_progress__finish();
 	perf_session__warn_about_errors(session, tool);
