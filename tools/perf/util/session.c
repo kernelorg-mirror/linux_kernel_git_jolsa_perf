@@ -453,6 +453,11 @@ struct ordered_event {
 	struct list_head	list;
 };
 
+enum oeq_flush {
+	OEQ_FLUSH__FINAL,
+	OEQ_FLUSH__ROUND,
+};
+
 static void perf_session_free_sample_buffers(struct perf_session *session)
 {
 	struct ordered_events_queue *q = &session->ordered_events;
@@ -565,8 +570,8 @@ static int perf_session_deliver_event(struct perf_session *session,
 				      struct perf_tool *tool,
 				      u64 file_offset);
 
-static int ordered_events_flush(struct perf_session *s,
-		       struct perf_tool *tool)
+static int __ordered_events_flush(struct perf_session *s,
+				  struct perf_tool *tool)
 {
 	struct ordered_events_queue *q = &s->ordered_events;
 	struct list_head *head = &q->events;
@@ -616,6 +621,32 @@ static int ordered_events_flush(struct perf_session *s,
 	return 0;
 }
 
+static int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
+				enum oeq_flush how)
+{
+	struct ordered_events_queue *q = &s->ordered_events;
+	int err;
+
+	switch (how) {
+	case OEQ_FLUSH__FINAL:
+		q->next_flush = ULLONG_MAX;
+		break;
+
+	case OEQ_FLUSH__ROUND:
+	default:
+		break;
+	};
+
+	err = __ordered_events_flush(s, tool);
+
+	if (!err) {
+		if (how == OEQ_FLUSH__ROUND)
+			q->next_flush = q->max_timestamp;
+	}
+
+	return err;
+}
+
 /*
  * When perf record finishes a pass on every buffers, it records this pseudo
  * event.
@@ -659,11 +690,7 @@ static int process_finished_round(struct perf_tool *tool,
 				  union perf_event *event __maybe_unused,
 				  struct perf_session *session)
 {
-	int ret = ordered_events_flush(session, tool);
-	if (!ret)
-		session->ordered_events.next_flush = session->ordered_events.max_timestamp;
-
-	return ret;
+	return ordered_events_flush(session, tool, OEQ_FLUSH__ROUND);
 }
 
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
@@ -1245,8 +1272,7 @@ more:
 		goto more;
 done:
 	/* do the final flush for ordered samples */
-	session->ordered_events.next_flush = ULLONG_MAX;
-	err = ordered_events_flush(session, tool);
+	err = ordered_events_flush(session, tool, OEQ_FLUSH__FINAL);
 out_err:
 	free(buf);
 	perf_session__warn_about_errors(session, tool);
@@ -1381,8 +1407,7 @@ more:
 
 out:
 	/* do the final flush for ordered samples */
-	session->ordered_events.next_flush = ULLONG_MAX;
-	err = ordered_events_flush(session, tool);
+	err = ordered_events_flush(session, tool, OEQ_FLUSH__FINAL);
 out_err:
 	ui_progress__finish();
 	perf_session__warn_about_errors(session, tool);
