@@ -130,4 +130,6 @@ int __perf_session__set_tracepoints_handlers(struct perf_session *session,
 extern volatile int session_done;
 
 #define session_done()	(*(volatile int *)(&session_done))
+
+extern int debug_sample_queue;
 #endif /* __PERF_SESSION_H */
