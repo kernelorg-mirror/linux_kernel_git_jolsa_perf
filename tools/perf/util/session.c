@@ -749,6 +749,12 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 	return 0;
 }
 
+void perf_session__sample_queue_size(struct perf_session *session, u64 size)
+{
+	struct ordered_samples *os = &session->ordered_samples;
+	os->max_alloc_size = size;
+}
+
 static void callchain__printf(struct perf_sample *sample)
 {
 	unsigned int i;
