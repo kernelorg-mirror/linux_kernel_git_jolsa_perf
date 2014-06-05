@@ -17,6 +17,51 @@
 #include "vdso.h"
 #include "asm/bug.h"
 
+int debug_sample_queue;
+
+static int sq_printf_level(int level, const char *fmt, ...)
+{
+	int ret = 0;
+
+        if (unlikely(debug_sample_queue >= level)) {
+		va_list args;
+
+		va_start(args, fmt);
+		ret = vfprintf(stderr, fmt, args);
+		va_end(args);
+	}
+
+	return ret;
+}
+
+#define pr_sqN(n, fmt, ...) \
+        sq_printf_level(n, pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_sq(fmt, ...)  pr_sqN(1, pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_sq2(fmt, ...) pr_sqN(2, pr_fmt(fmt), ##__VA_ARGS__)
+
+static int sq_printf_time(const char *str, u64 time)
+{
+	u64 secs, usecs, nsecs = time;
+
+	secs = nsecs / NSECS_PER_SEC;
+	nsecs -= secs * NSECS_PER_SEC;
+	usecs = nsecs / NSECS_PER_USEC;
+	return fprintf(stderr, "\t[%13lu.%06lu] %s\n", secs, usecs, str);
+}
+
+static int sq_printf_time_level(int level, const char *str, u64 time)
+{
+	int ret = 0;
+
+	if (unlikely(debug_sample_queue >= level))
+		ret = sq_printf_time(str, time);
+
+	return ret;
+}
+
+#define pr_sq_time(str, time)  sq_printf_time_level(1, str, time)
+#define pr_sq_time2(str, time) sq_printf_time_level(2, str, time)
+
 static int perf_session__open(struct perf_session *session)
 {
 	struct perf_data_file *file = session->file;
@@ -492,6 +537,9 @@ static struct sample_queue* __sample_queue__get(struct perf_session *session)
 		if (!os->sample_buffer)
 			return NULL;
 
+		pr_sq("alloc size %" PRIu64 "B, max %" PRIu64 "B\n",
+		      os->cur_alloc_size, os->max_alloc_size);
+
 		os->cur_alloc_size += size;
 		list_add(&os->sample_buffer->list, &os->to_free);
 		os->sample_buffer_idx = 2;
@@ -587,6 +635,14 @@ static int __flush_sample_queue(struct perf_session *s,
 	}
 
 	os->next_flush = os->max_timestamp;
+
+	if (unlikely(debug_sample_queue)) {
+		fprintf(stderr, "__flush_sample_queue nr_samples %u\n",
+			os->nr_samples);
+		sq_printf_time("next_flush", os->next_flush);
+		sq_printf_time("last_flush", os->last_flush);
+	}
+
 	return 0;
 }
 
@@ -620,6 +676,19 @@ static int flush_sample_queue(struct perf_session *s, struct perf_tool *tool,
 	default:
 		break;
 	};
+
+	if (unlikely(debug_sample_queue)) {
+		static const char* str[] = {
+			"FINAL",
+			"ROUND",
+			"HALF ",
+		};
+
+		fprintf(stderr, "flush_sample_queue %s, nr_samples %u\n",
+			str[how], os->nr_samples);
+		sq_printf_time("next_flush",    os->next_flush);
+		sq_printf_time("max_timestamp", os->max_timestamp);
+	}
 
 	return __flush_sample_queue(s, tool);
 }
@@ -681,9 +750,16 @@ static void __queue_event(struct sample_queue *new, struct perf_session *s)
 	++os->nr_samples;
 	os->last_sample = new;
 
+	if (unlikely(debug_sample_queue >= 2)) {
+		fprintf(stderr, "__queue_event nr_samples %u, file_offset %" PRIu64 "B\n",
+			os->nr_samples, new->file_offset);
+		sq_printf_time("time", timestamp);
+	}
+
 	if (!sample) {
 		list_add(&new->list, &os->samples);
 		os->max_timestamp = timestamp;
+		pr_sq_time2("max_timestamp(1)", timestamp);
 		return;
 	}
 
@@ -698,6 +774,7 @@ static void __queue_event(struct sample_queue *new, struct perf_session *s)
 			if (p == &os->samples) {
 				list_add_tail(&new->list, &os->samples);
 				os->max_timestamp = timestamp;
+				pr_sq_time2("max_timestamp(2)", timestamp);
 				return;
 			}
 			sample = list_entry(p, struct sample_queue, list);
