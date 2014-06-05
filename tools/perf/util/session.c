@@ -524,6 +524,7 @@ static int flush_sample_queue(struct perf_session *s,
 			list_entry(head->prev, struct sample_queue, list);
 	}
 
+	os->next_flush = os->max_timestamp;
 	return 0;
 }
 
@@ -570,11 +571,7 @@ static int process_finished_round(struct perf_tool *tool,
 				  union perf_event *event __maybe_unused,
 				  struct perf_session *session)
 {
-	int ret = flush_sample_queue(session, tool);
-	if (!ret)
-		session->ordered_samples.next_flush = session->ordered_samples.max_timestamp;
-
-	return ret;
+	return flush_sample_queue(session, tool);
 }
 
 /* The queue is ordered by time */
