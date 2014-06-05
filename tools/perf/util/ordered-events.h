@@ -40,4 +40,10 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 			 enum oe_flush how);
 void ordered_events_init(struct ordered_events *oe);
 void ordered_events_free(struct ordered_events *oe);
+
+static inline void
+ordered_events_alloc_size(struct ordered_events *oe, u64 size)
+{
+	oe->max_alloc_size = size;
+}
 #endif /* __ORDERED_EVENTS_H */
