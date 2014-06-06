@@ -12,32 +12,32 @@
 #include <linux/rbtree.h>
 #include <linux/perf_event.h>
 
-struct sample_queue;
+struct ordered_event;
 struct ip_callchain;
 struct thread;
 
-struct ordered_samples {
+struct ordered_events_queue {
 	u64			last_flush;
 	u64			next_flush;
 	u64			max_timestamp;
 	struct list_head	samples;
 	struct list_head	sample_cache;
 	struct list_head	to_free;
-	struct sample_queue	*sample_buffer;
-	struct sample_queue	*last_sample;
+	struct ordered_event	*sample_buffer;
+	struct ordered_event	*last_sample;
 	int			sample_buffer_idx;
 	unsigned int		nr_samples;
 };
 
 struct perf_session {
-	struct perf_header	header;
-	struct machines		machines;
-	struct perf_evlist	*evlist;
-	struct trace_event	tevent;
-	struct events_stats	stats;
-	bool			repipe;
-	struct ordered_samples	ordered_samples;
-	struct perf_data_file	*file;
+	struct perf_header		header;
+	struct machines			machines;
+	struct perf_evlist		*evlist;
+	struct trace_event		tevent;
+	struct events_stats		stats;
+	bool				repipe;
+	struct ordered_events_queue	ordered_events;
+	struct perf_data_file		*file;
 };
 
 #define PRINT_IP_OPT_IP		(1<<0)
