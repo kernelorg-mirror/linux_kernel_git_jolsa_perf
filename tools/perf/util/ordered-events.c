@@ -191,3 +191,12 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 
 	return err;
 }
+
+void ordered_events_queue_init(struct ordered_events_queue *q)
+{
+	INIT_LIST_HEAD(&q->events);
+	INIT_LIST_HEAD(&q->cache);
+	INIT_LIST_HEAD(&q->to_free);
+	q->max_alloc_size = (u64) -1;
+	q->cur_alloc_size = 0;
+}
