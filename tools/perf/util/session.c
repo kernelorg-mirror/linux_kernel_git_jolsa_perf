@@ -466,6 +466,99 @@ static void perf_session_free_sample_buffers(struct perf_session *session)
 	}
 }
 
+/* The queue is ordered by time */
+static void queue_event(struct ordered_events_queue *q, struct ordered_event *new)
+{
+	struct ordered_event *last = q->last;
+	u64 timestamp = new->timestamp;
+	struct list_head *p;
+
+	++q->nr_events;
+	q->last = new;
+
+	if (!last) {
+		list_add(&new->list, &q->events);
+		q->max_timestamp = timestamp;
+		return;
+	}
+
+	/*
+	 * last event might point to some random place in the list as it's
+	 * the last queued event. We expect that the new event is clqe to
+	 * this.
+	 */
+	if (last->timestamp <= timestamp) {
+		while (last->timestamp <= timestamp) {
+			p = last->list.next;
+			if (p == &q->events) {
+				list_add_tail(&new->list, &q->events);
+				q->max_timestamp = timestamp;
+				return;
+			}
+			last = list_entry(p, struct ordered_event, list);
+		}
+		list_add_tail(&new->list, &last->list);
+	} else {
+		while (last->timestamp > timestamp) {
+			p = last->list.prev;
+			if (p == &q->events) {
+				list_add(&new->list, &q->events);
+				return;
+			}
+			last = list_entry(p, struct ordered_event, list);
+		}
+		list_add(&new->list, &last->list);
+	}
+}
+
+#define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct ordered_event))
+static struct ordered_event *alloc_event(struct ordered_events_queue *q)
+{
+	struct list_head *cache = &q->cache;
+	struct ordered_event *new;
+
+	if (!list_empty(cache)) {
+		new = list_entry(cache->next, struct ordered_event, list);
+		list_del(&new->list);
+	} else if (q->buffer) {
+		new = q->buffer + q->buffer_idx;
+		if (++q->buffer_idx == MAX_SAMPLE_BUFFER)
+			q->buffer = NULL;
+	} else {
+		q->buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
+		if (!q->buffer)
+			return NULL;
+		list_add(&q->buffer->list, &q->to_free);
+		q->buffer_idx = 2;
+		new = q->buffer + 1;
+	}
+
+	return new;
+}
+
+static struct ordered_event*
+ordered_events_get(struct ordered_events_queue *q, u64 timestamp)
+{
+	struct ordered_event *new;
+
+	new = alloc_event(q);
+	if (new) {
+		new->timestamp = timestamp;
+		queue_event(q, new);
+	}
+
+	return new;
+}
+
+static void
+ordered_event_put(struct ordered_events_queue *q, struct ordered_event *iter)
+{
+	list_del(&iter->list);
+	list_add(&iter->list, &q->cache);
+	q->nr_events--;
+}
+
+
 static int perf_session_deliver_event(struct perf_session *session,
 				      union perf_event *event,
 				      struct perf_sample *sample,
@@ -508,10 +601,8 @@ static int ordered_events_flush(struct perf_session *s,
 				return ret;
 		}
 
+		ordered_event_put(q, iter);
 		q->last_flush = iter->timestamp;
-		list_del(&iter->list);
-		list_add(&iter->list, &q->cache);
-		q->nr_events--;
 
 		if (show_progress)
 			ui_progress__update(&prog, 1);
@@ -575,59 +666,10 @@ static int process_finished_round(struct perf_tool *tool,
 	return ret;
 }
 
-/* The queue is ordered by time */
-static void __queue_event(struct ordered_event *new, struct perf_session *s)
-{
-	struct ordered_events_queue *q = &s->ordered_events;
-	struct ordered_event *last = q->last;
-	u64 timestamp = new->timestamp;
-	struct list_head *p;
-
-	++q->nr_events;
-	q->last = new;
-
-	if (!last) {
-		list_add(&new->list, &q->events);
-		q->max_timestamp = timestamp;
-		return;
-	}
-
-	/*
-	 * last event might point to some random place in the list as it's
-	 * the last queued event. We expect that the new event is clqe to
-	 * this.
-	 */
-	if (last->timestamp <= timestamp) {
-		while (last->timestamp <= timestamp) {
-			p = last->list.next;
-			if (p == &q->events) {
-				list_add_tail(&new->list, &q->events);
-				q->max_timestamp = timestamp;
-				return;
-			}
-			last = list_entry(p, struct ordered_event, list);
-		}
-		list_add_tail(&new->list, &last->list);
-	} else {
-		while (last->timestamp > timestamp) {
-			p = last->list.prev;
-			if (p == &q->events) {
-				list_add(&new->list, &q->events);
-				return;
-			}
-			last = list_entry(p, struct ordered_event, list);
-		}
-		list_add(&new->list, &last->list);
-	}
-}
-
-#define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct ordered_event))
-
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 				    struct perf_sample *sample, u64 file_offset)
 {
 	struct ordered_events_queue *q = &s->ordered_events;
-	struct list_head *cache = &q->cache;
 	u64 timestamp = sample->time;
 	struct ordered_event *new;
 
@@ -639,29 +681,13 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 		return -EINVAL;
 	}
 
-	if (!list_empty(cache)) {
-		new = list_entry(cache->next, struct ordered_event, list);
-		list_del(&new->list);
-	} else if (q->buffer) {
-		new = q->buffer + q->buffer_idx;
-		if (++q->buffer_idx == MAX_SAMPLE_BUFFER)
-			q->buffer = NULL;
-	} else {
-		q->buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
-		if (!q->buffer)
-			return -ENOMEM;
-		list_add(&q->buffer->list, &q->to_free);
-		q->buffer_idx = 2;
-		new = q->buffer + 1;
+	new = ordered_events_get(q, timestamp);
+	if (new) {
+		new->file_offset = file_offset;
+		new->event = event;
 	}
 
-	new->timestamp = timestamp;
-	new->file_offset = file_offset;
-	new->event = event;
-
-	__queue_event(new, s);
-
-	return 0;
+	return new ? 0 : -ENOMEM;
 }
 
 static void callchain__printf(struct perf_sample *sample)
