@@ -444,19 +444,6 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_HEADER_MAX]	  = NULL,
 };
 
-static void perf_session_free_sample_buffers(struct perf_session *session)
-{
-	struct ordered_events_queue *q = &session->ordered_events;
-
-	while (!list_empty(&q->to_free)) {
-		struct ordered_event *sq;
-
-		sq = list_entry(q->to_free.next, struct ordered_event, list);
-		list_del(&sq->list);
-		free(sq);
-	}
-}
-
 /*
  * When perf record finishes a pass on every buffers, it records this pseudo
  * event.
@@ -1092,7 +1079,7 @@ done:
 out_err:
 	free(buf);
 	perf_session__warn_about_errors(session, tool);
-	perf_session_free_sample_buffers(session);
+	ordered_events_queue_free(&session->ordered_events);
 	return err;
 }
 
@@ -1227,7 +1214,7 @@ out:
 out_err:
 	ui_progress__finish();
 	perf_session__warn_about_errors(session, tool);
-	perf_session_free_sample_buffers(session);
+	ordered_events_queue_free(&session->ordered_events);
 	return err;
 }
 
