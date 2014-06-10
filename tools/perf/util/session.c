@@ -571,13 +571,6 @@ ordered_event_put(struct ordered_events_queue *q, struct ordered_event *iter)
 	q->nr_events--;
 }
 
-
-static int perf_session_deliver_event(struct perf_session *session,
-				      union perf_event *event,
-				      struct perf_sample *sample,
-				      struct perf_tool *tool,
-				      u64 file_offset);
-
 static int __ordered_events_flush(struct perf_session *s,
 				  struct perf_tool *tool)
 {
@@ -1003,11 +996,11 @@ perf_session__deliver_sample(struct perf_session *session,
 					    &sample->read.one, machine);
 }
 
-static int perf_session_deliver_event(struct perf_session *session,
-				      union perf_event *event,
-				      struct perf_sample *sample,
-				      struct perf_tool *tool,
-				      u64 file_offset)
+int perf_session_deliver_event(struct perf_session *session,
+			       union perf_event *event,
+			       struct perf_sample *sample,
+			       struct perf_tool *tool,
+			       u64 file_offset)
 {
 	struct perf_evsel *evsel;
 	struct machine *machine;
