@@ -200,3 +200,14 @@ void ordered_events_queue_init(struct ordered_events_queue *q)
 	q->max_alloc_size = (u64) -1;
 	q->cur_alloc_size = 0;
 }
+
+void ordered_events_queue_free(struct ordered_events_queue *q)
+{
+	while (!list_empty(&q->to_free)) {
+		struct ordered_event *sq;
+
+		sq = list_entry(q->to_free.next, struct ordered_event, list);
+		list_del(&sq->list);
+		free(sq);
+	}
+}

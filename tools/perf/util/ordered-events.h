@@ -41,4 +41,5 @@ void ordered_event_put(struct ordered_events_queue *q,
 int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 			 enum oeq_flush how);
 void ordered_events_queue_init(struct ordered_events_queue *q);
+void ordered_events_queue_free(struct ordered_events_queue *q);
 #endif /* __ORDERED_EVENTS_H */
