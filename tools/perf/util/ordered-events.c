@@ -199,7 +199,8 @@ void ordered_events_init(struct ordered_events *oe)
 	INIT_LIST_HEAD(&oe->events);
 	INIT_LIST_HEAD(&oe->cache);
 	INIT_LIST_HEAD(&oe->to_free);
-	oe->max_alloc_size = (u64) -1;
+	/* 100MB limitation by default */
+	oe->max_alloc_size = 100 * 1024 * 1024;
 	oe->cur_alloc_size = 0;
 }
 
