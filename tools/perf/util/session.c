@@ -79,6 +79,8 @@ struct perf_session *perf_session__new(struct perf_data_file *file,
 	INIT_LIST_HEAD(&session->ordered_events.events);
 	INIT_LIST_HEAD(&session->ordered_events.cache);
 	INIT_LIST_HEAD(&session->ordered_events.to_free);
+	session->ordered_events.max_alloc_size = (u64) -1;
+	session->ordered_events.cur_alloc_size = 0;
 	machines__init(&session->machines);
 
 	if (file) {
@@ -520,7 +522,7 @@ static void queue_event(struct ordered_events_queue *q, struct ordered_event *ne
 static struct ordered_event *alloc_event(struct ordered_events_queue *q)
 {
 	struct list_head *cache = &q->cache;
-	struct ordered_event *new;
+	struct ordered_event *new = NULL;
 
 	if (!list_empty(cache)) {
 		new = list_entry(cache->next, struct ordered_event, list);
@@ -529,10 +531,14 @@ static struct ordered_event *alloc_event(struct ordered_events_queue *q)
 		new = q->buffer + q->buffer_idx;
 		if (++q->buffer_idx == MAX_SAMPLE_BUFFER)
 			q->buffer = NULL;
-	} else {
-		q->buffer = malloc(MAX_SAMPLE_BUFFER * sizeof(*new));
+	} else if (q->cur_alloc_size < q->max_alloc_size) {
+		size_t size = MAX_SAMPLE_BUFFER * sizeof(*new);
+
+		q->buffer = malloc(size);
 		if (!q->buffer)
 			return NULL;
+
+		q->cur_alloc_size += size;
 		list_add(&q->buffer->list, &q->to_free);
 		q->buffer_idx = 2;
 		new = q->buffer + 1;
