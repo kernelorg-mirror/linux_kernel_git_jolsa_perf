@@ -251,7 +251,8 @@ void ordered_events_queue_init(struct ordered_events_queue *q)
 	INIT_LIST_HEAD(&q->events);
 	INIT_LIST_HEAD(&q->cache);
 	INIT_LIST_HEAD(&q->to_free);
-	q->max_alloc_size = (u64) -1;
+	/* 100MB limitation by default */
+	q->max_alloc_size = (u64) 100 * 1024 * 1024;
 	q->cur_alloc_size = 0;
 }
 
