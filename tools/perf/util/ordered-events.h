@@ -48,4 +48,6 @@ ordered_events_queue_alloc_size(struct ordered_events_queue *q, u64 size)
 {
 	q->max_alloc_size = size;
 }
+
+extern int debug_sample_queue;
 #endif /* __ORDERED_EVENTS_H */

@@ -4,6 +4,37 @@
 #include "session.h"
 #include "asm/bug.h"
 
+int debug_sample_queue;
+
+static int pr_level(int level, const char *fmt, ...)
+{
+	int ret = 0;
+
+	if (unlikely(debug_sample_queue >= level)) {
+		va_list args;
+
+		va_start(args, fmt);
+		ret = vfprintf(stderr, fmt, args);
+		va_end(args);
+	}
+
+	return ret;
+}
+
+#define pr_N(n, fmt, ...) \
+	pr_level(n, fmt, ##__VA_ARGS__)
+#define pr(fmt, ...)  pr_N(1, pr_fmt(fmt), ##__VA_ARGS__)
+
+static int pr_time(const char *str, u64 time)
+{
+	u64 secs, usecs, nsecs = time;
+
+	secs = nsecs / NSECS_PER_SEC;
+	nsecs -= secs * NSECS_PER_SEC;
+	usecs = nsecs / NSECS_PER_USEC;
+	return fprintf(stderr, "\t[%13lu.%06lu] %s\n", secs, usecs, str);
+}
+
 static void queue_event(struct ordered_events_queue *q, struct ordered_event *new)
 {
 	struct ordered_event *last = q->last;
@@ -67,6 +98,9 @@ static struct ordered_event *alloc_event(struct ordered_events_queue *q)
 		q->buffer = malloc(size);
 		if (!q->buffer)
 			return NULL;
+
+		pr("alloc size %" PRIu64 "B, max %" PRIu64 "B\n",
+		   q->cur_alloc_size, q->max_alloc_size);
 
 		q->cur_alloc_size += size;
 		list_add(&q->buffer->list, &q->to_free);
@@ -182,11 +216,31 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 		break;
 	};
 
+	if (unlikely(debug_sample_queue)) {
+		static const char * const str[] = {
+			"FINAL",
+			"ROUND",
+			"HALF ",
+		};
+
+		fprintf(stderr, "ordered_events_flush %s, nr_events %u\n",
+			str[how], q->nr_events);
+		pr_time("next_flush",    q->next_flush);
+		pr_time("max_timestamp", q->max_timestamp);
+	}
+
 	err = __ordered_events_flush(s, tool);
 
 	if (!err) {
 		if (how == OEQ_FLUSH__ROUND)
 			q->next_flush = q->max_timestamp;
+	}
+
+	if (unlikely(debug_sample_queue)) {
+		fprintf(stderr, "ordered_events_flush nr_events %u\n",
+			q->nr_events);
+		pr_time("next_flush", q->next_flush);
+		pr_time("last_flush", q->last_flush);
 	}
 
 	return err;

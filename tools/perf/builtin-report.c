@@ -82,6 +82,10 @@ static int report__config(const char *var, const char *value, void *cb)
 		rep->queue_size = perf_config_u64(var, value);
 		return 0;
 	}
+	if (!strcmp(var, "report.queue-debug")) {
+		debug_sample_queue = perf_config_int(var, value);
+		return 0;
+	}
 
 	return perf_default_config(var, value, cb);
 }
