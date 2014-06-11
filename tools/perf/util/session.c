@@ -15,6 +15,7 @@
 #include "cpumap.h"
 #include "perf_regs.h"
 #include "vdso.h"
+#include "asm/bug.h"
 
 static int perf_session__open(struct perf_session *session)
 {
@@ -458,6 +459,7 @@ struct ordered_event {
 enum oeq_flush {
 	OEQ_FLUSH__FINAL,
 	OEQ_FLUSH__ROUND,
+	OEQ_FLUSH__HALF,
 };
 
 static void perf_session_free_sample_buffers(struct perf_session *session)
@@ -638,6 +640,22 @@ static int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 		q->next_flush = ULLONG_MAX;
 		break;
 
+	case OEQ_FLUSH__HALF:
+	{
+		struct ordered_event *first, *last;
+		struct list_head *head = &q->events;
+
+		first = list_entry(head->next, struct ordered_event, list);
+		last = q->last;
+
+		if (WARN_ONCE(!last || list_empty(head), "empty queue"))
+			return 0;
+
+		q->next_flush  = first->timestamp;
+		q->next_flush += (last->timestamp - first->timestamp) / 2;
+		break;
+	}
+
 	case OEQ_FLUSH__ROUND:
 	default:
 		break;
@@ -700,7 +718,8 @@ static int process_finished_round(struct perf_tool *tool,
 }
 
 int perf_session_queue_event(struct perf_session *s, union perf_event *event,
-				    struct perf_sample *sample, u64 file_offset)
+			     struct perf_tool *tool, struct perf_sample *sample,
+			     u64 file_offset)
 {
 	struct ordered_events_queue *q = &s->ordered_events;
 	u64 timestamp = sample->time;
@@ -715,6 +734,11 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 	}
 
 	new = ordered_events_get(q, timestamp);
+	if (!new) {
+		ordered_events_flush(s, tool, OEQ_FLUSH__HALF);
+		new = ordered_events_get(q, timestamp);
+	}
+
 	if (new) {
 		new->file_offset = file_offset;
 		new->event = event;
@@ -1120,7 +1144,7 @@ static int perf_session__process_event(struct perf_session *session,
 		return ret;
 
 	if (tool->ordered_events) {
-		ret = perf_session_queue_event(session, event, &sample,
+		ret = perf_session_queue_event(session, event, tool, &sample,
 					       file_offset);
 		if (ret != -ETIME)
 			return ret;
