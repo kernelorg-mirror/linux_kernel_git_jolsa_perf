@@ -212,6 +212,7 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 	}
 
 	case OEQ_FLUSH__ROUND:
+	case OEQ_FLUSH__NONE:
 	default:
 		break;
 	};
@@ -234,6 +235,8 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 	if (!err) {
 		if (how == OEQ_FLUSH__ROUND)
 			q->next_flush = q->max_timestamp;
+
+		q->last_flush_type = how;
 	}
 
 	if (unlikely(debug_sample_queue)) {

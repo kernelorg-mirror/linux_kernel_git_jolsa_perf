@@ -14,6 +14,7 @@ struct ordered_event {
 };
 
 enum oeq_flush {
+	OEQ_FLUSH__NONE,
 	OEQ_FLUSH__FINAL,
 	OEQ_FLUSH__ROUND,
 	OEQ_FLUSH__HALF,
@@ -32,6 +33,7 @@ struct ordered_events_queue {
 	struct ordered_event	*last;
 	int			buffer_idx;
 	unsigned int		nr_events;
+	enum oeq_flush		last_flush_type;
 };
 
 struct ordered_event *ordered_events_get(struct ordered_events_queue *q,
