@@ -15,6 +15,7 @@
 #include "cpumap.h"
 #include "perf_regs.h"
 #include "vdso.h"
+#include "asm/bug.h"
 
 static int perf_session__open(struct perf_session *session)
 {
@@ -502,8 +503,11 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 		return -ETIME;
 
 	if (timestamp < s->ordered_events.last_flush) {
-		printf("Warning: Timestamp below last timeslice flush\n");
-		return -EINVAL;
+		WARN_ONCE(1, "Timestamp below last timeslice flush\n");
+
+		/* We could get out of order messages after forced flush. */
+		if (oe->last_flush_type != OE_FLUSH__HALF)
+			return -EINVAL;
 	}
 
 	new = ordered_events_new(oe, timestamp);
