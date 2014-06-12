@@ -179,6 +179,7 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 	}
 
 	case OE_FLUSH__ROUND:
+	case OE_FLUSH__NONE:
 	default:
 		break;
 	};
@@ -188,6 +189,8 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 	if (!err) {
 		if (how == OE_FLUSH__ROUND)
 			oe->next_flush = oe->max_timestamp;
+
+		oe->last_flush_type = how;
 	}
 
 	return err;
