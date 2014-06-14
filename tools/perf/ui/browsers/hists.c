@@ -25,6 +25,7 @@ struct hist_browser {
 	struct map_symbol   *selection;
 	int		     print_seq;
 	bool		     show_dso;
+	bool		     show_headers;
 	float		     min_pcnt;
 	u64		     nr_non_filtered_entries;
 	u64		     nr_callchain_rows;
@@ -57,9 +58,13 @@ static u32 hist_browser__nr_entries(struct hist_browser *hb)
 
 static void hist_browser__refresh_dimensions(struct hist_browser *browser)
 {
-	/* 3 == +/- toggle symbol before actual hist_entry rendering */
-	browser->b.width = 3 + (hists__sort_list_width(browser->hists) +
-			     sizeof("[k]"));
+	u16 header = browser->show_headers ? 1 : 0;
+
+	ui_browser__refresh_dimensions(&browser->b);
+
+	/* shrink view size if there are headers displayed */
+	browser->b.height = SLtt_Screen_Rows - 2 - header;
+	browser->b.y      = 1 + header;
 }
 
 static void hist_browser__reset(struct hist_browser *browser)
@@ -408,6 +413,10 @@ static int hist_browser__run(struct hist_browser *browser,
 			/* Expand the whole world. */
 			hist_browser__set_folding(browser, true);
 			break;
+		case 'H':
+			browser->show_headers = !browser->show_headers;
+			hist_browser__refresh_dimensions(browser);
+			continue;
 		case K_ENTER:
 			if (hist_browser__toggle_fold(browser))
 				break;
@@ -786,6 +795,65 @@ static int hist_browser__show_entry(struct hist_browser *browser,
 	return printed;
 }
 
+static int advance_hpp_check(struct perf_hpp *hpp, int inc)
+{
+	advance_hpp(hpp, inc);
+	return hpp->size <= 0;
+}
+
+static int hists__scnprintf_headers(char *buf, size_t size, struct hists *hists)
+{
+	struct perf_hpp dummy_hpp = {
+		.buf    = buf,
+		.size   = size,
+	};
+	struct perf_hpp_fmt *fmt;
+	size_t ret = 0;
+
+	if (symbol_conf.use_callchain) {
+		ret = scnprintf(buf, size, "  ");
+		if (advance_hpp_check(&dummy_hpp, ret))
+			return ret;
+	}
+
+	perf_hpp__for_each_format(fmt) {
+		if (perf_hpp__should_skip(fmt))
+			continue;
+
+		/* We need to add the length of the columns header. */
+		perf_hpp__reset_width(fmt, hists);
+
+		ret = fmt->header(fmt, &dummy_hpp, hists_to_evsel(hists));
+		if (advance_hpp_check(&dummy_hpp, ret))
+			break;
+
+		ret = scnprintf(dummy_hpp.buf, dummy_hpp.size, "  ");
+		if (advance_hpp_check(&dummy_hpp, ret))
+			break;
+	}
+
+	return ret;
+}
+
+static void ui_browser__show_headers(struct ui_browser *b, char *headers)
+{
+	SLsmg_gotorc(1, 0);
+	ui_browser__set_color(b, HE_COLORSET_ROOT);
+	slsmg_write_nstring(headers, b->width + 1);
+}
+
+static void hist_browser__show_headers(struct hist_browser *hb)
+{
+	static char buf[500], *headers;
+
+	if (!headers) {
+		hists__scnprintf_headers(buf, sizeof(buf), hb->hists);
+		headers = buf;
+	}
+
+	ui_browser__show_headers(&hb->b, headers);
+}
+
 static void ui_browser__hists_init_top(struct ui_browser *browser)
 {
 	if (browser->top == NULL) {
@@ -801,6 +869,9 @@ static unsigned int hist_browser__refresh(struct ui_browser *browser)
 	unsigned row = 0;
 	struct rb_node *nd;
 	struct hist_browser *hb = container_of(browser, struct hist_browser, b);
+
+	if (hb->show_headers)
+		hist_browser__show_headers(hb);
 
 	ui_browser__hists_init_top(browser);
 
@@ -1420,6 +1491,7 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 	"d             Zoom into current DSO\n"				\
 	"E             Expand all callchains\n"				\
 	"F             Toggle percentage of filtered entries\n"		\
+	"H             Display column headers\n"			\
 
 	/* help messages are sorted by lexical order of the hotkey */
 	const char report_help[] = HIST_BROWSER_HELP_COMMON
