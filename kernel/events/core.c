@@ -3209,6 +3209,8 @@ static void free_event_rcu(struct rcu_head *head)
 	if (event->ns)
 		put_pid_ns(event->ns);
 	perf_event_free_filter(event);
+	if (event->attach_mask)
+		free_cpumask_var(event->attach_mask);
 	kfree(event);
 }
 
@@ -3316,6 +3318,18 @@ static int get_event(struct perf_event *event)
 	return atomic_long_inc_not_zero(&event->refcount);
 }
 
+static void put_event(struct perf_event *event);
+
+static void perf_event_attach_release(struct perf_event *master)
+{
+	struct perf_event *event, *n;
+
+	list_for_each_entry_safe(event, n, &master->attach_list, attach_list) {
+		list_del(&event->attach_list);
+		put_event(event);
+	}
+}
+
 /*
  * Called when the last reference to the file is gone.
  */
@@ -3376,6 +3390,8 @@ static void put_event(struct perf_event *event)
 	mutex_lock_nested(&ctx->mutex, SINGLE_DEPTH_NESTING);
 	perf_remove_from_context(event, true);
 	mutex_unlock(&ctx->mutex);
+
+	perf_event_attach_release(event);
 
 	_free_event(event);
 }
@@ -3653,6 +3669,97 @@ static inline int perf_fget_light(int fd, struct fd *p)
 	return 0;
 }
 
+static int can_attach(struct perf_event *master, struct perf_event *event)
+{
+	/* master or event are already attached */
+	if ((master->fd == -1) || (event->fd == -1))
+		return -EINVAL;
+
+	/* something's already attached to event */
+	if (event->nr_attach != 0)
+		return -EINVAL;
+
+	/* attach only same events */
+	if (memcmp(&event->attr, &master->attr, sizeof(master->attr)))
+		return -EINVAL;
+
+	/* only cpu related (and different) events */
+	if ((master->cpu == -1) || (event->cpu == -1) ||
+	    (master->cpu == event->cpu))
+		return -EINVAL;
+
+	/* from different CPU */
+	if (!master->attach_mask ||
+	    !cpumask_test_cpu(event->cpu, master->attach_mask))
+		return 0;
+
+	return -EINVAL;
+}
+
+static int attach_mask(struct perf_event *master, int cpu)
+{
+	bool release_mask = true;
+
+	if (!master->attach_mask) {
+		if (!zalloc_cpumask_var(&master->attach_mask, GFP_KERNEL))
+			return -ENOMEM;
+		release_mask = true;
+	}
+
+	if (!cpumask_test_and_set_cpu(cpu, master->attach_mask))
+		return 0;
+
+	if (release_mask)
+		free_cpumask_var(master->attach_mask);
+
+	return -EINVAL;
+}
+
+static int perf_event_attach(struct perf_event *master,
+			     struct perf_event *event)
+{
+	struct perf_event_context *ctx = master->ctx;
+	int err;
+
+	if (can_attach(master, event))
+		return -EINVAL;
+
+	mutex_lock(&ctx->mutex);
+	err = attach_mask(master, event->cpu);
+	mutex_unlock(&ctx->mutex);
+
+	if (err)
+		return err;
+
+	err = -EINVAL;
+
+	/*
+	 * get event refcnt so the replace can
+	 * safely close the event, thus free the fd,
+	 * but keep the event object.
+	 */
+	if (!get_event(event))
+		goto err_unmask;
+
+	err = replace_fd(event->fd, NULL, 0);
+	if (err)
+		goto err_put;
+
+	event->fd = -1;
+
+	mutex_lock(&ctx->mutex);
+	list_add_tail(&event->attach_list, &master->attach_list);
+	master->nr_attach++;
+	mutex_unlock(&ctx->mutex);
+	return 0;
+
+err_put:
+	put_event(event);
+err_unmask:
+	cpumask_clear_cpu(event->cpu, master->attach_mask);
+	return err;
+}
+
 static int perf_event_set_output(struct perf_event *event,
 				 struct perf_event *output_event);
 static int perf_event_set_filter(struct perf_event *event, void __user *arg);
@@ -3709,6 +3816,26 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
+
+	case PERF_EVENT_IOC_ATTACH:
+	{
+		int ret = -EINVAL;
+
+		if (arg != -1) {
+			struct perf_event *master_event;
+			struct fd master;
+
+			ret = perf_fget_light(arg, &master);
+			if (ret)
+				return ret;
+
+			master_event = master.file->private_data;
+			ret = perf_event_attach(master_event, event);
+
+			fdput(master);
+		}
+		return ret;
+	}
 
 	default:
 		return -ENOTTY;
@@ -6788,6 +6915,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	INIT_LIST_HEAD(&event->sibling_list);
 	INIT_LIST_HEAD(&event->rb_entry);
 	INIT_LIST_HEAD(&event->active_entry);
+	INIT_LIST_HEAD(&event->attach_list);
 	INIT_HLIST_NODE(&event->hlist_entry);
 
 

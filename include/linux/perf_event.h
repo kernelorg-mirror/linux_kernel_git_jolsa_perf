@@ -452,6 +452,11 @@ struct perf_event {
 
 	/* event file descriptor */
 	int				fd;
+
+	struct list_head		attach_list;
+	cpumask_var_t			attach_mask;
+	int				nr_attach;
+
 #endif /* CONFIG_PERF_EVENTS */
 };
 
