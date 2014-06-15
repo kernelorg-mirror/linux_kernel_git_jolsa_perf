@@ -450,6 +450,8 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
+	/* event file descriptor */
+	int				fd;
 #endif /* CONFIG_PERF_EVENTS */
 };
 

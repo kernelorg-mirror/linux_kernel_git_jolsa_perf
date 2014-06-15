@@ -7313,6 +7313,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	 */
 	fdput(group);
 	fd_install(event_fd, event_file);
+	event->fd = event_fd;
 	return event_fd;
 
 err_context:
