@@ -3311,6 +3311,11 @@ static void free_event(struct perf_event *event)
 	_free_event(event);
 }
 
+static int get_event(struct perf_event *event)
+{
+	return atomic_long_inc_not_zero(&event->refcount);
+}
+
 /*
  * Called when the last reference to the file is gone.
  */
@@ -4016,7 +4021,7 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 again:
 	rcu_read_lock();
 	list_for_each_entry_rcu(event, &rb->event_list, rb_entry) {
-		if (!atomic_long_inc_not_zero(&event->refcount)) {
+		if (!get_event(event)) {
 			/*
 			 * This event is en-route to free_event() which will
 			 * detach it and remove it from the list.
@@ -7656,7 +7661,7 @@ inherit_event(struct perf_event *parent_event,
 	if (IS_ERR(child_event))
 		return child_event;
 
-	if (!atomic_long_inc_not_zero(&parent_event->refcount)) {
+	if (!get_event(parent_event)) {
 		free_event(child_event);
 		return NULL;
 	}
