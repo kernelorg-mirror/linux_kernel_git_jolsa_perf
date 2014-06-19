@@ -1264,7 +1264,7 @@ static struct hist_browser *hist_browser__new(struct hists *hists)
 		browser->b.refresh = hist_browser__refresh;
 		browser->b.seek = ui_browser__hists_seek;
 		browser->b.use_navkeypressed = true;
-		browser->show_headers = true;
+		browser->show_headers = symbol_conf.show_headers;
 	}
 
 	return browser;
