@@ -154,6 +154,10 @@ static struct test {
 		.func = test__hists_cumulate,
 	},
 	{
+		.desc = "Test optimized event schedule out",
+		.func = test__optimized_sched_out,
+	},
+	{
 		.func = NULL,
 	},
 };
