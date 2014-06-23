@@ -6839,9 +6839,11 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	local64_set(&hwc->period_left, hwc->sample_period);
 
 	/*
-	 * we currently do not support PERF_FORMAT_GROUP on inherited events
+	 * We currently do not support PERF_FORMAT_GROUP on inherited
+	 * sampling events.
 	 */
-	if (attr->inherit && (attr->read_format & PERF_FORMAT_GROUP))
+	if (attr->inherit && is_sampling_event(event) &&
+	    (attr->read_format & PERF_FORMAT_GROUP))
 		goto err_ns;
 
 	pmu = perf_init_event(event);
