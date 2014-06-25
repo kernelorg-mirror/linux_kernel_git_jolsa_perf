@@ -293,6 +293,7 @@ out:
 static int perf_c2c__init(struct perf_c2c *c2c)
 {
 	sort__mode = SORT_MODE__MEMORY;
+	sort__wants_unique = 1;
 	sort_order = "dcacheline,symbol_daddr,symbol_iaddr,pid,mem";
 
 	if (setup_sorting() < 0) {
