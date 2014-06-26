@@ -398,7 +398,7 @@ static int read_counter_aggr(struct perf_evsel *counter)
 	int i;
 
 	if (__perf_evsel__read(counter, perf_evsel__nr_cpus(counter),
-			       thread_map__nr(evsel_list->threads), scale) < 0)
+			       thread_map__nr(evsel_list->threads)) < 0)
 		return -1;
 
 	for (i = 0; i < 3; i++)
@@ -427,7 +427,7 @@ static int read_counter(struct perf_evsel *counter)
 	int cpu;
 
 	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-		if (__perf_evsel__read_on_cpu(counter, cpu, 0, scale) < 0)
+		if (__perf_evsel__read_on_cpu(counter, cpu, 0) < 0)
 			return -1;
 
 		count = counter->counts->cpu[cpu].values;

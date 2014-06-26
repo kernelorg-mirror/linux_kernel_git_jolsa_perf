@@ -219,8 +219,7 @@ static inline bool perf_evsel__match2(struct perf_evsel *e1,
 	 (a)->attr.type == (b)->attr.type &&	\
 	 (a)->attr.config == (b)->attr.config)
 
-int __perf_evsel__read_on_cpu(struct perf_evsel *evsel,
-			      int cpu, int thread, bool scale);
+int __perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread);
 
 /**
  * perf_evsel__read_on_cpu - Read out the results on a CPU and thread
@@ -232,11 +231,10 @@ int __perf_evsel__read_on_cpu(struct perf_evsel *evsel,
 static inline int perf_evsel__read_on_cpu(struct perf_evsel *evsel,
 					  int cpu, int thread)
 {
-	return __perf_evsel__read_on_cpu(evsel, cpu, thread, false);
+	return __perf_evsel__read_on_cpu(evsel, cpu, thread);
 }
 
-int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads,
-		       bool scale);
+int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads);
 
 /**
  * perf_evsel__read - Read the aggregate results on all CPUs
@@ -248,7 +246,7 @@ int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads,
 static inline int perf_evsel__read(struct perf_evsel *evsel,
 				    int ncpus, int nthreads)
 {
-	return __perf_evsel__read(evsel, ncpus, nthreads, false);
+	return __perf_evsel__read(evsel, ncpus, nthreads);
 }
 
 void hists__init(struct hists *hists);
@@ -310,6 +308,22 @@ static inline bool perf_evsel__is_function_event(struct perf_evsel *evsel)
 	       !strncmp(FUNCTION_EVENT, evsel->name, sizeof(FUNCTION_EVENT));
 
 #undef FUNCTION_EVENT
+}
+
+/**
+ * perf_evsel__has_time - Return whether given evsel reads time data
+ *
+ * @evsel - evsel selector to be tested
+ *
+ * Return %true if event reads time data
+ */
+static inline bool perf_evsel__has_time(struct perf_evsel *evsel)
+{
+#define TIME (PERF_FORMAT_TOTAL_TIME_ENABLED|PERF_FORMAT_TOTAL_TIME_RUNNING)
+
+	return evsel->attr.read_format & TIME;
+
+#undef TIME
 }
 
 struct perf_attr_details {
