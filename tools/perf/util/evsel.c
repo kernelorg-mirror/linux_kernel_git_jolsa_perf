@@ -830,7 +830,7 @@ static inline void compute_deltas(struct perf_evsel *evsel,
 	count->run = count->run - tmp.run;
 }
 
-int __perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread)
+int perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread)
 {
 	bool scale = perf_evsel__has_time(evsel);
 	struct perf_counts_values count;
@@ -859,7 +859,7 @@ int __perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread)
 	return 0;
 }
 
-int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads)
+int perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads)
 {
 	bool scale = perf_evsel__has_time(evsel);
 	size_t nv = scale ? 3 : 1;

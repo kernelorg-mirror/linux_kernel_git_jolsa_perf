@@ -219,8 +219,6 @@ static inline bool perf_evsel__match2(struct perf_evsel *e1,
 	 (a)->attr.type == (b)->attr.type &&	\
 	 (a)->attr.config == (b)->attr.config)
 
-int __perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread);
-
 /**
  * perf_evsel__read_on_cpu - Read out the results on a CPU and thread
  *
@@ -228,13 +226,7 @@ int __perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread);
  * @cpu - CPU of interest
  * @thread - thread of interest
  */
-static inline int perf_evsel__read_on_cpu(struct perf_evsel *evsel,
-					  int cpu, int thread)
-{
-	return __perf_evsel__read_on_cpu(evsel, cpu, thread);
-}
-
-int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads);
+int perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread);
 
 /**
  * perf_evsel__read - Read the aggregate results on all CPUs
@@ -243,11 +235,7 @@ int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads);
  * @ncpus - Number of cpus affected, from zero
  * @nthreads - Number of threads affected, from zero
  */
-static inline int perf_evsel__read(struct perf_evsel *evsel,
-				    int ncpus, int nthreads)
-{
-	return __perf_evsel__read(evsel, ncpus, nthreads);
-}
+int perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads);
 
 void hists__init(struct hists *hists);
 
