@@ -317,6 +317,9 @@ static inline bool perf_evsel__has_time(struct perf_evsel *evsel)
 void perf_evsel__scale_counts(struct perf_evsel *evsel,
 			      struct perf_counts_values *count);
 
+void perf_evsel__compute_deltas(struct perf_evsel *evsel, int cpu,
+				struct perf_counts_values *count);
+
 struct perf_attr_details {
 	bool freq;
 	bool verbose;
