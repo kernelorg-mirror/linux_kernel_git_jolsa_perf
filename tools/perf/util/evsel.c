@@ -900,6 +900,33 @@ int perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads)
 	return 0;
 }
 
+int perf_evsel__read_cb(struct perf_evsel *evsel, perf_evsel__read_cb_t cb,
+			int nr_cpus, int nr_threads)
+{
+	bool scale = perf_evsel__has_time(evsel);
+	ssize_t size = (scale ? 3 : 1) * sizeof(u64);
+	int cpu, thread;
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		for (thread = 0; thread < nr_threads; thread++) {
+			struct perf_counts_values count;
+			int err, fd = FD(evsel, cpu, thread);
+
+			if (fd < 0)
+                                continue;
+
+			if (size != readn(fd, &count, size))
+				return -1;
+
+			err = cb(evsel, &count, cpu, thread);
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
 static int get_group_fd(struct perf_evsel *evsel, int cpu, int thread)
 {
 	struct perf_evsel *leader = evsel->leader;

@@ -237,6 +237,13 @@ int perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread);
  */
 int perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads);
 
+typedef int (*perf_evsel__read_cb_t)(struct perf_evsel *evsel,
+		struct perf_counts_values *count,
+		int cpu, int thread);
+
+int perf_evsel__read_cb(struct perf_evsel *evsel, perf_evsel__read_cb_t cb,
+			int nr_cpus, int nr_threads);
+
 void hists__init(struct hists *hists);
 
 int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
