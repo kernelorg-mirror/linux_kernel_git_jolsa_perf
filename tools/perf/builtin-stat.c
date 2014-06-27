@@ -444,6 +444,7 @@ read_cb_aggr(struct perf_evsel *evsel, struct perf_counts_values *count,
 		aggr->val += count->val;
 		aggr->ena += count->ena;
 		aggr->run += count->run;
+		aggr->nr++;
 		return 0;
 	}
 
@@ -1185,7 +1186,7 @@ static void abs_printout(int cpu, int nr, struct perf_evsel *evsel, double avg)
 static void print_aggr(char *prefix)
 {
 	struct perf_evsel *counter;
-	int cpu, cpu2, s, s2, id, nr;
+	int s, id, nr;
 	double uval;
 	u64 ena, run, val;
 
@@ -1198,15 +1199,8 @@ static void print_aggr(char *prefix)
 			val = counter->counts->cpu[id].val;
 			ena = counter->counts->cpu[id].ena;
 			run = counter->counts->cpu[id].run;
+			nr  = counter->counts->cpu[id].nr;
 
-			nr = 0;
-			for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-				cpu2 = perf_evsel__cpus(counter)->map[cpu];
-				s2 = aggr_get_id(evsel_list->cpus, cpu2);
-				if (s2 != id)
-					continue;
-				nr++;
-			}
 			if (prefix)
 				fprintf(output, "%s", prefix);
 

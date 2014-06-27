@@ -20,6 +20,7 @@ struct perf_counts_values {
 		};
 		u64 values[3];
 	};
+	int nr;
 };
 
 struct perf_counts {

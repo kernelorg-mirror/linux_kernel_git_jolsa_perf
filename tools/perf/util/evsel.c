@@ -909,7 +909,7 @@ int perf_evsel__read_cb(struct perf_evsel *evsel, perf_evsel__read_cb_t cb,
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
 		for (thread = 0; thread < nr_threads; thread++) {
-			struct perf_counts_values count;
+			struct perf_counts_values count = { .nr = 0 };
 			int err, fd = FD(evsel, cpu, thread);
 
 			if (fd < 0)
