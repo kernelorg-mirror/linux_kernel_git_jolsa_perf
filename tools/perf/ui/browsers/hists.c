@@ -58,9 +58,7 @@ static u32 hist_browser__nr_entries(struct hist_browser *hb)
 
 static void hist_browser__refresh_dimensions(struct hist_browser *browser)
 {
-	/* 3 == +/- toggle symbol before actual hist_entry rendering */
-	browser->b.width = 3 + (hists__sort_list_width(browser->hists) +
-			     sizeof("[k]"));
+	ui_browser__refresh_dimensions(&browser->b);
 }
 
 static void hist_browser__reset(struct hist_browser *browser)
