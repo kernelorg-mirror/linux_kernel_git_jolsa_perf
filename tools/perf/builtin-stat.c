@@ -424,6 +424,32 @@ read_cb_global(struct perf_evsel *evsel, struct perf_counts_values *count,
 	return 0;
 }
 
+static int
+read_cb_aggr(struct perf_evsel *evsel, struct perf_counts_values *count,
+	     int cpu __maybe_unused, int thread __maybe_unused)
+{
+	int cpu2, s, s2, id;
+
+	for (s = 0; s < aggr_map->nr; s++) {
+		struct perf_counts_values *aggr;
+
+		id   = aggr_map->map[s];
+		aggr = &evsel->counts->cpu[id];
+		cpu2 = perf_evsel__cpus(evsel)->map[cpu];
+
+		s2 = aggr_get_id(evsel_list->cpus, cpu2);
+		if (s2 != id)
+			continue;
+
+		aggr->val += count->val;
+		aggr->ena += count->ena;
+		aggr->run += count->run;
+		return 0;
+	}
+
+	return -1;
+}
+
 static void read_evsel_pre(struct perf_evsel *evsel)
 {
 	struct perf_stat *ps = evsel->priv;
@@ -493,8 +519,8 @@ static void read_counters(void)
 	static perf_evsel__read_cb_t cbs[AGGR_MAX] = {
 		[AGGR_NONE]	= read_cb_none,
 		[AGGR_GLOBAL]	= read_cb_global,
-		[AGGR_SOCKET]	= read_cb_none,
-		[AGGR_CORE]	= read_cb_none,
+		[AGGR_SOCKET]	= read_cb_aggr,
+		[AGGR_CORE]	= read_cb_aggr,
 	};
 
 	if (perf_evlist__read_cb(evsel_list, cbs[aggr_mode]))
@@ -1169,16 +1195,16 @@ static void print_aggr(char *prefix)
 	for (s = 0; s < aggr_map->nr; s++) {
 		id = aggr_map->map[s];
 		evlist__for_each(evsel_list, counter) {
-			val = ena = run = 0;
+			val = counter->counts->cpu[id].val;
+			ena = counter->counts->cpu[id].ena;
+			run = counter->counts->cpu[id].run;
+
 			nr = 0;
 			for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
 				cpu2 = perf_evsel__cpus(counter)->map[cpu];
 				s2 = aggr_get_id(evsel_list->cpus, cpu2);
 				if (s2 != id)
 					continue;
-				val += counter->counts->cpu[cpu].val;
-				ena += counter->counts->cpu[cpu].ena;
-				run += counter->counts->cpu[cpu].run;
 				nr++;
 			}
 			if (prefix)
