@@ -314,6 +314,9 @@ static inline bool perf_evsel__has_time(struct perf_evsel *evsel)
 #undef TIME
 }
 
+void perf_evsel__scale_counts(struct perf_evsel *evsel,
+			      struct perf_counts_values *count);
+
 struct perf_attr_details {
 	bool freq;
 	bool verbose;

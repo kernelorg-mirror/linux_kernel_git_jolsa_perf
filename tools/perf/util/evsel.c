@@ -830,6 +830,25 @@ static inline void compute_deltas(struct perf_evsel *evsel,
 	count->run = count->run - tmp.run;
 }
 
+void perf_evsel__scale_counts(struct perf_evsel *evsel,
+			      struct perf_counts_values *count)
+{
+	bool scale = perf_evsel__has_time(evsel);
+
+	evsel->counts->scaled = 0;
+
+	if (scale) {
+		if (count->run == 0) {
+			evsel->counts->scaled = -1;
+			count->val = 0;
+		} else if (count->run < count->ena) {
+			evsel->counts->scaled = 1;
+			count->val = (u64)((double)count->val * count->ena / count->run + 0.5);
+		}
+	} else
+		count->ena = count->run = 0;
+}
+
 int perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread)
 {
 	bool scale = perf_evsel__has_time(evsel);
@@ -846,15 +865,7 @@ int perf_evsel__read_on_cpu(struct perf_evsel *evsel, int cpu, int thread)
 		return -errno;
 
 	compute_deltas(evsel, cpu, &count);
-
-	if (scale) {
-		if (count.run == 0)
-			count.val = 0;
-		else if (count.run < count.ena)
-			count.val = (u64)((double)count.val * count.ena / count.run + 0.5);
-	} else
-		count.ena = count.run = 0;
-
+	perf_evsel__scale_counts(evsel, &count);
 	evsel->counts->cpu[cpu] = count;
 	return 0;
 }
@@ -886,22 +897,7 @@ int perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads)
 	}
 
 	compute_deltas(evsel, -1, aggr);
-
-	evsel->counts->scaled = 0;
-	if (scale) {
-		if (aggr->run == 0) {
-			evsel->counts->scaled = -1;
-			aggr->val = 0;
-			return 0;
-		}
-
-		if (aggr->run < aggr->ena) {
-			evsel->counts->scaled = 1;
-			aggr->val = (u64)((double)aggr->val * aggr->ena / aggr->run + 0.5);
-		}
-	} else
-		aggr->ena = aggr->run = 0;
-
+	perf_evsel__scale_counts(evsel, aggr);
 	return 0;
 }
 
