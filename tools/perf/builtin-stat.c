@@ -119,6 +119,8 @@ enum aggr_mode {
 	AGGR_CORE,
 };
 
+#define AGGR_MAX (AGGR_CORE + 1)
+
 static int			run_count			=  1;
 static bool			no_inherit			= false;
 static bool			scale				=  true;
@@ -387,78 +389,126 @@ static void update_shadow_stats(struct perf_evsel *counter, u64 *count)
 		update_stats(&runtime_itlb_cache_stats[0], count[0]);
 }
 
-/*
- * Read out the results of a single counter:
- * aggregate counts across CPUs in system-wide mode
- */
-static int read_counter_aggr(struct perf_evsel *counter)
+static void update_counter(struct perf_evsel *evsel, int cpu,
+			   struct perf_counts_values *count)
 {
-	struct perf_stat *ps = counter->priv;
-	u64 *count = counter->counts->aggr.values;
-	int i;
+	u64 *values = cpu == -1 ? evsel->counts->aggr.values :
+				  evsel->counts->cpu[cpu].values;
 
-	if (perf_evsel__read(counter, perf_evsel__nr_cpus(counter),
-			     thread_map__nr(evsel_list->threads)) < 0)
-		return -1;
+	perf_evsel__compute_deltas(evsel, cpu, count);
+	perf_evsel__scale_counts(evsel, count);
+	update_shadow_stats(evsel, values);
+}
 
-	for (i = 0; i < 3; i++)
-		update_stats(&ps->res_stats[i], count[i]);
-
-	if (verbose) {
-		fprintf(output, "%s: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
-			perf_evsel__name(counter), count[0], count[1], count[2]);
-	}
-
-	/*
-	 * Save the full runtime - to allow normalization during printout:
-	 */
-	update_shadow_stats(counter, count);
-
+static int
+read_cb_none(struct perf_evsel *evsel, struct perf_counts_values *count,
+	     int cpu, int thread __maybe_unused)
+{
+	update_counter(evsel, cpu, count);
+	evsel->counts->cpu[cpu] = *count;
 	return 0;
 }
 
-/*
- * Read out the results of a single counter:
- * do not aggregate counts across CPUs in system-wide mode
- */
-static int read_counter(struct perf_evsel *counter)
+static int
+read_cb_global(struct perf_evsel *evsel, struct perf_counts_values *count,
+	       int cpu __maybe_unused, int thread __maybe_unused)
 {
-	u64 *count;
-	int cpu;
+	struct perf_counts_values *aggr = &evsel->counts->aggr;
 
-	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-		if (perf_evsel__read_on_cpu(counter, cpu, 0) < 0)
-			return -1;
+	aggr->val += count->val;
 
-		count = counter->counts->cpu[cpu].values;
+	if (perf_evsel__has_time(evsel)) {
+		aggr->ena += count->ena;
+		aggr->run += count->run;
+	}
+	return 0;
+}
 
-		update_shadow_stats(counter, count);
+static void read_evsel_pre(struct perf_evsel *evsel)
+{
+	struct perf_stat *ps = evsel->priv;
+
+	memset(ps->res_stats, 0, sizeof(ps->res_stats));
+
+	if (aggr_mode == AGGR_GLOBAL) {
+		struct perf_counts_values *aggr = &evsel->counts->aggr;
+
+		aggr->val = aggr->ena = aggr->run = 0;
+	}
+}
+
+static void read_evsel_post(struct perf_evsel *evsel)
+{
+	if (aggr_mode == AGGR_GLOBAL) {
+		struct perf_stat *ps = evsel->priv;
+		u64 *count = evsel->counts->aggr.values;
+		int i;
+
+		update_counter(evsel, -1, &evsel->counts->aggr);
+
+		for (i = 0; i < 3; i++)
+			update_stats(&ps->res_stats[i], count[i]);
+
+		if (verbose) {
+			fprintf(output, "%s: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+				perf_evsel__name(evsel), count[0], count[1], count[2]);
+		}
+	}
+}
+
+static int
+__perf_evlist__read_cb(struct perf_evlist *evlist, struct perf_evsel *evsel,
+		       perf_evsel__read_cb_t cb)
+{
+	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_cpus    = perf_evsel__nr_cpus(evsel);
+	int err;
+
+	read_evsel_pre(evsel);
+
+	err = perf_evsel__read_cb(evsel, cb, nr_cpus, nr_threads);
+	if (!err)
+		read_evsel_post(evsel);
+
+	return err;
+}
+
+static int perf_evlist__read_cb(struct perf_evlist *evlist,
+				perf_evsel__read_cb_t cb)
+{
+	struct perf_evsel *evsel;
+	int err = -EINVAL;
+
+	evlist__for_each(evlist, evsel) {
+		err = __perf_evlist__read_cb(evlist, evsel, cb);
+		if (err)
+			break;
 	}
 
-	return 0;
+	return err;
+}
+
+static void read_counters(void)
+{
+	static perf_evsel__read_cb_t cbs[AGGR_MAX] = {
+		[AGGR_NONE]	= read_cb_none,
+		[AGGR_GLOBAL]	= read_cb_global,
+		[AGGR_SOCKET]	= read_cb_none,
+		[AGGR_CORE]	= read_cb_none,
+	};
+
+	if (perf_evlist__read_cb(evsel_list, cbs[aggr_mode]))
+		pr_debug("failed to read counters\n");
 }
 
 static void print_interval(void)
 {
 	static int num_print_interval;
 	struct perf_evsel *counter;
-	struct perf_stat *ps;
 	struct timespec ts, rs;
 	char prefix[64];
 
-	if (aggr_mode == AGGR_GLOBAL) {
-		evlist__for_each(evsel_list, counter) {
-			ps = counter->priv;
-			memset(ps->res_stats, 0, sizeof(ps->res_stats));
-			read_counter_aggr(counter);
-		}
-	} else	{
-		evlist__for_each(evsel_list, counter) {
-			ps = counter->priv;
-			memset(ps->res_stats, 0, sizeof(ps->res_stats));
-			read_counter(counter);
-		}
-	}
+	read_counters();
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
@@ -636,17 +686,11 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	update_stats(&walltime_nsecs_stats, t1 - t0);
 
-	if (aggr_mode == AGGR_GLOBAL) {
-		evlist__for_each(evsel_list, counter) {
-			read_counter_aggr(counter);
-			perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter),
-					     thread_map__nr(evsel_list->threads));
-		}
-	} else {
-		evlist__for_each(evsel_list, counter) {
-			read_counter(counter);
-			perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter), 1);
-		}
+	read_counters();
+
+	evlist__for_each(evsel_list, counter) {
+		perf_evsel__close_fd(counter, perf_evsel__nr_cpus(counter),
+				     thread_map__nr(evsel_list->threads));
 	}
 
 	return WEXITSTATUS(status);
