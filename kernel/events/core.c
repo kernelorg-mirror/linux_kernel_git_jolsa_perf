@@ -3311,16 +3311,9 @@ static void free_event(struct perf_event *event)
 	_free_event(event);
 }
 
-/*
- * Called when the last reference to the file is gone.
- */
-static void put_event(struct perf_event *event)
+struct task_struct *perf_event_get_owner(struct perf_event *event)
 {
-	struct perf_event_context *ctx = event->ctx;
 	struct task_struct *owner;
-
-	if (!atomic_long_dec_and_test(&event->refcount))
-		return;
 
 	rcu_read_lock();
 	owner = ACCESS_ONCE(event->owner);
@@ -3340,7 +3333,21 @@ static void put_event(struct perf_event *event)
 		get_task_struct(owner);
 	}
 	rcu_read_unlock();
+	return owner;
+}
 
+/*
+ * Called when the last reference to the file is gone.
+ */
+static void put_event(struct perf_event *event)
+{
+	struct perf_event_context *ctx = event->ctx;
+	struct task_struct *owner;
+
+	if (!atomic_long_dec_and_test(&event->refcount))
+		return;
+
+	owner = perf_event_get_owner(event);
 	if (owner) {
 		mutex_lock(&owner->perf_event_mutex);
 		/*
