@@ -3315,6 +3315,10 @@ struct task_struct *perf_event_get_owner(struct perf_event *event)
 {
 	struct task_struct *owner;
 
+	/* Only the parent holds owner task. */
+	if (event->parent)
+		event = event->parent;
+
 	rcu_read_lock();
 	owner = ACCESS_ONCE(event->owner);
 	/*
