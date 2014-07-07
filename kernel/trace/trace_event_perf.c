@@ -21,9 +21,24 @@ typedef typeof(unsigned long [PERF_MAX_TRACE_SIZE / sizeof(unsigned long)])
 /* Count the events in use (per event id, not per instance) */
 static int	total_ref_count;
 
+static bool is_owner_admin(struct perf_event *event)
+{
+	struct task_struct *owner = perf_event_get_owner(event);
+	bool admin = false;
+
+	if (owner) {
+		admin = has_capability(owner, CAP_SYS_ADMIN);
+		put_task_struct(owner);
+	}
+
+	return admin;
+}
+
 static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 				 struct perf_event *p_event)
 {
+	bool admin = is_owner_admin(p_event);
+
 	if (tp_event->perf_perm) {
 		int ret = tp_event->perf_perm(tp_event, p_event);
 		if (ret)
@@ -32,7 +47,7 @@ static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 
 	/* The ftrace function trace is allowed only for root. */
 	if (ftrace_event_is_function(tp_event)) {
-		if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
+		if (perf_paranoid_tracepoint_raw() && !admin)
 			return -EPERM;
 
 		/*
@@ -65,7 +80,7 @@ static int perf_trace_event_perm(struct ftrace_event_call *tp_event,
 	 * ...otherwise raw tracepoint data can be a severe data leak,
 	 * only allow root to have these.
 	 */
-	if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
+	if (perf_paranoid_tracepoint_raw() && !admin)
 		return -EPERM;
 
 	return 0;
