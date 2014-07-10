@@ -105,3 +105,48 @@ void trace_event(union perf_event *event)
 	}
 	printf(".\n");
 }
+
+static struct variables_t {
+	const char *name;
+	int *ptr;
+} variables[] = {
+	{ .name = "verbose", .ptr = &verbose },
+	{ .name = NULL, }
+};
+
+int perf_debug_option(const struct option *opt __maybe_unused, const char *str,
+		      int unset __maybe_unused)
+{
+	struct variables_t *var = &variables[0];
+	char *vstr, *s = strdup(str);
+	int v = 1;
+
+	vstr = strchr(s, '=');
+	if (vstr)
+		*vstr++ = 0;
+
+	while (var->name) {
+		if (!strcmp(s, var->name))
+			break;
+		var++;
+	}
+
+	if (!var->name) {
+		pr_err("Unknown debug variable name '%s'\n", s);
+		free(s);
+		return -1;
+	}
+
+	if (vstr) {
+		v = atoi(vstr);
+		/*
+		 * Allow only values in rango (0, 10),
+		 * otherwise set 0
+		 */
+		v = (v < 0) || (v > 10) ? 0 : v;
+	}
+
+	*var->ptr = v;
+	free(s);
+	return 0;
+}

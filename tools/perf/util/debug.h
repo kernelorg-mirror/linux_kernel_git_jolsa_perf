@@ -7,6 +7,7 @@
 #include "../ui/helpline.h"
 #include "../ui/progress.h"
 #include "../ui/util.h"
+#include "parse-options.h"
 
 extern int verbose;
 extern bool quiet, dump_trace;
@@ -39,5 +40,7 @@ void pr_stat(const char *fmt, ...);
 
 int eprintf(int level, int var,
 	    const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+
+int perf_debug_option(const struct option *opt, const char *str, int unset);
 
 #endif	/* __PERF_DEBUG_H */
