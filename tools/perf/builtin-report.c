@@ -679,6 +679,8 @@ int cmd_report(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "Don't show entries under that percent", parse_percent_limit),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
 		     "how to display percentage of filtered entries", parse_filter_percentage),
+	OPT_CALLBACK(0, "debug", NULL, "variable[=VALUE]",
+		     "set debug variable (verbose)", perf_debug_option),
 	OPT_END()
 	};
 	struct perf_data_file file = {
