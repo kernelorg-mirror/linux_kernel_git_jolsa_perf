@@ -6751,6 +6751,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		 struct task_struct *task,
 		 struct perf_event *group_leader,
 		 struct perf_event *parent_event,
+		 struct task_struct *owner,
 		 perf_overflow_handler_t overflow_handler,
 		 void *context)
 {
@@ -6828,6 +6829,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	event->overflow_handler_context = context;
 
 	perf_event__state_init(event);
+
+	if (owner)
+		event->owner = owner;
 
 	pmu = NULL;
 
@@ -7141,7 +7145,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	get_online_cpus();
 
 	event = perf_event_alloc(&attr, cpu, task, group_leader, NULL,
-				 NULL, NULL);
+				 current, NULL, NULL);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
 		goto err_cpus;
@@ -7293,8 +7297,6 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	put_online_cpus();
 
-	event->owner = current;
-
 	mutex_lock(&current->perf_event_mutex);
 	list_add_tail(&event->owner_entry, &current->perf_event_list);
 	mutex_unlock(&current->perf_event_mutex);
@@ -7353,7 +7355,7 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	 * Get the target context (task or percpu):
 	 */
 
-	event = perf_event_alloc(attr, cpu, task, NULL, NULL,
+	event = perf_event_alloc(attr, cpu, task, NULL, NULL, NULL,
 				 overflow_handler, context);
 	if (IS_ERR(event)) {
 		err = PTR_ERR(event);
@@ -7674,11 +7676,9 @@ inherit_event(struct perf_event *parent_event,
 	if (parent_event->parent)
 		parent_event = parent_event->parent;
 
-	child_event = perf_event_alloc(&parent_event->attr,
-					   parent_event->cpu,
-					   child,
-					   group_leader, parent_event,
-				           NULL, NULL);
+	child_event = perf_event_alloc(&parent_event->attr, parent_event->cpu,
+				       child, group_leader, parent_event,
+				       NULL, NULL, NULL);
 	if (IS_ERR(child_event))
 		return child_event;
 
