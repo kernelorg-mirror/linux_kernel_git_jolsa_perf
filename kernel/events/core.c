@@ -7535,6 +7535,32 @@ static void perf_event_exit_task_context(struct task_struct *child, int ctxn)
 	put_ctx(child_ctx);
 }
 
+static void perf_event_exit_children(struct perf_event *parent)
+{
+	struct perf_event *child, *tmp;
+
+	mutex_lock(&parent->child_mutex);
+	list_for_each_entry_safe(child, tmp, &parent->child_list,
+				 child_list) {
+		struct perf_event_context *child_ctx = child->ctx;
+
+		/*
+		 * Child events got removed from child_list under
+		 * child_mutex and then freed. So it's safe to access
+		 * childs context in here, because the child holds
+		 * context ref.
+		 */
+		mutex_lock(&child_ctx->mutex);
+		perf_remove_from_context(child, true);
+		mutex_unlock(&child_ctx->mutex);
+
+		list_del_init(&child->child_list);
+		put_event(parent);
+		free_event(child);
+	}
+	mutex_unlock(&parent->child_mutex);
+}
+
 /*
  * When a child task exits, feed back event values to parent events.
  */
@@ -7555,6 +7581,7 @@ void perf_event_exit_task(struct task_struct *child)
 		 */
 		smp_wmb();
 		event->owner = NULL;
+		perf_event_exit_children(event);
 	}
 	mutex_unlock(&child->perf_event_mutex);
 
