@@ -1,9 +1,26 @@
 #include <linux/list.h>
+#include <linux/compiler.h>
 #include "ordered-events.h"
 #include "evlist.h"
 #include "session.h"
 #include "asm/bug.h"
 #include "debug.h"
+
+#define pr_N(n, fmt, ...) \
+	eprintf(n, debug_ordered_events, fmt, ##__VA_ARGS__)
+
+#define pr(fmt, ...)   pr_N(1, pr_fmt(fmt), ##__VA_ARGS__)
+
+static int pr_time(const char *str, u64 t)
+{
+	u64 secs, usecs, nsecs = t;
+
+	secs   = nsecs / NSECS_PER_SEC;
+	nsecs -= secs * NSECS_PER_SEC;
+	usecs  = nsecs / NSECS_PER_USEC;
+	return fprintf(stderr, "\t[%13" PRIu64 ".%06" PRIu64 "] %s\n",
+		       secs, usecs, str);
+}
 
 static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 {
@@ -13,6 +30,9 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 
 	++oe->nr_events;
 	oe->last = new;
+
+	if (unlikely(debug_ordered_events > 1))
+		pr_time("queue_event", timestamp);
 
 	if (!last) {
 		list_add(&new->list, &oe->events);
@@ -68,6 +88,9 @@ static struct ordered_event *alloc_event(struct ordered_events *oe)
 		oe->buffer = malloc(size);
 		if (!oe->buffer)
 			return NULL;
+
+		pr("alloc size %" PRIu64 "B (+%zu), max %" PRIu64 "B\n",
+		   oe->cur_alloc_size, size, oe->max_alloc_size);
 
 		oe->cur_alloc_size += size;
 		list_add(&oe->buffer->list, &oe->to_free);
@@ -155,6 +178,12 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 			 enum oe_flush how)
 {
 	struct ordered_events *oe = &s->ordered_events;
+	static const char * const str[] = {
+		"NONE",
+		"FINAL",
+		"ROUND",
+		"HALF ",
+	};
 	int err;
 
 	switch (how) {
@@ -185,6 +214,13 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 		break;
 	};
 
+	if (unlikely(debug_ordered_events)) {
+		fprintf(stderr, "ordered_events_flush PRE  %s, nr_events %u\n",
+			str[how], oe->nr_events);
+		pr_time("next_flush",    oe->next_flush);
+		pr_time("max_timestamp", oe->max_timestamp);
+	}
+
 	err = __ordered_events_flush(s, tool);
 
 	if (!err) {
@@ -192,6 +228,13 @@ int ordered_events_flush(struct perf_session *s, struct perf_tool *tool,
 			oe->next_flush = oe->max_timestamp;
 
 		oe->last_flush_type = how;
+	}
+
+	if (unlikely(debug_ordered_events)) {
+		fprintf(stderr, "ordered_events_flush POST %s, nr_events %u\n",
+			str[how], oe->nr_events);
+		pr_time("next_flush", oe->next_flush);
+		pr_time("last_flush", oe->last_flush);
 	}
 
 	return err;
