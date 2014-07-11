@@ -15,6 +15,7 @@
 
 int verbose;
 bool dump_trace = false, quiet = false;
+int debug_ordered_events;
 
 static int _eprintf(int level, int var, const char *fmt, va_list args)
 {
@@ -110,7 +111,8 @@ static struct variables_t {
 	const char *name;
 	int *ptr;
 } variables[] = {
-	{ .name = "verbose", .ptr = &verbose },
+	{ .name = "verbose",		.ptr = &verbose },
+	{ .name = "ordered_events",	.ptr = &debug_ordered_events},
 	{ .name = NULL, }
 };
 
