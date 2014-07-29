@@ -7681,6 +7681,9 @@ inherit_event(struct perf_event *parent_event,
 	if (parent_event->parent)
 		parent_event = parent_event->parent;
 
+	if (!atomic_long_inc_not_zero(&parent_event->refcount))
+		return NULL;
+
 	child_event = perf_event_alloc(&parent_event->attr,
 					   parent_event->cpu,
 					   child,
@@ -7688,11 +7691,6 @@ inherit_event(struct perf_event *parent_event,
 				           NULL, NULL);
 	if (IS_ERR(child_event))
 		return child_event;
-
-	if (!atomic_long_inc_not_zero(&parent_event->refcount)) {
-		free_event(child_event);
-		return NULL;
-	}
 
 	get_ctx(child_ctx);
 
