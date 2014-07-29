@@ -41,6 +41,7 @@
 #include <linux/cgroup.h>
 #include <linux/module.h>
 #include <linux/mman.h>
+#include <linux/task_work.h>
 
 #include "internal.h"
 
@@ -1374,6 +1375,28 @@ out:
 		perf_event__header_size(tmp);
 }
 
+/*
+ * Event has a parent but parent's task finished and it's
+ * alive only because of children holding refference.
+ */
+static bool is_orphaned_event(struct perf_event *event)
+{
+	return event->parent && !event->parent->owner;
+}
+
+static void orphans_remove_work(struct callback_head *work);
+
+static void schedule_orphans_remove(struct perf_event_context *ctx)
+{
+	if (!ctx->task || ctx->orphans_remove_sched)
+		return;
+
+	if (!task_work_add(ctx->task, &ctx->orphans_remove, true)) {
+		ctx->orphans_remove_sched = true;
+		get_ctx(ctx);
+	}
+}
+
 static inline int
 event_filter_match(struct perf_event *event)
 {
@@ -1422,6 +1445,9 @@ event_sched_out(struct perf_event *event,
 		ctx->nr_freq--;
 	if (event->attr.exclusive || !cpuctx->active_oncpu)
 		cpuctx->exclusive = 0;
+
+	if (is_orphaned_event(event))
+		schedule_orphans_remove(ctx);
 
 	perf_pmu_enable(event->pmu);
 }
@@ -1724,6 +1750,9 @@ event_sched_in(struct perf_event *event,
 
 	if (event->attr.exclusive)
 		cpuctx->exclusive = 1;
+
+	if (is_orphaned_event(event))
+		schedule_orphans_remove(ctx);
 
 out:
 	perf_pmu_enable(event->pmu);
@@ -3067,6 +3096,7 @@ static void __perf_event_init_context(struct perf_event_context *ctx)
 	INIT_LIST_HEAD(&ctx->flexible_groups);
 	INIT_LIST_HEAD(&ctx->event_list);
 	atomic_set(&ctx->refcount, 1);
+	init_task_work(&ctx->orphans_remove, orphans_remove_work);
 }
 
 static struct perf_event_context *
@@ -3386,6 +3416,38 @@ static int perf_release(struct inode *inode, struct file *file)
 {
 	put_event(file->private_data);
 	return 0;
+}
+
+static void orphans_remove_work(struct callback_head *work)
+{
+	struct perf_event_context *ctx;
+	struct perf_event *event, *tmp;
+	unsigned long flags;
+
+	ctx = container_of(work, struct perf_event_context, orphans_remove);
+
+	mutex_lock(&ctx->mutex);
+	list_for_each_entry_safe(event, tmp, &ctx->event_list, event_entry) {
+		if (is_orphaned_event(event)) {
+			struct perf_event *parent_event = event->parent;
+
+			perf_remove_from_context(event, true);
+
+			mutex_lock(&parent_event->child_mutex);
+			list_del_init(&event->child_list);
+			mutex_unlock(&parent_event->child_mutex);
+
+			free_event(event);
+			put_event(parent_event);
+		}
+	}
+	mutex_unlock(&ctx->mutex);
+
+	raw_spin_lock_irqsave(&ctx->lock, flags);
+	ctx->orphans_remove_sched = false;
+	raw_spin_unlock_irqrestore(&ctx->lock, flags);
+
+	put_ctx(ctx);
 }
 
 u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
@@ -7681,7 +7743,8 @@ inherit_event(struct perf_event *parent_event,
 	if (parent_event->parent)
 		parent_event = parent_event->parent;
 
-	if (!atomic_long_inc_not_zero(&parent_event->refcount))
+	if (!atomic_long_inc_not_zero(&parent_event->refcount) ||
+	    !parent_event->owner)
 		return NULL;
 
 	child_event = perf_event_alloc(&parent_event->attr,

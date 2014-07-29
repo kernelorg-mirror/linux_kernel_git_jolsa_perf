@@ -507,6 +507,9 @@ struct perf_event_context {
 	int				nr_cgroups;	 /* cgroup evts */
 	int				nr_branch_stack; /* branch_stack evt */
 	struct rcu_head			rcu_head;
+
+	struct callback_head		orphans_remove;
+	bool				orphans_remove_sched;
 };
 
 /*
