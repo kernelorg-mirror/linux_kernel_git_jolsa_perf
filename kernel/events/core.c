@@ -7355,6 +7355,9 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	struct perf_event *event;
 	int err;
 
+	if (WARN_ON(!overflow_handler))
+		return NULL;
+
 	/*
 	 * Get the target context (task or percpu):
 	 */
