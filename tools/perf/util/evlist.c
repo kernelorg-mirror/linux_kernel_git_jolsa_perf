@@ -15,6 +15,7 @@
 #include "evlist.h"
 #include "evsel.h"
 #include "debug.h"
+#include "poller.h"
 #include <unistd.h>
 
 #include "parse-events.h"
@@ -38,6 +39,7 @@ void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
 	INIT_LIST_HEAD(&evlist->entries);
 	perf_evlist__set_maps(evlist, cpus, threads);
 	evlist->workload.pid = -1;
+	poller__init(&evlist->poller);
 }
 
 struct perf_evlist *perf_evlist__new(void)
@@ -109,6 +111,7 @@ void perf_evlist__delete(struct perf_evlist *evlist)
 {
 	perf_evlist__munmap(evlist);
 	perf_evlist__close(evlist);
+	poller__cleanup(&evlist->poller);
 	cpu_map__delete(evlist->cpus);
 	thread_map__delete(evlist->threads);
 	evlist->cpus = NULL;
@@ -614,19 +617,23 @@ struct mmap_params {
 static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 			       struct mmap_params *mp, int fd)
 {
-	evlist->mmap[idx].prev = 0;
-	evlist->mmap[idx].mask = mp->mask;
-	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, mp->prot,
+	struct perf_mmap *m = &evlist->mmap[idx];
+
+	m->prev = 0;
+	m->mask = mp->mask;
+	m->base = mmap(NULL, evlist->mmap_len, mp->prot,
 				      MAP_SHARED, fd, 0);
-	if (evlist->mmap[idx].base == MAP_FAILED) {
+	if (m->base == MAP_FAILED) {
 		pr_debug2("failed to mmap perf event ring buffer, error %d\n",
 			  errno);
-		evlist->mmap[idx].base = NULL;
+		m->base = NULL;
 		return -1;
 	}
 
 	perf_evlist__add_pollfd(evlist, fd);
-	return 0;
+
+	m->poll.fd = fd;
+	return poller__add(&evlist->poller, &m->poll);
 }
 
 static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
