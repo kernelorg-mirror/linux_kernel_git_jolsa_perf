@@ -529,6 +529,18 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 	workload_exec_errno = info->si_value.sival_int;
 }
 
+static int data_error(struct poller *p, struct poller_item *item)
+{
+	pr_debug("got HUP/ERROR on fd %d\n", item->fd);
+
+	poller__del(p, item);
+	if (poller__empty(p)) {
+		pr_err("All events closed (monitored task exited?), shutting down.\n");
+		done = 1;
+	}
+	return 0;
+}
+
 static int __run_perf_stat(int argc, const char **argv)
 {
 	char msg[512];
@@ -538,6 +550,11 @@ static int __run_perf_stat(int argc, const char **argv)
 	size_t l;
 	int status = 0;
 	const bool forks = (argc > 0);
+	struct poller *poller = &evsel_list->poller;
+	struct poller_ops poller_ops = {
+		.error  = data_error,
+		.hup    = data_error,
+	};
 
 	if (interval) {
 		ts.tv_sec  = interval / 1000;
@@ -558,6 +575,8 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	if (group)
 		perf_evlist__set_leader(evsel_list);
+
+	poller__set_ops(poller, &poller_ops);
 
 	evlist__for_each(evsel_list, counter) {
 		if (create_perf_stat_counter(counter) < 0) {
@@ -584,6 +603,10 @@ static int __run_perf_stat(int argc, const char **argv)
 
 			return -1;
 		}
+
+		if (poller__add(poller, &counter->poll))
+			return -1;
+
 		counter->supported = true;
 
 		l = strlen(counter->unit);
@@ -626,7 +649,7 @@ static int __run_perf_stat(int argc, const char **argv)
 	} else {
 		handle_initial_delay();
 		while (!done) {
-			nanosleep(&ts, NULL);
+			poller__poll(poller, -1);
 			if (interval)
 				print_interval();
 		}

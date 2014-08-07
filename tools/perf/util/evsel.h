@@ -10,6 +10,7 @@
 #include "cgroup.h"
 #include "hist.h"
 #include "symbol.h"
+#include "poller.h"
 
 struct perf_counts_values {
 	union {
@@ -91,6 +92,7 @@ struct perf_evsel {
 	int			sample_read;
 	struct perf_evsel	*leader;
 	char			*group_name;
+	struct poller_item	poll;
 };
 
 union u64_swap {
