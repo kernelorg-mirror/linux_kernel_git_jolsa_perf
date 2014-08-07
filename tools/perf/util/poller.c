@@ -97,16 +97,14 @@ err:
 
 int poller__poll(struct poller *p, int timeout)
 {
-	int ret;
+	int ret, err;
 
 	ret = poll(p->ptr, p->n, timeout);
-	if (ret < 0)
-		return -1;
+	if (ret < 0 || !ret)
+		return ret;
 
-	if (ret)
-		ret = process(p, ret);
-
-	return ret;
+	err = process(p, ret);
+	return err ?: ret;
 }
 
 static struct pollfd *get_pfd(struct poller *p)

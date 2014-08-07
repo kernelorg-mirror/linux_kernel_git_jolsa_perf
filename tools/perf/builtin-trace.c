@@ -2011,6 +2011,18 @@ static int perf_evlist__add_pgfault(struct perf_evlist *evlist,
 	return 0;
 }
 
+static int data_error(struct poller *p, struct poller_item *item)
+{
+	pr_debug("got HUP/ERROR on fd %d\n", item->fd);
+
+	poller__del(p, item);
+	if (poller__empty(p)) {
+		pr_err("All events closed (monitored task exited?), shutting down.\n");
+		done = true;
+	}
+	return 0;
+}
+
 static int trace__run(struct trace *trace, int argc, const char **argv)
 {
 	struct perf_evlist *evlist = perf_evlist__new();
@@ -2018,6 +2030,11 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	int err = -1, i;
 	unsigned long before;
 	const bool forks = argc > 0;
+	struct poller *poller = &evlist->poller;
+	struct poller_ops poller_ops = {
+		.error  = data_error,
+		.hup    = data_error,
+	};
 
 	trace->live = true;
 
@@ -2088,6 +2105,8 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	if (forks)
 		perf_evlist__start_workload(evlist);
 
+	poller__set_ops(poller, &poller_ops);
+
 	trace->multiple_threads = evlist->threads->map[0] == -1 || evlist->threads->nr > 1;
 again:
 	before = trace->nr_events;
@@ -2143,7 +2162,7 @@ next_event:
 	if (trace->nr_events == before) {
 		int timeout = done ? 100 : -1;
 
-		if (poll(evlist->pollfd, evlist->nr_fds, timeout) > 0)
+		if (poller__poll(poller, timeout) > 0)
 			goto again;
 	} else {
 		goto again;
