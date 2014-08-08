@@ -25,6 +25,7 @@
 #include "util/cpumap.h"
 #include "util/thread_map.h"
 #include "util/data.h"
+#include "util/poller.h"
 
 #include <unistd.h>
 #include <sched.h>
@@ -155,6 +156,13 @@ try_again:
 			perf_evsel__open_strerror(pos, &opts->target,
 						  errno, msg, sizeof(msg));
 			ui__error("%s\n", msg);
+			goto out;
+		}
+
+		if (perf_evsel__set_poller(pos, &evlist->poller)) {
+			error("failed to set poller with %d (%s)\n", errno,
+				strerror(errno));
+			rc = -1;
 			goto out;
 		}
 	}
@@ -296,6 +304,18 @@ static void workload_exec_failed_signal(int signo __maybe_unused,
 	child_finished = 1;
 }
 
+static int data_error(struct poller *p, struct poller_item *item)
+{
+	pr_debug("got HUP/ERROR on fd %d\n", item->fd);
+
+	poller__del(p, item);
+	if (poller__empty(p)) {
+		pr_debug("All events closed, shutting down.\n");
+		done = 1;
+	}
+	return 0;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -308,6 +328,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	struct perf_data_file *file = &rec->file;
 	struct perf_session *session;
 	bool disabled = false;
+	struct poller *poller = &rec->evlist->poller;
+	struct poller_ops poller_ops = {
+		.error	= data_error,
+		.hup	= data_error,
+	};
 
 	rec->progname = argv[0];
 
@@ -447,6 +472,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		perf_evlist__enable(rec->evlist);
 	}
 
+	poller__set_ops(poller, &poller_ops);
+
 	for (;;) {
 		int hits = rec->samples;
 
@@ -458,7 +485,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (hits == rec->samples) {
 			if (done)
 				break;
-			err = poll(rec->evlist->pollfd, rec->evlist->nr_fds, -1);
+			err = poller__poll(poller, -1);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
