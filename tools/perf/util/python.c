@@ -7,6 +7,7 @@
 #include "event.h"
 #include "cpumap.h"
 #include "thread_map.h"
+#include "poller.h"
 
 /*
  * Support debug printing even though util/debug.c is not linked.  That means
@@ -730,13 +731,22 @@ static PyObject *pyrf_evlist__poll(struct pyrf_evlist *pevlist,
 				   PyObject *args, PyObject *kwargs)
 {
 	struct perf_evlist *evlist = &pevlist->evlist;
+	struct poller *poller = &evlist->poller;
 	static char *kwlist[] = { "timeout", NULL };
-	int timeout = -1, n;
+	int timeout = -1, n, err;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|i", kwlist, &timeout))
 		return NULL;
 
-	n = poll(evlist->pollfd, evlist->nr_fds, timeout);
+	if (poller__empty(poller)) {
+		err = perf_evlist__set_poller(evlist);
+		if (err) {
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+	}
+
+	n = poller__poll(poller, timeout);
 	if (n < 0) {
 		PyErr_SetFromErrno(PyExc_OSError);
 		return NULL;
@@ -750,12 +760,13 @@ static PyObject *pyrf_evlist__get_pollfd(struct pyrf_evlist *pevlist,
 					 PyObject *kwargs __maybe_unused)
 {
 	struct perf_evlist *evlist = &pevlist->evlist;
+	struct poller *poller = &evlist->poller;
         PyObject *list = PyList_New(0);
 	int i;
 
-	for (i = 0; i < evlist->nr_fds; ++i) {
+	for (i = 0; i < poller->n; ++i) {
 		PyObject *file;
-		FILE *fp = fdopen(evlist->pollfd[i].fd, "r");
+		FILE *fp = fdopen(poller->ptr[i].fd, "r");
 
 		if (fp == NULL)
 			goto free_list;
