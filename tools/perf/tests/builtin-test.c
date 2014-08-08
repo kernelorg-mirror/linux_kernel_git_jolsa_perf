@@ -154,6 +154,10 @@ static struct test {
 		.func = test__hists_cumulate,
 	},
 	{
+		.desc = "Test xyarray",
+		.func = test__xyarray,
+	},
+	{
 		.func = NULL,
 	},
 };
