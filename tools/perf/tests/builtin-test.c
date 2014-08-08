@@ -154,6 +154,10 @@ static struct test {
 		.func = test__hists_cumulate,
 	},
 	{
+		.desc = "Test poller",
+		.func = test__poller,
+	},
+	{
 		.func = NULL,
 	},
 };
