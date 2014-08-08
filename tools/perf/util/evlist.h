@@ -9,7 +9,6 @@
 #include "util.h"
 #include <unistd.h>
 
-struct pollfd;
 struct thread_map;
 struct cpu_map;
 struct record_opts;
@@ -41,7 +40,6 @@ struct perf_evlist {
 	} workload;
 	bool		 overwrite;
 	struct perf_mmap *mmap;
-	struct pollfd	 *pollfd;
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
@@ -82,8 +80,6 @@ perf_evlist__find_tracepoint_by_name(struct perf_evlist *evlist,
 
 void perf_evlist__id_add(struct perf_evlist *evlist, struct perf_evsel *evsel,
 			 int cpu, int thread, u64 id);
-
-void perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd);
 
 struct perf_evsel *perf_evlist__id2evsel(struct perf_evlist *evlist, u64 id);
 
