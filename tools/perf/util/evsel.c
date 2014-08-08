@@ -32,7 +32,7 @@ static struct {
 	bool cloexec;
 } perf_missing_features;
 
-#define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
+#define FD(e, x, y) (*perf_evsel__fd(e, x, y))
 
 int __perf_evsel__sample_size(u64 sample_type)
 {
