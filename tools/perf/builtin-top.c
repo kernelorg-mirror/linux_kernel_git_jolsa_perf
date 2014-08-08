@@ -40,6 +40,7 @@
 #include "util/xyarray.h"
 #include "util/sort.h"
 #include "util/intlist.h"
+#include "util/poller.h"
 #include "arch/common.h"
 
 #include "util/debug.h"
@@ -872,6 +873,12 @@ try_again:
 			ui__error("%s\n", msg);
 			goto out_err;
 		}
+
+		if (perf_evsel__set_poller(counter, &evlist->poller)) {
+			error("failed to set poller with %d (%s)\n", errno,
+			      strerror(errno));
+			goto out_err;
+		}
 	}
 
 	if (perf_evlist__mmap(evlist, opts->mmap_pages, false) < 0) {
@@ -903,11 +910,28 @@ static int perf_top__setup_sample_type(struct perf_top *top __maybe_unused)
 	return 0;
 }
 
+static int data_error(struct poller *p, struct poller_item *item)
+{
+	pr_debug("got HUP/ERROR on fd %d\n", item->fd);
+
+	poller__del(p, item);
+	if (poller__empty(p)) {
+		pr_debug("All events closed shutting down.\n");
+		done = 1;
+	}
+	return 0;
+}
+
 static int __cmd_top(struct perf_top *top)
 {
 	struct record_opts *opts = &top->record_opts;
 	pthread_t thread;
 	int ret;
+	struct poller *poller = &top->evlist->poller;
+	struct poller_ops poller_ops = {
+		.error  = data_error,
+		.hup    = data_error,
+	};
 
 	top->session = perf_session__new(NULL, false, NULL);
 	if (top->session == NULL)
@@ -945,8 +969,10 @@ static int __cmd_top(struct perf_top *top)
         if (!target__none(&opts->target))
                 perf_evlist__enable(top->evlist);
 
+	poller__set_ops(poller, &poller_ops);
+
 	/* Wait for a minimal set of events before starting the snapshot */
-	poll(top->evlist->pollfd, top->evlist->nr_fds, 100);
+	poller__poll(poller, 100);
 
 	perf_top__mmap_read(top);
 
@@ -973,7 +999,7 @@ static int __cmd_top(struct perf_top *top)
 		perf_top__mmap_read(top);
 
 		if (hits == top->samples)
-			ret = poll(top->evlist->pollfd, top->evlist->nr_fds, 100);
+			ret = poller__poll(poller, 100);
 	}
 
 	ret = 0;
