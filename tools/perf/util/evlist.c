@@ -102,7 +102,6 @@ static void perf_evlist__purge(struct perf_evlist *evlist)
 void perf_evlist__exit(struct perf_evlist *evlist)
 {
 	zfree(&evlist->mmap);
-	zfree(&evlist->pollfd);
 }
 
 void perf_evlist__delete(struct perf_evlist *evlist)
@@ -337,23 +336,6 @@ int perf_evlist__enable_event(struct perf_evlist *evlist,
 		}
 	}
 	return 0;
-}
-
-static int perf_evlist__alloc_pollfd(struct perf_evlist *evlist)
-{
-	int nr_cpus = cpu_map__nr(evlist->cpus);
-	int nr_threads = thread_map__nr(evlist->threads);
-	int nfds = nr_cpus * nr_threads * evlist->nr_entries;
-	evlist->pollfd = malloc(sizeof(struct pollfd) * nfds);
-	return evlist->pollfd != NULL ? 0 : -ENOMEM;
-}
-
-void perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd)
-{
-	fcntl(fd, F_SETFL, O_NONBLOCK);
-	evlist->pollfd[evlist->nr_fds].fd = fd;
-	evlist->pollfd[evlist->nr_fds].events = POLLIN;
-	evlist->nr_fds++;
 }
 
 static void perf_evlist__id_hash(struct perf_evlist *evlist,
@@ -625,7 +607,6 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 		return -1;
 	}
 
-	perf_evlist__add_pollfd(evlist, fd);
 	return 0;
 }
 
@@ -802,9 +783,6 @@ int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 	};
 
 	if (evlist->mmap == NULL && perf_evlist__alloc_mmap(evlist) < 0)
-		return -ENOMEM;
-
-	if (evlist->pollfd == NULL && perf_evlist__alloc_pollfd(evlist) < 0)
 		return -ENOMEM;
 
 	evlist->overwrite = overwrite;
