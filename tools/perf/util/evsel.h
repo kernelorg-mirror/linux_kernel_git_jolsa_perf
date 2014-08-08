@@ -10,6 +10,7 @@
 #include "cgroup.h"
 #include "hist.h"
 #include "symbol.h"
+#include "poller.h"
 
 struct perf_counts_values {
 	union {
@@ -366,7 +367,11 @@ for ((_evsel) = list_entry((_leader)->node.next, struct perf_evsel, node); 	\
 
 static inline int *perf_evsel__fd(struct perf_evsel *evsel, int cpu, int thread)
 {
-	return (int *) xyarray__entry(evsel->fd, cpu, thread);
+	struct poller_item *p;
+
+	p = xyarray__entry(evsel->fd, cpu, thread);
+	return &p->fd;
 }
 
+int perf_evsel__set_poller(struct perf_evsel *evsel, struct poller *poller);
 #endif /* __PERF_EVSEL_H */
