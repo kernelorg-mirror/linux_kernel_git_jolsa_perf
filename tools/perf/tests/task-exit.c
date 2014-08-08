@@ -3,6 +3,7 @@
 #include "thread_map.h"
 #include "cpumap.h"
 #include "tests.h"
+#include "poller.h"
 
 #include <signal.h>
 
@@ -92,6 +93,12 @@ int test__task_exit(void)
 		goto out_delete_evlist;
 	}
 
+	if (perf_evlist__set_poller(evlist)) {
+		pr_debug("failed to set poller: %d (%s)\n", errno,
+			 strerror(errno));
+		goto out_delete_evlist;
+	}
+
 	perf_evlist__start_workload(evlist);
 
 retry:
@@ -103,7 +110,7 @@ retry:
 	}
 
 	if (!exited || !nr_exit) {
-		poll(evlist->pollfd, evlist->nr_fds, -1);
+		poller__poll(&evlist->poller, -1);
 		goto retry;
 	}
 

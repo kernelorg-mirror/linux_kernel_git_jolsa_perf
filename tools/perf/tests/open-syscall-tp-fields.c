@@ -4,6 +4,7 @@
 #include "thread_map.h"
 #include "tests.h"
 #include "debug.h"
+#include "poller.h"
 
 int test__syscall_open_tp_fields(void)
 {
@@ -58,6 +59,12 @@ int test__syscall_open_tp_fields(void)
 		goto out_delete_evlist;
 	}
 
+	err = perf_evlist__set_poller(evlist);
+	if (err < 0) {
+		pr_debug("perf_evlist__set_poller: %s\n", strerror(errno));
+		goto out_delete_evlist;
+	};
+
 	perf_evlist__enable(evlist);
 
 	/*
@@ -102,7 +109,7 @@ int test__syscall_open_tp_fields(void)
 		}
 
 		if (nr_events == before)
-			poll(evlist->pollfd, evlist->nr_fds, 10);
+			poller__poll(&evlist->poller, 10);
 
 		if (++nr_polls > 5) {
 			pr_debug("%s: no events!\n", __func__);
