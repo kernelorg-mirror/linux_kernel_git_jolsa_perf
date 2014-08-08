@@ -97,7 +97,6 @@ struct perf_kvm_stat {
 
 	struct rb_root result;
 
-	int timerfd;
 	unsigned int display_time;
 	bool live;
 };
