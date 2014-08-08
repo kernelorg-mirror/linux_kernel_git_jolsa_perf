@@ -147,8 +147,6 @@ int test__PERF_RECORD(void)
 	perf_evlist__start_workload(evlist);
 
 	while (1) {
-		int before = total_events;
-
 		for (i = 0; i < evlist->nr_mmaps; i++) {
 			union perf_event *event;
 
@@ -262,8 +260,6 @@ int test__PERF_RECORD(void)
 		 * PERF_RECORD_{!SAMPLE} events don't honour
 		 * perf_event_attr.wakeup_events, just PERF_EVENT_SAMPLE does.
 		 */
-		if (total_events == before && false)
-			poll(evlist->pollfd, evlist->nr_fds, -1);
 
 		sleep(1);
 		if (++wakeups > 5) {
