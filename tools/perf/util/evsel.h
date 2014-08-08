@@ -364,4 +364,9 @@ for ((_evsel) = list_entry((_leader)->node.next, struct perf_evsel, node); 	\
      (_evsel) && (_evsel)->leader == (_leader);					\
      (_evsel) = list_entry((_evsel)->node.next, struct perf_evsel, node))
 
+static inline int *perf_evsel__fd(struct perf_evsel *evsel, int cpu, int thread)
+{
+	return (int *) xyarray__entry(evsel->fd, cpu, thread);
+}
+
 #endif /* __PERF_EVSEL_H */
