@@ -25,7 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/hash.h>
 
-#define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
+#define FD(e, x, y) (*perf_evsel__fd(e, x, y))
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
 void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
