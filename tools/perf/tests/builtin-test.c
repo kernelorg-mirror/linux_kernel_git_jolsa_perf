@@ -158,6 +158,10 @@ static struct test {
 		.func = test__poller,
 	},
 	{
+		.desc = "Test xyarray",
+		.func = test__xyarray,
+	},
+	{
 		.func = NULL,
 	},
 };
