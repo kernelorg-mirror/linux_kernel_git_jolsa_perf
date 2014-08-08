@@ -45,6 +45,7 @@ struct perf_evlist {
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
+	struct poller	 poller;
 };
 
 struct perf_evsel_str_handler {
@@ -195,6 +196,8 @@ static inline void perf_mmap__write_tail(struct perf_mmap *md,
 bool perf_evlist__can_select_event(struct perf_evlist *evlist, const char *str);
 void perf_evlist__to_front(struct perf_evlist *evlist,
 			   struct perf_evsel *move_evsel);
+
+int perf_evlist__set_poller(struct perf_evlist *evlist);
 
 /**
  * __evlist__for_each - iterate thru all the evsels

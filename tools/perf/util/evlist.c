@@ -1266,3 +1266,17 @@ void perf_evlist__to_front(struct perf_evlist *evlist,
 
 	list_splice(&move, &evlist->entries);
 }
+
+int perf_evlist__set_poller(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int err = -1;
+
+	evlist__for_each(evlist, evsel) {
+		err = perf_evsel__set_poller(evsel, &evlist->poller);
+		if (err)
+			break;
+	}
+
+	return err;
+}

@@ -695,7 +695,7 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts)
 int perf_evsel__alloc_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
 {
 	int cpu, thread;
-	evsel->fd = xyarray__new(ncpus, nthreads, sizeof(int));
+	evsel->fd = xyarray__new(ncpus, nthreads, sizeof(struct poller_item));
 
 	if (evsel->fd) {
 		for (cpu = 0; cpu < ncpus; cpu++) {
@@ -2054,4 +2054,21 @@ int perf_evsel__open_strerror(struct perf_evsel *evsel, struct target *target,
 	"/bin/dmesg may provide additional information.\n"
 	"No CONFIG_PERF_EVENTS=y kernel support configured?\n",
 			 err, strerror(err), perf_evsel__name(evsel));
+}
+
+int perf_evsel__set_poller(struct perf_evsel *evsel, struct poller *poller)
+{
+	struct poller_item *p;
+	int err = -1;
+
+	xyarray__for_each(evsel->fd, p) {
+		if (p->fd == -1)
+			continue;
+
+		err = poller__add(poller, p);
+		if (err)
+			break;
+	}
+
+	return err;
 }
