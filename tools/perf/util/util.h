@@ -75,6 +75,7 @@
 #include <api/fs/debugfs.h>
 #include <termios.h>
 #include <linux/bitops.h>
+#include <termios.h>
 
 extern const char *graph_line;
 extern const char *graph_dotted_line;
@@ -347,4 +348,6 @@ void mem_bswap_32(void *src, int byte_size);
 
 const char *get_filename_for_perf_kvm(void);
 bool find_process(const char *name);
+
+void terminal_set_quiet_input(struct termios *old);
 #endif /* GIT_COMPAT_UTIL_H */

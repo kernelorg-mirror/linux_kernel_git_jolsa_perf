@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <byteswap.h>
 #include <linux/kernel.h>
+#include <unistd.h>
 
 /*
  * XXX We need to find a better place for these things...
@@ -571,4 +572,16 @@ bool find_process(const char *name)
 
 	closedir(dir);
 	return ret ? false : true;
+}
+
+void terminal_set_quiet_input(struct termios *old)
+{
+	struct termios tc;
+
+	tcgetattr(0, old);
+	tc = *old;
+	tc.c_lflag &= ~(ICANON | ECHO);
+	tc.c_cc[VMIN] = 0;
+	tc.c_cc[VTIME] = 0;
+	tcsetattr(0, TCSANOW, &tc);
 }
