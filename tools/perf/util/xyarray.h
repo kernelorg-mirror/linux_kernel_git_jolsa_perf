@@ -6,6 +6,7 @@
 struct xyarray {
 	size_t row_size;
 	size_t entry_size;
+	size_t size;
 	char contents[];
 };
 
@@ -16,5 +17,10 @@ static inline void *xyarray__entry(struct xyarray *xy, int x, int y)
 {
 	return &xy->contents[x * xy->row_size + y * xy->entry_size];
 }
+
+#define xyarray__for_each(array, entry)					\
+	for (entry = (void *) &array->contents[0];			\
+	     (void *) entry < ((void *) array->contents + array->size);	\
+	     entry++)
 
 #endif /* _PERF_XYARRAY_H_ */
