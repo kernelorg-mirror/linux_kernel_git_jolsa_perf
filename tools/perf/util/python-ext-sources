@@ -20,3 +20,5 @@ util/strlist.c
 ../lib/api/fs/fs.c
 util/trace-event.c
 ../../lib/rbtree.c
+util/poller.c
+util/string.c
