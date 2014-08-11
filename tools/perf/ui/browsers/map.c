@@ -78,7 +78,7 @@ static int map_browser__run(struct map_browser *browser)
 		return -1;
 
 	while (1) {
-		key = ui_browser__run(&browser->b, 0);
+		key = ui_browser__run(&browser->b, 0, NULL);
 
 		switch (key) {
 		case '/':

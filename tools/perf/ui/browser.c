@@ -352,11 +352,11 @@ void ui_browser__update_nr_entries(struct ui_browser *browser, u32 nr_entries)
 	browser->seek(browser, browser->top_idx, SEEK_SET);
 }
 
-int ui_browser__run(struct ui_browser *browser, int delay_secs)
+int ui_browser__run(struct ui_browser *browser, int delay_secs, int *done)
 {
 	int err, key;
 
-	while (1) {
+	while (!browser_is_done(done)) {
 		off_t offset;
 
 		pthread_mutex_lock(&ui__lock);

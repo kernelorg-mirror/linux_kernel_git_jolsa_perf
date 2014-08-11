@@ -681,7 +681,7 @@ static int annotate_browser__run(struct annotate_browser *browser,
 	nd = browser->curr_hot;
 
 	while (1) {
-		key = ui_browser__run(&browser->b, delay_secs);
+		key = ui_browser__run(&browser->b, delay_secs, NULL);
 
 		if (delay_secs != 0) {
 			annotate_browser__calc_percent(browser, evsel);
