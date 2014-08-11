@@ -42,7 +42,7 @@ static int list_menu__run(struct ui_browser *menu)
 		return -1;
 
 	while (1) {
-		key = ui_browser__run(menu, 0);
+		key = ui_browser__run(menu, 0, NULL);
 
 		switch (key) {
 		case K_RIGHT:

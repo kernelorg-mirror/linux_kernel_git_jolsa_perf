@@ -24,5 +24,6 @@
 #define K_ERROR	 -2
 #define K_RESIZE -3
 #define K_SWITCH_INPUT_DATA -4
+#define K_INIT	 -5
 
 #endif /* _PERF_KEYSYMS_H_ */

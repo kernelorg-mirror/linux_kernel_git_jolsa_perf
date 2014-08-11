@@ -571,7 +571,8 @@ static void *display_thread_tui(void *arg)
 		pos->hists.uid_filter_str = top->record_opts.target.uid_str;
 
 	perf_evlist__tui_browse_hists(top->evlist, help, &hbt, top->min_percent,
-				      &top->session->header.env);
+				      &top->session->header.env,
+				      (int *) &done);
 
 	done = 1;
 	return NULL;

@@ -46,7 +46,7 @@ int ui_browser__show(struct ui_browser *browser, const char *title,
 		     const char *helpline, ...);
 void ui_browser__hide(struct ui_browser *browser);
 int ui_browser__refresh(struct ui_browser *browser);
-int ui_browser__run(struct ui_browser *browser, int delay_secs);
+int ui_browser__run(struct ui_browser *browser, int delay_secs, int *done);
 void ui_browser__update_nr_entries(struct ui_browser *browser, u32 nr_entries);
 void ui_browser__handle_resize(struct ui_browser *browser);
 void __ui_browser__vline(struct ui_browser *browser, unsigned int column,
@@ -72,4 +72,10 @@ unsigned int ui_browser__list_head_refresh(struct ui_browser *browser);
 
 void ui_browser__init(void);
 void annotate_browser__init(void);
+
+static inline bool browser_is_done(int *done)
+{
+	return done ? *done != 0 : 0;
+}
+
 #endif /* _PERF_UI_BROWSER_H_ */

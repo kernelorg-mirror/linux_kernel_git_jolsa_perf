@@ -378,9 +378,10 @@ static void ui_browser__warn_lost_events(struct ui_browser *browser)
 }
 
 static int hist_browser__run(struct hist_browser *browser,
-			     struct hist_browser_timer *hbt)
+			     struct hist_browser_timer *hbt,
+			     int *done)
 {
-	int key;
+	int key = K_INIT;
 	char title[160];
 	int delay_secs = hbt ? hbt->refresh : 0;
 
@@ -393,8 +394,8 @@ static int hist_browser__run(struct hist_browser *browser,
 			     "Press '?' for help on key bindings") < 0)
 		return -1;
 
-	while (1) {
-		key = ui_browser__run(&browser->b, delay_secs);
+	while (!browser_is_done(done)) {
+		key = ui_browser__run(&browser->b, delay_secs, done);
 
 		switch (key) {
 		case K_TIMER: {
@@ -1486,7 +1487,8 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 				    bool left_exits,
 				    struct hist_browser_timer *hbt,
 				    float min_pcnt,
-				    struct perf_session_env *env)
+				    struct perf_session_env *env,
+				    int *done)
 {
 	struct hists *hists = &evsel->hists;
 	struct hist_browser *browser = hist_browser__new(hists);
@@ -1554,7 +1556,7 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 	if (symbol_conf.col_width_list_str)
 		perf_hpp__set_user_width(symbol_conf.col_width_list_str);
 
-	while (1) {
+	while (!browser_is_done(done)) {
 		const struct thread *thread = NULL;
 		const struct dso *dso = NULL;
 		int choice = 0,
@@ -1565,7 +1567,7 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 
 		nr_options = 0;
 
-		key = hist_browser__run(browser, hbt);
+		key = hist_browser__run(browser, hbt, done);
 
 		if (browser->he_selection != NULL) {
 			thread = hist_browser__selected_thread(browser);
@@ -1939,20 +1941,21 @@ static void perf_evsel_menu__write(struct ui_browser *browser,
 
 static int perf_evsel_menu__run(struct perf_evsel_menu *menu,
 				int nr_events, const char *help,
-				struct hist_browser_timer *hbt)
+				struct hist_browser_timer *hbt,
+				int *done)
 {
 	struct perf_evlist *evlist = menu->b.priv;
 	struct perf_evsel *pos;
 	const char *title = "Available samples";
 	int delay_secs = hbt ? hbt->refresh : 0;
-	int key;
+	int key = K_INIT;
 
 	if (ui_browser__show(&menu->b, title,
 			     "ESC: exit, ENTER|->: Browse histograms") < 0)
 		return -1;
 
-	while (1) {
-		key = ui_browser__run(&menu->b, delay_secs);
+	while (!browser_is_done(done)) {
+		key = ui_browser__run(&menu->b, delay_secs, done);
 
 		switch (key) {
 		case K_TIMER:
@@ -1979,7 +1982,7 @@ browse_hists:
 			key = perf_evsel__hists_browse(pos, nr_events, help,
 						       true, hbt,
 						       menu->min_pcnt,
-						       menu->env);
+						       menu->env, done);
 			ui_browser__show_title(&menu->b, title);
 			switch (key) {
 			case K_TAB:
@@ -2041,7 +2044,8 @@ static int __perf_evlist__tui_browse_hists(struct perf_evlist *evlist,
 					   int nr_entries, const char *help,
 					   struct hist_browser_timer *hbt,
 					   float min_pcnt,
-					   struct perf_session_env *env)
+					   struct perf_session_env *env,
+					   int *done)
 {
 	struct perf_evsel *pos;
 	struct perf_evsel_menu menu = {
@@ -2068,13 +2072,14 @@ static int __perf_evlist__tui_browse_hists(struct perf_evlist *evlist,
 			menu.b.width = line_len;
 	}
 
-	return perf_evsel_menu__run(&menu, nr_entries, help, hbt);
+	return perf_evsel_menu__run(&menu, nr_entries, help, hbt, done);
 }
 
 int perf_evlist__tui_browse_hists(struct perf_evlist *evlist, const char *help,
 				  struct hist_browser_timer *hbt,
 				  float min_pcnt,
-				  struct perf_session_env *env)
+				  struct perf_session_env *env,
+				  int *done)
 {
 	int nr_entries = evlist->nr_entries;
 
@@ -2084,7 +2089,7 @@ single_entry:
 
 		return perf_evsel__hists_browse(first, nr_entries, help,
 						false, hbt, min_pcnt,
-						env);
+						env, done);
 	}
 
 	if (symbol_conf.event_group) {
@@ -2101,5 +2106,5 @@ single_entry:
 	}
 
 	return __perf_evlist__tui_browse_hists(evlist, nr_entries, help,
-					       hbt, min_pcnt, env);
+					       hbt, min_pcnt, env, done);
 }
