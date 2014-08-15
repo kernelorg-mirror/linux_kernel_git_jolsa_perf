@@ -1446,12 +1446,38 @@ static const char *get_default_sort_order(void)
 	return default_sort_orders[sort__mode];
 }
 
+static int setup_sort_order(void)
+{
+#define BUF_MAX 4096
+	static char buf[BUF_MAX];
+
+	if (!sort_order || is_strict_order(sort_order))
+		return 0;
+
+	if (!strlen(sort_order + 1)) {
+		error("Invalid --fields key: `+'");
+		return -EINVAL;
+	}
+
+	scnprintf(buf, BUF_MAX, "%s,%s",
+		  get_default_sort_order(),
+		  sort_order + 1);
+
+	sort_order = buf;
+	return 0;
+#undef BUF_MAX
+}
+
 static int __setup_sorting(void)
 {
 	char *tmp, *tok, *str;
-	const char *sort_keys = sort_order;
+	const char *sort_keys;
 	int ret = 0;
 
+	if (setup_sort_order())
+		return -EINVAL;
+
+	sort_keys = sort_order;
 	if (sort_keys == NULL) {
 		if (is_strict_order(field_order)) {
 			/*
