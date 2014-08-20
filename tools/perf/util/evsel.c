@@ -586,7 +586,11 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts)
 		 */
 		if (leader->nr_members > 1) {
 			attr->read_format |= PERF_FORMAT_GROUP;
-			attr->inherit = 0;
+			attr->inherit = opts->inherit_format_group;
+			if (!opts->inherit_format_group) {
+				pr_warning_once("Disabling inherit for sample read events, "
+						"no kernel support.\n");
+			}
 		}
 	}
 

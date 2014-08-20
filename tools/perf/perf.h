@@ -45,6 +45,7 @@ struct record_opts {
 	bool         call_graph_enabled;
 	bool	     group;
 	bool	     inherit_stat;
+	bool	     inherit_format_group;
 	bool	     no_buffering;
 	bool	     no_inherit;
 	bool	     no_inherit_set;
