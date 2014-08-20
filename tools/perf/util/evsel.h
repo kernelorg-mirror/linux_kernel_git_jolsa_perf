@@ -30,6 +30,19 @@ struct perf_counts {
 
 struct perf_evsel;
 
+struct perf_sample_period {
+	struct hlist_node	node;
+	u64			value;
+	pid_t			tid;
+};
+
+#define PERF_SAMPLE__HLIST_BITS 8
+#define PERF_SAMPLE__HLIST_SIZE (1 << PERF_SAMPLE__HLIST_BITS)
+
+struct perf_sample_hash {
+	struct hlist_head heads[PERF_SAMPLE__HLIST_SIZE];
+};
+
 /*
  * Per fd, to map back from PERF_SAMPLE_ID to evsel, only used when there are
  * more than one entry in the evlist.
@@ -40,7 +53,7 @@ struct perf_sample_id {
 	struct perf_evsel	*evsel;
 
 	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
-	u64			period;
+	struct perf_sample_hash	*periods;
 };
 
 /** struct perf_evsel - event selector

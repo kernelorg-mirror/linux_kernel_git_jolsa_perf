@@ -787,8 +787,30 @@ void perf_evsel__free_fd(struct perf_evsel *evsel)
 	evsel->fd = NULL;
 }
 
+static void free_hash_period(struct perf_sample_hash *hash)
+{
+	int h;
+
+	for (h = 0; h < PERF_SAMPLE__HLIST_SIZE; h++) {
+		struct perf_sample_period *period;
+		struct hlist_head *head;
+		struct hlist_node *n;
+
+		head = &hash->heads[h];
+		hlist_for_each_entry_safe(period, n, head, node) {
+			hlist_del(&period->node);
+			free(period);
+		}
+	}
+}
+
 void perf_evsel__free_id(struct perf_evsel *evsel)
 {
+	struct perf_sample_id *sid;
+
+	xyarray__for_each(evsel->sample_id, sid)
+		free_hash_period(sid->periods);
+
 	xyarray__delete(evsel->sample_id);
 	evsel->sample_id = NULL;
 	zfree(&evsel->id);
