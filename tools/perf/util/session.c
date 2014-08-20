@@ -1,4 +1,6 @@
 #include <linux/kernel.h>
+#include <linux/bitops.h>
+#include <linux/hash.h>
 #include <traceevent/event-parse.h>
 
 #include <byteswap.h>
@@ -733,6 +735,80 @@ static struct machine *
 	return &session->machines.host;
 }
 
+struct perf_sample_period {
+	struct hlist_node	node;
+	u64			value;
+	pid_t			tid;
+};
+
+#define PERF_SAMPLE__HLIST_BITS 8
+#define PERF_SAMPLE__HLIST_SIZE (1 << PERF_SAMPLE__HLIST_BITS)
+
+struct perf_sample_hash {
+	struct hlist_head heads[PERF_SAMPLE__HLIST_SIZE];
+};
+
+void perf_sample_hash__free(struct perf_sample_hash *hash)
+{
+	int h;
+
+	for (h = 0; h < PERF_SAMPLE__HLIST_SIZE; h++) {
+		struct perf_sample_period *period;
+		struct hlist_head *head;
+		struct hlist_node *n;
+
+		head = &hash->heads[h];
+		hlist_for_each_entry_safe(period, n, head, node) {
+			hlist_del(&period->node);
+			free(period);
+		}
+	}
+}
+
+static struct perf_sample_period*
+findnew_hash_period(struct perf_sample_hash *hash, pid_t tid)
+{
+	struct perf_sample_period* period;
+	struct hlist_head *head;
+	int hash_val;
+
+	hash_val = hash_64(tid, PERF_SAMPLE__HLIST_BITS);
+	head = &hash->heads[hash_val];
+
+	hlist_for_each_entry(period, head, node) {
+		if (period->tid == tid)
+			return period;
+	}
+
+	period = zalloc(sizeof(*period));
+	if (period) {
+		period->tid = tid;
+		hlist_add_head(&period->node, &hash->heads[hash_val]);
+	}
+
+	return period;
+}
+
+static struct perf_sample_period*
+get_sample_period(struct perf_sample_id *sid, pid_t tid)
+{
+	struct perf_sample_hash *hash = sid->periods;
+	int i;
+
+	if (hash == NULL) {
+		hash = zalloc(sizeof(*hash));
+		if (hash == NULL)
+			return NULL;
+
+		for (i = 0; i < PERF_SAMPLE__HLIST_SIZE; ++i)
+			INIT_HLIST_HEAD(&hash->heads[i]);
+
+		sid->periods = hash;
+	}
+
+	return findnew_hash_period(hash, tid);
+}
+
 static int deliver_sample_value(struct perf_session *session,
 				struct perf_tool *tool,
 				union perf_event *event,
@@ -741,18 +817,21 @@ static int deliver_sample_value(struct perf_session *session,
 				struct machine *machine)
 {
 	struct perf_sample_id *sid;
+	struct perf_sample_period *period;
 
 	sid = perf_evlist__id2sid(session->evlist, v->id);
-	if (sid) {
-		sample->id     = v->id;
-		sample->period = v->value - sid->period;
-		sid->period    = v->value;
-	}
-
 	if (!sid || sid->evsel == NULL) {
 		++session->stats.nr_unknown_id;
 		return 0;
 	}
+
+	period = get_sample_period(sid, sample->tid);
+	if (period == NULL)
+		return -ENOMEM;
+
+	sample->id     = v->id;
+	sample->period = v->value - period->value;
+	period->value  = v->value;
 
 	return tool->sample(tool, event, sample, sid->evsel, machine);
 }

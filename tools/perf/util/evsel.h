@@ -29,6 +29,7 @@ struct perf_counts {
 };
 
 struct perf_evsel;
+struct perf_sample_hash;
 
 /*
  * Per fd, to map back from PERF_SAMPLE_ID to evsel, only used when there are
@@ -40,8 +41,10 @@ struct perf_sample_id {
 	struct perf_evsel	*evsel;
 
 	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
-	u64			period;
+	struct perf_sample_hash	*periods;
 };
+
+void perf_sample_hash__free(struct perf_sample_hash *hash);
 
 /** struct perf_evsel - event selector
  *
