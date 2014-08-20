@@ -787,8 +787,21 @@ void perf_evsel__free_fd(struct perf_evsel *evsel)
 	evsel->fd = NULL;
 }
 
+static void free_sample_id(struct perf_evsel *evsel)
+{
+	struct perf_sample_id *sid;
+
+	if (evsel->sample_id) {
+		xyarray__for_each(evsel->sample_id, sid) {
+			if (sid->periods)
+				perf_sample_hash__delete(sid->periods);
+		}
+	}
+}
+
 void perf_evsel__free_id(struct perf_evsel *evsel)
 {
+	free_sample_id(evsel);
 	xyarray__delete(evsel->sample_id);
 	evsel->sample_id = NULL;
 	zfree(&evsel->id);
