@@ -1117,6 +1117,11 @@ ctx_group_list(struct perf_event *event, struct perf_event_context *ctx)
 		return &ctx->flexible_groups;
 }
 
+static bool has_inherit_read(struct perf_event *event)
+{
+	return event->attr.inherit && (event->attr.sample_type & PERF_SAMPLE_READ);
+}
+
 /*
  * Add a event from the lists for its context.
  * Must be called with ctx->mutex and ctx->lock held.
@@ -1147,6 +1152,9 @@ list_add_event(struct perf_event *event, struct perf_event_context *ctx)
 
 	if (has_branch_stack(event))
 		ctx->nr_branch_stack++;
+
+	if (has_inherit_read(event))
+		ctx->pin_count++;
 
 	list_add_rcu(&event->event_entry, &ctx->event_list);
 	if (!ctx->nr_events)
@@ -1312,6 +1320,9 @@ list_del_event(struct perf_event *event, struct perf_event_context *ctx)
 
 	if (has_branch_stack(event))
 		ctx->nr_branch_stack--;
+
+	if (has_inherit_read(event))
+		ctx->pin_count--;
 
 	ctx->nr_events--;
 	if (event->attr.inherit_stat)
@@ -6943,12 +6954,6 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	hwc->last_period = hwc->sample_period;
 
 	local64_set(&hwc->period_left, hwc->sample_period);
-
-	/*
-	 * we currently do not support PERF_FORMAT_GROUP on inherited events
-	 */
-	if (attr->inherit && (attr->read_format & PERF_FORMAT_GROUP))
-		goto err_ns;
 
 	pmu = perf_init_event(event);
 	if (!pmu)
