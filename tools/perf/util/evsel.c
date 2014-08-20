@@ -584,10 +584,8 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts)
 		 * Apply group format only if we belong to group
 		 * with more than one members.
 		 */
-		if (leader->nr_members > 1) {
+		if (leader->nr_members > 1)
 			attr->read_format |= PERF_FORMAT_GROUP;
-			attr->inherit = 0;
-		}
 	}
 
 	/*
