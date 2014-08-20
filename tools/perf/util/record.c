@@ -85,6 +85,12 @@ static void perf_probe_comm_exec(struct perf_evsel *evsel)
 	evsel->attr.comm_exec = 1;
 }
 
+static void perf_probe_inherit_format_group(struct perf_evsel *evsel)
+{
+	evsel->attr.inherit = 1;
+	evsel->attr.read_format |= PERF_FORMAT_GROUP;
+}
+
 bool perf_can_sample_identifier(void)
 {
 	return perf_probe_api(perf_probe_sample_identifier);
@@ -93,6 +99,11 @@ bool perf_can_sample_identifier(void)
 static bool perf_can_comm_exec(void)
 {
 	return perf_probe_api(perf_probe_comm_exec);
+}
+
+static bool perf_can_inherit_format_group(void)
+{
+	return perf_probe_api(perf_probe_inherit_format_group);
 }
 
 void perf_evlist__config(struct perf_evlist *evlist, struct record_opts *opts)
@@ -111,6 +122,7 @@ void perf_evlist__config(struct perf_evlist *evlist, struct record_opts *opts)
 	if (evlist->cpus->map[0] < 0)
 		opts->no_inherit = true;
 
+	opts->inherit_format_group = perf_can_inherit_format_group();
 	use_comm_exec = perf_can_comm_exec();
 
 	evlist__for_each(evlist, evsel) {
