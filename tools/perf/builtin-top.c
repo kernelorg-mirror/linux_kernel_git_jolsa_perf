@@ -991,8 +991,12 @@ static int __cmd_top(struct perf_top *top)
 
 		perf_top__mmap_read(top);
 
-		if (hits == top->samples)
-			ret = perf_evlist__poll(top->evlist, 100);
+		if (hits == top->samples) {
+			perf_evlist__poll(top->evlist, 100);
+
+			if (perf_evlist__filter_pollfd(top->evlist, POLLERR | POLLHUP) == 0)
+				done = 1;
+		}
 	}
 
 	ret = 0;
