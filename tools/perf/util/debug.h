@@ -31,6 +31,18 @@ extern int debug_ordered_events;
 #define pr_debug3(fmt, ...) pr_debugN(3, pr_fmt(fmt), ##__VA_ARGS__)
 #define pr_debug4(fmt, ...) pr_debugN(4, pr_fmt(fmt), ##__VA_ARGS__)
 
+#define pr_once(fmt, pr, ...)			\
+	do {					\
+		static int __warned;		\
+						\
+		if (!__warned) {		\
+			pr(fmt, ##__VA_ARGS__);	\
+			__warned = 1;		\
+		}				\
+	} while (0)
+
+#define pr_warning_once(fmt, ...) pr_once(fmt, pr_warning, ##__VA_ARGS__)
+
 #define pr_time_N(n, var, t, fmt, ...) \
 	eprintf_time(n, var, t, fmt, ##__VA_ARGS__)
 
