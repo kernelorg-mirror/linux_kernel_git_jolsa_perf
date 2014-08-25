@@ -2257,14 +2257,6 @@ static int context_equiv(struct perf_event_context *ctx1,
 	if (ctx1->pin_count || ctx2->pin_count)
 		return 0;
 
-	/* If ctx1 is the parent of ctx2 */
-	if (ctx1 == ctx2->parent_ctx && ctx1->generation == ctx2->parent_gen)
-		return 1;
-
-	/* If ctx2 is the parent of ctx1 */
-	if (ctx1->parent_ctx == ctx2 && ctx1->parent_gen == ctx2->generation)
-		return 1;
-
 	/*
 	 * If ctx1 and ctx2 have the same parent; we flatten the parent
 	 * hierarchy, see perf_event_init_context().
