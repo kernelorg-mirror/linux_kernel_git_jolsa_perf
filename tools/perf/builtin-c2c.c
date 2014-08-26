@@ -12,6 +12,7 @@
 
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <sys/mman.h>
 #include <sched.h>
 
 typedef struct {
@@ -265,6 +266,38 @@ static int perf_sample__fprintf(struct perf_sample *sample, char tag,
 		       data_src,			sep,
 		       map ? (map->dso ? map->dso->long_name : "???") : "???",
 		       mi->iaddr.sym ? mi->iaddr.sym->name : "???");
+}
+
+static int perf_mmap2__fprintf(union perf_event *event, char tag,
+				const char *reason, FILE *fp)
+{
+	const char *fmt, *sep;
+	struct mmap2_event *mmap2 = &event->mmap2;
+	bool exec = mmap2->prot & PROT_EXEC;
+
+	if (symbol_conf.field_sep) {
+		fmt = "%c%s%s%s%d%s%d%s%d%s%#"PRIx64"%s%#"PRIx64"%s"
+		      "%"PRIu64"%s%d:%d%s%#"PRIx64"%s%#"PRIx64"%s%s\n";
+		sep = symbol_conf.field_sep;
+	} else {
+		fmt = "%c%s%s%s%1d%s%6d%s%6d%s%#18"PRIx64"%s%#18"PRIx64"%s"
+		      "%18"PRIu64"%s%3d:%3d%s%#18"PRIx64"%s%#18"PRIx64"%s%-16s\n";
+		sep = " ";
+	}
+
+	return fprintf(fp, fmt,
+		       tag,				sep,
+		       reason ?: "valid record",	sep,
+		       exec,				sep,
+		       mmap2->pid,			sep,
+		       mmap2->tid,			sep,
+		       mmap2->start,			sep,
+		       mmap2->len,			sep,
+		       mmap2->pgoff,			sep,
+		       mmap2->maj, mmap2->min,		sep,
+		       mmap2->ino,			sep,
+		       mmap2->ino_generation,		sep,
+		       mmap2->filename);
 }
 
 static int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
@@ -676,6 +709,24 @@ static int perf_c2c__process_sample(struct perf_tool *tool,
 err:
 	if (err > 0)
 		err = 0;
+	return err;
+}
+static int perf_c2c__process_mmap2(struct perf_tool *tool,
+				    union perf_event *event,
+				    struct perf_sample *sample,
+				    struct machine *machine)
+{
+	struct perf_c2c *c2c = container_of(tool, struct perf_c2c, tool);
+	int err = 0;
+
+	err = perf_event__process_mmap2(tool, event, sample, machine);
+	if (err)
+		goto out;
+
+	if (c2c->raw_records)
+		perf_mmap2__fprintf(event, ' ', "mmap2", stdout);
+
+out:
 	return err;
 }
 
@@ -1558,6 +1609,9 @@ static int perf_c2c__process_events(struct perf_session *session, struct perf_c2
 		goto err;
 	}
 
+	if (c2c->raw_records)
+		return 0;
+
 	if (verbose > 2)
 		dump_rb_tree(c2c->hists.entries_in, c2c);
 	print_c2c_trace_report(c2c);
@@ -1851,7 +1905,7 @@ int cmd_c2c(int argc, const char **argv, const char *prefix __maybe_unused)
 	struct perf_c2c c2c = {
 		.tool = {
 			.sample		 = perf_c2c__process_sample,
-			.mmap2           = perf_event__process_mmap2,
+			.mmap2           = perf_c2c__process_mmap2,
 			.mmap            = perf_event__process_mmap,
 			.comm		 = perf_event__process_comm,
 			.exit		 = perf_event__process_exit,
