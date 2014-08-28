@@ -101,6 +101,7 @@ int test__clang_subtest_get_nr(void);
 int test__unit_number__scnprint(int subtest);
 int test__thread_comm(int subtest);
 int test__thread_lookup_time(int subtest);
+int test__thread_mg_time(int subtest);
 
 bool test__bp_signal_is_supported(void);
 
