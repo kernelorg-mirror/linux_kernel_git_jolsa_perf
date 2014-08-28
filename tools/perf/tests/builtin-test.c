@@ -259,6 +259,10 @@ static struct test generic_tests[] = {
 		.func = test__thread_comm,
 	},
 	{
+		.desc = "Test thread lookup with time",
+		.func = test__thread_lookup_time,
+	},
+	{
 		.func = NULL,
 	},
 };
