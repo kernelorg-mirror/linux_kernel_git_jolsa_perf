@@ -516,3 +516,29 @@ struct thread *thread__main_thread(struct machine *machine, struct thread *threa
 
 	return machine__find_thread(machine, thread->pid_, thread->pid_);
 }
+
+void thread__find_cpumode_addr_location_by_time(struct thread *thread,
+						enum map_type type, u64 addr,
+						struct addr_location *al,
+						u64 timestamp)
+{
+	size_t i;
+	const u8 const cpumodes[] = {
+		PERF_RECORD_MISC_USER,
+		PERF_RECORD_MISC_KERNEL,
+		PERF_RECORD_MISC_GUEST_USER,
+		PERF_RECORD_MISC_GUEST_KERNEL
+	};
+
+	if (!perf_has_index) {
+		thread__find_cpumode_addr_location(thread, type, addr, al);
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(cpumodes); i++) {
+		thread__find_addr_location_by_time(thread, cpumodes[i], type,
+						   addr, al, timestamp);
+		if (al->map)
+			break;
+	}
+}
