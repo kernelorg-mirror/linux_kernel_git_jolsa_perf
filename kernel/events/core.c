@@ -1731,7 +1731,7 @@ event_sched_in(struct perf_event *event,
 		 struct perf_event_context *ctx)
 {
 	u64 tstamp = perf_event_time(event);
-	int ret = 0;
+	int ret = 0, add_flags = PERF_EF_START;
 
 	lockdep_assert_held(&ctx->lock);
 
@@ -1755,7 +1755,10 @@ event_sched_in(struct perf_event *event,
 
 	perf_pmu_disable(event->pmu);
 
-	if (event->pmu->add(event, PERF_EF_START)) {
+	if (event->paused)
+		add_flags = 0;
+
+	if (event->pmu->add(event, add_flags)) {
 		event->state = PERF_EVENT_STATE_INACTIVE;
 		event->oncpu = -1;
 		ret = -EAGAIN;
@@ -2842,7 +2845,7 @@ static void perf_adjust_freq_unthr_context(struct perf_event_context *ctx,
 			event->pmu->start(event, 0);
 		}
 
-		if (!event->attr.freq || !event->attr.sample_freq)
+		if (!event->attr.freq || !event->attr.sample_freq || event->paused)
 			goto next;
 
 		/*

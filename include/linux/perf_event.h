@@ -452,6 +452,8 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
+	bool				paused;
+
 #endif /* CONFIG_PERF_EVENTS */
 };
 
