@@ -562,6 +562,7 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
 
+perf_tag_start(1);
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
 		ret = vfs_read(f.file, buf, count, &pos);
@@ -569,6 +570,8 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 			file_pos_write(f.file, pos);
 		fdput_pos(f);
 	}
+perf_tag_stop(1);
+
 	return ret;
 }
 
@@ -578,6 +581,7 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
 
+perf_tag_start(1);
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
 		ret = vfs_write(f.file, buf, count, &pos);
@@ -585,6 +589,7 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 			file_pos_write(f.file, pos);
 		fdput_pos(f);
 	}
+perf_tag_stop(1);
 
 	return ret;
 }
