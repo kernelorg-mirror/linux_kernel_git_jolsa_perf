@@ -334,8 +334,9 @@ struct perf_event_attr {
 	 */
 	__u32	sample_stack_user;
 
-	/* Align to u64. */
-	__u32	__reserved_2;
+	/* tag value for manual toggling */
+	__u32	tag;
+
 };
 
 #define perf_flags(attr)	(*(&(attr)->read_format + 1))
