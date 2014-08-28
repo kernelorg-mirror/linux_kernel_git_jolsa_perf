@@ -1074,7 +1074,8 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
 	int idx = event->hw.idx;
 
-	if (WARN_ON_ONCE(!(event->hw.state & PERF_HES_STOPPED)))
+	if (WARN_ON_ONCE(!(event->hw.state & PERF_HES_STOPPED) &&
+			 !event->paused))
 		return;
 
 	if (WARN_ON_ONCE(idx == -1))

@@ -798,6 +798,8 @@ extern void perf_event_enable(struct perf_event *event);
 extern void perf_event_disable(struct perf_event *event);
 extern int __perf_event_disable(void *info);
 extern void perf_event_task_tick(void);
+extern void perf_tag_start(int idx);
+extern void perf_tag_stop(int idx);
 #else /* !CONFIG_PERF_EVENTS: */
 static inline void
 perf_event_task_sched_in(struct task_struct *prev,
@@ -839,6 +841,8 @@ static inline void perf_event_enable(struct perf_event *event)		{ }
 static inline void perf_event_disable(struct perf_event *event)		{ }
 static inline int __perf_event_disable(void *info)			{ return -1; }
 static inline void perf_event_task_tick(void)				{ }
+static inline void perf_tag_start(int idx)				{ }
+static inline void perf_tag_stop(int idx)				{ }
 #endif
 
 #if defined(CONFIG_PERF_EVENTS) && defined(CONFIG_NO_HZ_FULL)

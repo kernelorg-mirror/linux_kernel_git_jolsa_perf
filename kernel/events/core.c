@@ -48,6 +48,130 @@
 
 static struct workqueue_struct *perf_wq;
 
+static void __perf_tag_start(struct perf_tag *tag)
+{
+	struct perf_event *event = *per_cpu_ptr(tag->event, smp_processor_id());
+
+	if (event->paused) {
+		event->pmu->start(event, PERF_EF_RELOAD);
+		event->paused = false;
+	}
+}
+
+static void __perf_tag_stop(struct perf_tag *tag)
+{
+	struct perf_event *event = *per_cpu_ptr(tag->event, smp_processor_id());
+
+	if (!event->paused) {
+		event->pmu->stop(event, PERF_EF_UPDATE);
+		event->paused = true;
+	}
+}
+
+void perf_tag_process(int idx, bool start)
+{
+	struct perf_tag *tag = &current->tags[idx];
+	unsigned long flags;
+
+	local_irq_save(flags);
+	if (cpu_isset(smp_processor_id(), tag->mask_live)) {
+		if (start)
+			__perf_tag_start(tag);
+		else
+			__perf_tag_stop(tag);
+	}
+
+	local_irq_restore(flags);
+}
+
+void perf_tag_start(int idx)
+{
+	perf_tag_process(idx, true);
+}
+
+void perf_tag_stop(int idx)
+{
+	perf_tag_process(idx, false);
+}
+
+static bool has_task_tag(struct perf_event_context *ctx, struct perf_event *event)
+{
+	return ctx->task && event->attr.tag;
+}
+
+static void perf_tag_set_cpu(struct perf_event *event, struct task_struct *task)
+{
+	int cpu = event->oncpu;
+	struct perf_tag *tag = &task->tags[event->attr.tag];
+	struct perf_event **eventp = per_cpu_ptr(tag->event, cpu);
+
+	WARN_ON(*eventp);
+	WARN_ON(cpu_isset(cpu, tag->mask_live));
+
+	*eventp = event;
+	cpu_set(cpu, tag->mask_live);
+}
+
+static void perf_tag_clear_cpu(struct perf_event *event, struct task_struct *task)
+{
+	int cpu = event->oncpu;
+	struct perf_tag *tag = &task->tags[event->attr.tag];
+	struct perf_event **eventp = per_cpu_ptr(tag->event, cpu);
+
+	WARN_ON(!*eventp);
+	WARN_ON(!cpu_isset(cpu, tag->mask_live));
+
+	cpu_clear(cpu, tag->mask_live);
+	*eventp = NULL;
+}
+
+static void perf_tags_free(struct task_struct *task)
+{
+	struct perf_tag *tag;
+	int i;
+
+	for (i = 0; i < PERF_TAG_MAX; i++) {
+		tag = &task->tags[i];
+		if (tag->event)
+			free_percpu(tag->event);
+	}
+}
+
+static int perf_tag_register(struct task_struct *task, struct perf_event *event)
+{
+	struct perf_tag *tag = &task->tags[event->attr.tag];
+	int ret = -EBUSY;
+
+	mutex_lock(&tag->lock);
+	if (event->cpu != -1) {
+		if (!cpu_test_and_set(event->cpu, tag->mask_reg))
+			ret = 0;
+	} else if (cpus_empty(tag->mask_reg)) {
+		cpumask_setall(&tag->mask_reg);
+		ret = 0;
+	}
+
+	if (!ret && !tag->event) {
+		tag->event = alloc_percpu(struct perf_event*);
+		ret = tag->event ? 0 : -ENOMEM;
+	}
+
+	mutex_unlock(&tag->lock);
+	return ret;
+}
+
+static void perf_tag_unregister(struct task_struct *task, struct perf_event *event)
+{
+	struct perf_tag *tag = &task->tags[event->attr.tag];
+
+	mutex_lock(&tag->lock);
+	if (event->cpu != -1)
+		cpumask_clear_cpu(event->cpu, &tag->mask_reg);
+	else
+		cpumask_clear(&tag->mask_reg);
+	mutex_unlock(&tag->lock);
+}
+
 struct remote_function_call {
 	struct task_struct	*p;
 	int			(*func)(void *info);
@@ -1317,6 +1441,9 @@ list_del_event(struct perf_event *event, struct perf_event_context *ctx)
 	if (event->attr.inherit_stat)
 		ctx->nr_stat--;
 
+	if (has_task_tag(ctx, event))
+		perf_tag_unregister(ctx->task, event);
+
 	list_del_rcu(&event->event_entry);
 
 	if (event->group_leader == event)
@@ -1453,6 +1580,9 @@ event_sched_out(struct perf_event *event,
 		return;
 
 	perf_pmu_disable(event->pmu);
+
+	if (event->attr.tag && ctx->task)
+		perf_tag_clear_cpu(event, ctx->task);
 
 	event->tstamp_stopped = tstamp;
 	event->oncpu = -1;
@@ -1767,6 +1897,9 @@ event_sched_in(struct perf_event *event,
 
 	event->state = PERF_EVENT_STATE_ACTIVE;
 	event->oncpu = smp_processor_id();
+
+	if (event->attr.tag && ctx->task)
+		perf_tag_set_cpu(event, ctx->task);
 
 	event->tstamp_running += tstamp - event->tstamp_stopped;
 
@@ -6979,6 +7112,16 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		}
 	}
 
+	if (event->attr.tag) {
+		err = -EINVAL;
+		if (task)
+			err = perf_tag_register(task, event);
+		if (err) {
+			perf_tag_unregister(task, event);
+			goto err_pmu;
+		}
+	}
+
 	return event;
 
 err_pmu:
@@ -7712,6 +7855,8 @@ void perf_event_exit_task(struct task_struct *child)
 
 	for_each_task_context_nr(ctxn)
 		perf_event_exit_task_context(child, ctxn);
+
+	perf_tags_free(child);
 }
 
 static void perf_free_event(struct perf_event *event,
@@ -8031,6 +8176,7 @@ int perf_event_init_task(struct task_struct *child)
 	int ctxn, ret;
 
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
+	memset(child->tags, 0, sizeof(child->tags));
 	mutex_init(&child->perf_event_mutex);
 	INIT_LIST_HEAD(&child->perf_event_list);
 

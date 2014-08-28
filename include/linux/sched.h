@@ -1221,6 +1221,15 @@ enum perf_event_task_context {
 	perf_nr_task_contexts,
 };
 
+#define PERF_TAG_MAX 10
+
+struct perf_tag {
+	cpumask_t			 mask_reg;
+	cpumask_t			 mask_live;
+	struct perf_event* __percpu	*event;
+	struct mutex			 lock;
+};
+
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	void *stack;
@@ -1517,6 +1526,7 @@ struct task_struct {
 	struct perf_event_context *perf_event_ctxp[perf_nr_task_contexts];
 	struct mutex perf_event_mutex;
 	struct list_head perf_event_list;
+	struct perf_tag tags[PERF_TAG_MAX];
 #endif
 #ifdef CONFIG_DEBUG_PREEMPT
 	unsigned long preempt_disable_ip;
