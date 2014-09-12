@@ -24,8 +24,10 @@ ifeq ($(ARCH),x86)
     CFLAGS += -DHAVE_ARCH_X86_64_SUPPORT
     ARCH_INCLUDE = ../../arch/x86/lib/memcpy_64.S ../../arch/x86/lib/memset_64.S
     LIBUNWIND_LIBS = -lunwind -lunwind-x86_64
+    PF_LIBUNWIND = "libunwind-x86_64.so"
   else
     LIBUNWIND_LIBS = -lunwind -lunwind-x86
+    PF_LIBUNWIND = "libunwind-x86.so"
   endif
   NO_PERF_REGS := 0
 endif
@@ -33,11 +35,13 @@ endif
 ifeq ($(ARCH),arm)
   NO_PERF_REGS := 0
   LIBUNWIND_LIBS = -lunwind -lunwind-arm
+  PF_LIBUNWIND = "libunwind-arm.so"
 endif
 
 ifeq ($(ARCH),arm64)
   NO_PERF_REGS := 0
   LIBUNWIND_LIBS = -lunwind -lunwind-aarch64
+  PF_LIBUNWIND = "libunwind-aarch64.so"
 endif
 
 # So far there's only x86 and arm libdw unwind support merged in perf.
@@ -423,10 +427,8 @@ ifndef NO_LIBUNWIND
     # non-ARM has no dwarf_find_debug_frame() function:
     CFLAGS += -DNO_LIBUNWIND_DEBUG_FRAME
   endif
-  CFLAGS  += -DHAVE_LIBUNWIND_SUPPORT
-  EXTLIBS += $(LIBUNWIND_LIBS)
+  CFLAGS  += -DHAVE_LIBUNWIND_SUPPORT '-DPF_LIBUNWIND=$(PF_LIBUNWIND)'
   CFLAGS  += $(LIBUNWIND_CFLAGS)
-  LDFLAGS += $(LIBUNWIND_LDFLAGS)
 endif
 
 ifndef NO_LIBAUDIT

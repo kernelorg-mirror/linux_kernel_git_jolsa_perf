@@ -32,6 +32,7 @@
 #include "symbol.h"
 #include "util.h"
 #include "debug.h"
+#include "feat.h"
 
 extern int
 UNW_OBJ(dwarf_search_unwind_table) (unw_addr_space_t as,
@@ -315,7 +316,7 @@ find_proc_info(unw_addr_space_t as, unw_word_t ip, unw_proc_info_t *pi,
 		di.u.rti.table_data = map->start + table_data;
 		di.u.rti.table_len  = fde_count * sizeof(struct table_entry)
 				      / sizeof(unw_word_t);
-		return dwarf_search_unwind_table(as, ip, &di, pi,
+		return PF(UNW, dwarf_search_unwind_table)(as, ip, &di, pi,
 						 need_unwind_info, arg);
 	}
 
@@ -533,7 +534,7 @@ int unwind__prepare_access(struct thread *thread)
 	if (callchain_param.record_mode != CALLCHAIN_DWARF)
 		return 0;
 
-	addr_space = unw_create_addr_space(&accessors, 0);
+	addr_space = PF(UNW, unw_create_addr_space)(&accessors, 0);
 	if (!addr_space) {
 		pr_err("unwind: Can't create unwind address space.\n");
 		return -ENOMEM;
@@ -552,7 +553,7 @@ void unwind__finish_access(struct thread *thread)
 		return;
 
 	addr_space = thread__priv(thread);
-	unw_destroy_addr_space(addr_space);
+	PF(UNW, unw_destroy_addr_space)(addr_space);
 }
 
 static int get_entries(struct unwind_info *ui, unwind_entry_cb_t cb,
@@ -566,14 +567,14 @@ static int get_entries(struct unwind_info *ui, unwind_entry_cb_t cb,
 	if (addr_space == NULL)
 		return -1;
 
-	ret = unw_init_remote(&c, addr_space, ui);
+	ret = PF(UNW, unw_init_remote)(&c, addr_space, ui);
 	if (ret)
 		display_error(ret);
 
-	while (!ret && (unw_step(&c) > 0) && max_stack--) {
+	while (!ret && (PF(UNW, unw_step)(&c) > 0) && max_stack--) {
 		unw_word_t ip;
 
-		unw_get_reg(&c, UNW_REG_IP, &ip);
+		PF(UNW, unw_get_reg)(&c, UNW_REG_IP, &ip);
 		ret = ip ? entry(ip, ui->thread, ui->machine, cb, arg) : 0;
 	}
 
@@ -591,6 +592,9 @@ int unwind__get_entries(unwind_entry_cb_t cb, void *arg,
 		.machine      = machine,
 	};
 	int ret;
+
+	if (!PF_HAS(UNW))
+		return 0;
 
 	if (!data->user_regs.regs)
 		return -EINVAL;

@@ -11,6 +11,13 @@ struct perf_feature perf_features[PF_MAX] = {
 		.lib	= "libc.so.6",
 		.in	= 1,
 	},
+	[PERF_FEATURE__UNW] = {
+		.name	= "DWARF unwind",
+#ifdef HAVE_LIBUNWIND_SUPPORT
+		.lib	= PF_LIBUNWIND,
+		.in	= 1,
+#endif
+	},
 };
 
 static void nop(void)

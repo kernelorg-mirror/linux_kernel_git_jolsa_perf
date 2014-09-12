@@ -12,6 +12,7 @@ struct perf_feature {
 
 enum {
 	PERF_FEATURE__TEST = 0,
+	PERF_FEATURE__UNW,
 	PERF_FEATURE__MAX,
 };
 
