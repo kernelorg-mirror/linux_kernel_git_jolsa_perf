@@ -11,8 +11,12 @@ struct perf_feature {
 
 enum {
 	PERF_FEATURE__TEST = 0,
+	PERF_FEATURE__UNW,
 	PERF_FEATURE__MAX,
 };
+
+#define ____string(s) __string(s)
+#define __string(s) #s
 
 void* pf_resolve(unsigned int f, const char *symbol);
 
@@ -20,7 +24,7 @@ void* pf_resolve(unsigned int f, const char *symbol);
 	static typeof(symbol) *addr;			\
 							\
 	if (!addr)					\
-		addr = pf_resolve(PERF_FEATURE__ ##pf, #symbol);	\
+		addr = pf_resolve(PERF_FEATURE__ ##pf, __string(symbol));	\
 							\
 	addr;						\
 })

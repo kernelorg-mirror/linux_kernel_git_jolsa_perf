@@ -8,6 +8,10 @@ struct perf_feature perf_features[PF_MAX] = {
 		.name	= "test",
 		.lib	= "libaudit.so",
 	},
+	[PERF_FEATURE__UNW] = {
+		.name	= "DWARF unwinf (libunwind)",
+		.lib	= "libunwind-x86_64.so",
+	},
 };
 
 void* pf_resolve(unsigned int f, const char *symbol)
