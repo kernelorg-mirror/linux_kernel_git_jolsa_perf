@@ -158,6 +158,10 @@ static struct test {
 		.func = test__switch_tracking,
 	},
 	{
+		.desc = "Test features interface",
+		.func = test__feat,
+	},
+	{
 		.func = NULL,
 	},
 };
