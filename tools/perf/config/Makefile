@@ -675,6 +675,8 @@ prefix_SQ = $(subst ','\'',$(prefix))
 sysconfdir_SQ = $(subst ','\'',$(sysconfdir))
 libdir_SQ = $(subst ','\'',$(libdir))
 
+CFLAGS += -DLIBDIR='"$(libdir_SQ)"'
+
 ifneq ($(filter /%,$(firstword $(perfexecdir))),)
 perfexec_instdir = $(perfexecdir)
 else

@@ -167,6 +167,10 @@ static struct test {
 		.func = test__fdarray__add,
 	},
 	{
+		.desc = "Test features interface",
+		.func = test__feat,
+	},
+	{
 		.func = NULL,
 	},
 };
