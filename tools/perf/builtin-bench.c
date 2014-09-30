@@ -63,6 +63,13 @@ static struct bench futex_benchmarks[] = {
 	{ NULL,		NULL,						NULL			}
 };
 
+static struct bench locking_benchmarks[] = {
+	{ "creat",      "Benchmark using creat(2)",			bench_locking_creat     },
+	{ "all",        "Run all benchmarks in this suite",		NULL			},
+	{ NULL,		NULL,						NULL			}
+};
+
+
 struct collection {
 	const char	*name;
 	const char	*summary;
@@ -76,6 +83,7 @@ static struct collection collections[] = {
 	{ "numa",	"NUMA scheduling and MM benchmarks",		numa_benchmarks		},
 #endif
 	{"futex",       "Futex stressing benchmarks",                   futex_benchmarks        },
+	{"locking",     "Kernel locking benchmarks",                    locking_benchmarks      },
 	{ "all",	"All benchmarks",				NULL			},
 	{ NULL,		NULL,						NULL			}
 };

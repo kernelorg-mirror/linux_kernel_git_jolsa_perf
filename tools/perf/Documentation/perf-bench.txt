@@ -58,6 +58,9 @@ SUBSYSTEM
 'futex'::
 	Futex stressing benchmarks.
 
+'locking'::
+        Locking stressing benchmarks.
+
 'all'::
 	All benchmark subsystems.
 
@@ -212,6 +215,11 @@ Suite for evaluating wake calls.
 
 *requeue*::
 Suite for evaluating requeue calls.
+
+SUITES FOR 'locking'
+~~~~~~~~~~~~~~~~~~
+*creat*::
+Suite for evaluating locking contention through creat(2).
 
 SEE ALSO
 --------
