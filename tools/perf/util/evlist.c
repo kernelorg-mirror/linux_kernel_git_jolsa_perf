@@ -434,11 +434,8 @@ static int __perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd, int idx
 	 * Save the idx so that when we filter out fds POLLHUP'ed we can
 	 * close the associated evlist->mmap[] entry.
 	 */
-	if (pos >= 0) {
+	if (pos >= 0)
 		evlist->pollfd.priv[pos].idx = idx;
-
-		fcntl(fd, F_SETFL, O_NONBLOCK);
-	}
 
 	return pos;
 }
