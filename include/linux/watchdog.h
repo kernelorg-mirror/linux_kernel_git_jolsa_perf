@@ -142,4 +142,7 @@ extern int watchdog_init_timeout(struct watchdog_device *wdd,
 extern int watchdog_register_device(struct watchdog_device *);
 extern void watchdog_unregister_device(struct watchdog_device *);
 
+void watchdog_nmi_disable_all(void);
+void watchdog_nmi_enable_all(void);
+
 #endif  /* ifndef _LINUX_WATCHDOG_H */
