@@ -1889,10 +1889,50 @@ static ssize_t set_attr_rdpmc(struct device *cdev,
 	return count;
 }
 
+static ssize_t get_attr_xsu(struct device *cdev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	int ff = is_ht_workaround_enabled();
+
+	return snprintf(buf, 40, "%d\n", ff);
+}
+
+static ssize_t set_attr_xsu(struct device *cdev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct cpu_hw_events *cpuc = &__get_cpu_var(cpu_hw_events);
+	unsigned long val;
+	int ff = is_ht_workaround_enabled();
+	ssize_t ret;
+
+	/*
+	 * if workaround, disabled, no effect
+	 */
+	if (!cpuc->excl_cntrs)
+		return count;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (!!val != ff) {
+		if (!val)
+			x86_pmu.flags &= ~PMU_FL_EXCL_ENABLED;
+		else
+			x86_pmu.flags |= PMU_FL_EXCL_ENABLED;
+	}
+	return count;
+}
+
 static DEVICE_ATTR(rdpmc, S_IRUSR | S_IWUSR, get_attr_rdpmc, set_attr_rdpmc);
+static DEVICE_ATTR(ht_bug_workaround, S_IRUSR | S_IWUSR, get_attr_xsu, \
+		   set_attr_xsu);
 
 static struct attribute *x86_pmu_attrs[] = {
 	&dev_attr_rdpmc.attr,
+	&dev_attr_ht_bug_workaround.attr,
 	NULL,
 };
 
