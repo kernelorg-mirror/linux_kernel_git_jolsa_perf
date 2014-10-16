@@ -8216,6 +8216,8 @@ perf_cpu_notify(struct notifier_block *self, unsigned long action, void *hcpu)
 	return NOTIFY_OK;
 }
 
+void pita_init(void);
+
 void __init perf_event_init(void)
 {
 	int ret;
@@ -8243,6 +8245,8 @@ void __init perf_event_init(void)
 	 */
 	BUILD_BUG_ON((offsetof(struct perf_event_mmap_page, data_head))
 		     != 1024);
+
+	pita_init();
 }
 
 static int __init perf_event_sysfs_init(void)
