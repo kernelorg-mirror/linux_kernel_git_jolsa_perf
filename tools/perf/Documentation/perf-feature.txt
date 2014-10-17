@@ -1,0 +1,15 @@
+perf-feature(1)
+===============
+
+NAME
+----
+perf-feature - Display feature(s) status
+
+SYNOPSIS
+--------
+[verse]
+'perf feature'
+
+DESCRIPTION
+-----------
+Display feature(s) status.
