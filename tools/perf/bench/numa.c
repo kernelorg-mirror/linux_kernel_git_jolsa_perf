@@ -8,6 +8,8 @@
 #include "../builtin.h"
 #include "../util/util.h"
 #include "../util/parse-options.h"
+#include "../util/feat.h"
+#include "../util/debug.h"
 
 #include "bench.h"
 
@@ -275,7 +277,7 @@ static void mempol_restore(void)
 {
 	int ret;
 
-	ret = set_mempolicy(MPOL_DEFAULT, NULL, g->p.nr_nodes-1);
+	ret = PF(NUMA, set_mempolicy)(MPOL_DEFAULT, NULL, g->p.nr_nodes-1);
 
 	BUG_ON(ret);
 }
@@ -291,7 +293,7 @@ static void bind_to_memnode(int node)
 	BUG_ON(g->p.nr_nodes > (int)sizeof(nodemask));
 	nodemask = 1L << node;
 
-	ret = set_mempolicy(MPOL_BIND, &nodemask, sizeof(nodemask)*8);
+	ret = PF(NUMA, set_mempolicy)(MPOL_BIND, &nodemask, sizeof(nodemask)*8);
 	dprintf("binding to node %d, mask: %016lx => %d\n", node, nodemask, ret);
 
 	BUG_ON(ret);
@@ -827,7 +829,7 @@ static int count_process_nodes(int process_nr)
 		task_nr = process_nr*g->p.nr_threads + t;
 		td = g->threads + task_nr;
 
-		node = numa_node_of_cpu(td->curr_cpu);
+		node = PF(NUMA, numa_node_of_cpu)(td->curr_cpu);
 		node_present[node] = 1;
 	}
 
@@ -860,7 +862,7 @@ static int count_node_processes(int node)
 			task_nr = p*g->p.nr_threads + t;
 			td = g->threads + task_nr;
 
-			n = numa_node_of_cpu(td->curr_cpu);
+			n = PF(NUMA, numa_node_of_cpu)(td->curr_cpu);
 			if (n == node) {
 				processes++;
 				break;
@@ -929,7 +931,7 @@ static void calc_convergence(double runtime_ns_max, double *convergence)
 		if (cpu < 0)
 			continue;
 
-		node = numa_node_of_cpu(cpu);
+		node = PF(NUMA, numa_node_of_cpu)(cpu);
 
 		nodes[node]++;
 
@@ -1310,9 +1312,9 @@ static int init(void)
 	/* Copy over options: */
 	g->p = p0;
 
-	g->p.nr_cpus = numa_num_configured_cpus();
+	g->p.nr_cpus = PF(NUMA, numa_num_configured_cpus)();
 
-	g->p.nr_nodes = numa_max_node() + 1;
+	g->p.nr_nodes = PF(NUMA, numa_max_node)() + 1;
 
 	/* char array in count_process_nodes(): */
 	BUG_ON(g->p.nr_nodes > MAX_NR_NODES || g->p.nr_nodes < 0);
@@ -1725,6 +1727,11 @@ static int bench_all(void)
 
 int bench_numa(int argc, const char **argv, const char *prefix __maybe_unused)
 {
+	if (!PF_HAS(NUMA)) {
+		pr_err("Cannot resolve numa support\n");
+		return 0;
+	}
+
 	init_params(&p0, "main,", argc, argv);
 	argc = parse_options(argc, argv, options, bench_numa_usage, 0);
 	if (argc)

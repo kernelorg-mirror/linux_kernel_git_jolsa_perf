@@ -616,7 +616,6 @@ ifndef NO_LIBNUMA
     NO_LIBNUMA := 1
   else
     CFLAGS += -DHAVE_LIBNUMA_SUPPORT
-    EXTLIBS += -lnuma
   endif
 endif
 

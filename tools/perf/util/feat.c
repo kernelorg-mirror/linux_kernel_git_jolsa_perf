@@ -18,6 +18,13 @@ struct perf_feature perf_features[PF_MAX] = {
 		.in	= 1,
 #endif
 	},
+	[PERF_FEATURE__NUMA] = {
+		.name	= "NUMA",
+#ifdef HAVE_LIBNUMA_SUPPORT
+		.lib	= "libnuma.so",
+		.in	= 1,
+#endif
+	},
 };
 
 static void nop(void)
