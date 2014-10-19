@@ -2109,6 +2109,10 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry *entry)
 		perf_callchain_store(entry, cs_base + frame.return_address);
 		fp = compat_ptr(ss_base + frame.next_frame);
 	}
+
+	if (fp != compat_ptr(regs->bp))
+		entry->source |= PERF_FP_CALLCHAIN;
+
 	return 1;
 }
 #else
@@ -2161,6 +2165,9 @@ perf_callchain_user(struct perf_callchain_entry *entry, struct pt_regs *regs)
 		perf_callchain_store(entry, frame.return_address);
 		fp = frame.next_frame;
 	}
+
+	if (fp != (void __user *)regs->bp)
+		entry->source |= PERF_FP_CALLCHAIN;
 }
 
 /*

@@ -915,7 +915,7 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 			data.txn = intel_hsw_transaction(pebs);
 	}
 
-	if (has_branch_stack(event))
+	if (needs_branch_stack(event))
 		data.br_stack = &cpuc->lbr_stack;
 
 	if (perf_event_overflow(event, &data, &regs))

@@ -175,6 +175,7 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	if (!entry)
 		goto exit_put;
 
+	entry->source = 0;
 	entry->nr = 0;
 
 	if (kernel && !user_mode(regs)) {

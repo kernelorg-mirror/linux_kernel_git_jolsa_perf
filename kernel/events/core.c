@@ -4793,7 +4793,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 
 	if (sample_type & PERF_SAMPLE_CALLCHAIN) {
 		if (data->callchain) {
-			int size = 1;
+			int size = 2;
 
 			if (data->callchain)
 				size += data->callchain->nr;
@@ -4824,7 +4824,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 		}
 	}
 
-	if (sample_type & PERF_SAMPLE_BRANCH_STACK) {
+	/* LBR can be used for call stack, so it may be enabled implicitly. */
+	if ((sample_type & PERF_SAMPLE_BRANCH_STACK) ||
+			(data->br_stack && data->br_stack->user_callstack)) {
 		if (data->br_stack) {
 			size_t size;
 
@@ -4908,12 +4910,20 @@ void perf_prepare_sample(struct perf_event_header *header,
 		data->ip = perf_instruction_pointer(regs);
 
 	if (sample_type & PERF_SAMPLE_CALLCHAIN) {
-		int size = 1;
+		int size = 2;
 
 		data->callchain = perf_callchain(event, regs);
 
-		if (data->callchain)
+		if (data->callchain) {
 			size += data->callchain->nr;
+
+			if (data->br_stack &&
+			    data->br_stack->user_callstack &&
+			    !(sample_type & PERF_SAMPLE_BRANCH_STACK) &&
+			    !(sample_type & PERF_SAMPLE_STACK_USER))
+				data->callchain->source |=
+					PERF_LBR_CALLCHAIN;
+		}
 
 		header->size += size * sizeof(u64);
 	}
@@ -4930,7 +4940,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 		header->size += size;
 	}
 
-	if (sample_type & PERF_SAMPLE_BRANCH_STACK) {
+	/* LBR can be used for call stack, so it may be enabled implicitly. */
+	if ((sample_type & PERF_SAMPLE_BRANCH_STACK) ||
+		(data->br_stack && data->br_stack->user_callstack)) {
 		int size = sizeof(u64); /* nr */
 		if (data->br_stack) {
 			size += data->br_stack->nr

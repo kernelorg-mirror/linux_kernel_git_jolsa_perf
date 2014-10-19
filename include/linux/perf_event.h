@@ -55,7 +55,16 @@ struct perf_guest_info_callbacks {
 #include <linux/workqueue.h>
 #include <asm/local.h>
 
+/*
+ * From Haswell, the existing Last Branch Record facility can
+ * also be used to record call chains.
+ * source: indicates the available call chains source.
+ */
+#define	PERF_FP_CALLCHAIN		0x01
+#define	PERF_LBR_CALLCHAIN		0x02
+
 struct perf_callchain_entry {
+	__u64				source;
 	__u64				nr;
 	__u64				ip[PERF_MAX_STACK_DEPTH];
 };
@@ -67,7 +76,9 @@ struct perf_raw_record {
 
 /*
  * branch stack layout:
- *  nr: number of taken branches stored in entries[]
+ * user_callstack: LBR is enhanced to support call stack profiling.
+ * user_callstack indicates if it's call stack info.
+ * nr: number of taken branches stored in entries[]
  *
  * Note that nr can vary from sample to sample
  * branches (to, from) are stored from most recent
@@ -75,6 +86,7 @@ struct perf_raw_record {
  * recent branch.
  */
 struct perf_branch_stack {
+	bool				user_callstack;
 	__u64				nr;
 	struct perf_branch_entry	entries[0];
 };
