@@ -119,7 +119,15 @@ struct sample_read {
 	};
 };
 
+/*
+ * From Haswell, the existing Last Branch Record facility can
+ * also be used to record call chains.
+ * source: indicates the available call chains source.
+ */
+#define	PERF_FP_CALLCHAIN	0x01
+#define	PERF_LBR_CALLCHAIN	0x02
 struct ip_callchain {
+	u64 source;
 	u64 nr;
 	u64 ips[0];
 };

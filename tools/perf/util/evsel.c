@@ -1028,7 +1028,6 @@ static size_t perf_event_attr__fprintf(struct perf_event_attr *attr, FILE *fp)
 	ret += PRINT_ATTR2(exclude_host, exclude_guest);
 	ret += PRINT_ATTR2N("excl.callchain_kern", exclude_callchain_kernel,
 			    "excl.callchain_user", exclude_callchain_user);
-
 	ret += PRINT_ATTR_U32(wakeup_events);
 	ret += PRINT_ATTR_U32(wakeup_watermark);
 	ret += PRINT_ATTR_X32(bp_type);
@@ -1440,10 +1439,10 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		const u64 max_callchain_nr = UINT64_MAX / sizeof(u64);
 
 		OVERFLOW_CHECK_u64(array);
-		data->callchain = (struct ip_callchain *)array++;
+		data->callchain = (struct ip_callchain *)array;
 		if (data->callchain->nr > max_callchain_nr)
 			return -EFAULT;
-		sz = data->callchain->nr * sizeof(u64);
+		sz = (data->callchain->nr + 2) * sizeof(u64);
 		OVERFLOW_CHECK(array, sz, max_size);
 		array = (void *)array + sz;
 	}
@@ -1466,7 +1465,9 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		array = (void *)array + data->raw_size;
 	}
 
-	if (type & PERF_SAMPLE_BRANCH_STACK) {
+	if ((type & PERF_SAMPLE_BRANCH_STACK) ||
+		(data->callchain &&
+		(data->callchain->source & PERF_LBR_CALLCHAIN))) {
 		const u64 max_branch_nr = UINT64_MAX /
 					  sizeof(struct branch_entry);
 
@@ -1590,7 +1591,7 @@ size_t perf_event__sample_event_size(const struct perf_sample *sample, u64 type,
 	}
 
 	if (type & PERF_SAMPLE_CALLCHAIN) {
-		sz = (sample->callchain->nr + 1) * sizeof(u64);
+		sz = (sample->callchain->nr + 2) * sizeof(u64);
 		result += sz;
 	}
 
@@ -1599,7 +1600,9 @@ size_t perf_event__sample_event_size(const struct perf_sample *sample, u64 type,
 		result += sample->raw_size;
 	}
 
-	if (type & PERF_SAMPLE_BRANCH_STACK) {
+	if ((type & PERF_SAMPLE_BRANCH_STACK) ||
+		(sample->callchain &&
+		(sample->callchain->source & PERF_LBR_CALLCHAIN))) {
 		sz = sample->branch_stack->nr * sizeof(struct branch_entry);
 		sz += sizeof(u64);
 		result += sz;
@@ -1745,7 +1748,7 @@ int perf_event__synthesize_sample(union perf_event *event, u64 type,
 	}
 
 	if (type & PERF_SAMPLE_CALLCHAIN) {
-		sz = (sample->callchain->nr + 1) * sizeof(u64);
+		sz = (sample->callchain->nr + 2) * sizeof(u64);
 		memcpy(array, sample->callchain, sz);
 		array = (void *)array + sz;
 	}
@@ -1768,7 +1771,9 @@ int perf_event__synthesize_sample(union perf_event *event, u64 type,
 		array = (void *)array + sample->raw_size;
 	}
 
-	if (type & PERF_SAMPLE_BRANCH_STACK) {
+	if ((type & PERF_SAMPLE_BRANCH_STACK) ||
+		(sample->callchain &&
+		(sample->callchain->source & PERF_LBR_CALLCHAIN))) {
 		sz = sample->branch_stack->nr * sizeof(struct branch_entry);
 		sz += sizeof(u64);
 		memcpy(array, sample->branch_stack, sz);
