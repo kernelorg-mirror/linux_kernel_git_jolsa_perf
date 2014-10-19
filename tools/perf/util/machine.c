@@ -1371,19 +1371,81 @@ struct branch_info *sample__resolve_bstack(struct perf_sample *sample,
 	return bi;
 }
 
+static inline int __machine__resolve_callchain_sample(struct machine *machine,
+			struct thread *thread,
+			u64 ip,
+			u8 *cpumode,
+			struct symbol **parent,
+			struct addr_location *root_al,
+			struct addr_location *al)
+{
+	int err;
+
+	if (ip >= PERF_CONTEXT_MAX) {
+		switch (ip) {
+		case PERF_CONTEXT_HV:
+			*cpumode = PERF_RECORD_MISC_HYPERVISOR;
+			break;
+		case PERF_CONTEXT_KERNEL:
+			*cpumode = PERF_RECORD_MISC_KERNEL;
+			break;
+		case PERF_CONTEXT_USER:
+			*cpumode = PERF_RECORD_MISC_USER;
+			break;
+		default:
+			pr_debug("invalid callchain context: "
+				 "%"PRId64"\n", (s64) ip);
+			/*
+			 * It seems the callchain is corrupted.
+			 * Discard all.
+			 */
+			callchain_cursor_reset(&callchain_cursor);
+			return 1;
+		}
+		return 0;
+	}
+
+	al->filtered = 0;
+	thread__find_addr_location(thread, machine, *cpumode,
+				   MAP__FUNCTION, ip, al);
+	if (al->sym != NULL) {
+		if (sort__has_parent && !*parent &&
+		    symbol__match_regex(al->sym, &parent_regex))
+			*parent = al->sym;
+		else if (have_ignore_callees && root_al &&
+		  symbol__match_regex(al->sym, &ignore_callees_regex)) {
+			/* Treat this symbol as the root,
+			   forgetting its callees. */
+			*root_al = *al;
+			callchain_cursor_reset(&callchain_cursor);
+		}
+	}
+
+	err = callchain_cursor_append(&callchain_cursor,
+				      ip, al->map, al->sym);
+	if (err)
+		return err;
+	return 0;
+}
+
 static int machine__resolve_callchain_sample(struct machine *machine,
 					     struct thread *thread,
-					     struct ip_callchain *chain,
+					     struct perf_sample *sample,
 					     struct symbol **parent,
 					     struct addr_location *root_al,
 					     int max_stack)
 {
+	struct ip_callchain *chain = sample->callchain;
 	u8 cpumode = PERF_RECORD_MISC_USER;
 	int chain_nr = min(max_stack, (int)chain->nr);
-	int i;
-	int j;
-	int err;
+	int i, j, err;
 	int skip_idx __maybe_unused;
+	int use_fp = (callchain_param.source == SOURCE_FP) ? 1 : 0;
+	u64 ip;
+
+	/* If there isn't user fp callchain available, try LBR */
+	if (!(chain->source & PERF_FP_CALLCHAIN))
+		use_fp = 0;
 
 	callchain_cursor_reset(&callchain_cursor);
 
@@ -1392,73 +1454,83 @@ static int machine__resolve_callchain_sample(struct machine *machine,
 		return 0;
 	}
 
-	/*
-	 * Based on DWARF debug information, some architectures skip
-	 * a callchain entry saved by the kernel.
-	 */
-	skip_idx = arch_skip_callchain_idx(machine, thread, chain);
+again:
+	/* try LBR */
+	if (!use_fp && (chain->source & PERF_LBR_CALLCHAIN)) {
+		struct branch_stack *lbr_stack = sample->branch_stack;
+		int lbr_nr = lbr_stack->nr;
+		int mix_chain_nr;
 
-	for (i = 0; i < chain_nr; i++) {
-		u64 ip;
-		struct addr_location al;
+		for (i = 0; i < chain_nr; i++) {
+			if (chain->ips[i] == PERF_CONTEXT_USER)
+				break;
+		}
 
-		if (callchain_param.order == ORDER_CALLEE)
-			j = i;
-		else
-			j = chain->nr - i - 1;
+		/* LBR only affects the user callchain */
+		if (i == chain_nr) {
+			use_fp = 1;
+			goto again;
+		}
+
+		mix_chain_nr = i + 2 + lbr_nr;
+		if (mix_chain_nr > PERF_MAX_STACK_DEPTH) {
+			pr_warning("corrupted callchain. skipping...\n");
+			return 0;
+		}
+
+		for (j = 0; j < mix_chain_nr; j++) {
+			struct addr_location al;
+
+			if (callchain_param.order == ORDER_CALLEE) {
+				if (j < i + 2)
+					ip = chain->ips[j];
+				else
+					ip = lbr_stack->entries[j - i - 2].from;
+			} else {
+				if (j < lbr_nr)
+					ip = lbr_stack->entries[lbr_nr - j - 1].from;
+				else
+					ip = chain->ips[i + 1 - (j - lbr_nr)];
+			}
+			err = __machine__resolve_callchain_sample(machine,
+				thread, ip, &cpumode, parent, root_al, &al);
+			/* Discard all when the callchain is corrupted */
+			if (err > 0)
+				return 0;
+			else if (err)
+				return err;
+		}
+	} else {
+
+		/*
+		 * Based on DWARF debug information, some architectures skip
+		 * a callchain entry saved by the kernel.
+		 */
+		skip_idx = arch_skip_callchain_idx(machine, thread, chain);
+
+		for (i = 0; i < chain_nr; i++) {
+			struct addr_location al;
+
+			if (callchain_param.order == ORDER_CALLEE)
+				j = i;
+			else
+				j = chain->nr - i - 1;
 
 #ifdef HAVE_SKIP_CALLCHAIN_IDX
-		if (j == skip_idx)
-			continue;
+			if (j == skip_idx)
+				continue;
 #endif
-		ip = chain->ips[j];
+			ip = chain->ips[j];
+			err = __machine__resolve_callchain_sample(machine,
+				thread, ip, &cpumode, parent, root_al, &al);
 
-		if (ip >= PERF_CONTEXT_MAX) {
-			switch (ip) {
-			case PERF_CONTEXT_HV:
-				cpumode = PERF_RECORD_MISC_HYPERVISOR;
-				break;
-			case PERF_CONTEXT_KERNEL:
-				cpumode = PERF_RECORD_MISC_KERNEL;
-				break;
-			case PERF_CONTEXT_USER:
-				cpumode = PERF_RECORD_MISC_USER;
-				break;
-			default:
-				pr_debug("invalid callchain context: "
-					 "%"PRId64"\n", (s64) ip);
-				/*
-				 * It seems the callchain is corrupted.
-				 * Discard all.
-				 */
-				callchain_cursor_reset(&callchain_cursor);
+			/* Discard all when the callchain is corrupted */
+			if (err > 0)
 				return 0;
-			}
-			continue;
+			else if (err)
+				return err;
 		}
-
-		al.filtered = 0;
-		thread__find_addr_location(thread, machine, cpumode,
-					   MAP__FUNCTION, ip, &al);
-		if (al.sym != NULL) {
-			if (sort__has_parent && !*parent &&
-			    symbol__match_regex(al.sym, &parent_regex))
-				*parent = al.sym;
-			else if (have_ignore_callees && root_al &&
-			  symbol__match_regex(al.sym, &ignore_callees_regex)) {
-				/* Treat this symbol as the root,
-				   forgetting its callees. */
-				*root_al = al;
-				callchain_cursor_reset(&callchain_cursor);
-			}
-		}
-
-		err = callchain_cursor_append(&callchain_cursor,
-					      ip, al.map, al.sym);
-		if (err)
-			return err;
 	}
-
 	return 0;
 }
 
@@ -1480,7 +1552,7 @@ int machine__resolve_callchain(struct machine *machine,
 	int ret;
 
 	ret = machine__resolve_callchain_sample(machine, thread,
-						sample->callchain, parent,
+						sample, parent,
 						root_al, max_stack);
 	if (ret)
 		return ret;

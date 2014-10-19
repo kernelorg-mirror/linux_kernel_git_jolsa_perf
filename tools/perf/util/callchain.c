@@ -152,6 +152,19 @@ static int parse_callchain_sort_key(const char *value)
 	return -1;
 }
 
+static int parse_callchain_source(const char *value)
+{
+	if (!strncmp(value, "fp", strlen(value))) {
+		callchain_param.source = SOURCE_FP;
+		return 0;
+	}
+	if (!strncmp(value, "lbr", strlen(value))) {
+		callchain_param.source = SOURCE_LBR;
+		return 0;
+	}
+	return -1;
+}
+
 int
 parse_callchain_report_opt(const char *arg)
 {
@@ -173,7 +186,8 @@ parse_callchain_report_opt(const char *arg)
 
 		if (!parse_callchain_mode(tok) ||
 		    !parse_callchain_order(tok) ||
-		    !parse_callchain_sort_key(tok)) {
+		    !parse_callchain_sort_key(tok) ||
+		    !parse_callchain_source(tok)) {
 			/* parsing ok - move on to the next */
 		} else if (!minpcnt_set) {
 			/* try to get the min percent */
@@ -225,6 +239,8 @@ int perf_callchain_config(const char *var, const char *value)
 		return parse_callchain_order(value);
 	if (!strcmp(var, "sort-key"))
 		return parse_callchain_sort_key(value);
+	if (!strcmp(var, "source"))
+		return parse_callchain_source(value);
 	if (!strcmp(var, "threshold")) {
 		callchain_param.min_percent = strtod(value, &endptr);
 		if (value == endptr)

@@ -548,12 +548,42 @@ int perf_session_queue_event(struct perf_session *s, union perf_event *event,
 static void callchain__printf(struct perf_sample *sample)
 {
 	unsigned int i;
+	u64 total_nr, callchain_nr;
+	int use_fp = (callchain_param.source == SOURCE_FP) ? 1 : 0;
 
-	printf("... chain: nr:%" PRIu64 "\n", sample->callchain->nr);
+	total_nr = callchain_nr = sample->callchain->nr;
 
-	for (i = 0; i < sample->callchain->nr; i++)
+	/* If there isn't user fp callchain available, try LBR */
+	if (!(sample->callchain->source & PERF_FP_CALLCHAIN))
+		use_fp = 0;
+
+	if (!use_fp && (sample->callchain->source & PERF_LBR_CALLCHAIN)) {
+		struct branch_stack *lbr_stack = sample->branch_stack;
+
+		for (i = 0; i < callchain_nr; i++) {
+			if (sample->callchain->ips[i] == PERF_CONTEXT_USER)
+				break;
+		}
+
+		if (i != callchain_nr) {
+			total_nr = i + 1 + lbr_stack->nr;
+			callchain_nr = i + 1;
+		}
+	}
+
+	printf("... chain: nr:%" PRIu64 "\n", total_nr);
+
+	for (i = 0; i < callchain_nr + 1; i++)
 		printf("..... %2d: %016" PRIx64 "\n",
 		       i, sample->callchain->ips[i]);
+
+	if (total_nr > callchain_nr) {
+		struct branch_stack *lbr_stack = sample->branch_stack;
+
+		for (i = 0; i < lbr_stack->nr; i++)
+			printf("..... %2d: %016" PRIx64 "\n",
+				(int)(i + callchain_nr + 1), lbr_stack->entries[i].from);
+	}
 }
 
 static void branch_stack__printf(struct perf_sample *sample)

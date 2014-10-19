@@ -53,6 +53,11 @@ enum chain_key {
 	CCKEY_ADDRESS
 };
 
+enum chain_source {
+	SOURCE_FP,
+	SOURCE_LBR
+};
+
 struct callchain_param {
 	bool			enabled;
 	enum perf_call_graph_mode record_mode;
@@ -63,6 +68,7 @@ struct callchain_param {
 	sort_chain_func_t	sort;
 	enum chain_order	order;
 	enum chain_key		key;
+	enum chain_source	source;
 };
 
 extern struct callchain_param callchain_param;
