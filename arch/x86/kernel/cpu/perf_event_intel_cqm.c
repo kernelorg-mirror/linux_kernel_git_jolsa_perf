@@ -1105,12 +1105,14 @@ EVENT_ATTR_STR(llc_occupancy, intel_cqm_llc, "event=0x01");
 EVENT_ATTR_STR(llc_occupancy.per-pkg, intel_cqm_llc_pkg, "1");
 EVENT_ATTR_STR(llc_occupancy.unit, intel_cqm_llc_unit, "Bytes");
 EVENT_ATTR_STR(llc_occupancy.scale, intel_cqm_llc_scale, NULL);
+EVENT_ATTR_STR(llc_occupancy.snapshot, intel_cqm_llc_snapshot, "1");
 
 static struct attribute *intel_cqm_events_attr[] = {
 	EVENT_PTR(intel_cqm_llc),
 	EVENT_PTR(intel_cqm_llc_pkg),
 	EVENT_PTR(intel_cqm_llc_unit),
 	EVENT_PTR(intel_cqm_llc_scale),
+	EVENT_PTR(intel_cqm_llc_snapshot),
 	NULL,
 };
 
