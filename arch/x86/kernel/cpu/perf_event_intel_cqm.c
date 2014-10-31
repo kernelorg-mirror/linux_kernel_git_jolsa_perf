@@ -851,8 +851,6 @@ static void intel_cqm_event_read(struct perf_event *event)
 	if (val & (RMID_VAL_ERROR | RMID_VAL_UNAVAIL))
 		goto out;
 
-	val *= cqm_l3_scale; /* cachelines -> bytes */
-
 	/*
 	 * If this event is per-cpu then we don't need to do any
 	 * aggregation in the kernel, it's all done in userland.
@@ -882,8 +880,6 @@ static void __intel_cqm_event_count(void *info)
 
 	if (val & (RMID_VAL_ERROR | RMID_VAL_UNAVAIL))
 		goto unlock;
-
-	val *= cqm_l3_scale; /* cachelines -> bytes */
 
 	local64_add(val, &event->count);
 
@@ -1106,9 +1102,13 @@ static int intel_cqm_event_init(struct perf_event *event)
 }
 
 EVENT_ATTR_STR(llc_occupancy, intel_cqm_llc, "event=0x01");
+EVENT_ATTR_STR(llc_occupancy.unit, intel_cqm_llc_unit, "Bytes");
+EVENT_ATTR_STR(llc_occupancy.scale, intel_cqm_llc_scale, NULL);
 
 static struct attribute *intel_cqm_events_attr[] = {
 	EVENT_PTR(intel_cqm_llc),
+	EVENT_PTR(intel_cqm_llc_unit),
+	EVENT_PTR(intel_cqm_llc_scale),
 	NULL,
 };
 
@@ -1127,6 +1127,7 @@ static struct attribute_group intel_cqm_format_group = {
 	.name = "format",
 	.attrs = intel_cqm_formats_attr,
 };
+
 
 static ssize_t
 max_recycle_threshold_show(struct device *dev, struct device_attribute *attr,
@@ -1273,6 +1274,7 @@ static const struct x86_cpu_id intel_cqm_match[] = {
 
 static int __init intel_cqm_init(void)
 {
+	char scale[20];
 	int i, cpu, ret;
 
 	if (!x86_match_cpu(intel_cqm_match))
@@ -1303,6 +1305,9 @@ static int __init intel_cqm_init(void)
 			goto out;
 		}
 	}
+
+	snprintf(scale, 20, "%u", cqm_l3_scale);
+	event_attr_intel_cqm_llc_scale.event_str = kstrdup(scale, GFP_KERNEL);
 
 	ret = intel_cqm_setup_rmid_cache();
 	if (ret)
