@@ -1172,10 +1172,22 @@ max_recycle_threshold_store(struct device *dev,
 	return count;
 }
 
+static ssize_t cpumask_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	int n = cpulist_scnprintf(buf, PAGE_SIZE - 2, &cqm_cpumask);
+
+	buf[n++] = '\n';
+	buf[n] = '\0';
+	return n;
+}
+
 static DEVICE_ATTR_RW(max_recycle_threshold);
+static DEVICE_ATTR_RO(cpumask);
 
 static struct attribute *intel_cqm_attrs[] = {
 	&dev_attr_max_recycle_threshold.attr,
+	&dev_attr_cpumask.attr,
 	NULL,
 };
 
