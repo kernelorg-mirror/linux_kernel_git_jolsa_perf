@@ -672,6 +672,7 @@ int parse_events_add_pmu(struct list_head *list, int *idx,
 	if (evsel) {
 		evsel->unit = info.unit;
 		evsel->scale = info.scale;
+		evsel->snapshot = info.snapshot;
 	}
 
 	return evsel ? 0 : -ENOMEM;
