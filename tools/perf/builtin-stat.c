@@ -164,7 +164,13 @@ static inline void diff_timespec(struct timespec *r, struct timespec *a,
 
 static inline struct cpu_map *perf_evsel__cpus(struct perf_evsel *evsel)
 {
-	return (evsel->cpus && !target.cpu_list) ? evsel->cpus : evsel_list->cpus;
+	/*
+	 * Use evsel specific CPUs if:
+	 * - there's no overload on command line (target.cpu_list)
+	 * - there's no task specified (tasks are read via cpu == -1)
+	 */
+	return (evsel->cpus && !target.cpu_list && !target__has_task(&target)) ?
+		evsel->cpus : evsel_list->cpus;
 }
 
 static inline int perf_evsel__nr_cpus(struct perf_evsel *evsel)
