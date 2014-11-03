@@ -87,7 +87,6 @@ struct perf_evsel {
 	bool			immediate;
 	bool			system_wide;
 	bool			tracking;
-	bool			per_pkg;
 	/* parse modifier helper */
 	int			exclude_GH;
 	int			nr_members;
@@ -254,8 +253,7 @@ static inline int perf_evsel__read_on_cpu_scaled(struct perf_evsel *evsel,
 }
 
 int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads,
-		       bool scale,
-		       bool (*f_skip)(struct perf_evsel *evsel, int cpu, u64 val));
+		       bool scale);
 
 /**
  * perf_evsel__read - Read the aggregate results on all CPUs
@@ -267,7 +265,7 @@ int __perf_evsel__read(struct perf_evsel *evsel, int ncpus, int nthreads,
 static inline int perf_evsel__read(struct perf_evsel *evsel,
 				    int ncpus, int nthreads)
 {
-	return __perf_evsel__read(evsel, ncpus, nthreads, false, NULL);
+	return __perf_evsel__read(evsel, ncpus, nthreads, false);
 }
 
 /**
@@ -280,7 +278,7 @@ static inline int perf_evsel__read(struct perf_evsel *evsel,
 static inline int perf_evsel__read_scaled(struct perf_evsel *evsel,
 					  int ncpus, int nthreads)
 {
-	return __perf_evsel__read(evsel, ncpus, nthreads, true, NULL);
+	return __perf_evsel__read(evsel, ncpus, nthreads, true);
 }
 
 void hists__init(struct hists *hists);

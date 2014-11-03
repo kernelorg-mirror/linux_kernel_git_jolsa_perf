@@ -28,7 +28,6 @@ struct perf_pmu {
 struct perf_pmu_info {
 	const char *unit;
 	double scale;
-	bool per_pkg;
 };
 
 struct perf_pmu *perf_pmu__find(const char *name);
