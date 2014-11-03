@@ -1106,11 +1106,9 @@ static int intel_cqm_event_init(struct perf_event *event)
 }
 
 EVENT_ATTR_STR(llc_occupancy, intel_cqm_llc, "event=0x01");
-EVENT_ATTR_STR(llc_occupancy.per-pkg, intel_cqm_llc_pkg, "1");
 
 static struct attribute *intel_cqm_events_attr[] = {
 	EVENT_PTR(intel_cqm_llc),
-	EVENT_PTR(intel_cqm_llc_pkg),
 	NULL,
 };
 
@@ -1173,19 +1171,19 @@ max_recycle_threshold_store(struct device *dev,
 
 static DEVICE_ATTR_RW(max_recycle_threshold);
 
-static struct attribute *intel_cqm_threshold_attrs[] = {
+static struct attribute *intel_cqm_attrs[] = {
 	&dev_attr_max_recycle_threshold.attr,
 	NULL,
 };
 
-static const struct attribute_group intel_cqm_threshold_group = {
-	.attrs = intel_cqm_threshold_attrs,
+static const struct attribute_group intel_cqm_group = {
+	.attrs = intel_cqm_attrs,
 };
 
 static const struct attribute_group *intel_cqm_attr_groups[] = {
 	&intel_cqm_events_group,
 	&intel_cqm_format_group,
-	&intel_cqm_threshold_group,
+	&intel_cqm_group,
 	NULL,
 };
 
