@@ -1173,19 +1173,19 @@ max_recycle_threshold_store(struct device *dev,
 
 static DEVICE_ATTR_RW(max_recycle_threshold);
 
-static struct attribute *intel_cqm_threshold_attrs[] = {
+static struct attribute *intel_cqm_attrs[] = {
 	&dev_attr_max_recycle_threshold.attr,
 	NULL,
 };
 
-static const struct attribute_group intel_cqm_threshold_group = {
-	.attrs = intel_cqm_threshold_attrs,
+static const struct attribute_group intel_cqm_group = {
+	.attrs = intel_cqm_attrs,
 };
 
 static const struct attribute_group *intel_cqm_attr_groups[] = {
 	&intel_cqm_events_group,
 	&intel_cqm_format_group,
-	&intel_cqm_threshold_group,
+	&intel_cqm_group,
 	NULL,
 };
 
