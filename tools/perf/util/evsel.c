@@ -851,16 +851,33 @@ int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads)
 	return 0;
 }
 
+struct perf_counts *perf_counts__alloc(int ncpus)
+{
+	int size = sizeof(struct perf_counts) +
+		   ncpus * sizeof(struct perf_counts_values);
+
+	return zalloc(size);
+}
+
+void perf_counts__free(struct perf_counts *counts)
+{
+	free(counts);
+}
+
+static void perf_counts__reset(struct perf_counts *counts, int ncpus)
+{
+	memset(counts, 0, (sizeof(*counts) +
+	       (ncpus * sizeof(struct perf_counts_values))));
+}
+
 void perf_evsel__reset_counts(struct perf_evsel *evsel, int ncpus)
 {
-	memset(evsel->counts, 0, (sizeof(*evsel->counts) +
-				 (ncpus * sizeof(struct perf_counts_values))));
+	perf_counts__reset(evsel->counts, ncpus);
 }
 
 int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus)
 {
-	evsel->counts = zalloc((sizeof(*evsel->counts) +
-				(ncpus * sizeof(struct perf_counts_values))));
+	evsel->counts = perf_counts__alloc(ncpus);
 	return evsel->counts != NULL ? 0 : -ENOMEM;
 }
 
@@ -893,7 +910,8 @@ void perf_evsel__close_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
 
 void perf_evsel__free_counts(struct perf_evsel *evsel)
 {
-	zfree(&evsel->counts);
+	perf_counts__free(evsel->counts);
+	evsel->counts = NULL;
 }
 
 void perf_evsel__exit(struct perf_evsel *evsel)
