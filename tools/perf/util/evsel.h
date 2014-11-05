@@ -131,6 +131,9 @@ void perf_counts_values__scale(struct perf_counts_values *count,
 void perf_evsel__compute_deltas(struct perf_evsel *evsel, int cpu,
 				struct perf_counts_values *count);
 
+struct perf_counts *perf_counts__alloc(int ncpus);
+void perf_counts__free(struct perf_counts *counts);
+
 int perf_evsel__object_config(size_t object_size,
 			      int (*init)(struct perf_evsel *evsel),
 			      void (*fini)(struct perf_evsel *evsel));
