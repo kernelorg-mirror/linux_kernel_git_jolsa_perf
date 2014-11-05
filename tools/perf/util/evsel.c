@@ -883,15 +883,29 @@ void perf_evsel__reset_counts(struct perf_evsel *evsel, int ncpus)
 
 struct perf_counts *perf_counts__alloc(int ncpus)
 {
-	int size = sizeof(struct perf_counts) +
-		   ncpus * sizeof(struct perf_counts_values);
+	struct perf_counts *counts = zalloc(sizeof(*counts));
 
-	return zalloc(size);
+	if (counts) {
+		struct xyarray *cpu;
+
+		cpu = xyarray__new(ncpus, 1, sizeof(struct perf_counts_values));
+		if (!cpu) {
+			free(counts);
+			return NULL;
+		}
+
+		counts->cpu = cpu;
+	}
+
+	return counts;
 }
 
 void perf_counts__free(struct perf_counts *counts)
 {
-	free(counts);
+	if (counts) {
+		xyarray__delete(counts->cpu);
+		free(counts);
+	}
 }
 
 int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus)
