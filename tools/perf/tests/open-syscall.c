@@ -44,9 +44,9 @@ int test__open_syscall_event(void)
 		goto out_close_fd;
 	}
 
-	if (evsel->counts->cpu[0].val != nr_open_calls) {
+	if (perf_counts(evsel->counts, 0)->val != nr_open_calls) {
 		pr_debug("perf_evsel__read_on_cpu: expected to intercept %d calls, got %" PRIu64 "\n",
-			 nr_open_calls, evsel->counts->cpu[0].val);
+			 nr_open_calls, perf_counts(evsel->counts, 0)->val);
 		goto out_close_fd;
 	}
 
