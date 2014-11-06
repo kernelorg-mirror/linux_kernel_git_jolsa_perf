@@ -141,16 +141,16 @@ static inline int perf_evsel__nr_cpus(struct perf_evsel *evsel)
 void perf_counts_values__scale(struct perf_counts_values *count,
 			       bool scale, s8 *pscaled);
 
-void perf_evsel__compute_deltas(struct perf_evsel *evsel, int cpu,
+void perf_evsel__compute_deltas(struct perf_evsel *evsel, int cpu, int thread,
 				struct perf_counts_values *count);
 
-struct perf_counts *perf_counts__alloc(int ncpus);
+struct perf_counts *perf_counts__alloc(int ncpus, int nthreads);
 void perf_counts__free(struct perf_counts *counts);
 
 static inline struct perf_counts_values*
-perf_counts(struct perf_counts *counts, int cpu)
+perf_counts(struct perf_counts *counts, int cpu, int thread)
 {
-	return xyarray__entry(counts->cpu, cpu, 0);
+	return xyarray__entry(counts->cpu, cpu, thread);
 }
 
 int perf_evsel__object_config(size_t object_size,
@@ -204,7 +204,7 @@ const char *perf_evsel__group_name(struct perf_evsel *evsel);
 int perf_evsel__group_desc(struct perf_evsel *evsel, char *buf, size_t size);
 
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
-int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus);
+int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus, int nthreads);
 void perf_evsel__reset_counts(struct perf_evsel *evsel, int ncpus);
 void perf_evsel__free_counts(struct perf_evsel *evsel);
 void perf_evsel__close_fd(struct perf_evsel *evsel, int ncpus, int nthreads);
