@@ -99,6 +99,7 @@ enum { LVL0, LVL1, LVL2, LVL3, LVL4, MAX_LVL };
 static int cloffset = LVL1;
 static int node_info = 0;
 static int coalesce_level = LVL1;
+static bool trace_coalescing = false;
 static histo_t  histogram;
 
 
@@ -1456,6 +1457,123 @@ static void print_hitm_cacheline_offset(struct c2c_hit *clo,
 
 
 
+LIST_HEAD(trace_tree);
+static int trace_total = 0;
+
+struct trace_coal {
+	struct list_head	list;
+	struct hist_entry	*entry;
+};
+
+static int update_trace_list(struct hist_entry *entry)
+{
+	struct trace_coal *p, *n;
+
+	list_for_each_entry(p, &trace_tree, list) {
+		if (entry->stat.weight < p->entry->stat.weight)
+			break;
+	}
+
+	n = zalloc(sizeof(struct trace_coal));
+	if (!p)
+		return -1;
+	n->entry = entry;
+	list_add_tail(&n->list, &p->list);
+
+	trace_total++;
+	return 0;
+}
+
+static void print_trace_list(double median)
+{
+#define DLIMIT 240
+
+	struct mem_info *mi;
+	struct map *map;
+        u64 data_src;
+	int index = 1;
+	struct trace_coal *p, *pn;
+	int cal_index = trace_total/2;
+	double cal_median;
+        char dsrc_str[62];
+        int i;
+
+	for(i=0; i<DLIMIT; i++) {
+		printf("=");
+	}
+	printf("\n");
+
+	printf("%6s %8s %8s %4s %18s %18s %8s %10s %-60s %-40s %s\n", 
+		"Index",
+		"Pid",
+		"Tid",
+		"CPU",
+		"Inst Adrs",
+		"Virt Data Adrs",
+		"Cycles",
+		"Source",   
+		" Decoded Source",
+		"Symbol",
+		"Object");
+
+	for(i=0; i<DLIMIT; i++) {
+		printf("=");
+	}
+
+	printf("\n");
+
+
+	cal_median = 0.0;
+
+	list_for_each_entry_safe(p, pn, &trace_tree, list) {
+
+		map = p->entry->mem_info->iaddr.map;
+                mi  = p->entry->mem_info;
+		data_src = p->entry->mem_info->data_src.val;
+		perf_c2c__scnprintf_data_src(dsrc_str, sizeof(dsrc_str), data_src);
+
+
+		printf("%6d %8d %8d %4d %#18lx %#18lx %8ld %#10lx %-60s %-40s %s\n",
+			index,
+			p->entry->thread->pid_,
+			p->entry->thread->tid,
+			p->entry->cpu,
+			p->entry->mem_info->iaddr.al_addr,
+			p->entry->mem_info->daddr.al_addr,
+			p->entry->stat.weight,
+			data_src,
+			dsrc_str,
+			mi->iaddr.sym ? mi->iaddr.sym->name : "???",
+			map ? (map->dso ? map->dso->long_name : "???") : "???");
+
+		if ODD(trace_total) {
+			if (index == cal_index+1) {
+				cal_median = p->entry->stat.weight;
+			}	
+		}
+		else {
+			if ((index == cal_index) || (index == cal_index+1)) {
+				cal_median += (double)p->entry->stat.weight/2.0;
+			}	
+			
+		}
+
+
+		list_del(&p->list);
+		free(p);
+		index++;
+	}
+
+	printf("Total Records:\t\t%8d\tHistogram Records:\t%8d\n", trace_total, histogram.totcnt);
+	printf("Calculated Median:\t%8.0f\tEstimated Median:\t%8.0f\n", cal_median, median);
+
+	if (!list_empty(&trace_tree))
+		printf("Trace tree NOT empty!!\n");
+
+	INIT_LIST_HEAD(&trace_tree);
+	trace_total = 0;
+}
+
 static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 				  struct c2c_stats *hitm_stats __maybe_unused,
 				  struct c2c_stats *c2c_stats)
@@ -1521,6 +1639,8 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 					median = estimate_median();
 					print_hitm_cacheline_offset(clo, h, node_stats, median);
 					init_hist();
+					if (trace_coalescing)
+						print_trace_list(median);
 				}
 
 				free(clo);
@@ -1547,11 +1667,16 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 						entry->callchain);
 			}
 
+			if (trace_coalescing)
+				update_trace_list(entry);
+
 		}
 
 		if (clo) {
 			median = estimate_median();
 			print_hitm_cacheline_offset(clo, h, node_stats, median);
+			if (trace_coalescing)
+				print_trace_list(median);
 			free(clo);
 			clo = NULL;
 		}
@@ -2023,6 +2148,7 @@ int cmd_c2c(int argc, const char **argv, const char *prefix __maybe_unused)
 	};
 	const struct option c2c_options[] = {
 	OPT_BOOLEAN('r', "raw_records", &c2c.raw_records, "dump raw events"),
+	OPT_BOOLEAN('t', "trace_coalescing", &trace_coalescing, "dump trace coalescing events"),
 	OPT_INCR('N', "node-info", &node_info,
 		 "show extra node info in report (repeat for more info)"),
 	OPT_INTEGER('c', "coalesce-level", &coalesce_level,
