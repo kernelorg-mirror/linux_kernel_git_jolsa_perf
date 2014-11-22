@@ -9,12 +9,18 @@ SYNOPSIS
 --------
 [verse]
 'perf buildid-cache <options>'
+'perf buildid-cache <options> clean [<options>] [limit]
 
 DESCRIPTION
 -----------
 This command manages the build-id cache. It can add and remove files to/from
 the cache. In the future it should as well purge older entries, set upper
 limits for the space used by the cache, etc.
+
+The 'perf buildid-cache clean' command provides means to clean the cache
+directory. Unless the '-r' option is specified it displays the contents
+(with size) of the cache. You can also specify time or size limit as
+a cache filer (see CLEAN LIMIT section).
 
 OPTIONS
 -------
@@ -47,6 +53,59 @@ OPTIONS
 -v::
 --verbose::
 	Be more verbose.
+
+
+CLEAN OPTIONS
+-------------
+-a::
+--all::
+	Display each cache file separately.
+
+-r::
+--remove::
+	Remove all files displayed.
+
+--size::
+	Sort files by size (default).
+
+--time::
+	Sort files by time.
+
+-v::
+--verbose::
+	Be more verbose.
+
+
+CLEAN LIMIT
+-----------
+User can specify size or time limit as a filter to display cache files.
+The syntax of the limit is, time:
+  $ perf buildid-cache clean 1d  # displays files older than 1 day
+  $ perf buildid-cache clean 4w  # displays files older than 4 weeks
+  $ perf buildid-cache clean 2m  # displays files older than 2 months
+  $ perf buildid-cache clean 1y  # displays files older than 1 year
+
+or size:
+  $ perf buildid-cache clean 100B # displays files with size >= 100 B
+  $ perf buildid-cache clean 4K   # displays files with size >= 4 KB
+  $ perf buildid-cache clean 2M   # displays files with size >= 2 MB
+  $ perf buildid-cache clean 1G   # displays files with size >= 1 GB
+
+
+EXAMPLES
+--------
+Display cache files older than 3 days and sort them by time:
+$ perf buildid-cache clean --time 3d
+
+Total cache removal:
+$ perf buildid-cache clean -r
+
+Remove items older than 2 weeks
+$ perf buildid-cache clean -r 2w
+
+Remove and display items bigger than 200M
+$ perf buildid-cache clean -r -a 200M
+
 
 SEE ALSO
 --------
