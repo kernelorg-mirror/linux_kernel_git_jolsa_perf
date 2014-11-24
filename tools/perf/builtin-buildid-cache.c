@@ -207,6 +207,25 @@ static int build_id_cache__add_file(const char *filename, const char *debugdir)
 	return err;
 }
 
+/*
+ * Takes basename from @filename argument and
+ * copy that into @buf.
+ */
+static int scnprintf_base(char *buf, int size, const char *filename)
+{
+	char *base = strrchr(filename, '/');
+
+	if (!base++)
+		return -1;
+
+	return scnprintf(buf, size, base, strlen(base));
+}
+
+static bool is_kallsyms_file(const char *filename)
+{
+	return strstr(filename, "kernel.kallsyms");
+}
+
 static int build_id_cache__remove_file(const char *filename,
 				       const char *debugdir)
 {
@@ -217,10 +236,22 @@ static int build_id_cache__remove_file(const char *filename,
 
 	if (filename__read_build_id(filename, &build_id, sizeof(build_id)) < 0) {
 		pr_debug("Couldn't read a build-id in %s\n", filename);
-		return -1;
+
+		if (!is_kallsyms_file(filename))
+			return -1;
+
+		pr_debug("Detected [kernel.kallsyms] file,"
+			 "trying basename as buildid.\n");
+
+		if (scnprintf_base(sbuild_id, sizeof(sbuild_id),
+					     filename) < 0) {
+			pr_debug("failed to get build-id\n");
+			return -1;
+		}
+	} else {
+		build_id__sprintf(build_id, sizeof(build_id), sbuild_id);
 	}
 
-	build_id__sprintf(build_id, sizeof(build_id), sbuild_id);
 	err = build_id_cache__remove_s(sbuild_id, debugdir);
 	if (verbose)
 		pr_info("Removing %s %s: %s\n", sbuild_id, filename,
