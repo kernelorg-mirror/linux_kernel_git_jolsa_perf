@@ -2248,6 +2248,7 @@ static int process_data_index(struct perf_file_section *section __maybe_unused,
 
 	ph->index = idx;
 	ph->nr_index = nr_idx;
+	perf_has_index = true;
 	return 0;
 }
 
