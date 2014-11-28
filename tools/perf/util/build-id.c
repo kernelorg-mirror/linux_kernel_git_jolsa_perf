@@ -329,11 +329,41 @@ static int build_id_cache__add_b(const u8 *build_id, size_t build_id_size,
 				     is_kallsyms, is_vdso);
 }
 
+/*
+ * Tries to remove directory of the file given in
+ * the @file parameter. It might change the string
+ * pointed to by the @file pointer.
+ */
+static void try_remove_dir(char *file, const char *debugdir)
+{
+	char *dir = dirname(file);
+
+	while (dir) {
+		char *slash;
+
+		if (!strcmp(dir, debugdir))
+			return;
+
+		pr_debug("try_remove_dir %s\n", dir);
+
+		/* We dont care if it failes, we tried.. */
+		if (rmdir(dir))
+			return;
+
+		slash = strrchr(dir, '/');
+		if (!slash)
+			return;
+
+		*slash = 0;
+	}
+}
+
 int build_id_cache__remove_s(const char *sbuild_id, const char *debugdir)
 {
 	const size_t size = PATH_MAX;
 	char *filename = zalloc(size),
-	     *linkname = zalloc(size);
+	     *linkname = zalloc(size),
+	     *build_id_link = NULL;
 	int err = -1;
 
 	if (filename == NULL || linkname == NULL)
@@ -351,6 +381,10 @@ int build_id_cache__remove_s(const char *sbuild_id, const char *debugdir)
 	if (unlink(linkname))
 		goto out_free;
 
+	build_id_link = strdup(linkname);
+	if (!build_id_link)
+		goto out_free;
+
 	/*
 	 * Since the link is relative, we must make it absolute:
 	 */
@@ -360,10 +394,18 @@ int build_id_cache__remove_s(const char *sbuild_id, const char *debugdir)
 	if (unlink(linkname))
 		goto out_free;
 
+	/*
+	 * The order matters here, because linkname path
+	 * is based on build_id_link path.
+	 */
+	try_remove_dir(linkname, debugdir);
+	try_remove_dir(build_id_link, debugdir);
+
 	err = 0;
 out_free:
 	free(filename);
 	free(linkname);
+	free(build_id_link);
 	return err;
 }
 
