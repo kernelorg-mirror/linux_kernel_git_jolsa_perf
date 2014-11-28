@@ -1839,7 +1839,9 @@ static int __perf_session__process_events(struct perf_session *session,
 	mmap_size = MMAP_SIZE;
 	if (mmap_size > file_size) {
 		mmap_size = file_size;
-		session->one_mmap = true;
+
+		if (!perf_has_index)
+			session->one_mmap = true;
 	}
 
 	memset(mmaps, 0, sizeof(mmaps));
@@ -1917,7 +1919,6 @@ out:
 	err = perf_session__flush_thread_stacks(session);
 out_err:
 	ui_progress__finish();
-	perf_session__warn_about_errors(session);
 	/*
 	 * We may switching perf.data output, make ordered_events
 	 * reusable.
@@ -1928,21 +1929,47 @@ out_err:
 	return err;
 }
 
+static int __perf_session__process_indexed_events(struct perf_session *session)
+{
+	int err = 0, i;
+
+	for (i = 0; i < (int)session->header.nr_index; i++) {
+		struct perf_file_section *idx = &session->header.index[i];
+
+		if (!idx->size)
+			continue;
+
+		err = __perf_session__process_events(session, idx->offset,
+						     idx->size,
+						     idx->offset + idx->size);
+		if (err < 0)
+			break;
+	}
+
+	perf_session__warn_about_errors(session);
+	return err;
+}
+
 int perf_session__process_events(struct perf_session *session)
 {
-	u64 size = perf_data__size(session->data);
+	struct perf_data *data = session->data;
+	u64 size = perf_data__size(data);
 	int err;
 
 	if (perf_session__register_idle_thread(session) < 0)
 		return -ENOMEM;
 
-	if (!perf_data__is_pipe(session->data))
-		err = __perf_session__process_events(session,
-						     session->header.data_offset,
-						     session->header.data_size, size);
-	else
-		err = __perf_session__process_pipe_events(session);
+	if (perf_data__is_pipe(data))
+		return __perf_session__process_pipe_events(session);
+	if (perf_has_index)
+		return __perf_session__process_indexed_events(session);
 
+	err = __perf_session__process_events(session,
+					     session->header.data_offset,
+					     session->header.data_size,
+					     size);
+
+	perf_session__warn_about_errors(session);
 	return err;
 }
 
