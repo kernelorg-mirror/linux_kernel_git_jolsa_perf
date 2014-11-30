@@ -167,6 +167,14 @@ static struct test {
 		.func = test__fdarray__add,
 	},
 	{
+		.desc = "Add fd to a fdarray, making it autogrow",
+		.func = test__fdarray__add,
+	},
+	{
+		.desc = "Test buildid cache",
+		.func = test__buildid_cache,
+	},
+	{
 		.func = NULL,
 	},
 };
