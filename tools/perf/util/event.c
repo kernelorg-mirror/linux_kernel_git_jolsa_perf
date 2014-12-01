@@ -15,6 +15,7 @@
 #include "thread.h"
 #include "thread_map.h"
 #include "sane_ctype.h"
+#include "session.h"
 #include "symbol/kallsyms.h"
 #include "asm/bug.h"
 #include "stat.h"
@@ -1462,9 +1463,10 @@ void thread__find_addr_location(struct thread *thread,
 int machine__resolve(struct machine *machine, struct addr_location *al,
 		     struct perf_sample *sample)
 {
-	struct thread *thread = machine__findnew_thread(machine, sample->pid,
-							sample->tid);
+	struct thread *thread;
 
+	thread = machine__findnew_thread_by_time(machine, sample->pid,
+						 sample->tid, sample->time);
 	if (thread == NULL)
 		return -1;
 
