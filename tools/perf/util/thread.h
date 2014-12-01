@@ -14,10 +14,8 @@ struct thread_stack;
 struct unwind_libunwind_ops;
 
 struct thread {
-	union {
-		struct rb_node	 rb_node;
-		struct list_head node;
-	};
+	struct rb_node	 	rb_node;
+	struct list_head 	tid_list;
 	struct map_groups	*mg;
 	pid_t			pid_; /* Not all tools update this */
 	pid_t			tid;
@@ -27,7 +25,8 @@ struct thread {
 	char			shortname[3];
 	bool			comm_set;
 	int			comm_len;
-	bool			dead; /* if set thread has exited */
+	bool			exited; /* if set thread has exited */
+	bool			dead; /* thread is in dead_threads list */
 	struct list_head	namespaces_list;
 	struct list_head	comm_list;
 	u64			db_id;
@@ -61,7 +60,7 @@ static inline void __thread__zput(struct thread **thread)
 
 static inline void thread__exited(struct thread *thread)
 {
-	thread->dead = true;
+	thread->exited = true;
 }
 
 struct namespaces *thread__namespaces(const struct thread *thread);
