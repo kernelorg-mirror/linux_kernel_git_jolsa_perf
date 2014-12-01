@@ -31,9 +31,9 @@ struct machine {
 	bool		  kptr_restrict_warned;
 	char		  *root_dir;
 	struct rb_root	  threads;
+	struct rb_root	  dead_threads;
 	pthread_rwlock_t  threads_lock;
 	unsigned int	  nr_threads;
-	struct list_head  dead_threads;
 	struct thread	  *last_match;
 	struct vdso_info  *vdso_info;
 	struct perf_env   *env;
