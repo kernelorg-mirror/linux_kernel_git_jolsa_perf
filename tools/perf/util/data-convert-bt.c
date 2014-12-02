@@ -74,6 +74,9 @@ struct convert {
 
 	u64			events_size;
 	u64			events_count;
+
+	/* Ordered events configured queue size. */
+	u64			queue_size;
 };
 
 static int value_set(struct bt_ctf_field_type *type,
@@ -966,6 +969,18 @@ static void ctf_writer__flush_streams(struct ctf_writer *cw)
 		ctf_stream__flush(cw->stream[cpu]);
 }
 
+static int convert__config(const char *var, const char *value, void *cb)
+{
+	struct convert *c = cb;
+
+	if (!strcmp(var, "convert.queue-size")) {
+		c->queue_size = perf_config_u64(var, value);
+		return 0;
+	}
+
+	return perf_default_config(var, value, cb);
+}
+
 int bt_convert__perf2ctf(const char *input, const char *path)
 {
 	struct perf_session *session;
@@ -991,6 +1006,8 @@ int bt_convert__perf2ctf(const char *input, const char *path)
 	struct ctf_writer *cw = &c.writer;
 	int err = -1;
 
+	perf_config(convert__config, &c);
+
 	/* CTF writer */
 	if (ctf_writer__init(cw, path))
 		return -1;
@@ -999,6 +1016,11 @@ int bt_convert__perf2ctf(const char *input, const char *path)
 	session = perf_session__new(&file, 0, NULL);
 	if (!session)
 		goto free_writer;
+
+	if (c.queue_size) {
+		ordered_events__set_alloc_size(&session->ordered_events,
+					       c.queue_size);
+	}
 
 	/* CTF writer env/clock setup  */
 	if (ctf_writer__setup_env(cw, session))
