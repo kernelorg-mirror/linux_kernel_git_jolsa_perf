@@ -23,6 +23,7 @@
 #include "stat.h"
 
 static int perf_session__deliver_event(struct perf_session *session,
+				       struct events_stats *stats,
 				       union perf_event *event,
 				       struct perf_sample *sample,
 				       struct perf_tool *tool,
@@ -114,7 +115,8 @@ static int ordered_events__deliver_event(struct ordered_events *oe,
 		return ret;
 	}
 
-	return perf_session__deliver_event(session, event->event, &sample,
+	return perf_session__deliver_event(session, &session->evlist->stats,
+					   event->event, &sample,
 					   session->tool, event->file_offset);
 }
 
@@ -1150,6 +1152,7 @@ static struct machine *machines__find_for_cpumode(struct machines *machines,
 }
 
 static int deliver_sample_value(struct perf_evlist *evlist,
+				struct events_stats *stats,
 				struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -1165,7 +1168,7 @@ static int deliver_sample_value(struct perf_evlist *evlist,
 	}
 
 	if (!sid || sid->evsel == NULL) {
-		++evlist->stats.nr_unknown_id;
+		++stats->nr_unknown_id;
 		return 0;
 	}
 
@@ -1173,6 +1176,7 @@ static int deliver_sample_value(struct perf_evlist *evlist,
 }
 
 static int deliver_sample_group(struct perf_evlist *evlist,
+				struct events_stats *stats,
 				struct perf_tool *tool,
 				union  perf_event *event,
 				struct perf_sample *sample,
@@ -1182,7 +1186,7 @@ static int deliver_sample_group(struct perf_evlist *evlist,
 	u64 i;
 
 	for (i = 0; i < sample->read.group.nr; i++) {
-		ret = deliver_sample_value(evlist, tool, event, sample,
+		ret = deliver_sample_value(evlist, stats, tool, event, sample,
 					   &sample->read.group.values[i],
 					   machine);
 		if (ret)
@@ -1194,6 +1198,7 @@ static int deliver_sample_group(struct perf_evlist *evlist,
 
 static int
  perf_evlist__deliver_sample(struct perf_evlist *evlist,
+			     struct events_stats *stats,
 			     struct perf_tool *tool,
 			     union  perf_event *event,
 			     struct perf_sample *sample,
@@ -1210,14 +1215,15 @@ static int
 
 	/* For PERF_SAMPLE_READ we have either single or group mode. */
 	if (read_format & PERF_FORMAT_GROUP)
-		return deliver_sample_group(evlist, tool, event, sample,
+		return deliver_sample_group(evlist, stats, tool, event, sample,
 					    machine);
 	else
-		return deliver_sample_value(evlist, tool, event, sample,
+		return deliver_sample_value(evlist, stats, tool, event, sample,
 					    &sample->read.one, machine);
 }
 
 static int machines__deliver_event(struct machines *machines,
+				   struct events_stats *stats,
 				   struct perf_evlist *evlist,
 				   union perf_event *event,
 				   struct perf_sample *sample,
@@ -1235,15 +1241,16 @@ static int machines__deliver_event(struct machines *machines,
 	switch (event->header.type) {
 	case PERF_RECORD_SAMPLE:
 		if (evsel == NULL) {
-			++evlist->stats.nr_unknown_id;
+			++stats->nr_unknown_id;
 			return 0;
 		}
 		dump_sample(evsel, event, sample);
 		if (machine == NULL) {
-			++evlist->stats.nr_unprocessable_samples;
+			++stats->nr_unprocessable_samples;
 			return 0;
 		}
-		return perf_evlist__deliver_sample(evlist, tool, event, sample, evsel, machine);
+		return perf_evlist__deliver_sample(evlist, stats, tool, event,
+						   sample, evsel, machine);
 	case PERF_RECORD_MMAP:
 		return tool->mmap(tool, event, sample, machine);
 	case PERF_RECORD_MMAP2:
@@ -1260,7 +1267,7 @@ static int machines__deliver_event(struct machines *machines,
 		return tool->exit(tool, event, sample, machine);
 	case PERF_RECORD_LOST:
 		if (tool->lost == perf_event__process_lost)
-			evlist->stats.total_lost += event->lost.lost;
+			stats->total_lost += event->lost.lost;
 		return tool->lost(tool, event, sample, machine);
 	case PERF_RECORD_LOST_SAMPLES:
 		if (tool->lost_samples == perf_event__process_lost_samples)
@@ -1286,12 +1293,13 @@ static int machines__deliver_event(struct machines *machines,
 	case PERF_RECORD_SWITCH_CPU_WIDE:
 		return tool->context_switch(tool, event, sample, machine);
 	default:
-		++evlist->stats.nr_unknown_events;
+		++stats->nr_unknown_events;
 		return -1;
 	}
 }
 
 static int perf_session__deliver_event(struct perf_session *session,
+				       struct events_stats *stats,
 				       union perf_event *event,
 				       struct perf_sample *sample,
 				       struct perf_tool *tool,
@@ -1305,8 +1313,9 @@ static int perf_session__deliver_event(struct perf_session *session,
 	if (ret > 0)
 		return 0;
 
-	return machines__deliver_event(&session->machines, session->evlist,
-				       event, sample, tool, file_offset);
+	return machines__deliver_event(&session->machines, stats,
+				       session->evlist, event, sample,
+				       tool, file_offset);
 }
 
 static s64 perf_session__process_user_event(struct perf_session *session,
@@ -1386,7 +1395,8 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
 		return perf_session__process_user_event(session, event, 0);
 
-	return machines__deliver_event(&session->machines, evlist, event, sample, tool, 0);
+	return machines__deliver_event(&session->machines, &evlist->stats,
+				       evlist, event, sample, tool, 0);
 }
 
 static void event_swap(union perf_event *event, bool sample_id_all)
@@ -1454,7 +1464,9 @@ out_parse_sample:
 }
 
 static s64 perf_session__process_event(struct perf_session *session,
-				       union perf_event *event, u64 file_offset)
+				       struct events_stats *stats,
+				       union perf_event *event,
+				       u64 file_offset)
 {
 	struct perf_evlist *evlist = session->evlist;
 	struct perf_tool *tool = session->tool;
@@ -1467,7 +1479,7 @@ static s64 perf_session__process_event(struct perf_session *session,
 	if (event->header.type >= PERF_RECORD_HEADER_MAX)
 		return -EINVAL;
 
-	events_stats__inc(&evlist->stats, event->header.type);
+	events_stats__inc(stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
 		return perf_session__process_user_event(session, event, file_offset);
@@ -1485,8 +1497,8 @@ static s64 perf_session__process_event(struct perf_session *session,
 			return ret;
 	}
 
-	return perf_session__deliver_event(session, event, &sample, tool,
-					   file_offset);
+	return perf_session__deliver_event(session, stats, event,
+					   &sample, tool, file_offset);
 }
 
 void perf_event_header__bswap(struct perf_event_header *hdr)
@@ -1540,10 +1552,9 @@ perf_session__warn_order(const struct perf_session *session)
 		ui__warning("%u out of order events recorded.\n", oe->nr_unordered_events);
 }
 
-static void perf_session__warn_about_errors(const struct perf_session *session)
+static void perf_session__warn_about_errors(const struct perf_session *session,
+					    const struct events_stats *stats)
 {
-	const struct events_stats *stats = &session->evlist->stats;
-
 	if (session->tool->lost == perf_event__process_lost &&
 	    stats->nr_events[PERF_RECORD_LOST] != 0) {
 		ui__warning("Processed %d events and lost %d chunks!\n\n"
@@ -1650,6 +1661,7 @@ volatile int session_done;
 static int __perf_session__process_pipe_events(struct perf_session *session)
 {
 	struct ordered_events *oe = &session->ordered_events;
+	struct events_stats *stats = &session->evlist->stats;
 	struct perf_tool *tool = session->tool;
 	int fd = perf_data__fd(session->data);
 	union perf_event *event;
@@ -1715,7 +1727,8 @@ more:
 		}
 	}
 
-	if ((skip = perf_session__process_event(session, event, head)) < 0) {
+	if ((skip = perf_session__process_event(session, stats, event,
+						head)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 		       head, event->header.size, event->header.type);
 		err = -EINVAL;
@@ -1740,7 +1753,7 @@ done:
 	err = perf_session__flush_thread_stacks(session);
 out_err:
 	free(buf);
-	perf_session__warn_about_errors(session);
+	perf_session__warn_about_errors(session, stats);
 	ordered_events__free(&session->ordered_events);
 	auxtrace__free_events(session);
 	return err;
@@ -1787,6 +1800,7 @@ fetch_mmaped_event(struct perf_session *session,
 #endif
 
 static int __perf_session__process_events(struct perf_session *session,
+					  struct events_stats *stats,
 					  u64 data_offset, u64 data_size,
 					  u64 file_size)
 {
@@ -1865,7 +1879,8 @@ more:
 	size = event->header.size;
 
 	if (size < sizeof(struct perf_event_header) ||
-	    (skip = perf_session__process_event(session, event, file_pos)) < 0) {
+	    (skip = perf_session__process_event(session, stats, event,
+						file_pos)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 		       file_offset + head, event->header.size,
 		       event->header.type);
@@ -1913,6 +1928,7 @@ static int __perf_session__process_indexed_events(struct perf_session *session)
 	struct perf_data *data = session->data;
 	struct perf_tool *tool = session->tool;
 	u64 size = perf_data__size(data);
+	struct events_stats *stats = &session->evlist->stats;
 	int err = 0, i;
 
 	for (i = 0; i < (int)session->header.nr_index; i++) {
@@ -1929,13 +1945,14 @@ static int __perf_session__process_indexed_events(struct perf_session *session)
 		if (i > 0)
 			tool->ordered_events = false;
 
-		err = __perf_session__process_events(session, idx->offset,
+		err = __perf_session__process_events(session, stats,
+						     idx->offset,
 						     idx->size, size);
 		if (err < 0)
 			break;
 	}
 
-	perf_session__warn_about_errors(session);
+	perf_session__warn_about_errors(session, stats);
 	return err;
 }
 
@@ -1943,6 +1960,7 @@ int perf_session__process_events(struct perf_session *session)
 {
 	struct perf_data *data = session->data;
 	u64 size = perf_data__size(data);
+	struct events_stats *stats = &session->evlist->stats;
 	int err;
 
 	if (perf_session__register_idle_thread(session) < 0)
@@ -1953,12 +1971,12 @@ int perf_session__process_events(struct perf_session *session)
 	if (perf_has_index)
 		return __perf_session__process_indexed_events(session);
 
-	err = __perf_session__process_events(session,
+	err = __perf_session__process_events(session, stats,
 					     session->header.data_offset,
 					     session->header.data_size,
 					     size);
 
-	perf_session__warn_about_errors(session);
+	perf_session__warn_about_errors(session, stats);
 	return err;
 }
 
