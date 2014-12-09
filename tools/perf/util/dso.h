@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/bitops.h>
 #include "map.h"
+#include "perf.h"
 #include "build-id.h"
 
 enum dso_binary_type {
