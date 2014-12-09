@@ -85,6 +85,7 @@ static int add_hist_entries(struct hists *hists, struct machine *machine)
 	for (i = 0; i < ARRAY_SIZE(fake_samples); i++) {
 		struct hist_entry_iter iter = {
 			.evsel = evsel,
+			.hists = evsel__hists(evsel),
 			.sample	= &sample,
 			.hide_unresolved = false,
 		};
