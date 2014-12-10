@@ -508,9 +508,7 @@ static int report__collapse_hists(struct report *rep)
 
 		hists->socket_filter = rep->socket_filter;
 
-		ret = hists__collapse_resort(hists, &prog);
-		if (ret < 0)
-			break;
+		hists__collapse_resort(hists, &prog);
 
 		/* Non-group events are considered as leader */
 		if (symbol_conf.event_group &&
