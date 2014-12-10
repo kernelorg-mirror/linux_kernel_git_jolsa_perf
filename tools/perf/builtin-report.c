@@ -56,6 +56,7 @@ struct report {
 	bool			header;
 	bool			header_only;
 	bool			nonany_branch_mode;
+	bool			multi_thread;
 	int			max_stack;
 	struct perf_read_values	show_threads_values;
 	const char		*pretty_printing_style;
@@ -95,6 +96,10 @@ static int report__config(const char *var, const char *value, void *cb)
 	}
 	if (!strcmp(var, "report.sort_order")) {
 		default_sort_order = strdup(value);
+		return 0;
+	}
+	if (!strcmp(var, "report.multi-thread")) {
+		rep->multi_thread = perf_config_bool(var, value);
 		return 0;
 	}
 
@@ -571,7 +576,11 @@ static int __cmd_report(struct report *rep)
 		return ret;
 	}
 
-	ret = perf_session__process_events(session);
+	if (rep->multi_thread)
+		ret = perf_session__process_events_mt(session);
+	else
+		ret = perf_session__process_events(session);
+
 	if (ret) {
 		ui__error("failed to process sample\n");
 		return ret;
@@ -596,10 +605,16 @@ static int __cmd_report(struct report *rep)
 		}
 	}
 
-	ret = report__collapse_hists(rep);
-	if (ret) {
-		ui__error("failed to process hist entry\n");
-		return ret;
+	/*
+	 * For multi-thread report, it already calls hists__mt_resort()
+	 * so no need to collapse here.
+	 */
+	if (!rep->multi_thread) {
+		ret = report__collapse_hists(rep);
+		if (ret) {
+			ui__error("failed to process hist entry\n");
+			return ret;
+		}
 	}
 
 	if (session_done())
@@ -853,6 +868,8 @@ int cmd_report(int argc, const char **argv)
 		   "Time span of interest (start,stop)"),
 	OPT_BOOLEAN(0, "inline", &symbol_conf.inline_name,
 		    "Show inline function"),
+	OPT_BOOLEAN(0, "multi-thread", &report.multi_thread,
+		    "Speed up sample processing using multi-thead"),
 	OPT_END()
 	};
 	struct perf_data data = {
@@ -934,6 +951,11 @@ repeat:
 	}
 
 	session->itrace_synth_opts = &itrace_synth_opts;
+
+	if (report.multi_thread && !perf_has_index) {
+		pr_debug("fallback to single thread for normal data file.\n");
+		report.multi_thread = false;
+	}
 
 	report.session = session;
 
