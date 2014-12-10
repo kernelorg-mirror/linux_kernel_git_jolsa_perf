@@ -1504,12 +1504,13 @@ void hists__collapse_resort(struct hists *hists, struct ui_progress *prog)
 	__hists__collapse_resort(hists, root, prog);
 }
 
-void hists__mt_resort(struct hists *dst, struct hists *src)
+void hists__mt_resort(struct hists *dst, struct hists *src,
+		      struct ui_progress *prog)
 {
 	struct rb_root *root = src->entries_in;
 
 	perf_hpp_list.need_collapse = true;
-	__hists__collapse_resort(dst, root, NULL);
+	__hists__collapse_resort(dst, root, prog);
 }
 
 static int hist_entry__sort(struct hist_entry *a, struct hist_entry *b)

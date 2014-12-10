@@ -164,7 +164,8 @@ void hists__output_resort(struct hists *hists, struct ui_progress *prog);
 void hists__output_resort_cb(struct hists *hists, struct ui_progress *prog,
 			     hists__resort_cb_t cb);
 void hists__collapse_resort(struct hists *hists, struct ui_progress *prog);
-void hists__mt_resort(struct hists *dst, struct hists *src);
+void hists__mt_resort(struct hists *dst, struct hists *src,
+		      struct ui_progress *prog);
 
 void hists__decay_entries(struct hists *hists, bool zap_user, bool zap_kernel);
 void hists__delete_entries(struct hists *hists);
