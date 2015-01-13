@@ -7250,6 +7250,55 @@ out:
 	return ret;
 }
 
+static void put_group(struct perf_event **group_arr)
+{
+	struct perf_event *event;
+	int i = 0;
+
+	while (event = group_arr[i++]) {
+		put_event(event);
+	}
+
+	kfree(group_arr);
+}
+
+static int get_group(struct perf_event *leader, struct perf_event ***group_arr)
+{
+	struct perf_event_context *ctx = leader->ctx;
+	struct perf_event *sibling, **arr = NULL;
+	int i = 0, err = -ENOMEM;
+	size_t size;
+
+	if (!atomic_long_inc_not_zero(&leader->refcount))
+		return -EINVAL;
+
+	mutex_lock(&ctx->mutex);
+	/* + 1 for leader and +1 for final NULL */
+	size = (leader->nr_siblings + 2) * sizeof(leader);
+
+	arr = *group_arr = kzalloc(size, GFP_KERNEL);
+	if (!arr)
+		goto err;
+
+	err = -EINVAL;
+	arr[i++] = leader;
+
+	list_for_each_entry(sibling, &leader->sibling_list, group_entry) {
+		if (!atomic_long_inc_not_zero(&sibling->refcount))
+			goto err;
+
+		arr[i++] = sibling;
+	}
+
+	mutex_unlock(&ctx->mutex);
+	return 0;
+err:
+	mutex_unlock(&ctx->mutex);
+	if (arr)
+		put_group(arr);
+	return err;
+}
+
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
  *
@@ -7263,6 +7312,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		pid_t, pid, int, cpu, int, group_fd, unsigned long, flags)
 {
 	struct perf_event *group_leader = NULL, *output_event = NULL;
+	struct perf_event **group_arr = NULL;
 	struct perf_event *event, *sibling;
 	struct perf_event_attr attr;
 	struct perf_event_context *ctx;
@@ -7443,6 +7493,12 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
+	if (move_group) {
+		err = get_group(group_leader, &group_arr);
+		if (err)
+			goto err_context;
+	}
+
 	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
 					f_flags);
 	if (IS_ERR(event_file)) {
@@ -7490,6 +7546,9 @@ SYSCALL_DEFINE5(perf_event_open,
 	perf_unpin_context(ctx);
 	mutex_unlock(&ctx->mutex);
 
+	if (move_group)
+		put_group(group_arr);
+
 	put_online_cpus();
 
 	event->owner = current;
@@ -7515,6 +7574,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	return event_fd;
 
 err_context:
+	if (group_arr)
+		put_group(group_arr);
 	perf_unpin_context(ctx);
 	put_ctx(ctx);
 err_alloc:
