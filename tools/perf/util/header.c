@@ -32,6 +32,7 @@
 #include "strbuf.h"
 #include "build-id.h"
 #include "data.h"
+#include "units.h"
 #include <api/fs/fs.h>
 #include "asm/bug.h"
 #include "tool.h"
@@ -1180,6 +1181,25 @@ static int write_stat(struct feat_fd *ff __maybe_unused,
 	return 0;
 }
 
+static int write_data_index(struct feat_fd *ff,
+			    struct perf_evlist *evlist __maybe_unused)
+{
+	struct perf_header *ph = ff->ph;
+	int ret;
+	unsigned i;
+
+	ret = do_write(ff, &ph->nr_index, sizeof(ph->nr_index));
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < ph->nr_index; i++) {
+		ret = do_write(ff, &ph->index[i], sizeof(*ph->index));
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
 static void print_hostname(struct feat_fd *ff, FILE *fp)
 {
 	fprintf(fp, "# hostname : %s\n", ff->ph->env.hostname);
@@ -1502,6 +1522,23 @@ static void print_group_desc(struct feat_fd *ff, FILE *fp)
 			if (--nr == 0)
 				fprintf(fp, "}\n");
 		}
+	}
+}
+
+static void print_data_index(struct feat_fd *ff, FILE *fp)
+{
+	struct perf_header *ph = ff->ph;
+	unsigned int i;
+
+	fprintf(fp, "# contains data index (%lu) for parallel processing\n",
+		ph->nr_index);
+
+	for (i = 0; i < ph->nr_index; i++) {
+		struct perf_file_section *s = &ph->index[i];
+		char buf[20];
+
+		unit_number__scnprintf(buf, sizeof(buf), s->size);
+		fprintf(fp, "#   %u: %s @ %lu\n", i, buf, s->offset);
 	}
 }
 
@@ -2146,6 +2183,44 @@ out_free_caches:
 	return -1;
 }
 
+static int process_data_index(struct feat_fd *ff, void *data __maybe_unused)
+{
+	struct perf_header *ph = ff->ph;
+	int fd = ff->fd;
+	ssize_t ret;
+	u64 nr_idx;
+	unsigned i;
+	struct perf_file_section *idx;
+
+	ret = readn(fd, &nr_idx, sizeof(nr_idx));
+	if (ret != sizeof(nr_idx))
+		return -1;
+
+	if (ph->needs_swap)
+		nr_idx = bswap_64(nr_idx);
+
+	idx = calloc(nr_idx, sizeof(*idx));
+	if (idx == NULL)
+		return -1;
+
+	for (i = 0; i < nr_idx; i++) {
+		ret = readn(fd, &idx[i], sizeof(*idx));
+		if (ret != sizeof(*idx)) {
+			free(idx);
+			return -1;
+		}
+
+		if (ph->needs_swap) {
+			idx[i].offset = bswap_64(idx[i].offset);
+			idx[i].size   = bswap_64(idx[i].size);
+		}
+	}
+
+	ph->index = idx;
+	ph->nr_index = nr_idx;
+	return 0;
+}
+
 struct feature_ops {
 	int (*write)(struct feat_fd *ff, struct perf_evlist *evlist);
 	void (*print)(struct feat_fd *ff, FILE *fp);
@@ -2203,6 +2278,7 @@ static const struct feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPN(AUXTRACE,	auxtrace,	false),
 	FEAT_OPN(STAT,		stat,		false),
 	FEAT_OPN(CACHE,		cache,		true),
+	FEAT_OPN(DATA_INDEX,	data_index,	true),
 };
 
 struct header_print_data {
