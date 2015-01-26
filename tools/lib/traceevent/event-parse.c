@@ -6236,6 +6236,7 @@ static void free_format_fields(struct format_field *field)
 		next = field->next;
 		free(field->type);
 		free(field->name);
+		free(field->alias);
 		free(field);
 		field = next;
 	}
