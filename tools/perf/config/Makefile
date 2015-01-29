@@ -202,7 +202,8 @@ CORE_FEATURE_TESTS =			\
 	stackprotector-all		\
 	timerfd				\
 	libdw-dwarf-unwind		\
-	zlib
+	zlib				\
+	lzma
 
 LIB_FEATURE_TESTS =			\
 	dwarf				\
@@ -217,7 +218,8 @@ LIB_FEATURE_TESTS =			\
 	libslang			\
 	libunwind			\
 	libdw-dwarf-unwind		\
-	zlib
+	zlib				\
+	lzma
 
 VF_FEATURE_TESTS =			\
 	backtrace			\
