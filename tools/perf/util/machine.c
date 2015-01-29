@@ -869,14 +869,17 @@ static int map_groups__set_modules_path_dir(struct map_groups *mg,
 			     dso_name[PATH_MAX];
 			struct map *map;
 			char *long_name;
+			bool compressed = false;
 
 			if (dot == NULL)
 				continue;
 
 			/* On some system, modules are compressed like .ko.gz */
 			if (is_supported_compression(dot + 1) &&
-			    is_kmodule_extension(dot - 2))
+			    is_kmodule_extension(dot - 2)) {
 				dot -= 3;
+				compressed = true;
+			}
 
 			snprintf(dso_name, sizeof(dso_name), "[%.*s]",
 				 (int)(dot - dent->d_name), dent->d_name);
@@ -894,6 +897,10 @@ static int map_groups__set_modules_path_dir(struct map_groups *mg,
 			}
 			dso__set_long_name(map->dso, long_name, true);
 			dso__kernel_module_get_build_id(map->dso, "");
+
+			/* _KMODULE_COMP should be next to _KMODULE */
+			if (compressed)
+				map->dso->symtab_type++;
 		}
 	}
 
