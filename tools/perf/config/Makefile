@@ -624,6 +624,15 @@ ifndef NO_ZLIB
   endif
 endif
 
+ifndef NO_LZMA
+  ifeq ($(feature-lzma), 1)
+    CFLAGS += -DHAVE_LZMA_SUPPORT
+    EXTLIBS += -llzma
+  else
+    NO_LZMA := 1
+  endif
+endif
+
 ifndef NO_BACKTRACE
   ifeq ($(feature-backtrace), 1)
     CFLAGS += -DHAVE_BACKTRACE_SUPPORT
