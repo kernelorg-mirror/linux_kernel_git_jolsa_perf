@@ -59,6 +59,7 @@
 #include "util/thread.h"
 #include "util/thread_map.h"
 #include "util/session.h"
+#include "util/tool.h"
 
 #include <stdlib.h>
 #include <sys/prctl.h>
@@ -1888,6 +1889,92 @@ static int __cmd_record(int argc, const char **argv)
 	return argc;
 }
 
+static int process_stat_event(struct perf_tool *tool __maybe_unused,
+			      union perf_event *event,
+			      struct perf_session *session)
+{
+	struct perf_counts_values count;
+	struct stat_event *stat = &event->stat;
+	struct perf_evsel *counter;
+
+	count.val = stat->val;
+	count.ena = stat->ena;
+	count.run = stat->run;
+
+	counter = perf_evlist__id2evsel(session->evlist, stat->id);
+	if (!counter) {
+		pr_err("Failed to resolve counter for stat event.\n");
+		return -EINVAL;
+	}
+
+	*perf_counts(counter->counts, stat->cpu, stat->thread) = count;
+	counter->supported = true;
+	return 0;
+}
+
+static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event,
+				    struct perf_session *session)
+{
+	struct stat_round_event *round = &event->stat_round;
+	struct perf_evsel *counter;
+	struct timespec tsh, *ts = NULL;
+	const char **argv = session->header.env.cmdline_argv;
+	int argc = session->header.env.nr_cmdline;
+
+	evlist__for_each(evsel_list, counter)
+		process_counter(counter);
+
+	if (interval && round->time) {
+		tsh.tv_sec  = round->time / NSECS_PER_SEC;
+		tsh.tv_nsec = round->time % NSECS_PER_SEC;
+		ts = &tsh;
+	}
+
+	print_counters(ts, argc, argv);
+	return 0;
+}
+
+static const char * const report_usage[] = {
+	"perf stat report [<options>]",
+	NULL,
+};
+
+static int __cmd_report(int argc, const char **argv)
+{
+	struct perf_session *session;
+	const struct option options[] = {
+	OPT_STRING('i', "input", &input_name, "file", "input file name"),
+	OPT_END()
+	};
+	struct perf_data_file file = {
+		.mode  = PERF_DATA_MODE_READ,
+	};
+	struct perf_tool tool = {
+		.stat		= process_stat_event,
+		.stat_round	= process_stat_round_event,
+	};
+	int ret;
+
+	argc = parse_options(argc, argv, options, report_usage, 0);
+
+	session = perf_session__new(&file, false, &tool);
+	if (session == NULL)
+		return -1;
+
+	evsel_list = session->evlist;
+
+	if (perf_evlist__alloc_stats(evsel_list, interval))
+		return -1;
+
+	ret = perf_session__process_events(session);
+	if (ret)
+		return ret;
+
+	perf_session__delete(session);
+	return 0;
+}
+
 int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool append_file = false;
@@ -1957,7 +2044,7 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	};
 	int status = -EINVAL, run_idx;
 	const char *mode;
-	const char * const stat_subcommands[] = { "record" };
+	const char * const stat_subcommands[] = { "record", "report" };
 
 	setlocale(LC_ALL, "");
 
@@ -1969,13 +2056,15 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 					(const char **) stat_usage,
 					PARSE_OPT_STOP_AT_NON_OPTION);
 
+	output = stderr;
+
 	if (argc && !strncmp(argv[0], "rec", 3)) {
 		argc = __cmd_record(argc, argv);
 		if (argc < 0)
 			return -1;
-	}
+	} else if (argc && !strncmp(argv[0], "rep", 3))
+		return __cmd_report(argc, argv);
 
-	output = stderr;
 	if (output_name && strcmp(output_name, "-"))
 		output = NULL;
 
