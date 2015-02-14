@@ -220,6 +220,7 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_AUXTRACE_INFO		= 70,
 	PERF_RECORD_AUXTRACE			= 71,
 	PERF_RECORD_AUXTRACE_ERROR		= 72,
+	PERF_RECORD_STAT			= 73,
 	PERF_RECORD_HEADER_MAX
 };
 
@@ -335,6 +336,23 @@ struct itrace_start_event {
 	u32 pid, tid;
 };
 
+struct stat_event {
+	struct perf_event_header	header;
+
+	u64	id;
+	u32	cpu;
+	u32	thread;
+
+	union {
+		struct {
+			u64 val;
+			u64 ena;
+			u64 run;
+		};
+		u64 values[3];
+	};
+};
+
 union perf_event {
 	struct perf_event_header	header;
 	struct mmap_event		mmap;
@@ -355,6 +373,7 @@ union perf_event {
 	struct auxtrace_error_event	auxtrace_error;
 	struct aux_event		aux;
 	struct itrace_start_event	itrace_start;
+	struct stat_event		stat;
 };
 
 void perf_event__print_totals(void);
