@@ -54,4 +54,12 @@ void perf_stat__print_shadow_stats(FILE *out, struct perf_evsel *evsel,
 
 struct perf_evsel;
 int perf_stat__process_counter(struct perf_evsel *counter);
+
+struct perf_tool;
+union perf_event;
+struct perf_session;
+int perf_event__process_stat_event(struct perf_tool *tool,
+				   union perf_event *event,
+				   struct perf_session *session);
+
 #endif
