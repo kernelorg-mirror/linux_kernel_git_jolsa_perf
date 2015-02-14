@@ -58,6 +58,7 @@
 #include "util/cpumap.h"
 #include "util/thread.h"
 #include "util/thread_map.h"
+#include "util/session.h"
 
 #include <stdlib.h>
 #include <sys/prctl.h>
@@ -141,6 +142,20 @@ static bool			forever				= false;
 static struct timespec		ref_time;
 static struct cpu_map		*aggr_map;
 static int			(*aggr_get_id)(struct cpu_map *m, int cpu);
+
+struct record {
+	bool			enabled;
+	struct perf_data_file	file;
+	struct perf_session	*session;
+	u64			bytes_written;
+};
+
+static struct record record;
+
+static bool do_record(void)
+{
+	return record.enabled;
+}
 
 static volatile int done = 0;
 
@@ -559,6 +574,7 @@ static int __run_perf_stat(int argc, const char **argv)
 	size_t l;
 	int status = 0;
 	const bool forks = (argc > 0);
+	bool is_pipe = do_record() ? record.file.is_pipe : false;
 
 	if (interval) {
 		ts.tv_sec  = interval / 1000;
@@ -569,7 +585,7 @@ static int __run_perf_stat(int argc, const char **argv)
 	}
 
 	if (forks) {
-		if (perf_evlist__prepare_workload(evsel_list, &target, argv, false,
+		if (perf_evlist__prepare_workload(evsel_list, &target, argv, is_pipe,
 						  workload_exec_failed_signal) < 0) {
 			perror("failed to prepare workload");
 			return -1;
@@ -617,6 +633,17 @@ static int __run_perf_stat(int argc, const char **argv)
 			counter->filter, perf_evsel__name(counter), errno,
 			strerror_r(errno, msg, sizeof(msg)));
 		return -1;
+	}
+
+	if (do_record()) {
+		int err, fd = perf_data_file__fd(&record.file);
+
+		if (!is_pipe) {
+			err = perf_session__write_header(record.session, evsel_list,
+							 fd, false);
+			if (err < 0)
+				return -1;
+		}
 	}
 
 	/*
@@ -1679,6 +1706,46 @@ static int add_default_attributes(void)
 	return perf_evlist__add_default_attrs(evsel_list, very_very_detailed_attrs);
 }
 
+static const char * const recort_usage[] = {
+	"perf stat record [<options>]",
+	NULL,
+};
+
+static void init_features(struct perf_session *session)
+{
+        int feat;
+
+        for (feat = HEADER_FIRST_FEATURE; feat < HEADER_LAST_FEATURE; feat++)
+                perf_header__set_feat(&session->header, feat);
+}
+
+static int __cmd_record(int argc, const char **argv)
+{
+	struct perf_session *session;
+	struct perf_data_file *file = &record.file;
+	const struct option options[] = {
+	OPT_STRING('o', "output", &record.file.path, "file", "output file name"),
+	OPT_END()
+	};
+
+	argc = parse_options(argc, argv, options, record_usage,
+			     PARSE_OPT_STOP_AT_NON_OPTION);
+
+	session = perf_session__new(file, false, NULL);
+	if (session == NULL) {
+		pr_err("Perf session creation failed.\n");
+                return -1;
+        }
+
+	init_features(session);
+
+	session->evlist = evsel_list;
+	record.session  = session;
+	record.enabled  = true;
+
+	return argc;
+}
+
 int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool append_file = false;
@@ -1748,6 +1815,7 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	};
 	int status = -EINVAL, run_idx;
 	const char *mode;
+	const char * const stat_subcommands[] = { "record" };
 
 	setlocale(LC_ALL, "");
 
@@ -1755,8 +1823,15 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (evsel_list == NULL)
 		return -ENOMEM;
 
-	argc = parse_options(argc, argv, options, stat_usage,
-		PARSE_OPT_STOP_AT_NON_OPTION);
+	argc = parse_options_subcommand(argc, argv, options, stat_subcommands,
+					(const char **) stat_usage,
+					PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (argc && !strncmp(argv[0], "rec", 3)) {
+		argc = __cmd_record(argc, argv);
+		if (argc < 0)
+			return -1;
+	}
 
 	output = stderr;
 	if (output_name && strcmp(output_name, "-"))
@@ -1898,6 +1973,17 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	if (!forever && status != -1 && !interval)
 		print_counters(NULL, argc, argv);
+
+	if (do_record()) {
+		int fd = perf_data_file__fd(&record.file);
+
+		if (!record.file.is_pipe) {
+			record.session->header.data_size += record.bytes_written;
+			perf_session__write_header(record.session, evsel_list, fd, true);
+		}
+
+		perf_session__delete(record.session);
+	}
 
 	perf_evlist__free_stats(evsel_list);
 out:
