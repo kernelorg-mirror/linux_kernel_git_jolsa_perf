@@ -565,6 +565,38 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 	workload_exec_errno = info->si_value.sival_int;
 }
 
+#define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
+
+static int __store_counter_ids(struct perf_evsel *counter,
+			       struct cpu_map *cpus,
+			       struct thread_map *threads)
+{
+	int cpu, thread;
+
+	for (cpu = 0; cpu < cpus->nr; cpu++) {
+		for (thread = 0; thread < threads->nr; thread++) {
+			int fd = FD(counter, cpu, thread);
+
+			if (perf_evlist__id_add_fd(evsel_list, counter,
+						   cpu, thread, fd) < 0)
+				return -1;
+		}
+	}
+
+	return 0;
+}
+
+static int store_counter_ids(struct perf_evsel *counter)
+{
+	struct cpu_map *cpus = counter->cpus;
+	struct thread_map *threads = counter->threads;
+
+	if (perf_evsel__alloc_id(counter, cpus->nr, threads->nr))
+		return -ENOMEM;
+
+	return __store_counter_ids(counter, cpus, threads);
+}
+
 static int __run_perf_stat(int argc, const char **argv)
 {
 	char msg[512];
@@ -626,6 +658,9 @@ static int __run_perf_stat(int argc, const char **argv)
 		l = strlen(counter->unit);
 		if (l > unit_width)
 			unit_width = l;
+
+		if (do_record() && store_counter_ids(counter))
+			return -1;
 	}
 
 	if (perf_evlist__apply_filters(evsel_list, &counter)) {
