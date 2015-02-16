@@ -366,16 +366,16 @@ static struct map *find_map(unw_word_t ip, struct unwind_info *ui)
 {
 	struct addr_location al;
 
-	thread__find_addr_map(ui->thread, PERF_RECORD_MISC_USER,
-			      MAP__FUNCTION, ip, &al);
+	thread__find_addr_map_by_time(ui->thread, PERF_RECORD_MISC_USER,
+				      MAP__FUNCTION, ip, &al, ui->sample->time);
 	if (!al.map) {
 		/*
 		 * We've seen cases (softice) where DWARF unwinder went
 		 * through non executable mmaps, which we need to lookup
 		 * in MAP__VARIABLE tree.
 		 */
-		thread__find_addr_map(ui->thread, PERF_RECORD_MISC_USER,
-				      MAP__VARIABLE, ip, &al);
+		thread__find_addr_map_by_time(ui->thread, PERF_RECORD_MISC_USER,
+					      MAP__VARIABLE, ip, &al, ui->sample->time);
 	}
 	return al.map;
 }
@@ -579,14 +579,14 @@ static void put_unwind_info(unw_addr_space_t __maybe_unused as,
 	pr_debug("unwind: put_unwind_info called\n");
 }
 
-static int entry(u64 ip, struct thread *thread,
+static int entry(u64 ip, struct thread *thread, u64 timestamp,
 		 unwind_entry_cb_t cb, void *arg)
 {
 	struct unwind_entry e;
 	struct addr_location al;
 
-	thread__find_addr_location(thread, PERF_RECORD_MISC_USER,
-				   MAP__FUNCTION, ip, &al);
+	thread__find_addr_location_by_time(thread, PERF_RECORD_MISC_USER,
+					   MAP__FUNCTION, ip, &al, timestamp);
 
 	e.ip = al.addr;
 	e.map = al.map;
@@ -706,7 +706,7 @@ static int get_entries(struct unwind_info *ui, unwind_entry_cb_t cb,
 
 		if (callchain_param.order == ORDER_CALLER)
 			j = max_stack - i - 1;
-		ret = ips[j] ? entry(ips[j], ui->thread, cb, arg) : 0;
+		ret = ips[j] ? entry(ips[j], ui->thread, ui->sample->time, cb, arg) : 0;
 	}
 
 	return ret;
