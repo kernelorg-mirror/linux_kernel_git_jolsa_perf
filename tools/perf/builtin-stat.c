@@ -381,6 +381,44 @@ static int check_per_pkg(struct perf_evsel *counter, int cpu, bool *skip)
 }
 
 static int
+write_stat_event(u32 cpu, u32 thread, u64 id, struct perf_counts_values *count)
+{
+	u16 size = sizeof(struct stat_event);
+	struct stat_event event  = {
+		.header = {
+			.type = PERF_RECORD_STAT,
+			.size = size,
+		}
+	};
+
+	event.id	= id;
+	event.cpu	= cpu;
+	event.thread	= thread;
+	event.val	= count->val;
+	event.ena	= count->ena;
+	event.run	= count->run;
+
+	if (perf_data_file__write(&record.file, &event, size) < 0) {
+		pr_err("failed to write perf data, error: %m\n");
+		return -1;
+	}
+
+	record.bytes_written += size;
+	return 0;
+}
+
+#define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
+
+static int
+perf_evsel__write_stat_event(struct perf_evsel *counter, u32 cpu, u32 thread,
+			     struct perf_counts_values *count)
+{
+	struct perf_sample_id *sid = SID(counter, cpu, thread);
+
+	return write_stat_event(cpu, thread, sid->id, count);
+}
+
+static int
 process_counter_values(struct perf_evsel *evsel, int cpu, int thread,
 		       struct perf_counts_values *count)
 {
@@ -502,6 +540,13 @@ static int read_counter(struct perf_evsel *counter)
 			count = perf_counts(counter->counts, cpu, thread);
 			if (perf_evsel__read(counter, cpu, thread, count))
 				return -1;
+
+			if (do_record()) {
+				if (perf_evsel__write_stat_event(counter, cpu, thread, count)) {
+					pr_err("failed to write stat event\n");
+					return -1;
+				}
+			}
 		}
 	}
 
