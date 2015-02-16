@@ -1896,15 +1896,17 @@ static int add_callchain_ip(struct thread *thread,
 			    struct branch_flags *flags,
 			    int nr_loop_iter,
 			    int samples,
-			    u64 branch_from)
+			    u64 branch_from,
+			    u64 timestamp)
 {
 	struct addr_location al;
 
 	al.filtered = 0;
 	al.sym = NULL;
 	if (!cpumode) {
-		thread__find_cpumode_addr_location(thread, MAP__FUNCTION,
-						   ip, &al);
+		thread__find_cpumode_addr_location_by_time(thread,
+							   MAP__FUNCTION, ip,
+							   &al, timestamp);
 	} else {
 		if (ip >= PERF_CONTEXT_MAX) {
 			switch (ip) {
@@ -1929,8 +1931,9 @@ static int add_callchain_ip(struct thread *thread,
 			}
 			return 0;
 		}
-		thread__find_addr_location(thread, *cpumode, MAP__FUNCTION,
-					   ip, &al);
+		thread__find_addr_location_by_time(thread, *cpumode,
+						   MAP__FUNCTION, ip,
+						   &al, timestamp);
 	}
 
 	if (al.sym != NULL) {
@@ -2097,7 +2100,7 @@ static int resolve_lbr_callchain_sample(struct thread *thread,
 			err = add_callchain_ip(thread, cursor, parent,
 					       root_al, &cpumode, ip,
 					       branch, flags, 0, 0,
-					       branch_from);
+					       branch_from, sample->time);
 			if (err)
 				return (err < 0) ? err : 0;
 		}
@@ -2120,6 +2123,7 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 	int chain_nr = chain->nr;
 	u8 cpumode = PERF_RECORD_MISC_USER;
 	int i, j, err, nr_entries;
+	u64 timestamp = sample->time;
 	int skip_idx = -1;
 	int first_call = 0;
 	int nr_loop_iter;
@@ -2197,19 +2201,19 @@ static int thread__resolve_callchain_sample(struct thread *thread,
 						       NULL, be[i].to,
 						       true, &be[i].flags,
 						       nr_loop_iter, 1,
-						       be[i].from);
+						       be[i].from, timestamp);
 			else
 				err = add_callchain_ip(thread, cursor, parent,
 						       root_al,
 						       NULL, be[i].to,
 						       true, &be[i].flags,
-						       0, 0, be[i].from);
+						       0, 0, be[i].from, timestamp);
 
 			if (!err)
 				err = add_callchain_ip(thread, cursor, parent, root_al,
 						       NULL, be[i].from,
 						       true, &be[i].flags,
-						       0, 0, 0);
+						       0, 0, 0, timestamp);
 			if (err == -EINVAL)
 				break;
 			if (err)
@@ -2239,7 +2243,7 @@ check_calls:
 
 		err = add_callchain_ip(thread, cursor, parent,
 				       root_al, &cpumode, ip,
-				       false, NULL, 0, 0, 0);
+				       false, NULL, 0, 0, 0, timestamp);
 
 		if (err)
 			return (err < 0) ? err : 0;
