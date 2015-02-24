@@ -1,0 +1,8 @@
+mainmenu "Perf Configuration"
+
+menu "Builtin commands"
+
+config BUILTIN_TEST
+	bool "Tests"
+
+endmenu # "Builtin commands"

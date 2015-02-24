@@ -297,6 +297,29 @@ $(SCRIPTS) : % : %.sh
 perf.spec $(SCRIPTS) \
 	: $(OUTPUT)PERF-VERSION-FILE
 
+# kbuild scripts
+HOSTCC := $(CC)
+HOSTLD := $(LD)
+
+# kconfig overrides
+KBUILD_KCONFIG     := $(srctree)/tools/perf/Kconfig
+KCONFIG_CONFIG     := $(srctree)/tools/perf/.config
+KCONFIG_AUTOCONFIG := $(srctree)/tools/perf/include/config/auto.conf
+
+export HOSTCC HOSTLD KBUILD_KCONFIG KCONFIG_CONFIG KCONFIG_AUTOCONFIG
+
+kbuild := -C $(srctree) -f scripts/Makefile.build obj
+
+scripts_basic:
+	$(Q)$(MKDIR) -p $(srctree)/tools/perf/include/config $(srctree)/tools/perf/include/generated
+	$(Q)$(MAKE) $(kbuild)=scripts/basic
+
+config: scripts_basic FORCE
+	$(Q)$(MAKE) $(kbuild)=scripts/kconfig $@
+
+%config: scripts_basic FORCE
+	$(Q)$(MAKE) $(kbuild)=scripts/kconfig $@
+
 .SUFFIXES:
 
 #
@@ -548,5 +571,5 @@ FORCE:
 
 .PHONY: all install clean config-clean strip install-gtk
 .PHONY: shell_compatibility_test please_set_SHELL_PATH_to_a_more_modern_shell
-.PHONY: $(GIT-HEAD-PHONY) TAGS tags cscope FORCE single_dep
+.PHONY: $(GIT-HEAD-PHONY) TAGS tags cscope FORCE single_dep scripts_basic
 
