@@ -39,4 +39,6 @@ echo -n Testing..
 test_ex
 test_ex_suffix
 
-echo OK
+cd features && make -s -f Makefile
+
+if [ $? -eq 0 ]; then echo OK; fi

@@ -1,0 +1,16 @@
+
+FEATURE_TESTS   := glibc backtrace
+FEATURE_DISPLAY := glibc
+
+srctree := ../../../..
+include $(srctree)/tools/build/Makefile.feature
+
+ifndef feature-glibc
+  $(error FAILED feature-glibc variable not defined)
+endif
+
+ifndef feature-backtrace
+  $(error FAILED feature-backtrace variable not defined)
+endif
+
+all:

@@ -1,0 +1,93 @@
+Feature Framework
+=================
+The 'feature' framework provides information for makefiles about
+installed libraries and interfaces in the system.
+
+The 'feature' is represented by its name and simple source located
+in 'tools/build/feature/test-$(name).c' file. The framework builds
+each such source for configured feature and sets $(feature-$(name))
+variable to 0 or 1 if it fails or succeeds to build respectively.
+
+The current usage example of the feature framework is:
+
+--- Makefile.test
+  FEATURE_TESTS   := glibc backtrace
+  FEATURE_DISPLAY := glibc
+
+  srctree := ../../../..
+  include $(srctree)/tools/build/Makefile.feature
+
+  ifndef feature-glibc
+    $(error FAILED feature-glibc variable not defined)
+  endif
+
+  ifndef feature-backtrace
+    $(error FAILED feature-backtrace variable not defined)
+  endif
+---
+
+User defines list of features to check in FEATURE_TESTS variable:
+
+  FEATURE_TESTS   := glibc backtrace
+
+and list of features she wishes to display in FEATURE_DISPLAY variable:
+
+  FEATURE_DISPLAY := glibc
+
+then user includes Makefile.feature makefile:
+
+  include $(srctree)/tools/build/Makefile.feature
+
+following output is displayed on processing of the makefile:
+
+  $ make -f Makefile.test
+
+  Auto-detecting system features:
+  ...                         glibc: [ on  ]
+
+Plus following variables are defined indicating the
+requested feature status:
+
+  $(feature-glibc)
+  $(feature-backtrace)
+
+Following features are currently available for FEATURE_TESTS:
+
+      backtrace
+      dwarf
+      fortify-source
+      sync-compare-and-swap
+      glibc
+      gtk2
+      gtk2-infobar
+      libaudit
+      libbfd
+      libelf
+      libelf-getphdrnum
+      libelf-mmap
+      libnuma
+      libperl
+      libpython
+      libpython-version
+      libslang
+      libunwind
+      pthread-attr-setaffinity-np
+      stackprotector-all
+      timerfd
+      libdw-dwarf-unwind
+      libbabeltrace
+      zlib
+
+It's also possible to pass options for checks compilation and linking
+by using following variables:
+
+  FEATURE_CHECK_CFLAGS-$(name)
+  FEATURE_CHECK_LDFLAGS-$(name)
+
+where $(anem) represents feature name from above list.
+
+For example following settings will provide options for 'libunwind'
+feature compilation and linking:
+
+    FEATURE_CHECK_CFLAGS-libunwind  = $(LIBUNWIND_CFLAGS)
+    FEATURE_CHECK_LDFLAGS-libunwind = $(LIBUNWIND_LDFLAGS)

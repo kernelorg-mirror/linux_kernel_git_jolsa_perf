@@ -27,7 +27,7 @@ endef
 #   the rule that uses them - an example for that is the 'bionic'
 #   feature check. ]
 #
-FEATURE_TESTS =			\
+FEATURE_TESTS ?=			\
 	backtrace			\
 	dwarf				\
 	fortify-source			\
@@ -52,7 +52,7 @@ FEATURE_TESTS =			\
 	libdw-dwarf-unwind		\
 	zlib
 
-FEATURE_DISPLAY =			\
+FEATURE_DISPLAY ?=			\
 	dwarf				\
 	glibc				\
 	gtk2				\
