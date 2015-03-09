@@ -1,5 +1,4 @@
 include ../../scripts/Makefile.include
-include ../../perf/config/utilities.mak		# QUIET_CLEAN
 
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(shell pwd)))
@@ -22,6 +21,8 @@ CFLAGS += -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
 RM = rm -f
 
 build  := -f $(srctree)/tools/build/Makefile.build dir=. obj
+clean  := -f $(srctree)/tools/build/Makefile.clean dir=. obj
+
 API_IN := $(OUTPUT)libapi-in.o
 
 export srctree OUTPUT CC LD CFLAGS V
@@ -35,8 +36,9 @@ $(LIBFILE): $(API_IN)
 	$(QUIET_AR)$(RM) $@ && $(AR) rcs $@ $(API_IN)
 
 clean:
-	$(call QUIET_CLEAN, libapi) $(RM) $(LIBFILE); \
-	find $(if $(OUTPUT),$(OUTPUT),.) -name \*.o | xargs $(RM)
+	@$(RM) $(LIBFILE)
+	@$(MAKE) $(clean)=libapi
+	-@find -name '\.*.cmd' -delete -o -name '\.*.d' -delete
 
 FORCE:
 
