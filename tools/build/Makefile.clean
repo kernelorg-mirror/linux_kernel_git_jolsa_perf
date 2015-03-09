@@ -1,0 +1,76 @@
+###
+# Clean build makefile.
+#
+#  Lots of this code have been borrowed or heavily inspired from parts
+#  of kbuild code, which is not credited, but mostly developed by:
+#
+#  Copyright (C) Sam Ravnborg <sam@mars.ravnborg.org>, 2015
+#  Copyright (C) Linus Torvalds <torvalds@linux-foundation.org>, 2015
+#
+
+PHONY := __clean
+__clean:
+
+ifeq ($(V),1)
+  quiet =
+  Q =
+else
+  quiet=quiet_
+  Q=@
+endif
+
+build-dir := $(srctree)/tools/build
+
+# Generic definitions
+include $(build-dir)/Build.include
+
+# Init all relevant variables used in clean files so
+# 1) they have correct type
+# 2) they do not inherit any value from the environment
+obj-yn        :=
+subdir-yn     :=
+subdir-obj-yn :=
+
+# Build definitions
+build-file := $(dir)/Build
+include $(build-file)
+
+# Gather build data:
+#   obj-yn        - list of all (yn) build objects '$(obj)-y' and '$(obj)-'
+#   subdir-yn     - list of all (yn) directories to nest
+#   subdir-obj-yn - list of all directories objects 'dir/$(obj)-in.o'
+obj-yn        := $($(obj)-y) $($(obj)-)
+subdir-yn     := $(patsubst %/,%,$(filter %/, $(obj-yn)))
+obj-yn        := $(patsubst %/, %/$(obj)-in.o, $(obj-yn))
+subdir-obj-yn := $(filter %/$(obj)-in.o, $(obj-yn))
+
+# '$(OUTPUT)/dir' prefix to all objects
+prefix        := $(subst ./,,$(OUTPUT)$(dir)/)
+obj-yn        := $(addprefix $(prefix),$(obj-yn))
+subdir-obj-yn := $(addprefix $(prefix),$(subdir-obj-yn))
+
+# Final '$(obj)-in.o' object
+in-target := $(prefix)$(obj)-in.o
+
+# build a list of files to remove, usually relative
+# to the current directory
+__clean-files := $(obj-yn) $(in-target)
+
+quiet_cmd_clean_obj = CLEAN    $(obj)
+      cmd_clean     = rm -f $(__clean-files)
+
+PHONY += $(subdir-yn)
+
+$(subdir-yn):
+	$(Q)$(MAKE) -f $(build-dir)/Makefile.clean dir=$(dir)/$@ obj=$(obj) __nested=1
+
+__clean: $(subdir-yn)
+ifndef __nested
+	@$(call echo-cmd,clean_obj)
+endif
+ifneq ($(strip $(__clean-files)),)
+	$(call cmd,clean)
+endif
+	@:
+
+.PHONY: $(PHONY)

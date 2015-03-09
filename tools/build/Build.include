@@ -35,10 +35,15 @@ arg-check = $(strip $(filter-out $(cmd_$(1)), $(cmd_$@)) \
 # Escape single quote for use in echo statements
 escsq = $(subst $(squote),'\$(squote)',$1)
 
+###
 # Echo command
 # Short version is used, if $(quiet) equals `quiet_', otherwise full one.
 echo-cmd = $(if $($(quiet)cmd_$(1)),\
            echo '  $(call escsq,$($(quiet)cmd_$(1)))';)
+
+###
+# Run command with echo
+cmd = @$(echo-cmd) $(cmd_$(1))
 
 ###
 # Replace >$< with >$$< to preserve $ when reloading the .cmd file
