@@ -188,6 +188,8 @@ struct cpu_hw_events {
 	u64				perf_ctr_virt_mask;
 
 	void				*kfree_on_online;
+
+	u64				intel_ctrl_no_nmi_disable;
 };
 
 #define __EVENT_CONSTRAINT(c, n, m, w, o, f) {\
