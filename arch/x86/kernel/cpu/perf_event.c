@@ -1098,6 +1098,8 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 	cpuc->events[idx] = event;
 	__set_bit(idx, cpuc->active_mask);
 	__set_bit(idx, cpuc->running);
+	if (event->attr.no_nmi_disable)
+		cpuc->intel_ctrl_no_nmi_disable |= (1ull << idx);
 	x86_pmu.enable(event);
 	perf_event_update_userpage(event);
 }
@@ -1162,6 +1164,8 @@ void x86_pmu_stop(struct perf_event *event, int flags)
 	struct hw_perf_event *hwc = &event->hw;
 
 	if (__test_and_clear_bit(hwc->idx, cpuc->active_mask)) {
+		if (event->attr.no_nmi_disable)
+			cpuc->intel_ctrl_no_nmi_disable &= ~(1ull << hwc->idx);
 		x86_pmu.disable(event);
 		cpuc->events[hwc->idx] = NULL;
 		WARN_ON_ONCE(hwc->state & PERF_HES_STOPPED);
