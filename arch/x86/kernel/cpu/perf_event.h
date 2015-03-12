@@ -247,6 +247,8 @@ struct cpu_hw_events {
 	u64				perf_ctr_virt_mask;
 
 	void				*kfree_on_online[X86_PERF_KFREE_MAX];
+
+	u64	intel_no_pmi_disable;
 };
 
 #define __EVENT_CONSTRAINT(c, n, m, w, o, f) {\

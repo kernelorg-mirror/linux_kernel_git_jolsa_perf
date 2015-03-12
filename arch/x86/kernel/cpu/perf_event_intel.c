@@ -1460,11 +1460,12 @@ static __initconst const u64 slm_hw_cache_event_ids
 /*
  * Use from PMIs where the LBRs are already disabled.
  */
-static void __intel_pmu_disable_all(void)
+static void __intel_pmu_disable_all(bool pmi)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	u64 ctrl = pmi ? cpuc->intel_no_pmi_disable : 0;
 
-	wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL, 0);
+	wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL, ctrl);
 
 	if (test_bit(INTEL_PMC_IDX_FIXED_BTS, cpuc->active_mask))
 		intel_pmu_disable_bts();
@@ -1476,7 +1477,7 @@ static void __intel_pmu_disable_all(void)
 
 static void intel_pmu_disable_all(void)
 {
-	__intel_pmu_disable_all();
+	__intel_pmu_disable_all(false);
 	intel_pmu_lbr_disable_all();
 }
 
@@ -1632,6 +1633,7 @@ static void intel_pmu_disable_event(struct perf_event *event)
 	cpuc->intel_ctrl_guest_mask &= ~(1ull << hwc->idx);
 	cpuc->intel_ctrl_host_mask &= ~(1ull << hwc->idx);
 	cpuc->intel_cp_status &= ~(1ull << hwc->idx);
+	cpuc->intel_no_pmi_disable &= ~(1ull << hwc->idx);
 
 	/*
 	 * must disable before any actual event
@@ -1717,6 +1719,9 @@ static void intel_pmu_enable_event(struct perf_event *event)
 	if (unlikely(event->attr.precise_ip))
 		intel_pmu_pebs_enable(event);
 
+	if (event->attr.no_pmi_disable)
+		cpuc->intel_no_pmi_disable |= (1ull << hwc->idx);
+
 	__x86_pmu_enable_event(hwc, ARCH_PERFMON_EVENTSEL_ENABLE);
 }
 
@@ -1799,7 +1804,7 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 	 */
 	if (!x86_pmu.late_ack)
 		apic_write(APIC_LVTPC, APIC_DM_NMI);
-	__intel_pmu_disable_all();
+	__intel_pmu_disable_all(true);
 	handled = intel_pmu_drain_bts_buffer();
 	handled += intel_bts_interrupt();
 	status = intel_pmu_get_status();
