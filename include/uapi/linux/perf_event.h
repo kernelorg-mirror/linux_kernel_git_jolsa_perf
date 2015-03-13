@@ -329,7 +329,9 @@ struct perf_event_attr {
 
 				no_nmi_disable :  1,
 
-				__reserved_1   : 38;
+				slot           :  1,
+
+				__reserved_1   : 37;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
@@ -369,6 +371,9 @@ struct perf_event_attr {
 	 * See asm/perf_regs.h for details.
 	 */
 	__u64	sample_regs_intr;
+
+	/* id for slot bit */
+	__u64	slot_id;
 };
 
 #define perf_flags(attr)	(*(&(attr)->read_format + 1))
