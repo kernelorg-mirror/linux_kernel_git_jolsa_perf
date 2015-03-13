@@ -961,4 +961,8 @@ _name##_show(struct device *dev,					\
 									\
 static struct device_attribute format_attr_##_name = __ATTR_RO(_name)
 
+struct perf_slot;
+struct perf_slot *perf_slot_start(unsigned int id);
+void perf_slot_stop(struct perf_slot *slot);
+
 #endif /* _LINUX_PERF_EVENT_H */
