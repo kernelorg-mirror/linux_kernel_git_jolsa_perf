@@ -69,6 +69,9 @@ u64 x86_perf_event_update(struct perf_event *event)
 	int idx = hwc->idx;
 	s64 delta;
 
+	if (has_slot(event))
+		return 0;
+
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
 		return 0;
 
@@ -454,6 +457,109 @@ int x86_pmu_hw_config(struct perf_event *event)
 	return x86_setup_perfctr(event);
 }
 
+static bool perf_slot_enabled(struct perf_slot *slot)
+{
+	return atomic_read(&slot->state) == PERF_SLOT_ENABLED;
+}
+
+static struct perf_slot * __percpu alloc_slots(void)
+{
+	size_t size;
+
+	size = x86_pmu.slots_num * sizeof(struct perf_slot);
+	return __alloc_percpu(size, size);
+}
+
+static struct perf_slot *get_slot(unsigned int id, int cpu, bool alloc)
+{
+	struct perf_slot *__percpu slots = x86_pmu.slots;
+	struct perf_slot *slot;
+
+	if (!slots) {
+		if (!alloc)
+			return NULL;
+
+		slots = alloc_slots();
+		if (!slots)
+			return NULL;
+
+		x86_pmu.slots = slots;
+	}
+
+	slot = per_cpu(slots, cpu);
+	return slot + id;
+}
+
+struct perf_slot *perf_slot_start(unsigned int id)
+{
+	struct perf_slot *slot;
+
+	if (id >= x86_pmu.slots_num)
+		return NULL;
+
+	slot = get_slot(id, smp_processor_id(), false);
+	if (!slot || !perf_slot_enabled(slot))
+		return NULL;
+
+	slot->prev = native_read_pmc(slot->rdpmc);
+	return slot;
+}
+
+void __perf_slot_stop(struct perf_slot *slot, u64 new)
+{
+	int shift = 64 - x86_pmu.cntval_bits;
+	u64 delta;
+
+	delta = (new << shift) - (slot->prev << shift);
+	delta >>= shift;
+
+	local64_add(delta, &slot->count);
+}
+
+void perf_slot_stop(struct perf_slot *slot)
+{
+	u64 new;
+
+	if (!slot)
+		return;
+
+	new = native_read_pmc(slot->rdpmc);
+	__perf_slot_stop(slot, new);
+}
+
+static bool perf_slot_arm(struct perf_slot *slot)
+{
+	enum perf_slot_state state;
+
+	state = atomic_cmpxchg(&slot->state, PERF_SLOT_FREE, PERF_SLOT_ARMED);
+	return state == PERF_SLOT_FREE;
+}
+
+static int x86_perf_event_slot_init(struct perf_event *event)
+{
+	unsigned int id = (unsigned int) event->attr.slot_id;
+	struct perf_slot *slot;
+
+	if (event->cpu == -1)
+		return -EINVAL;
+
+	if (id >= x86_pmu.slots_num)
+		return -EINVAL;
+
+	slot = get_slot(id, event->cpu, true);
+	if (!slot)
+		return -ENOMEM;
+
+	if (!perf_slot_arm(slot))
+		return -EBUSY;
+
+	local64_set(&slot->count, 0);
+	slot->nb    = 0;
+	slot->prev  = 0;
+	slot->rdpmc = event->hw.event_base_rdpmc;
+	return 0;
+}
+
 /*
  * Setup the hardware configuration for a given attr_type
  */
@@ -490,7 +596,14 @@ static int __x86_pmu_event_init(struct perf_event *event)
 	event->hw.extra_reg.idx = EXTRA_REG_NONE;
 	event->hw.branch_reg.idx = EXTRA_REG_NONE;
 
-	return x86_pmu.hw_config(event);
+	err = x86_pmu.hw_config(event);
+	if (err)
+		return err;
+
+	if (has_slot(event))
+		err = x86_perf_event_slot_init(event);
+
+	return err;
 }
 
 void x86_pmu_disable_all(void)
@@ -1587,6 +1700,8 @@ static int __init init_hw_perf_events(void)
 		if (!WARN_ON(!tmp))
 			x86_pmu_events_group.attrs = tmp;
 	}
+
+	x86_pmu.slots_num = x86_pmu.num_counters + x86_pmu.num_counters_fixed;
 
 	pr_info("... version:                %d\n",     x86_pmu.version);
 	pr_info("... bit width:              %d\n",     x86_pmu.cntval_bits);

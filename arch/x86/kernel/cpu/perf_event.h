@@ -410,6 +410,21 @@ union x86_pmu_config {
 
 #define X86_CONFIG(args...) ((union x86_pmu_config){.bits = {args}}).value
 
+enum perf_slot_state {
+	PERF_SLOT_FREE		= 0,
+	PERF_SLOT_ARMED		= 1,
+	PERF_SLOT_ENABLED	= 2,
+};
+
+struct perf_slot {
+	atomic_t	state;
+	u64		rdpmc;
+	u64		prev;
+	/* counts */
+	local64_t	count;
+	u64		nb;
+};
+
 /*
  * struct x86_pmu - generic x86 pmu
  */
@@ -516,6 +531,12 @@ struct x86_pmu {
 	 * Intel host/guest support (KVM)
 	 */
 	struct perf_guest_switch_msr *(*guest_get_msrs)(int *nr);
+
+	/*
+	 * self update slots
+	 */
+	struct perf_slot * __percpu	slots;
+	int				slots_num;
 };
 
 struct x86_perf_task_context {
