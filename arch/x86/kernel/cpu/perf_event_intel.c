@@ -1457,6 +1457,130 @@ static __initconst const u64 slm_hw_cache_event_ids
  },
 };
 
+static struct perf_slot* __percpu __alloc_slots(void)
+{
+	size_t size;
+
+	size = x86_pmu.slots_num * sizeof(struct perf_slot);
+	return __alloc_percpu(size, size);
+}
+
+static DEFINE_MUTEX(slots_mutex);
+
+static struct perf_slot* __percpu alloc_slots(void)
+{
+	struct perf_slot *__percpu slots;
+
+	mutex_lock(&slots_mutex);
+	slots = x86_pmu.slots;
+	if (!slots) {
+		slots = __alloc_slots();
+		if (!slots)
+			goto out;
+
+		x86_pmu.slots = slots;
+	}
+out:
+	mutex_lock(&slots_mutex);
+	return slots;
+}
+
+static struct perf_slot *get_slot(unsigned int id, int cpu, bool alloc)
+{
+	struct perf_slot *__percpu slots = x86_pmu.slots;
+	struct perf_slot *slot;
+
+	if (unlikely(!slots)) {
+		if (!alloc)
+			return NULL;
+
+		slots = alloc_slots();
+		if (!slots)
+			return NULL;
+	}
+
+	slot = per_cpu_ptr(slots, cpu);
+	return slot + id;
+}
+
+static bool perf_slot_enabled(struct perf_slot *slot)
+{
+	return atomic_read(&slot->state) == PERF_SLOT_ENABLED && !!slot->ctrl_set;
+}
+
+void perf_slot_start(unsigned int id)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct perf_slot *slot;
+
+	slot = get_slot(id, smp_processor_id(), false);
+	if (slot && slot->ctrl_set && perf_slot_enabled(slot)) {
+		slot->ctrl_unset = x86_pmu.intel_ctrl & ~cpuc->intel_ctrl_guest_mask &
+				   cpuc->intel_slot_enabled;
+		cpuc->intel_slot_enabled |= slot->ctrl_set;
+
+		wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL,
+			x86_pmu.intel_ctrl & ~cpuc->intel_ctrl_guest_mask & cpuc->intel_slot_enabled);
+	}
+}
+
+void perf_slot_stop(unsigned int id)
+{
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct perf_slot *slot;
+
+	slot = get_slot(id, smp_processor_id(), false);
+	if (slot && slot->ctrl_unset) {
+		wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL, slot->ctrl_unset);
+		slot->ctrl_unset = 0;
+		slot->nb++;
+		cpuc->intel_slot_enabled &= slot->ctrl_unset;
+	}
+}
+
+void perf_slot_add(struct perf_event *event)
+{
+	struct hw_perf_event *hwc = &event->hw;
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct perf_slot *slot;
+
+	slot = get_slot(event->attr.slot_id, event->cpu, false);
+
+	if (WARN_ONCE(!slot, "add: slot not found"))
+		return;
+
+	slot->ctrl_set |= (1ull << hwc->idx);
+	cpuc->intel_slot |= (1ull << hwc->idx);
+}
+
+void perf_slot_del(struct perf_event *event)
+{
+	struct hw_perf_event *hwc = &event->hw;
+	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct perf_slot *slot;
+
+	slot = get_slot(event->attr.slot_id, event->cpu, false);
+
+	if (WARN_ONCE(!slot, "del: slot not found"))
+		return;
+
+	slot->ctrl_set &= ~(1ull << hwc->idx);
+	cpuc->intel_slot &= ~(1ull << hwc->idx);
+}
+
+static int slot_init(struct perf_event *event)
+{
+	unsigned int id = (unsigned int) event->attr.slot_id;
+
+	if (event->cpu == -1)
+		return -EINVAL;
+
+	if (id >= x86_pmu.slots_num)
+		return -EINVAL;
+
+	return get_slot(id, event->cpu, true) ? 0 : -ENOMEM;
+}
+
 /*
  * Use from PMIs where the LBRs are already disabled.
  */
@@ -1484,11 +1608,17 @@ static void intel_pmu_disable_all(void)
 static void __intel_pmu_enable_all(int added, bool pmi)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	u64 slot;
+
+	if (pmi)
+		slot = cpuc->intel_slot_enabled;
+	else
+		slot = ~cpuc->intel_slot;
 
 	intel_pmu_pebs_enable_all();
 	intel_pmu_lbr_enable_all(pmi);
 	wrmsrl(MSR_CORE_PERF_GLOBAL_CTRL,
-			x86_pmu.intel_ctrl & ~cpuc->intel_ctrl_guest_mask);
+			x86_pmu.intel_ctrl & ~cpuc->intel_ctrl_guest_mask & slot);
 
 	if (test_bit(INTEL_PMC_IDX_FIXED_BTS, cpuc->active_mask)) {
 		struct perf_event *event =
@@ -1651,6 +1781,9 @@ static void intel_pmu_disable_event(struct perf_event *event)
 
 	if (unlikely(event->attr.precise_ip))
 		intel_pmu_pebs_disable(event);
+
+	if (has_slot(event))
+		perf_slot_del(event);
 }
 
 static void intel_pmu_enable_fixed(struct hw_perf_event *hwc)
@@ -1721,6 +1854,9 @@ static void intel_pmu_enable_event(struct perf_event *event)
 
 	if (event->attr.no_pmi_disable)
 		cpuc->intel_no_pmi_disable |= (1ull << hwc->idx);
+
+	if (has_slot(event))
+		perf_slot_add(event);
 
 	__x86_pmu_enable_event(hwc, ARCH_PERFMON_EVENTSEL_ENABLE);
 }
@@ -2538,7 +2674,10 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 	event->hw.config |= ARCH_PERFMON_EVENTSEL_ANY;
 
-	return 0;
+	if (has_slot(event))
+		ret = slot_init(event);
+
+	return ret;
 }
 
 struct perf_guest_switch_msr *perf_guest_get_msrs(int *nr)

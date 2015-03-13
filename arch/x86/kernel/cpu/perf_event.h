@@ -26,6 +26,21 @@ do {									\
 } while (0)
 #endif
 
+enum {
+	PERF_SLOT_DISABLED,
+	PERF_SLOT_ENABLED,
+};
+
+struct perf_slot {
+	atomic_t  state;
+	u64	  nb;
+	u64	  ctrl_set;
+	u64	  ctrl_unset;
+};
+
+void perf_slot_start(unsigned int id);
+void perf_slot_stop(unsigned int id);
+
 /*
  *          |   NHM/WSM    |      SNB     |
  * register -------------------------------
@@ -249,6 +264,11 @@ struct cpu_hw_events {
 	void				*kfree_on_online[X86_PERF_KFREE_MAX];
 
 	u64	intel_no_pmi_disable;
+
+	/* configured slot events */
+	u64	intel_slot;
+	/* enabled slot events */
+	u64	intel_slot_enabled;
 };
 
 #define __EVENT_CONSTRAINT(c, n, m, w, o, f) {\
@@ -623,6 +643,12 @@ struct x86_pmu {
 	 * Intel host/guest support (KVM)
 	 */
 	struct perf_guest_switch_msr *(*guest_get_msrs)(int *nr);
+
+	/*
+	 * self update slots
+	 */
+	struct perf_slot * __percpu     slots;
+	int                             slots_num;
 };
 
 struct x86_perf_task_context {

@@ -1724,6 +1724,8 @@ static int __init init_hw_perf_events(void)
 			x86_pmu_events_group.attrs = tmp;
 	}
 
+	x86_pmu.slots_num = x86_pmu.num_counters + x86_pmu.num_counters_fixed;
+
 	pr_info("... version:                %d\n",     x86_pmu.version);
 	pr_info("... bit width:              %d\n",     x86_pmu.cntval_bits);
 	pr_info("... generic registers:      %d\n",     x86_pmu.num_counters);

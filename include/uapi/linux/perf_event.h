@@ -335,8 +335,9 @@ struct perf_event_attr {
 				context_switch :  1, /* context switch data */
 
 				no_pmi_disable :  1,
+				slot           :  1,
 
-				__reserved_1   : 36;
+				__reserved_1   : 35;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
@@ -381,6 +382,9 @@ struct perf_event_attr {
 	 */
 	__u32	aux_watermark;
 	__u32	__reserved_2;	/* align to __u64 */
+
+	/* id for slot bit */
+	__u64	slot_id;
 };
 
 #define perf_flags(attr)	(*(&(attr)->read_format + 1))
