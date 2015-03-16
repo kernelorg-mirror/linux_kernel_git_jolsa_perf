@@ -418,7 +418,7 @@ enum perf_slot_state {
 
 struct perf_slot {
 	atomic_t	state;
-	u64		rdpmc;
+	int		rdpmc;
 	u64		prev;
 	/* counts */
 	local64_t	count;

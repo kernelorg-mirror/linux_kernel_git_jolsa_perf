@@ -535,6 +535,22 @@ static bool perf_slot_arm(struct perf_slot *slot)
 	return state == PERF_SLOT_FREE;
 }
 
+static bool perf_slot_enable(struct perf_slot *slot)
+{
+	enum perf_slot_state state;
+
+	state = atomic_cmpxchg(&slot->state, PERF_SLOT_ARMED, PERF_SLOT_ENABLED);
+	return state == PERF_SLOT_ARMED;
+}
+
+static bool perf_slot_disable(struct perf_slot *slot)
+{
+	enum perf_slot_state state;
+
+	state = atomic_cmpxchg(&slot->state, PERF_SLOT_ENABLED, PERF_SLOT_ARMED);
+	return state == PERF_SLOT_ENABLED;
+}
+
 static int x86_perf_event_slot_init(struct perf_event *event)
 {
 	unsigned int id = (unsigned int) event->attr.slot_id;
@@ -556,8 +572,90 @@ static int x86_perf_event_slot_init(struct perf_event *event)
 	local64_set(&slot->count, 0);
 	slot->nb    = 0;
 	slot->prev  = 0;
-	slot->rdpmc = event->hw.event_base_rdpmc;
 	return 0;
+}
+
+static int __slot_ioctl_cpu(unsigned int cmd, u64 id, int cpu)
+{
+	struct perf_slot *slot;
+
+	slot = get_slot(id, cpu, false);
+	if (!slot)
+		return -EINVAL;
+
+	if (cmd == PERF_EVENT_IOC_SLOT_ENABLE)
+		perf_slot_enable(slot);
+	else
+		perf_slot_disable(slot);
+
+	return 0;
+}
+
+static int slot_ioctl_cpu(unsigned int cmd, u64 id, u64 cpu)
+{
+	int err = -EINVAL;
+
+	if (cpu == PERF_EVENT_SLOT_CPU_ALL) {
+		int _cpu;
+
+		for_each_online_cpu(_cpu) {
+			err = __slot_ioctl_cpu(cmd, id, _cpu);
+			if (err)
+				break;
+		}
+	} else {
+		err = __slot_ioctl_cpu(cmd, id, (int) cpu);
+	}
+
+	return err;
+}
+
+static int slot_ioctl(unsigned int cmd, struct perf_event_slot *slot)
+{
+	int i, err = -EINVAL;
+
+	for (i = 0; i < slot->count; i++)
+		err = slot_ioctl_cpu(cmd, slot->ids[i], slot->cpu);
+
+	return err;
+}
+
+int perf_event_slot_ioctl(unsigned int cmd, struct perf_event_slot *arg)
+{
+	struct perf_event_slot buf, *slot;
+	size_t size;
+	int err;
+
+	if (copy_from_user(&buf, arg, sizeof(buf)))
+		return -EFAULT;
+
+	if (buf.count >= x86_pmu.slots_num)
+		return -EINVAL;
+
+	size = sizeof(*slot) + buf.count * sizeof(u64);
+	slot = kmalloc(size, GFP_KERNEL);
+	if (!slot)
+		return -ENOMEM;
+
+	if (copy_from_user(slot, arg, size))
+		return -EFAULT;
+
+	err = slot_ioctl(cmd, slot);
+
+	kfree(slot);
+	return err;;
+}
+
+static void perf_event_slot_assign(struct perf_event *event)
+{
+	unsigned int id = (unsigned int) event->attr.slot_id;
+	struct perf_slot *slot;
+
+	slot = get_slot(id, event->cpu, false);
+	if (WARN_ON_ONCE(!slot))
+		return;
+
+	slot->rdpmc = event->hw.event_base_rdpmc;
 }
 
 /*
@@ -975,6 +1073,9 @@ static inline void x86_assign_hw_event(struct perf_event *event,
 		hwc->event_base  = x86_pmu_event_addr(hwc->idx);
 		hwc->event_base_rdpmc = x86_pmu_rdpmc_index(hwc->idx);
 	}
+
+	if (has_slot(event))
+		perf_event_slot_assign(event);
 }
 
 static inline int match_prev_assignment(struct hw_perf_event *hwc,
