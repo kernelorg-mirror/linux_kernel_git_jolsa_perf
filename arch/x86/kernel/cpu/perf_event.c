@@ -535,6 +535,22 @@ static bool perf_slot_arm(struct perf_slot *slot)
 	return state == PERF_SLOT_FREE;
 }
 
+static bool perf_slot_enable(struct perf_slot *slot)
+{
+	enum perf_slot_state state;
+
+	state = atomic_cmpxchg(&slot->state, PERF_SLOT_ARMED, PERF_SLOT_ENABLED);
+	return state == PERF_SLOT_ARMED;
+}
+
+static bool perf_slot_disable(struct perf_slot *slot)
+{
+	enum perf_slot_state state;
+
+	state = atomic_cmpxchg(&slot->state, PERF_SLOT_ENABLED, PERF_SLOT_ARMED);
+	return state == PERF_SLOT_ENABLED;
+}
+
 static int x86_perf_event_slot_init(struct perf_event *event)
 {
 	unsigned int id = (unsigned int) event->attr.slot_id;
@@ -558,6 +574,74 @@ static int x86_perf_event_slot_init(struct perf_event *event)
 	slot->prev  = 0;
 	slot->rdpmc = event->hw.event_base_rdpmc;
 	return 0;
+}
+
+static int __slot_ioctl_cpu(unsigned int cmd, u64 id, int cpu)
+{
+	struct perf_slot *slot;
+
+	slot = get_slot(id, cpu, false);
+	if (!slot)
+		return -EINVAL;
+
+	return cmd == PERF_EVENT_IOC_SLOT_ENABLE ?
+		perf_slot_enable(slot) :
+		perf_slot_disable(slot);
+}
+
+static int slot_ioctl_cpu(unsigned int cmd, u64 id, int cpu)
+{
+	int err = -EINVAL;
+
+	if (cpu == PERF_EVENT_SLOT_CPU_ALL) {
+		int _cpu;
+
+		for_each_online_cpu(_cpu) {
+			err = __slot_ioctl_cpu(cmd, id, _cpu);
+			if (err)
+				return -EINVAL;
+		}
+	} else {
+		err = __slot_ioctl_cpu(cmd, id, cpu);
+	}
+
+	return err;
+}
+
+static int slot_ioctl(unsigned int cmd, struct perf_event_slot *slot)
+{
+	int i, err = -EINVAL;
+
+	for (i = 0; i < slot->count; i++);
+		err = slot_ioctl_cpu(cmd, slot->ids[i], slot->cpu);
+
+	return err;
+}
+
+int perf_event_slot_ioctl(unsigned int cmd, struct perf_event_slot *arg)
+{
+	struct perf_event_slot buf, *slot;
+	size_t size;
+	int err;
+
+	if (copy_from_user(&buf, arg, sizeof(buf)))
+		return -EFAULT;
+
+	if (buf.count >= x86_pmu.slots_num)
+		return -EINVAL;
+
+	size = sizeof(*slot) + buf.count * sizeof(u64);
+	slot = kmalloc(size, GFP_KERNEL);
+	if (!slot)
+		return -ENOMEM;
+
+	if (copy_from_user(&slot, arg, size))
+		return -EFAULT;
+
+	err = slot_ioctl(cmd, slot);
+
+	kfree(slot);
+	return err;;
 }
 
 /*

@@ -3947,6 +3947,12 @@ static int perf_event_set_output(struct perf_event *event,
 				 struct perf_event *output_event);
 static int perf_event_set_filter(struct perf_event *event, void __user *arg);
 
+__weak int
+perf_event_slot_ioctl(unsigned int cmd, struct perf_event_slot *arg)
+{
+	return -ENOENT;
+}
+
 static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned long arg)
 {
 	void (*func)(struct perf_event *);
@@ -3998,6 +4004,10 @@ static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned lon
 
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
+
+	case PERF_EVENT_IOC_SLOT_ENABLE:
+	case PERF_EVENT_IOC_SLOT_DISABLE:
+		return perf_event_slot_ioctl(cmd, ((struct perf_event_slot *) arg);
 
 	default:
 		return -ENOTTY;
