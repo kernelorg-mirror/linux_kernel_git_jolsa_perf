@@ -812,6 +812,25 @@ int perf_evsel__set_filter(struct perf_evsel *evsel, int ncpus, int nthreads,
 				     (void *)filter);
 }
 
+int perf_evsel__enable_slot(struct perf_evsel *evsel)
+{
+	struct perf_event_slot slot[2] = {
+		[0] = {
+			.cpu	= PERF_EVENT_SLOT_CPU_ALL,
+			.count	= 1,
+		},
+	};
+	int fd = FD(evsel, 0, 0);
+
+	slot[0].ids[0] = evsel->attr.slot_id;
+
+	pr_debug("slot ioctl cpu %" PRIu64 ", count %" PRIu64 ", id %" PRIu64 "\n",
+		(uint64_t) slot[0].cpu,
+		(uint64_t) slot[0].count, (uint64_t) slot[0].ids[0]);
+
+	return ioctl(fd, PERF_EVENT_IOC_SLOT_ENABLE, &slot);
+}
+
 int perf_evsel__enable(struct perf_evsel *evsel, int ncpus, int nthreads)
 {
 	return perf_evsel__run_ioctl(evsel, ncpus, nthreads,
@@ -1056,6 +1075,7 @@ static size_t perf_event_attr__fprintf(struct perf_event_attr *attr, FILE *fp)
 	ret += PRINT_ATTR2(watermark, precise_ip);
 	ret += PRINT_ATTR2(mmap_data, sample_id_all);
 	ret += PRINT_ATTR2(exclude_host, exclude_guest);
+	ret += PRINT_ATTR2(exclude_host, slot);
 	ret += PRINT_ATTR2N("excl.callchain_kern", exclude_callchain_kernel,
 			    "excl.callchain_user", exclude_callchain_user);
 
@@ -1070,6 +1090,7 @@ static size_t perf_event_attr__fprintf(struct perf_event_attr *attr, FILE *fp)
 	ret += PRINT_ATTR_X64(sample_regs_user);
 	ret += PRINT_ATTR_U32(sample_stack_user);
 	ret += PRINT_ATTR_X64(sample_regs_intr);
+	ret += PRINT_ATTR_U64(slot_id);
 
 	ret += fprintf(fp, "%.60s\n", graph_dotted_line);
 
