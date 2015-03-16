@@ -666,6 +666,11 @@ do {									   \
 	case PARSE_EVENTS__TERM_TYPE_STACKSIZE:
 		CHECK_TYPE_VAL(NUM);
 		break;
+	case PARSE_EVENTS__TERM_TYPE_SLOT:
+		CHECK_TYPE_VAL(NUM);
+		attr->slot = 1;
+		attr->slot_id = term->val.num;
+		break;
 	case PARSE_EVENTS__TERM_TYPE_NAME:
 		CHECK_TYPE_VAL(STR);
 		break;
