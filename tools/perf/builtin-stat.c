@@ -690,6 +690,12 @@ static int __run_perf_stat(int argc, const char **argv)
 		return -1;
 	}
 
+	if (perf_evlist__enable_slot(evsel_list)) {
+		error("failed to enable slots with %d (%s)\n", errno,
+			strerror_r(errno, msg, sizeof(msg)));
+		return -1;
+	}
+
 	/*
 	 * Enable counters and exec the command:
 	 */

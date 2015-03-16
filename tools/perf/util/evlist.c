@@ -1069,6 +1069,24 @@ int perf_evlist__apply_filters(struct perf_evlist *evlist)
 	return err;
 }
 
+int perf_evlist__enable_slot(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int err = 0;
+
+	evlist__for_each(evlist, evsel) {
+		if (!evsel->attr.slot)
+			continue;
+
+		err = perf_evsel__enable_slot(evsel);
+		if (err)
+			break;
+	}
+
+	return err;
+}
+
+
 int perf_evlist__set_filter(struct perf_evlist *evlist, const char *filter)
 {
 	struct perf_evsel *evsel;

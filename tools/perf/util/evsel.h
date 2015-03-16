@@ -15,8 +15,9 @@ struct perf_counts_values {
 			u64 val;
 			u64 ena;
 			u64 run;
+			u64 snb;
 		};
-		u64 values[3];
+		u64 values[4];
 	};
 };
 
@@ -191,6 +192,8 @@ void perf_evsel__set_sample_id(struct perf_evsel *evsel,
 
 int perf_evsel__set_filter(struct perf_evsel *evsel, int ncpus, int nthreads,
 			   const char *filter);
+int perf_evsel__enable_slot(struct perf_evsel *evsel);
+
 int perf_evsel__enable(struct perf_evsel *evsel, int ncpus, int nthreads);
 
 int perf_evsel__open_per_cpu(struct perf_evsel *evsel,

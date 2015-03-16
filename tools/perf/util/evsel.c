@@ -812,6 +812,20 @@ int perf_evsel__set_filter(struct perf_evsel *evsel, int ncpus, int nthreads,
 				     (void *)filter);
 }
 
+int perf_evsel__enable_slot(struct perf_evsel *evsel)
+{
+	struct perf_event_slot slot[2] = {
+		[0] = {
+			.cpu	= PERF_EVENT_SLOT_CPU_ALL,
+			.count	= 1,
+		},
+	};
+	int fd = FD(evsel, 0, 0);
+
+	slot[0].ids[0] = evsel->attr.slot_id;
+	return ioctl(fd, PERF_EVENT_IOC_SLOT_ENABLE, &slot);
+}
+
 int perf_evsel__enable(struct perf_evsel *evsel, int ncpus, int nthreads)
 {
 	return perf_evsel__run_ioctl(evsel, ncpus, nthreads,
