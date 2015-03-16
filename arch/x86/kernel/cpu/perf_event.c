@@ -257,6 +257,8 @@ msr_fail:
 	return false;
 }
 
+static void perf_event_slot_destroy(struct perf_event *event);
+
 static void hw_perf_event_destroy(struct perf_event *event)
 {
 	if (atomic_dec_and_mutex_lock(&active_events, &pmc_reserve_mutex)) {
@@ -264,6 +266,9 @@ static void hw_perf_event_destroy(struct perf_event *event)
 		release_ds_buffers();
 		mutex_unlock(&pmc_reserve_mutex);
 	}
+
+	if (has_slot(event))
+		perf_event_slot_destroy(event);
 }
 
 static inline int x86_pmu_initialized(void)
@@ -535,6 +540,11 @@ static bool perf_slot_arm(struct perf_slot *slot)
 	return state == PERF_SLOT_FREE;
 }
 
+static void perf_slot_free(struct perf_slot *slot)
+{
+	atomic_set(&slot->state, PERF_SLOT_FREE);
+}
+
 static bool perf_slot_enable(struct perf_slot *slot)
 {
 	enum perf_slot_state state;
@@ -549,6 +559,21 @@ static bool perf_slot_disable(struct perf_slot *slot)
 
 	state = atomic_cmpxchg(&slot->state, PERF_SLOT_ENABLED, PERF_SLOT_ARMED);
 	return state == PERF_SLOT_ENABLED;
+}
+
+static void perf_event_slot_destroy(struct perf_event *event)
+{
+	unsigned int id = (unsigned int) event->attr.slot_id;
+	struct perf_slot *slot;
+
+	if (WARN_ON_ONCE(event->cpu == -1))
+		return;
+
+	slot = get_slot(id, event->cpu, false);
+	if (WARN_ON_ONCE(!slot))
+		return;
+
+	perf_slot_free(slot);
 }
 
 static int x86_perf_event_slot_init(struct perf_event *event)
