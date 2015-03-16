@@ -251,6 +251,7 @@ enum perf_event_read_format {
 	PERF_FORMAT_TOTAL_TIME_RUNNING		= 1U << 1,
 	PERF_FORMAT_ID				= 1U << 2,
 	PERF_FORMAT_GROUP			= 1U << 3,
+	PERF_FORMAT_SLOT_NB			= 1U << 4,
 
 	PERF_FORMAT_MAX = 1U << 4,		/* non-ABI */
 };
@@ -399,8 +400,8 @@ struct perf_event_slot {
 #define PERF_EVENT_IOC_SET_OUTPUT	_IO ('$', 5)
 #define PERF_EVENT_IOC_SET_FILTER	_IOW('$', 6, char *)
 #define PERF_EVENT_IOC_ID		_IOR('$', 7, __u64 *)
-#define PERF_EVENT_IOC_SLOT_ENABLE	_IOR('$', 0, struct perf_event_slot *)
-#define PERF_EVENT_IOC_SLOT_DISABLE	_IOR('$', 0, struct perf_event_slot *)
+#define PERF_EVENT_IOC_SLOT_ENABLE	_IOR('$', 8, struct perf_event_slot *)
+#define PERF_EVENT_IOC_SLOT_DISABLE	_IOR('$', 9, struct perf_event_slot *)
 
 enum perf_event_ioc_flags {
 	PERF_IOC_FLAG_GROUP		= 1U << 0,
