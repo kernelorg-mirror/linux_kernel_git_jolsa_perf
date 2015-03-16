@@ -1189,6 +1189,22 @@ test__checkevent_breakpoint_len_rw_modifier(struct perf_evlist *evlist)
 	return test__checkevent_breakpoint_rw(evlist);
 }
 
+static int test__checkevent_slot(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	TEST_ASSERT_VAL("wrong number of entries", 1 == evlist->nr_entries);
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config",
+			PERF_COUNT_HW_CPU_CYCLES == evsel->attr.config);
+	TEST_ASSERT_VAL("wrong slot", evsel->attr.slot);
+	TEST_ASSERT_VAL("wrong slot id", 1 == evsel->attr.slot_id);
+	TEST_ASSERT_VAL("wrong config1", 0 == evsel->attr.config1);
+	TEST_ASSERT_VAL("wrong config2", 0 == evsel->attr.config2);
+	return 0;
+}
+
+
 static int count_tracepoints(void)
 {
 	char events_path[PATH_MAX];
@@ -1485,7 +1501,7 @@ static struct evlist_test test__events[] = {
 	{
 		.name  = "mem:0/4:rw:u",
 		.check = test__checkevent_breakpoint_len_rw_modifier,
-		.id    = 44
+		.id    = 44,
 	},
 #if defined(__s390x__)
 	{
@@ -1494,6 +1510,11 @@ static struct evlist_test test__events[] = {
 		.id    = 100,
 	},
 #endif
+	{
+		.name  = "cycles/slot=1/",
+		.check = test__checkevent_slot,
+		.id    = 45,
+	},
 };
 
 static struct evlist_test test__events_pmu[] = {
