@@ -519,6 +519,7 @@ void __perf_slot_stop(struct perf_slot *slot, u64 new)
 	delta >>= shift;
 
 	local64_add(delta, &slot->count);
+	slot->nb += 1;
 }
 
 void perf_slot_stop(struct perf_slot *slot)
@@ -681,6 +682,21 @@ static void perf_event_slot_assign(struct perf_event *event)
 		return;
 
 	slot->rdpmc = event->hw.event_base_rdpmc;
+}
+
+u64 arch_perf_event_slot_read(struct perf_event *event, u64 *slot_nb)
+{
+	unsigned int id = (unsigned int) event->attr.slot_id;
+	struct perf_slot *slot;
+
+	slot = get_slot(id, event->cpu, false);
+	if (WARN_ON_ONCE(!slot || !perf_slot_enabled(slot)))
+		return 0;
+
+	if (slot_nb)
+		*slot_nb = slot->nb;
+
+	return local64_read(&slot->count);
 }
 
 /*

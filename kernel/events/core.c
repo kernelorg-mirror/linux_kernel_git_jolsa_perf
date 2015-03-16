@@ -3664,7 +3664,34 @@ static void orphans_remove_work(struct work_struct *work)
 	put_ctx(ctx);
 }
 
-u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
+__weak u64 arch_perf_event_slot_read(struct perf_event *event, u64 *slot_nb)
+{
+	WARN_ON_ONCE("slot interface not supported for arch\n");
+	return 0;
+}
+
+u64 perf_event_slot_read(struct perf_event *event, u64 *slot_nb)
+{
+	struct perf_event_context *ctx = event->ctx;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&ctx->lock, flags);
+	/*
+	 * may read while context is not active
+	 * (e.g., thread is blocked), in that case
+	 * we cannot update context time
+	 */
+	if (ctx->is_active) {
+		update_context_time(ctx);
+		update_cgrp_time_from_event(event);
+	}
+	update_event_times(event);
+	raw_spin_unlock_irqrestore(&ctx->lock, flags);
+
+	return arch_perf_event_slot_read(event, slot_nb);
+}
+
+u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running, u64 *slot_nb)
 {
 	struct perf_event *child;
 	u64 total = 0;
@@ -3673,7 +3700,11 @@ u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
 	*running = 0;
 
 	mutex_lock(&event->child_mutex);
-	total += perf_event_read(event);
+	if (has_slot(event))
+		total += perf_event_slot_read(event, slot_nb);
+	else
+		total += perf_event_read(event);
+
 	*enabled += event->total_time_enabled +
 			atomic64_read(&event->child_total_time_enabled);
 	*running += event->total_time_running +
@@ -3696,12 +3727,12 @@ static int perf_event_read_group(struct perf_event *event,
 	struct perf_event *leader = event->group_leader, *sub;
 	struct perf_event_context *ctx = leader->ctx;
 	int n = 0, size = 0, ret;
-	u64 count, enabled, running;
+	u64 count, enabled, running, slot_nb;
 	u64 values[5];
 
 	lockdep_assert_held(&ctx->mutex);
 
-	count = perf_event_read_value(leader, &enabled, &running);
+	count = perf_event_read_value(leader, &enabled, &running, &slot_nb);
 
 	values[n++] = 1 + leader->nr_siblings;
 	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
@@ -3711,6 +3742,8 @@ static int perf_event_read_group(struct perf_event *event,
 	values[n++] = count;
 	if (read_format & PERF_FORMAT_ID)
 		values[n++] = primary_event_id(leader);
+	if (read_format & PERF_FORMAT_SLOT_NB)
+		values[n++] = slot_nb;
 
 	size = n * sizeof(u64);
 
@@ -3722,9 +3755,11 @@ static int perf_event_read_group(struct perf_event *event,
 	list_for_each_entry(sub, &leader->sibling_list, group_entry) {
 		n = 0;
 
-		values[n++] = perf_event_read_value(sub, &enabled, &running);
+		values[n++] = perf_event_read_value(sub, &enabled, &running, &slot_nb);
 		if (read_format & PERF_FORMAT_ID)
 			values[n++] = primary_event_id(sub);
+		if (read_format & PERF_FORMAT_SLOT_NB)
+			values[n++] = slot_nb;
 
 		size = n * sizeof(u64);
 
@@ -3741,17 +3776,19 @@ static int perf_event_read_group(struct perf_event *event,
 static int perf_event_read_one(struct perf_event *event,
 				 u64 read_format, char __user *buf)
 {
-	u64 enabled, running;
+	u64 enabled, running, slot_nb;
 	u64 values[4];
 	int n = 0;
 
-	values[n++] = perf_event_read_value(event, &enabled, &running);
+	values[n++] = perf_event_read_value(event, &enabled, &running, &slot_nb);
 	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
 		values[n++] = enabled;
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
 		values[n++] = running;
 	if (read_format & PERF_FORMAT_ID)
 		values[n++] = primary_event_id(event);
+	if (read_format & PERF_FORMAT_SLOT_NB)
+		values[n++] = slot_nb;
 
 	if (copy_to_user(buf, values, n * sizeof(u64)))
 		return -EFAULT;
@@ -4007,7 +4044,7 @@ static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned lon
 
 	case PERF_EVENT_IOC_SLOT_ENABLE:
 	case PERF_EVENT_IOC_SLOT_DISABLE:
-		return perf_event_slot_ioctl(cmd, ((struct perf_event_slot *) arg);
+		return perf_event_slot_ioctl(cmd, (struct perf_event_slot *) arg);
 
 	default:
 		return -ENOTTY;
