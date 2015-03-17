@@ -453,6 +453,7 @@ static int read_cb(struct perf_evsel *evsel, int cpu, int thread __maybe_unused,
 		break;
 	case AGGR_GLOBAL:
 		aggr->val += count->val;
+		aggr->snb += count->snb;
 		if (scale) {
 			aggr->ena += count->ena;
 			aggr->run += count->run;
@@ -1354,7 +1355,7 @@ static void print_counter_aggr(struct perf_evsel *counter, char *prefix)
  */
 static void print_counter(struct perf_evsel *counter, char *prefix)
 {
-	u64 ena, run, val;
+	u64 ena, run, val, snb;
 	double uval;
 	int cpu;
 
@@ -1362,6 +1363,7 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 		val = counter->counts->cpu[cpu].val;
 		ena = counter->counts->cpu[cpu].ena;
 		run = counter->counts->cpu[cpu].run;
+		snb = counter->counts->cpu[cpu].snb;
 
 		if (prefix)
 			fprintf(output, "%s", prefix);
@@ -1397,6 +1399,9 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 			nsec_printout(cpu, 0, counter, uval);
 		else
 			abs_printout(cpu, 0, counter, uval);
+
+		if (counter->attr.slot)
+			fprintf(output, "  slot %" PRIu64 "x", snb);
 
 		if (!csv_output)
 			print_noise(counter, 1.0);
