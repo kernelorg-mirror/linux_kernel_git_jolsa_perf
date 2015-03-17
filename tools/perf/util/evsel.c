@@ -963,6 +963,7 @@ void perf_counts_values__scale(struct perf_counts_values *count,
 		*pscaled = scaled;
 }
 
+
 static size_t perf_evsel__read_size(struct perf_evsel *evsel)
 {
 	u64 read_format = evsel->attr.read_format;
@@ -971,6 +972,8 @@ static size_t perf_evsel__read_size(struct perf_evsel *evsel)
 	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
 		size += 8;
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+		size += 8;
+	if (read_format & PERF_FORMAT_SLOT_NB)
 		size += 8;
 
 	return size;
@@ -981,6 +984,7 @@ int perf_evsel__read_cb(struct perf_evsel *evsel, int cpu, int thread,
 {
 	struct perf_counts_values count;
 	size_t size = perf_evsel__read_size(evsel);
+	u64 read_format = evsel->attr.read_format;
 
 	memset(&count, 0, sizeof(count));
 
@@ -990,8 +994,19 @@ int perf_evsel__read_cb(struct perf_evsel *evsel, int cpu, int thread,
 	if (readn(FD(evsel, cpu, thread), &count, size) < 0)
 		return -errno;
 
+#define SCALED (PERF_FORMAT_TOTAL_TIME_ENABLED | \
+		PERF_FORMAT_TOTAL_TIME_ENABLED)
+
+	if (!(read_format && SCALED) && (read_format & PERF_FORMAT_SLOT_NB)) {
+		count.snb = count.ena;
+		count.ena = count.run = 0;
+	}
+
+#undef SCALED
+
 	return cb(evsel, cpu, thread, &count);
 }
+
 
 int __perf_evsel__read_on_cpu(struct perf_evsel *evsel,
 			      int cpu, int thread, bool scale)

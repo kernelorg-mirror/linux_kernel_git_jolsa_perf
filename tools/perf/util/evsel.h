@@ -15,8 +15,9 @@ struct perf_counts_values {
 			u64 val;
 			u64 ena;
 			u64 run;
+			u64 snb;
 		};
-		u64 values[3];
+		u64 values[4];
 	};
 };
 
