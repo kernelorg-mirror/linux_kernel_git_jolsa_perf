@@ -1090,7 +1090,7 @@ static size_t perf_event_attr__fprintf(struct perf_event_attr *attr, FILE *fp)
 	ret += PRINT_ATTR2(watermark, precise_ip);
 	ret += PRINT_ATTR2(mmap_data, sample_id_all);
 	ret += PRINT_ATTR2(exclude_host, exclude_guest);
-	ret += PRINT_ATTR2(exclude_host, slot);
+	ret += PRINT_ATTR2(slot, no_nmi_disable);
 	ret += PRINT_ATTR2N("excl.callchain_kern", exclude_callchain_kernel,
 			    "excl.callchain_user", exclude_callchain_user);
 

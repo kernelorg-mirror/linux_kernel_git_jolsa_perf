@@ -575,6 +575,10 @@ do {								\
 		attr->slot = 1;
 		attr->slot_id = term->val.num;
 		break;
+	case PARSE_EVENTS__TERM_TYPE_NO_NMI:
+		CHECK_TYPE_VAL(NUM);
+		attr->no_nmi_disable = 1;
+		break;
 	case PARSE_EVENTS__TERM_TYPE_NAME:
 		CHECK_TYPE_VAL(STR);
 		break;
