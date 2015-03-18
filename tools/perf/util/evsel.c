@@ -944,17 +944,31 @@ void perf_counts_values__scale(struct perf_counts_values *count,
 		*pscaled = scaled;
 }
 
+static size_t perf_evsel__read_size(struct perf_evsel *evsel)
+{
+	u64 read_format = evsel->attr.read_format;
+	size_t size = 8;
+
+	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
+		size += 8;
+	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+		size += 8;
+
+	return size;
+}
+
 int perf_evsel__read_cb(struct perf_evsel *evsel, int cpu, int thread,
 			perf_evsel__read_cb_t cb)
 {
 	struct perf_counts_values count;
+	size_t size = perf_evsel__read_size(evsel);
 
 	memset(&count, 0, sizeof(count));
 
 	if (FD(evsel, cpu, thread) < 0)
 		return -EINVAL;
 
-	if (readn(FD(evsel, cpu, thread), &count, sizeof(count)) < 0)
+	if (readn(FD(evsel, cpu, thread), &count, size) < 0)
 		return -errno;
 
 	return cb(evsel, cpu, thread, &count);
