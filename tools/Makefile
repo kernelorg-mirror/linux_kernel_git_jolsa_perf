@@ -1,3 +1,8 @@
+# Some of the tools (perf) use same make variables
+# as in kernel build.
+export srctree=
+export objtree=
+
 include scripts/Makefile.include
 
 help:
