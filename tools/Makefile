@@ -47,10 +47,10 @@ cgroup firewire hv guest usb virtio vm net: FORCE
 liblockdep: FORCE
 	$(call descend,lib/lockdep)
 
-libapikfs: FORCE
+libapi: FORCE
 	$(call descend,lib/api)
 
-perf: libapikfs FORCE
+perf: FORCE
 	$(call descend,$@)
 
 selftests: FORCE
