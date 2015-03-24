@@ -250,6 +250,12 @@ is off by default.
 --running-time::
 Record running and enabled time for read events (:S)
 
+--poll=::
+Polling interval in msec. Defaults to infinite which means record relies on
+watermarks to wakeup and read events from each mmap. Setting poll helps smooth
+the event collection across mmaps and the subsequent processing of the data
+file. For example perf-top uses a 100 msec polling interval.
+
 SEE ALSO
 --------
 linkperf:perf-stat[1], linkperf:perf-list[1]

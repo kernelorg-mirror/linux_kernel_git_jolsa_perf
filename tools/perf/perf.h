@@ -62,6 +62,7 @@ struct record_opts {
 	u64	     user_interval;
 	bool	     sample_transaction;
 	unsigned     initial_delay;
+	int	     poll_timeout;
 };
 
 struct option;

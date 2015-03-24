@@ -485,7 +485,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (hits == rec->samples) {
 			if (done || draining)
 				break;
-			err = perf_evlist__poll(rec->evlist, -1);
+			err = perf_evlist__poll(rec->evlist, opts->poll_timeout);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
@@ -734,6 +734,7 @@ static struct record record = {
 		.user_freq	     = UINT_MAX,
 		.user_interval	     = ULLONG_MAX,
 		.freq		     = 4000,
+		.poll_timeout	     = -1,
 		.target		     = {
 			.uses_mmap   = true,
 			.default_per_cpu = true,
@@ -841,6 +842,8 @@ struct option __record_options[] = {
 		    "Sample machine registers on interrupt"),
 	OPT_BOOLEAN(0, "running-time", &record.opts.running_time,
 		    "Record running/enabled time of read (:S) events"),
+	OPT_INTEGER(0, "poll", &record.opts.poll_timeout,
+		  "poll interval in ms (defaults to infinite)"),
 	OPT_END()
 };
 
