@@ -49,6 +49,7 @@ name		[a-zA-Z_*?][a-zA-Z0-9_*?\.-]*
 
 %x config
 %x config_eoln_str
+%x comment
 
 %%
 
@@ -68,10 +69,18 @@ name		[a-zA-Z_*?][a-zA-Z0-9_*?\.-]*
 	}
 %}
 
+<comment>{
+[^*\n]*		/* eat anything that's not a '*' */
+"*"+[^*/\n]*	/* eat up '*'s not followed by '/'s */
+\n
+"*"+"/"		BEGIN(config);
+}
+
 <config>{
 "{"		{ return '{'; }
 "}"		{ return '}'; }
 "="		{ BEGIN(config_eoln_str); return '='; }
+"/*"		BEGIN(comment);
 
 events		{ return PF_EVENTS; }
 print		{ return PF_PRINT; }
