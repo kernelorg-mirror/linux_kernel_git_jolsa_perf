@@ -3,6 +3,7 @@
 %parse-param {void *_data}
 %parse-param {void *scanner}
 %lex-param {void* scanner}
+%locations
 
 %left '+' '-' '*' '/'
 
@@ -174,8 +175,21 @@ PF_NAME '=' PF_EOLN_STR
 
 %%
 
-void perf_formula_error(void *data __maybe_unused,
+static void perf_formula_lerror(YYLTYPE *loc, char *s, ...)
+{
+	va_list ap;
+	va_start(ap, s);
+
+	vfprintf(stderr, "formula: ", ap);
+	vfprintf(stderr, s, ap);
+	fprintf(stderr, " (line %d, col %d)", loc->first_line, loc->first_column);
+	fprintf(stderr, "\n");
+};
+
+void perf_formula_error(YYLTYPE *loc,
+			void *data __maybe_unused,
 			void *scanner __maybe_unused,
 			char const *msg __maybe_unused)
 {
+	perf_formula_lerror(loc, "parsing error");
 }

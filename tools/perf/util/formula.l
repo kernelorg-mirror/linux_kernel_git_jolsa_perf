@@ -3,6 +3,8 @@
 %option bison-bridge
 %option prefix="perf_formula_"
 %option stack
+%option bison-locations
+%option yylineno
 
 %{
 #include "formula-bison.h"
@@ -41,6 +43,13 @@ static int str(yyscan_t scanner, int token)
 	return token;
 }
 
+#define YY_USER_ACTION				\
+do {						\
+	yylloc->first_line   = yylineno;	\
+	yylloc->first_column = yycolumn;	\
+	yycolumn += yyleng;			\
+} while (0);
+
 %}
 
 num_dec		[0-9]+
@@ -72,7 +81,7 @@ name		[a-zA-Z_*?][a-zA-Z0-9_*?\.-]*
 <comment>{
 [^*\n]*		/* eat anything that's not a '*' */
 "*"+[^*/\n]*	/* eat up '*'s not followed by '/'s */
-\n
+\n		yycolumn = 1;
 "*"+"/"		BEGIN(config);
 }
 
@@ -86,7 +95,7 @@ events		{ return PF_EVENTS; }
 print		{ return PF_PRINT; }
 {name}		{ return str(yyscanner, PF_NAME); }
 
-\n		{ }
+\n		{ yycolumn = 1; }
 .		{ }
 }
 
