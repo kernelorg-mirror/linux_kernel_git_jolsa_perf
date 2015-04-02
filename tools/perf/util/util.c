@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <unistd.h>
 #include "callchain.h"
+#include <dirent.h>
 
 struct callchain_param	callchain_param = {
 	.mode	= CHAIN_GRAPH_REL,
@@ -614,4 +615,30 @@ bool find_process(const char *name)
 
 	closedir(dir);
 	return ret ? false : true;
+}
+
+static int iter_dir_filter(const struct dirent *d)
+{
+	return strcmp(d->d_name, ".") && strcmp(d->d_name, "..");
+}
+
+int iter_dir(const char *path, iter_dir_cb cb, void *data)
+{
+	struct dirent **namelist;
+	int n, ret = 0;
+
+	n = scandir(path, &namelist, iter_dir_filter, alphasort);
+	if (n < 0) {
+		pr_err("scandir failed: %s", strerror(errno));
+		return -1;
+	}
+
+	while (n--) {
+		if (!ret)
+			ret = cb(namelist[n]->d_name, data);
+		free(namelist[n]);
+	}
+
+	free(namelist);
+	return ret;
 }

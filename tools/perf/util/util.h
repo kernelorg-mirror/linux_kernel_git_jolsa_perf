@@ -333,4 +333,6 @@ int gzip_decompress_to_file(const char *input, int output_fd);
 int lzma_decompress_to_file(const char *input, int output_fd);
 #endif
 
+typedef int (iter_dir_cb)(char *name, void *data);
+int iter_dir(const char *path, iter_dir_cb cb, void *data);
 #endif /* GIT_COMPAT_UTIL_H */
