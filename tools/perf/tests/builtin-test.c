@@ -171,6 +171,10 @@ static struct test {
 		.func = test__kmod_path__parse,
 	},
 	{
+		.desc = "Test topology interface",
+		.func = test__topology,
+	},
+	{
 		.func = NULL,
 	},
 };

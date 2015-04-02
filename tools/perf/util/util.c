@@ -635,7 +635,7 @@ int iter_dir(const char *path, iter_dir_cb cb, void *data)
 
 	while (n--) {
 		if (!ret)
-			ret = cb(namelist[n]->d_name, data);
+			ret = cb(path, namelist[n]->d_name, data);
 		free(namelist[n]);
 	}
 
