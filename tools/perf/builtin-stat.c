@@ -2701,7 +2701,7 @@ int cmd_stat(int argc, const char **argv)
 		int fd = perf_data__fd(&perf_stat.data);
 		int err = perf_event__synthesize_kernel_mmap((void *)&perf_stat,
 							     process_synthesized_event,
-							     &perf_stat.session->machines.host);
+							     &perf_stat.session->machines->host);
 		if (err) {
 			pr_warning("Couldn't synthesize the kernel mmap record, harmless, "
 				   "older tools may produce warnings about this file\n.");

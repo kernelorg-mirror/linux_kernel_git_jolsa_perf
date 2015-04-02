@@ -2739,7 +2739,7 @@ static size_t timehist_print_idlehist_callchain(struct rb_root *root)
 static void timehist_print_summary(struct perf_sched *sched,
 				   struct perf_session *session)
 {
-	struct machine *m = &session->machines.host;
+	struct machine *m = &session->machines->host;
 	struct total_run_stats totals;
 	u64 task_count;
 	struct thread *t;

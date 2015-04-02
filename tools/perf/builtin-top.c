@@ -809,13 +809,13 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 			++top->us_samples;
 			if (top->hide_user_symbols)
 				goto next_event;
-			machine = &session->machines.host;
+			machine = &session->machines->host;
 			break;
 		case PERF_RECORD_MISC_KERNEL:
 			++top->kernel_samples;
 			if (top->hide_kernel_symbols)
 				goto next_event;
-			machine = &session->machines.host;
+			machine = &session->machines->host;
 			break;
 		case PERF_RECORD_MISC_GUEST_KERNEL:
 			++top->guest_kernel_samples;
@@ -832,7 +832,7 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 		default:
 			if (event->header.type == PERF_RECORD_SAMPLE)
 				goto next_event;
-			machine = &session->machines.host;
+			machine = &session->machines->host;
 			break;
 		}
 
@@ -947,7 +947,7 @@ static int __cmd_top(struct perf_top *top)
 	if (perf_session__register_idle_thread(top->session) < 0)
 		goto out_delete;
 
-	machine__synthesize_threads(&top->session->machines.host, &opts->target,
+	machine__synthesize_threads(&top->session->machines->host, &opts->target,
 				    top->evlist->threads, false, opts->proc_map_timeout);
 
 	if (perf_hpp_list.socket) {

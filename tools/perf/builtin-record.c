@@ -771,7 +771,7 @@ static int record__synthesize_workload(struct record *rec, bool tail)
 
 	err = perf_event__synthesize_thread_map(&rec->tool, thread_map,
 						 process_synthesized_event,
-						 &rec->session->machines.host,
+						 &rec->session->machines->host,
 						 rec->opts.sample_address,
 						 rec->opts.proc_map_timeout);
 	thread_map__put(thread_map);
@@ -885,7 +885,7 @@ static const struct perf_event_mmap_page *record__pick_pc(struct record *rec)
 static int record__synthesize(struct record *rec, bool tail)
 {
 	struct perf_session *session = rec->session;
-	struct machine *machine = &session->machines.host;
+	struct machine *machine = &session->machines->host;
 	struct perf_data *data = &rec->data;
 	struct record_opts *opts = &rec->opts;
 	struct perf_tool *tool = &rec->tool;
@@ -947,7 +947,7 @@ static int record__synthesize(struct record *rec, bool tail)
 			   "Check /proc/modules permission or run as root.\n");
 
 	if (perf_guest) {
-		machines__process_guests(&session->machines,
+		machines__process_guests(session->machines,
 					 perf_event__synthesize_guest_os, tool);
 	}
 
@@ -1069,7 +1069,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		goto out_child;
 	}
 
-	machine = &session->machines.host;
+	machine = &session->machines->host;
 
 	err = record__synthesize(rec, false);
 	if (err < 0)

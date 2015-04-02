@@ -64,21 +64,21 @@ void perf_session__set_id_hdr_size(struct perf_session *session)
 {
 	u16 id_hdr_size = perf_evlist__id_hdr_size(session->evlist);
 
-	machines__set_id_hdr_size(&session->machines, id_hdr_size);
+	machines__set_id_hdr_size(session->machines, id_hdr_size);
 }
 
 int perf_session__create_kernel_maps(struct perf_session *session)
 {
-	int ret = machine__create_kernel_maps(&session->machines.host);
+	int ret = machine__create_kernel_maps(&session->machines->host);
 
 	if (ret >= 0)
-		ret = machines__create_guest_kernel_maps(&session->machines);
+		ret = machines__create_guest_kernel_maps(session->machines);
 	return ret;
 }
 
 static void perf_session__destroy_kernel_maps(struct perf_session *session)
 {
-	machines__destroy_kernel_maps(&session->machines);
+	machines__destroy_kernel_maps(session->machines);
 }
 
 static bool perf_session__has_comm_exec(struct perf_session *session)
@@ -97,7 +97,7 @@ static void perf_session__set_comm_exec(struct perf_session *session)
 {
 	bool comm_exec = perf_session__has_comm_exec(session);
 
-	machines__set_comm_exec(&session->machines, comm_exec);
+	machines__set_comm_exec(session->machines, comm_exec);
 }
 
 static int ordered_events__deliver_event(struct ordered_events *oe,
@@ -129,7 +129,8 @@ struct perf_session *perf_session__new(struct perf_data *data,
 	session->repipe = repipe;
 	session->tool   = tool;
 	INIT_LIST_HEAD(&session->auxtrace_index);
-	machines__init(&session->machines);
+	session->machines = tool->machines;
+
 	ordered_events__init(&session->ordered_events, ordered_events__deliver_event);
 
 	if (data) {
@@ -152,7 +153,7 @@ struct perf_session *perf_session__new(struct perf_data *data,
 			}
 		}
 	} else  {
-		session->machines.host.env = &perf_env;
+		session->machines->host.env = &perf_env;
 	}
 
 	if (!data || perf_data__is_write(data)) {
@@ -186,7 +187,7 @@ struct perf_session *perf_session__new(struct perf_data *data,
 
 static void perf_session__delete_threads(struct perf_session *session)
 {
-	machine__delete_threads(&session->machines.host);
+	machine__delete_threads(&session->machines->host);
 }
 
 void perf_session__delete(struct perf_session *session)
@@ -198,7 +199,6 @@ void perf_session__delete(struct perf_session *session)
 	perf_session__destroy_kernel_maps(session);
 	perf_session__delete_threads(session);
 	perf_env__exit(&session->header.env);
-	machines__exit(&session->machines);
 	if (session->data)
 		perf_data__close(session->data);
 	free(session);
@@ -1311,7 +1311,7 @@ static int perf_session__deliver_event(struct perf_session *session,
 	if (ret > 0)
 		return 0;
 
-	return machines__deliver_event(&session->machines, stats,
+	return machines__deliver_event(session->machines, stats,
 				       session->evlist, event, sample,
 				       tool, file_offset);
 }
@@ -1393,7 +1393,7 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
 		return perf_session__process_user_event(session, event, 0);
 
-	return machines__deliver_event(&session->machines, &evlist->stats,
+	return machines__deliver_event(session->machines, &evlist->stats,
 				       evlist, event, sample, tool, 0);
 }
 
@@ -1508,7 +1508,7 @@ void perf_event_header__bswap(struct perf_event_header *hdr)
 
 struct thread *perf_session__findnew(struct perf_session *session, pid_t pid)
 {
-	return machine__findnew_thread(&session->machines.host, -1, pid);
+	return machine__findnew_thread(&session->machines->host, -1, pid);
 }
 
 int perf_session__register_idle_thread(struct perf_session *session)
@@ -1516,7 +1516,7 @@ int perf_session__register_idle_thread(struct perf_session *session)
 	struct thread *thread;
 	int err = 0;
 
-	thread = machine__findnew_thread(&session->machines.host, 0, 0);
+	thread = machine__findnew_thread(&session->machines->host, 0, 0);
 	if (thread == NULL || thread__set_comm(thread, "swapper", 0)) {
 		pr_err("problem inserting idle task.\n");
 		err = -1;
@@ -1649,7 +1649,7 @@ static int perf_session__flush_thread_stack(struct thread *thread,
 
 static int perf_session__flush_thread_stacks(struct perf_session *session)
 {
-	return machines__for_each_thread(&session->machines,
+	return machines__for_each_thread(session->machines,
 					 perf_session__flush_thread_stack,
 					 NULL);
 }
@@ -2027,13 +2027,13 @@ int maps__set_kallsyms_ref_reloc_sym(struct map **maps,
 
 size_t perf_session__fprintf_dsos(struct perf_session *session, FILE *fp)
 {
-	return machines__fprintf_dsos(&session->machines, fp);
+	return machines__fprintf_dsos(session->machines, fp);
 }
 
 size_t perf_session__fprintf_dsos_buildid(struct perf_session *session, FILE *fp,
 					  bool (skip)(struct dso *dso, int parm), int parm)
 {
-	return machines__fprintf_dsos_buildid(&session->machines, fp, skip, parm);
+	return machines__fprintf_dsos_buildid(session->machines, fp, skip, parm);
 }
 
 size_t perf_session__fprintf_nr_events(struct perf_session *session, FILE *fp)
@@ -2056,7 +2056,7 @@ size_t perf_session__fprintf(struct perf_session *session, FILE *fp)
 	 * FIXME: Here we have to actually print all the machines in this
 	 * session, not just the host...
 	 */
-	return machine__fprintf(&session->machines.host, fp);
+	return machine__fprintf(&session->machines->host, fp);
 }
 
 struct perf_evsel *perf_session__find_first_evtype(struct perf_session *session,
