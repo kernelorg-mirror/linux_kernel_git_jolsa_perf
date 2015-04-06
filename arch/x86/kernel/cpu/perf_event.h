@@ -225,6 +225,10 @@ struct cpu_hw_events {
 	u64				perf_ctr_virt_mask;
 
 	void				*kfree_on_online[X86_PERF_KFREE_MAX];
+
+	bool				watchdog_fastpath;
+	unsigned long			watchdog_msr;
+	u64				watchdog_base;
 };
 
 #define __EVENT_CONSTRAINT(c, n, m, w, o, f) {\
@@ -600,6 +604,8 @@ struct x86_pmu {
 	 * Intel host/guest support (KVM)
 	 */
 	struct perf_guest_switch_msr *(*guest_get_msrs)(int *nr);
+
+	cpumask_t	watchdog;
 };
 
 struct x86_perf_task_context {

@@ -327,8 +327,11 @@ struct perf_event_attr {
 				exclude_callchain_user   : 1, /* exclude user callchains */
 				mmap2          :  1, /* include mmap with inode data     */
 				comm_exec      :  1, /* flag comm events that are due to an exec */
+
 				use_clockid    :  1, /* use @clockid for time fields */
-				__reserved_1   : 38;
+				watchdog       :  1, /* event serves as nmi watchdog */
+				__reserved_1   : 37;
+
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */

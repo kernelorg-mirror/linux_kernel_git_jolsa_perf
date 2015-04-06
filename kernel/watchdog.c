@@ -254,16 +254,12 @@ static struct perf_event_attr wd_hw_attr = {
 	.size		= sizeof(struct perf_event_attr),
 	.pinned		= 1,
 	.disabled	= 1,
+	.watchdog	= 1,
 };
 
 /* Callback function for perf event subsystem */
-static void watchdog_overflow_callback(struct perf_event *event,
-		 struct perf_sample_data *data,
-		 struct pt_regs *regs)
+void watchdog_nmi_callback(void)
 {
-	/* Ensure the watchdog never gets throttled */
-	event->hw.interrupts = 0;
-
 	if (__this_cpu_read(watchdog_nmi_touch) == true) {
 		__this_cpu_write(watchdog_nmi_touch, false);
 		return;
@@ -296,6 +292,16 @@ static void watchdog_overflow_callback(struct perf_event *event,
 	__this_cpu_write(hard_watchdog_warn, false);
 	return;
 }
+
+static void
+watchdog_overflow_callback(struct perf_event *event, struct perf_sample_data *data,
+			   struct pt_regs *regs)
+{
+	/* Ensure the watchdog never gets throttled */
+	event->hw.interrupts = 0;
+	watchdog_nmi_callback();
+}
+
 #endif /* CONFIG_HARDLOCKUP_DETECTOR */
 
 static void watchdog_interrupt_count(void)

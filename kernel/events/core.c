@@ -285,6 +285,9 @@ void perf_sample_event_took(u64 sample_len_ns)
 	 */
 	avg_local_sample_len = local_samples_len/NR_ACCUMULATED_SAMPLES;
 
+trace_printk("avg_local_sample_len %llu, sample_len_ns %llu\n",
+	avg_local_sample_len, sample_len_ns);
+
 	if (avg_local_sample_len <= allowed_ns)
 		return;
 

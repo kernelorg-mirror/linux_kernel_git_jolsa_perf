@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/watchdog.h>
+#include <linux/nmi.h>
 
 #include <asm/cpufeature.h>
 #include <asm/hardirq.h>
@@ -1244,6 +1245,84 @@ static __initconst const u64 slm_hw_cache_event_ids
  },
 };
 
+#ifdef CONFIG_HARDLOCKUP_DETECTOR
+static int intel_pmu_watchdog(struct cpu_hw_events *cpuc)
+{
+	apic_write(APIC_LVTPC, APIC_DM_NMI);
+	watchdog_nmi_callback();
+	wrmsrl(cpuc->watchdog_msr, cpuc->watchdog_base);
+	return 1;
+}
+
+static int intel_pmu_watchdog_init(struct perf_event *event)
+{
+	if (event->cpu == -1)
+		return -EINVAL;
+	if (cpumask_test_and_set_cpu(event->cpu, &x86_pmu.watchdog))
+		return -EBUSY;
+	return 0;
+}
+
+static void
+intel_pmu_watchdog_enable(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	u64 base = (u64)(-event->hw.sample_period) & x86_pmu.cntval_mask;
+
+	cpuc->watchdog_msr  = event->hw.event_base;
+	cpuc->watchdog_base = base;
+}
+
+static void
+intel_pmu_watchdog_disable(struct cpu_hw_events *cpuc)
+{
+	cpuc->watchdog_msr  = 0;
+	cpuc->watchdog_base = 0;
+}
+
+static void
+intel_pmu_watchdog_enable_all(struct cpu_hw_events *cpuc)
+{
+	if (cpuc->watchdog_msr != 0 && cpuc->n_events == 1)
+		cpuc->watchdog_fastpath = true;
+}
+
+static void
+intel_pmu_watchdog_disable_all(struct cpu_hw_events *cpuc)
+{
+	cpuc->watchdog_fastpath = false;
+}
+#else
+static inline int intel_pmu_watchdog(struct cpu_hw_events *cpuc)
+{
+	return 1;
+}
+
+static inline int intel_pmu_watchdog_init(struct perf_event *event)
+{
+	return -EINVAL;
+}
+
+static inline void
+intel_pmu_watchdog_enable(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+}
+
+static inline void
+intel_pmu_watchdog_disable(struct cpu_hw_events *cpuc)
+{
+}
+
+static inline void
+intel_pmu_atchdog_enable_all(struct cpu_hw_events *cpuc)
+{
+}
+
+static inline void
+intel_pmu_watchdog_disable_all(struct cpu_hw_events *cpuc)
+{
+}
+#endif /* CONFIG_HARDLOCKUP_DETECTOR */
+
 /*
  * Use from PMIs where the LBRs are already disabled.
  */
@@ -1259,6 +1338,7 @@ static void __intel_pmu_disable_all(void)
 		intel_bts_disable_local();
 
 	intel_pmu_pebs_disable_all();
+	intel_pmu_watchdog_disable_all(cpuc);
 }
 
 static void intel_pmu_disable_all(void)
@@ -1286,6 +1366,8 @@ static void __intel_pmu_enable_all(int added, bool pmi)
 		intel_pmu_enable_bts(event->hw.config);
 	} else
 		intel_bts_enable_local();
+
+	intel_pmu_watchdog_enable_all(cpuc);
 }
 
 static void intel_pmu_enable_all(int added)
@@ -1427,6 +1509,9 @@ static void intel_pmu_disable_event(struct perf_event *event)
 	if (needs_branch_stack(event))
 		intel_pmu_lbr_disable(event);
 
+	if (event->attr.watchdog)
+		intel_pmu_watchdog_disable(cpuc);
+
 	if (unlikely(hwc->config_base == MSR_ARCH_PERFMON_FIXED_CTR_CTRL)) {
 		intel_pmu_disable_fixed(hwc);
 		return;
@@ -1492,6 +1577,9 @@ static void intel_pmu_enable_event(struct perf_event *event)
 		cpuc->intel_ctrl_guest_mask |= (1ull << hwc->idx);
 	if (event->attr.exclude_guest)
 		cpuc->intel_ctrl_host_mask |= (1ull << hwc->idx);
+
+	if (event->attr.watchdog)
+		intel_pmu_watchdog_enable(cpuc, event);
 
 	if (unlikely(event_is_checkpointed(event)))
 		cpuc->intel_cp_status |= (1ull << hwc->idx);
@@ -1579,6 +1667,9 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 	int handled;
 
 	cpuc = this_cpu_ptr(&cpu_hw_events);
+
+	if (cpuc->watchdog_fastpath)
+		return intel_pmu_watchdog(cpuc);
 
 	/*
 	 * No known reason to not always do late ACK,
@@ -2330,6 +2421,12 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 	if (!(event->attr.config & ARCH_PERFMON_EVENTSEL_ANY))
 		return 0;
+
+	if (event->attr.watchdog) {
+		ret = intel_pmu_watchdog_init(event);
+		if (ret)
+			return ret;
+	}
 
 	if (x86_pmu.version < 3)
 		return -EINVAL;
