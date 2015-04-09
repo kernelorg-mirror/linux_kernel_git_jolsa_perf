@@ -3,6 +3,7 @@
 
 #include <linux/kernel.h>
 #include <stdbool.h>
+#include "util.h"
 
 enum parse_opt_type {
 	/* special types */
