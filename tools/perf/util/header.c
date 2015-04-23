@@ -23,6 +23,8 @@
 #include "strbuf.h"
 #include "build-id.h"
 #include "data.h"
+#include "cpumap.h"
+#include "thread_map.h"
 
 static u32 header_argc;
 static const char **header_argv;
@@ -883,6 +885,101 @@ static int write_auxtrace(int fd, struct perf_header *h,
 	return err;
 }
 
+/* Writes both 'struct cpu_map' and 'struct thread_map' */
+#define WRITE_MAP(fd, m)					\
+do {								\
+	u64 __nr = (u64) m->nr;					\
+	int __i, __ret;						\
+								\
+	__ret = do_write(fd, &__nr, sizeof(u64));		\
+	if (__ret)						\
+		return __ret;					\
+								\
+	for (__i = 0; __i < m->nr; __i++) {			\
+		u64 __cpu = (u64) m->map[__i];			\
+								\
+		__ret = do_write(fd, &__cpu, sizeof(u64)); 	\
+		if (__ret)					\
+			return -1;				\
+	}							\
+} while (0)
+
+static int read_swap_64(int fd, u64 *val, struct perf_header *ph)
+{
+	if (readn(fd, val, sizeof(u64)) != sizeof(u64))
+		return -1;
+	if (ph->needs_swap)
+		*val = bswap_64(*val);
+	return 0;
+}
+
+/* Reads both 'struct cpu_map' and 'struct thread_map' */
+#define READ_MAP(fd, m, type, ph)				\
+do {								\
+	u64 __nr;						\
+	int __i;						\
+								\
+	if (read_swap_64(fd, &__nr, ph))			\
+		return -1;					\
+								\
+	*m = zalloc(sizeof(**m) + __nr * sizeof(type));		\
+	if (!*m)						\
+		return -ENOMEM;					\
+								\
+	*m->nr     = (int) __nr;				\
+	*m->refcnt = 1;						\
+								\
+	for (__i = 0; __i < *m->nr; __i++) {			\
+		u64 __cpu;					\
+								\
+		if (read_swap_64(fd, &__cpu, ph))		\
+			return -1;				\
+		*m->map[__i] = (type) __cpu;			\
+	}							\
+} while (0)
+
+static int
+write_stat_maps(int fd, struct perf_header *ph __maybe_unused,
+		struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	off_t offset_cnt, offset_end;
+	u64 cnt = 0;
+	int ret;
+
+	WRITE_MAP(fd, evlist->cpus);
+	WRITE_MAP(fd, evlist->threads);
+
+	/* Remember the count possition. */
+	offset_cnt = lseek(fd, 0, SEEK_CUR);
+	ret = do_write(fd, &cnt, sizeof(cnt));
+	if (ret)
+		return ret;
+
+	evlist__for_each(evlist, evsel) {
+		if (!evsel->cpus)
+			continue;
+
+		ret = do_write(fd, &evsel->id[0], sizeof(u64));
+		if (ret < 0)
+			return ret;
+
+		WRITE_MAP(fd, evsel->cpus);
+		cnt++;
+	}
+
+	/* Update the evsel->cpus count number. */
+	offset_end = lseek(fd, 0, SEEK_CUR);
+	lseek(fd, offset_cnt, SEEK_SET);
+
+	ret = do_write(fd, &cnt, sizeof(cnt));
+	if (ret)
+		return ret;
+
+	lseek(fd, offset_end, SEEK_SET);
+	return 0;
+}
+
 static void print_hostname(struct perf_header *ph, int fd __maybe_unused,
 			   FILE *fp)
 {
@@ -1165,6 +1262,31 @@ static void print_auxtrace(struct perf_header *ph __maybe_unused,
 			   int fd __maybe_unused, FILE *fp)
 {
 	fprintf(fp, "# contains AUX area data (e.g. instruction trace)\n");
+}
+
+static void print_stat_maps(struct perf_header *ph,
+			    int fd __maybe_unused, FILE *fp)
+{
+	struct perf_session *session;
+	struct perf_evlist *evlist;
+	struct perf_evsel *evsel;
+
+	session = container_of(ph, struct perf_session, header);
+	evlist  = session->evlist;
+
+	fprintf(fp, "# cpus:    ");
+	cpu_map__fprintf(evlist->cpus, fp);
+
+	evlist__for_each(evlist, evsel) {
+		if (!evsel->cpus)
+			continue;
+
+		fprintf(fp, "#  '%s' cpus: ", perf_evsel__name(evsel));
+		cpu_map__fprintf(evlist->cpus, fp);
+	}
+
+	fprintf(fp, "# threads: ");
+	thread_map__fprintf(evlist->threads, fp);
 }
 
 static void print_pmu_mappings(struct perf_header *ph, int fd __maybe_unused,
@@ -1858,6 +1980,54 @@ static int process_auxtrace(struct perf_file_section *section,
 	return err;
 }
 
+static int
+process_stat_maps(struct perf_file_section *section __maybe_unused,
+		  struct perf_header *ph, int fd,
+		  void *data __maybe_unused)
+{
+	struct perf_session *session;
+	struct perf_evlist *evlist;
+	struct perf_evsel *evsel;
+	struct cpu_map *cpus;
+	struct thread_map *threads;
+	u64 cnt;
+
+	session = container_of(ph, struct perf_session, header);
+	evlist = session->evlist;
+
+	READ_MAP(fd, &cpus,    int,   ph);
+	READ_MAP(fd, &threads, pid_t, ph);
+
+	perf_evlist__set_maps(evlist, cpus, threads);
+
+	if (readn(fd, &cnt, sizeof(cnt)) != sizeof(cnt))
+		return -1;
+
+	while (cnt--) {
+		u64 id;
+
+		if (readn(fd, &id, sizeof(id)) != sizeof(id))
+			return -1;
+
+		READ_MAP(fd, &cpus, int, ph);
+
+	        evsel = perf_evlist__id2evsel(evlist, id);
+		if (!evsel) {
+			pr_err("failed to read cpumap, no event for id %" PRIu64 "\n", id);
+			return -EINVAL;
+		}
+		evsel->cpus = cpus;
+	}
+
+	/* propagate maps if needed */
+	evlist__for_each(evlist, evsel) {
+                if (!evsel->cpus)
+			evsel->cpus = cpu_map__get(evlist->cpus);
+		evsel->threads = thread_map__get(evlist->threads);
+	}
+	return 0;
+}
+
 struct feature_ops {
 	int (*write)(int fd, struct perf_header *h, struct perf_evlist *evlist);
 	void (*print)(struct perf_header *h, int fd, FILE *fp);
@@ -1899,6 +2069,7 @@ static const struct feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPP(HEADER_PMU_MAPPINGS,	pmu_mappings),
 	FEAT_OPP(HEADER_GROUP_DESC,	group_desc),
 	FEAT_OPP(HEADER_AUXTRACE,	auxtrace),
+	FEAT_OPP(HEADER_STAT_MAPS,	stat_maps),
 };
 
 struct header_print_data {
