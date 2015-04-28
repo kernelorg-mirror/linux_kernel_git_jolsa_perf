@@ -319,6 +319,15 @@ static int process_stat_stub(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int process_stat_round_stub(struct perf_tool *tool __maybe_unused,
+				   union perf_event *event __maybe_unused,
+				   struct perf_session *perf_session
+				   __maybe_unused)
+{
+	dump_printf(": unhandled!\n");
+	return 0;
+}
+
 void perf_tool__fill_defaults(struct perf_tool *tool)
 {
 	if (tool->sample == NULL)
@@ -367,6 +376,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 		tool->auxtrace_error = process_event_auxtrace_error_stub;
 	if (tool->stat == NULL)
 		tool->stat = process_stat_stub;
+	if (tool->stat_round == NULL)
+		tool->stat_round = process_stat_round_stub;
 }
 
 static void swap_sample_id_all(union perf_event *event, void *data)
@@ -613,6 +624,12 @@ static void perf_event__stat_swap(union perf_event *event,
 	event->stat.run    = bswap_64(event->stat.run);
 }
 
+static void perf_event__stat_round_swap(union perf_event *event,
+					bool sample_id_all __maybe_unused)
+{
+	event->stat_round.time = bswap_64(event->stat_round.time);
+}
+
 typedef void (*perf_event__swap_op)(union perf_event *event,
 				    bool sample_id_all);
 
@@ -638,6 +655,7 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_AUXTRACE]		  = perf_event__auxtrace_swap,
 	[PERF_RECORD_AUXTRACE_ERROR]	  = perf_event__auxtrace_error_swap,
 	[PERF_RECORD_STAT]		  = perf_event__stat_swap,
+	[PERF_RECORD_STAT_ROUND]	  = perf_event__stat_round_swap,
 	[PERF_RECORD_HEADER_MAX]	  = NULL,
 };
 
@@ -1154,6 +1172,8 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->auxtrace_error(tool, event, session);
 	case PERF_RECORD_STAT:
 		return tool->stat(tool, event, session);
+	case PERF_RECORD_STAT_ROUND:
+		return tool->stat_round(tool, event, session);
 	default:
 		return -EINVAL;
 	}
