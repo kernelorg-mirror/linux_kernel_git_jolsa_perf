@@ -197,6 +197,26 @@ static inline int nsec_counter(struct perf_evsel *evsel)
 	return 0;
 }
 
+static int write_stat_round_event(u64 time)
+{
+	u16 size = sizeof(struct stat_round_event);
+	struct stat_round_event event  = {
+		.header = {
+			.type = PERF_RECORD_STAT_ROUND,
+			.size = size,
+		},
+		.time   = time,
+	};
+
+	if (perf_data_file__write(&record.file, &event, size) < 0) {
+		pr_err("failed to write perf data, error: %m\n");
+		return -1;
+	}
+
+	record.bytes_written += size;
+	return 0;
+}
+
 static int
 write_stat_event(u32 cpu, u32 thread, u64 id, struct perf_counts_values *count)
 {
@@ -297,6 +317,11 @@ static void process_interval(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
+
+	if (do_record()) {
+		if (write_stat_round_event(rs.tv_sec * NSECS_PER_SEC + rs.tv_nsec))
+			pr_err("failed to write stat round event\n");
+	}
 
 	print_counters(&rs, 0, NULL);
 }
@@ -1488,6 +1513,11 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	if (do_record()) {
 		int fd = perf_data_file__fd(&record.file);
+
+		if (!interval) {
+			if (write_stat_round_event(0))
+				pr_err("failed to write stat round event\n");
+		}
 
 		if (!record.file.is_pipe) {
 			record.session->header.data_size += record.bytes_written;
