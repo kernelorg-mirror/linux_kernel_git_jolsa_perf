@@ -35,6 +35,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_AUXTRACE]			= "AUXTRACE",
 	[PERF_RECORD_AUXTRACE_ERROR]		= "AUXTRACE_ERROR",
 	[PERF_RECORD_STAT]			= "STAT",
+	[PERF_RECORD_STAT_ROUND]		= "STAT_ROUND",
 };
 
 const char *perf_event__name(unsigned int id)
