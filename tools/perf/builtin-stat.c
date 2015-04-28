@@ -204,6 +204,13 @@ static int process_synthesized_event(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int write_stat_round_event(u64 time)
+{
+	return perf_event__synthesize_stat_round(NULL, time,
+						 process_synthesized_event,
+						 NULL);
+}
+
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
 static int
@@ -278,6 +285,11 @@ static void process_interval(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
+
+	if (STAT_RECORD) {
+		if (write_stat_round_event(rs.tv_sec * NSECS_PER_SEC + rs.tv_nsec))
+			pr_err("failed to write stat round event\n");
+	}
 
 	print_counters(&rs, 0, NULL);
 }
@@ -1577,6 +1589,11 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	if (STAT_RECORD) {
 		int fd = perf_data_file__fd(&perf_stat.file);
+
+		if (!interval) {
+			if (write_stat_round_event(0))
+				pr_err("failed to write stat round event\n");
+		}
 
 		if (!perf_stat.file.is_pipe) {
 			perf_stat.session->header.data_size += perf_stat.bytes_written;
