@@ -24,7 +24,7 @@ struct perf_counts_values {
 struct perf_counts {
 	s8		   	  scaled;
 	struct perf_counts_values aggr;
-	struct xyarray		  *cpu;
+	struct xyarray		  *values;
 };
 
 struct perf_evsel;
@@ -137,7 +137,7 @@ void perf_counts__free(struct perf_counts *counts);
 static inline struct perf_counts_values*
 perf_counts(struct perf_counts *counts, int cpu, int thread)
 {
-	return xyarray__entry(counts->cpu, cpu, thread);
+	return xyarray__entry(counts->values, cpu, thread);
 }
 
 int perf_evsel__object_config(size_t object_size,
