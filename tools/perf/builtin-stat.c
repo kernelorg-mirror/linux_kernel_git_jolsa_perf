@@ -474,7 +474,7 @@ static int read_counter(struct perf_evsel *counter)
 	return 0;
 }
 
-static void print_interval(void)
+static void process_interval(void)
 {
 	static int num_print_interval;
 	struct perf_evsel *counter;
@@ -647,7 +647,7 @@ static int __run_perf_stat(int argc, const char **argv)
 		if (interval) {
 			while (!waitpid(child_pid, &status, WNOHANG)) {
 				nanosleep(&ts, NULL);
-				print_interval();
+				process_interval();
 			}
 		}
 		wait(&status);
@@ -665,7 +665,7 @@ static int __run_perf_stat(int argc, const char **argv)
 		while (!done) {
 			nanosleep(&ts, NULL);
 			if (interval)
-				print_interval();
+				process_interval();
 		}
 	}
 
