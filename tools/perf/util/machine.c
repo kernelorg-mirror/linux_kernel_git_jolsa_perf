@@ -780,7 +780,7 @@ static void dso__adjust_kmod_long_name(struct dso *dso, const char *filename)
 }
 
 struct map *machine__findnew_module_map(struct machine *machine, u64 start,
-					const char *filename)
+					const char *filename, u64 timestamp)
 {
 	struct map *map = NULL;
 	struct dso *dso = NULL;
@@ -805,7 +805,7 @@ struct map *machine__findnew_module_map(struct machine *machine, u64 start,
 	if (dso == NULL)
 		goto out;
 
-	map = map__new2(start, dso, MAP__FUNCTION);
+	map = map__new2(start, dso, MAP__FUNCTION, timestamp);
 	if (map == NULL)
 		goto out;
 
@@ -979,7 +979,7 @@ int __machine__create_kernel_maps(struct machine *machine, struct dso *kernel)
 		struct kmap *kmap;
 		struct map *map;
 
-		machine->vmlinux_maps[type] = map__new2(start, kernel, type);
+		machine->vmlinux_maps[type] = map__new2(start, kernel, type, 0);
 		if (machine->vmlinux_maps[type] == NULL)
 			return -1;
 
@@ -1293,7 +1293,7 @@ static int machine__create_module(void *arg, const char *name, u64 start)
 	if (arch__fix_module_text_start(&start, name) < 0)
 		return -1;
 
-	map = machine__findnew_module_map(machine, start, name);
+	map = machine__findnew_module_map(machine, start, name, 0);
 	if (map == NULL)
 		return -1;
 
@@ -1398,7 +1398,8 @@ static bool machine__uses_kcore(struct machine *machine)
 }
 
 static int machine__process_kernel_mmap_event(struct machine *machine,
-					      union perf_event *event)
+					      union perf_event *event,
+					      u64 timestamp)
 {
 	struct map *map;
 	char kmmap_prefix[PATH_MAX];
@@ -1421,7 +1422,8 @@ static int machine__process_kernel_mmap_event(struct machine *machine,
 	if (event->mmap.filename[0] == '/' ||
 	    (!is_kernel_mmap && event->mmap.filename[0] == '[')) {
 		map = machine__findnew_module_map(machine, event->mmap.start,
-						  event->mmap.filename);
+						  event->mmap.filename,
+						  timestamp);
 		if (map == NULL)
 			goto out_problem;
 
@@ -1521,7 +1523,8 @@ int machine__process_mmap2_event(struct machine *machine,
 
 	if (sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL ||
 	    sample->cpumode == PERF_RECORD_MISC_KERNEL) {
-		ret = machine__process_kernel_mmap_event(machine, event);
+		ret = machine__process_kernel_mmap_event(machine, event,
+							 sample->time);
 		if (ret < 0)
 			goto out_problem;
 		return 0;
@@ -1544,7 +1547,8 @@ int machine__process_mmap2_event(struct machine *machine,
 			event->mmap2.ino_generation,
 			event->mmap2.prot,
 			event->mmap2.flags,
-			event->mmap2.filename, type, thread);
+			event->mmap2.filename, type, thread,
+			sample->time);
 
 	if (map == NULL)
 		goto out_problem_map;
@@ -1579,7 +1583,8 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 
 	if (sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL ||
 	    sample->cpumode == PERF_RECORD_MISC_KERNEL) {
-		ret = machine__process_kernel_mmap_event(machine, event);
+		ret = machine__process_kernel_mmap_event(machine, event,
+							 sample->time);
 		if (ret < 0)
 			goto out_problem;
 		return 0;
@@ -1599,7 +1604,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 			event->mmap.len, event->mmap.pgoff,
 			event->mmap.pid, 0, 0, 0, 0, 0, 0,
 			event->mmap.filename,
-			type, thread);
+			type, thread, sample->time);
 
 	if (map == NULL)
 		goto out_problem_map;

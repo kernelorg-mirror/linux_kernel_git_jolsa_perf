@@ -1073,7 +1073,7 @@ int dso__load_sym(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 				curr_dso->long_name = dso->long_name;
 				curr_dso->long_name_len = dso->long_name_len;
 				curr_map = map__new2(start, curr_dso,
-						     map->type);
+						     map->type, map->timestamp);
 				dso__put(curr_dso);
 				if (curr_map == NULL) {
 					goto out_elf_end;
