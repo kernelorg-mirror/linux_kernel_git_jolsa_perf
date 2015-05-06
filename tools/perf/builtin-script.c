@@ -17,6 +17,9 @@
 #include "util/sort.h"
 #include "util/data.h"
 #include "util/auxtrace.h"
+#include "util/stat.h"
+#include "util/cpumap.h"
+#include "util/thread_map.h"
 #include <linux/bitmap.h>
 
 static char const		*script_name;
@@ -193,6 +196,9 @@ static int perf_evsel__check_attr(struct perf_evsel *evsel,
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	bool allow_user_set;
+
+	if (perf_header__has_feat(&session->header, HEADER_STAT_MAPS))
+		return 0;
 
 	allow_user_set = perf_header__has_feat(&session->header,
 					       HEADER_AUXTRACE);
@@ -528,6 +534,12 @@ static void process_event(union perf_event *event, struct perf_sample *sample,
 	printf("\n");
 }
 
+static void process_stat(struct perf_evsel *evsel __maybe_unused, u64 time __maybe_unused)
+{
+}
+
+static void process_stat_interval(u64 time __maybe_unused) { }
+
 static int default_start_script(const char *script __maybe_unused,
 				int argc __maybe_unused,
 				const char **argv __maybe_unused)
@@ -556,6 +568,8 @@ static struct scripting_ops default_scripting_ops = {
 	.flush_script		= default_flush_script,
 	.stop_script		= default_stop_script,
 	.process_event		= process_event,
+	.process_stat		= process_stat,
+	.process_stat_interval	= process_stat_interval,
 	.generate_script	= default_generate_script,
 };
 
@@ -1535,6 +1549,22 @@ static int have_cmd(int argc, const char **argv)
 	return 0;
 }
 
+static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event,
+				    struct perf_session *session)
+{
+	struct stat_round_event *round = &event->stat_round;
+	struct perf_evsel *counter;
+
+	evlist__for_each(session->evlist, counter) {
+		perf_stat__process_counter(counter);
+		scripting_ops->process_stat(counter, round->time);
+	}
+
+	scripting_ops->process_stat_interval(round->time);
+	return 0;
+}
+
 int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool show_full_info = false;
@@ -1563,6 +1593,10 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 			.auxtrace_info	 = perf_event__process_auxtrace_info,
 			.auxtrace	 = perf_event__process_auxtrace,
 			.auxtrace_error	 = perf_event__process_auxtrace_error,
+			.stat		 = perf_event__process_stat_event,
+			.stat_round	 = process_stat_round_event,
+			.stat_maps	 = perf_session__process_stat_maps,
+			.stat_config	 = perf_event__process_stat_config,
 			.ordered_events	 = true,
 			.ordering_requires_timestamps = true,
 		},
@@ -1818,6 +1852,14 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (symbol__init(&session->header.env) < 0)
 		goto out_delete;
 
+	/*
+	 * We dont allocate count maps for pipe sessions,
+	 * because we will receive STAT_MAPS events.
+	 */
+	if (!file.is_pipe &&
+	    perf_evlist__alloc_stats(session->evlist, true))
+		goto out_delete;
+
 	script.session = session;
 
 	session->itrace_synth_opts = &itrace_synth_opts;
@@ -1892,6 +1934,7 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 	flush_scripting();
 
 out_delete:
+	perf_evlist__free_stats(session->evlist);
 	perf_session__delete(session);
 
 	if (script_started)

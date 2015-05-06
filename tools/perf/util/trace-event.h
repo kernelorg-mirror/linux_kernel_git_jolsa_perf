@@ -73,6 +73,8 @@ struct scripting_ops {
 			       struct perf_sample *sample,
 			       struct perf_evsel *evsel,
 			       struct addr_location *al);
+	void (*process_stat) (struct perf_evsel *evsel, u64 time);
+	void (*process_stat_interval) (u64 time);
 	int (*generate_script) (struct pevent *pevent, const char *outfile);
 };
 
