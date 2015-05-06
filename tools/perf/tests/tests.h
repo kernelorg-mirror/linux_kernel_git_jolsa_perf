@@ -101,6 +101,7 @@ int test__unit_number__scnprint(int subtest);
 int test__thread_comm(int subtest);
 int test__thread_lookup_time(int subtest);
 int test__thread_mg_time(int subtest);
+int test__thread_map_lookup_time(int subtest);
 
 #if defined(__arm__) || defined(__aarch64__)
 #ifdef HAVE_DWARF_UNWIND_SUPPORT
