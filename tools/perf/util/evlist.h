@@ -288,4 +288,6 @@ void perf_evlist__to_front(struct perf_evlist *evlist,
 void perf_evlist__set_tracking_event(struct perf_evlist *evlist,
 				     struct perf_evsel *tracking_evsel);
 
+int perf_evlist__alloc_stats(struct perf_evlist *evlist, bool alloc_raw);
+void perf_evlist__free_stats(struct perf_evlist *evlist);
 #endif /* __PERF_EVLIST_H */
