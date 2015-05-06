@@ -31,4 +31,13 @@ static inline void init_stats(struct stats *stats)
 	stats->min  = (u64) -1;
 	stats->max  = 0;
 }
+
+struct perf_session;
+union perf_event;
+struct perf_tool;
+struct perf_evsel;
+int perf_event__process_stat_event(struct perf_tool *tool,
+                                  union perf_event *event,
+                                  struct perf_session *perf_session);
+int process_counter(struct perf_evsel *counter);
 #endif

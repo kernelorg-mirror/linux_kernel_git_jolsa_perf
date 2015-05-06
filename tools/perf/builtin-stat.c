@@ -498,7 +498,7 @@ static int process_counter_maps(struct perf_evsel *counter)
 	return 0;
 }
 
-static int process_counter(struct perf_evsel *counter)
+int process_counter(struct perf_evsel *counter)
 {
 	struct perf_counts_values *aggr = &counter->counts->aggr;
 	struct perf_stat *ps = counter->priv;
@@ -1892,9 +1892,9 @@ static int __cmd_record(int argc, const char **argv)
 	return argc;
 }
 
-static int process_stat_event(struct perf_tool *tool __maybe_unused,
-			      union perf_event *event,
-			      struct perf_session *session)
+int perf_event__process_stat_event(struct perf_tool *tool __maybe_unused,
+				   union perf_event *event,
+				   struct perf_session *session)
 {
 	struct perf_counts_values count;
 	struct stat_event *stat = &event->stat;
@@ -1954,7 +1954,7 @@ static int __cmd_report(int argc, const char **argv)
 		.mode  = PERF_DATA_MODE_READ,
 	};
 	struct perf_tool tool = {
-		.stat		= process_stat_event,
+		.stat		= perf_event__process_stat_event,
 		.stat_round	= process_stat_round_event,
 	};
 	struct perf_stat_config *stat_config;
