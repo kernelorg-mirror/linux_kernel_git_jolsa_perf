@@ -878,6 +878,24 @@ int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads)
 	return 0;
 }
 
+int perf_evsel__alloc_prev_raw_counts(struct perf_evsel *evsel,
+				      int ncpus, int nthreads)
+{
+	struct perf_counts *counts;
+
+	counts = perf_counts__alloc(ncpus, nthreads);
+	if (counts)
+		evsel->prev_raw_counts = counts;
+
+	return counts ? 0 : -ENOMEM;
+}
+
+void perf_evsel__free_prev_raw_counts(struct perf_evsel *evsel)
+{
+	perf_counts__free(evsel->prev_raw_counts);
+	evsel->prev_raw_counts = NULL;
+}
+
 void perf_evsel__reset_stat_priv(struct perf_evsel *evsel)
 {
 	int i;
