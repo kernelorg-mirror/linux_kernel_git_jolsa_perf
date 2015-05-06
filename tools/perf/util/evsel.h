@@ -192,6 +192,11 @@ int perf_evsel__group_desc(struct perf_evsel *evsel, char *buf, size_t size);
 
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
 int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus, int nthreads);
+
+void perf_evsel__reset_stat_priv(struct perf_evsel *evsel);
+int perf_evsel__alloc_stat_priv(struct perf_evsel *evsel);
+void perf_evsel__free_stat_priv(struct perf_evsel *evsel);
+
 void perf_evsel__reset_counts(struct perf_evsel *evsel, int ncpus);
 void perf_evsel__free_counts(struct perf_evsel *evsel);
 void perf_evsel__close_fd(struct perf_evsel *evsel, int ncpus, int nthreads);

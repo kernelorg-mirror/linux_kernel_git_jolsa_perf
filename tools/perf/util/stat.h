@@ -9,6 +9,10 @@ struct stats
 	u64 max, min;
 };
 
+struct perf_stat {
+	struct stats res_stats[3];
+};
+
 void update_stats(struct stats *stats, u64 val);
 double avg_stats(struct stats *stats);
 double stddev_stats(struct stats *stats);
