@@ -8,6 +8,7 @@
 #include "util/debug.h"
 
 struct cpu_map {
+	int refcnt;
 	int nr;
 	int map[];
 };
@@ -21,6 +22,9 @@ int cpu_map__get_socket(struct cpu_map *map, int idx);
 int cpu_map__get_core(struct cpu_map *map, int idx);
 int cpu_map__build_socket_map(struct cpu_map *cpus, struct cpu_map **sockp);
 int cpu_map__build_core_map(struct cpu_map *cpus, struct cpu_map **corep);
+
+struct cpu_map* cpu_map__get(struct cpu_map *map);
+void cpu_map__put(struct cpu_map *map);
 
 static inline int cpu_map__socket(struct cpu_map *sock, int s)
 {
