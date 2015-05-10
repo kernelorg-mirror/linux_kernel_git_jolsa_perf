@@ -980,6 +980,16 @@ write_stat_maps(int fd, struct perf_header *ph __maybe_unused,
 	return 0;
 }
 
+static int
+write_stat_config(int fd, struct perf_header *ph,
+		  struct perf_evlist *evlist __maybe_unused)
+{
+	struct perf_session *session;
+
+	session = container_of(ph, struct perf_session, header);
+	return do_write(fd, &session->stat_config, sizeof(session->stat_config));
+}
+
 static void print_hostname(struct perf_header *ph, int fd __maybe_unused,
 			   FILE *fp)
 {
@@ -1349,6 +1359,17 @@ static void print_group_desc(struct perf_header *ph, int fd __maybe_unused,
 				fprintf(fp, "}\n");
 		}
 	}
+}
+
+static void print_stat_config(struct perf_header *ph, int fd __maybe_unused,
+			      FILE *fp)
+{
+	struct perf_session *session;
+
+	session = container_of(ph, struct perf_session, header);
+	fprintf(fp, "stat config:\n");
+	fprintf(fp, "  aggr_mode = %lu\n", session->stat_config.aggr_mode);
+	fprintf(fp, "  interval  = %lu\n", session->stat_config.interval);
 }
 
 static int __event_process_build_id(struct build_id_event *bev,
@@ -2028,6 +2049,34 @@ process_stat_maps(struct perf_file_section *section __maybe_unused,
 	return 0;
 }
 
+static int
+process_stat_config(struct perf_file_section *section __maybe_unused,
+		    struct perf_header *ph, int fd,
+		    void *data __maybe_unused)
+{
+	struct perf_session *session;
+	u64 val;
+
+	session = container_of(ph, struct perf_session, header);
+
+	if (readn(fd, &val, sizeof(val)) != sizeof(val))
+		return -1;
+
+	if (ph->needs_swap)
+		val = bswap_64(val);
+
+	session->stat_config.aggr_mode = val;
+
+	if (readn(fd, &val, sizeof(val)) != sizeof(val))
+		return -1;
+
+	if (ph->needs_swap)
+		val = bswap_64(val);
+
+	session->stat_config.interval = val;
+	return 0;
+}
+
 struct feature_ops {
 	int (*write)(int fd, struct perf_header *h, struct perf_evlist *evlist);
 	void (*print)(struct perf_header *h, int fd, FILE *fp);
@@ -2070,6 +2119,7 @@ static const struct feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPP(HEADER_GROUP_DESC,	group_desc),
 	FEAT_OPP(HEADER_AUXTRACE,	auxtrace),
 	FEAT_OPP(HEADER_STAT_MAPS,	stat_maps),
+	FEAT_OPP(HEADER_STAT_CONFIG,	stat_config),
 };
 
 struct header_print_data {

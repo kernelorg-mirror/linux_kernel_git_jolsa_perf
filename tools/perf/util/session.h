@@ -8,6 +8,7 @@
 #include "symbol.h"
 #include "thread.h"
 #include "data.h"
+#include "stat.h"
 #include "ordered-events.h"
 #include <linux/rbtree.h>
 #include <linux/perf_event.h>
@@ -33,6 +34,7 @@ struct perf_session {
 	struct ordered_events	ordered_events;
 	struct perf_data_file	*file;
 	struct perf_tool	*tool;
+	struct perf_stat_config stat_config;
 };
 
 #define PRINT_IP_OPT_IP		(1<<0)
