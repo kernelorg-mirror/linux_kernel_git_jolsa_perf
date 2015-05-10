@@ -13,6 +13,11 @@ struct perf_stat {
 	struct stats res_stats[3];
 };
 
+struct perf_stat_config {
+	u64	aggr_mode;
+	u64	interval;
+};
+
 void update_stats(struct stats *stats, u64 val);
 double avg_stats(struct stats *stats);
 double stddev_stats(struct stats *stats);
