@@ -290,4 +290,9 @@ void perf_evlist__set_tracking_event(struct perf_evlist *evlist,
 
 int perf_evlist__alloc_stats(struct perf_evlist *evlist, bool alloc_raw);
 void perf_evlist__free_stats(struct perf_evlist *evlist);
+
+int perf_evlist__synthesize_stat_maps(struct perf_evlist *evlist,
+				      struct perf_tool *tool,
+				      perf_event__handler_t process,
+				      struct machine *machine);
 #endif /* __PERF_EVLIST_H */

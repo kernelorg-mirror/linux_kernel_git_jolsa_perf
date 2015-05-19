@@ -138,4 +138,7 @@ int perf_event__synthesize_id_index(struct perf_tool *tool,
 				    struct perf_evlist *evlist,
 				    struct machine *machine);
 
+int perf_session__process_stat_maps(struct perf_tool *tool,
+				    union perf_event *event,
+				    struct perf_session *session);
 #endif /* __PERF_SESSION_H */

@@ -10,6 +10,7 @@
 #include "thread.h"
 #include "thread_map.h"
 #include "symbol/kallsyms.h"
+#include "cpumap.h"
 
 static const char *perf_event__names[] = {
 	[0]					= "TOTAL",
@@ -36,6 +37,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_AUXTRACE_ERROR]		= "AUXTRACE_ERROR",
 	[PERF_RECORD_STAT]			= "STAT",
 	[PERF_RECORD_STAT_ROUND]		= "STAT_ROUND",
+	[PERF_RECORD_STAT_MAPS]			= "STAT_MAPS",
 };
 
 const char *perf_event__name(unsigned int id)
@@ -578,6 +580,45 @@ out_free_comm:
 	free(comm_event);
 out:
 	return err;
+}
+
+int perf_event__synthesize_stat_maps(struct perf_tool *tool,
+				     struct cpu_map *cpus,
+				     struct thread_map *threads,
+				     perf_event__handler_t process,
+				     struct machine *machine,
+				     enum stat_maps_event_type type,
+				     u64 id)
+{
+	struct stat_maps_event *event;
+	int j, i = 0, size, ret;
+
+	/* size of both maps and 2 'nr' values */
+	size = (threads->nr + cpus->nr + 2) * sizeof(u64) + sizeof(*event);
+
+	event = zalloc(size);
+	if (!event)
+		return -ENOMEM;
+
+	event->header.type = PERF_RECORD_STAT_MAPS;
+	event->header.size = size;
+	event->type        = type;
+	event->id          = id;
+
+	event->array[i++] = cpus->nr;
+
+	for (j = 0; j < cpus->nr; j++, i++)
+		event->array[i] = cpus->map[j];
+
+	event->array[i++] = threads->nr;
+
+	for (j = 0; j < threads->nr; j++, i++)
+		event->array[i] = threads->map[j];
+
+	ret = process(tool, (union perf_event *) event, NULL, machine);
+
+	free(event);
+	return ret;
 }
 
 struct process_symbol_args {
