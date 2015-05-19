@@ -9,6 +9,8 @@
 #include "build-id.h"
 #include "perf_regs.h"
 
+struct cpu_map;
+
 struct mmap_event {
 	struct perf_event_header header;
 	u32 pid, tid;
@@ -222,6 +224,7 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_AUXTRACE_ERROR		= 72,
 	PERF_RECORD_STAT			= 73,
 	PERF_RECORD_STAT_ROUND			= 74,
+	PERF_RECORD_STAT_MAPS			= 75,
 	PERF_RECORD_HEADER_MAX
 };
 
@@ -359,6 +362,18 @@ struct stat_round_event {
 	u64				time;
 };
 
+enum stat_maps_event_type {
+	PERF_STAT_MAPS__EVLIST = 1,
+	PERF_STAT_MAPS__EVSEL,
+};
+
+struct stat_maps_event {
+	struct perf_event_header	header;
+	u64 type;
+	u64 id;
+	u64 array[];
+};
+
 union perf_event {
 	struct perf_event_header	header;
 	struct mmap_event		mmap;
@@ -381,6 +396,7 @@ union perf_event {
 	struct itrace_start_event	itrace_start;
 	struct stat_event		stat;
 	struct stat_round_event		stat_round;
+	struct stat_maps_event		stat_maps;
 };
 
 void perf_event__print_totals(void);
@@ -407,6 +423,14 @@ int perf_event__synthesize_kernel_mmap(struct perf_tool *tool,
 int perf_event__synthesize_modules(struct perf_tool *tool,
 				   perf_event__handler_t process,
 				   struct machine *machine);
+
+int perf_event__synthesize_stat_maps(struct perf_tool *tool,
+				     struct cpu_map *cpus,
+				     struct thread_map *threads,
+				     perf_event__handler_t process,
+				     struct machine *machine,
+				     enum stat_maps_event_type type,
+				     u64 id);
 
 int perf_event__process_comm(struct perf_tool *tool,
 			     union perf_event *event,

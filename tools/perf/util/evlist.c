@@ -1676,3 +1676,32 @@ void perf_evlist__free_stats(struct perf_evlist *evlist)
 		perf_evsel__free_prev_raw_counts(evsel);
 	}
 }
+
+int
+perf_evlist__synthesize_stat_maps(struct perf_evlist *evlist,
+				  struct perf_tool *tool,
+				  perf_event__handler_t process,
+				  struct machine *machine)
+{
+	struct perf_evsel *evsel;
+	int err = 0;
+
+	err = perf_event__synthesize_stat_maps(tool, evlist->cpus,
+					       evlist->threads,
+					       process, machine,
+					       PERF_STAT_MAPS__EVLIST, 0);
+	if (err)
+		return err;
+
+	evlist__for_each(evlist, evsel) {
+		err = perf_event__synthesize_stat_maps(tool, evsel->cpus,
+						       evsel->threads,
+						       process, machine,
+						       PERF_STAT_MAPS__EVSEL,
+						       evsel->id[0]);
+		if (err)
+			break;
+	}
+
+	return err;
+}

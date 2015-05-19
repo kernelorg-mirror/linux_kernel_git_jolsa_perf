@@ -13,6 +13,7 @@
 #include "sort.h"
 #include "util.h"
 #include "cpumap.h"
+#include "thread_map.h"
 #include "perf_regs.h"
 #include "asm/bug.h"
 #include "auxtrace.h"
@@ -328,6 +329,15 @@ static int process_stat_round_stub(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int process_stat_maps_stub(struct perf_tool *tool __maybe_unused,
+				  union perf_event *event __maybe_unused,
+				  struct perf_session *perf_session
+				  __maybe_unused)
+{
+	dump_printf(": unhandled!\n");
+	return 0;
+}
+
 void perf_tool__fill_defaults(struct perf_tool *tool)
 {
 	if (tool->sample == NULL)
@@ -378,6 +388,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 		tool->stat = process_stat_stub;
 	if (tool->stat_round == NULL)
 		tool->stat_round = process_stat_round_stub;
+	if (tool->stat_maps == NULL)
+		tool->stat_maps = process_stat_maps_stub;
 }
 
 static void swap_sample_id_all(union perf_event *event, void *data)
@@ -630,6 +642,14 @@ static void perf_event__stat_round_swap(union perf_event *event,
 	event->stat_round.time = bswap_64(event->stat_round.time);
 }
 
+static void perf_event__stat_maps_swap(union perf_event *event,
+				       bool sample_id_all __maybe_unused)
+{
+	size_t size = event->header.size;
+
+	mem_bswap_64(event->stat_maps.array, size);
+}
+
 typedef void (*perf_event__swap_op)(union perf_event *event,
 				    bool sample_id_all);
 
@@ -656,6 +676,7 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_AUXTRACE_ERROR]	  = perf_event__auxtrace_error_swap,
 	[PERF_RECORD_STAT]		  = perf_event__stat_swap,
 	[PERF_RECORD_STAT_ROUND]	  = perf_event__stat_round_swap,
+	[PERF_RECORD_STAT_MAPS]		  = perf_event__stat_maps_swap,
 	[PERF_RECORD_HEADER_MAX]	  = NULL,
 };
 
@@ -1174,6 +1195,8 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->stat(tool, event, session);
 	case PERF_RECORD_STAT_ROUND:
 		return tool->stat_round(tool, event, session);
+	case PERF_RECORD_STAT_MAPS:
+		return tool->stat_maps(tool, event, session);
 	default:
 		return -EINVAL;
 	}
@@ -2025,4 +2048,107 @@ out_err:
 	free(ev);
 
 	return err;
+}
+
+static int process_stat_maps(struct stat_maps_event *stat_maps,
+			     struct cpu_map **pcpus,
+			     struct thread_map **pthreads)
+{
+	unsigned int i = 0, j;
+	struct thread_map *threads;
+	struct cpu_map *cpus;
+	u64 nr;
+
+	nr = stat_maps->array[i++];
+	cpus = malloc(sizeof(*cpus) + nr * sizeof(int));
+	if (!cpus)
+		return -ENOMEM;
+
+	cpus->refcnt = 1;
+
+	for (j = 0; j < nr; j++, i++)
+		cpus->map[j] = (int) stat_maps->array[i];
+
+	nr = stat_maps->array[i++];
+	threads = malloc(sizeof(*threads) + nr * sizeof(pid_t));
+	if (!threads) {
+		free(cpus);
+		return -ENOMEM;
+	}
+
+	threads->refcnt = 1;
+
+	for (j = 0; j < nr; j++, i++)
+		cpus->map[j] = (pid_t) stat_maps->array[i];
+
+	*pcpus    = cpus;
+	*pthreads = threads;
+	return 0;
+}
+
+static int
+perf_evsel__process_stat_maps(struct perf_evlist *evlist,
+			      struct stat_maps_event *stat_maps)
+{
+	struct perf_evsel *evsel;
+	struct thread_map *threads;
+	struct cpu_map *cpus;
+	int err;
+
+	evsel = perf_evlist__id2evsel(evlist, stat_maps->id);
+	if (!evsel) {
+		pr_err("failed to process stat_maps, event id not found\n");
+		return -EINVAL;
+	}
+
+	if (evsel->cpus || evsel->threads) {
+		pr_warning("evsel altready has maps, moving on\n");
+		return 0;
+	}
+
+	err = process_stat_maps(stat_maps, &cpus, &threads);
+	if (err) {
+		pr_err("failed to process stat_maps\n");
+		return err;
+	}
+
+	evsel->cpus    = cpus;
+	evsel->threads = threads;
+	return 0;
+}
+
+static int
+perf_evlist__process_stat_maps(struct perf_evlist *evlist,
+			       struct stat_maps_event *stat_maps)
+{
+	struct thread_map *threads;
+	struct cpu_map *cpus;
+	int err;
+
+	if (evlist->cpus) {
+		pr_warning("evlist altready has maps, moving on\n");
+		return 0;
+	}
+
+	err = process_stat_maps(stat_maps, &cpus, &threads);
+	if (err) {
+		pr_err("failed to process stat_maps\n");
+		return err;
+	}
+
+	evlist->cpus    = cpus;
+	evlist->threads = threads;
+	return 0;
+}
+
+int perf_session__process_stat_maps(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event,
+				    struct perf_session *session)
+{
+	struct stat_maps_event *stat_maps = &event->stat_maps;
+	struct perf_evlist *evlist = session->evlist;
+
+	return stat_maps->type == PERF_STAT_MAPS__EVLIST ?
+	       perf_evlist__process_stat_maps(evlist, stat_maps) :
+	       perf_evsel__process_stat_maps(evlist, stat_maps);
 }
