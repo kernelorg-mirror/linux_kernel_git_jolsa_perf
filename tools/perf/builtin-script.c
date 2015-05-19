@@ -572,9 +572,40 @@ static void process_event(union perf_event *event, struct perf_sample *sample,
 }
 
 static void process_stat(struct perf_stat_config *config __maybe_unused,
-			 struct perf_evsel *evsel __maybe_unused,
-			 u64 time __maybe_unused)
+			 struct perf_evsel *counter, u64 time)
 {
+	int nthreads = thread_map__nr(counter->threads);
+	int ncpus = perf_evsel__nr_cpus(counter);
+	int cpu, thread;
+	static int header_printed;
+
+	if (counter->system_wide)
+		nthreads = 1;
+
+	if (!header_printed) {
+		printf("%3s %8s %15s %15s %15s %15s %s\n",
+		       "CPU", "THREAD", "VAL", "ENA", "RUN", "TIME", "EVENT");
+		header_printed = 1;
+	}
+
+	for (thread = 0; thread < nthreads; thread++) {
+		for (cpu = 0; cpu < ncpus; cpu++) {
+			struct perf_counts_values *counts;
+
+			counts = perf_counts(counter->counts, cpu, thread);
+
+			printf("%3d %8d %15" PRIu64 " %15" PRIu64 " %15" PRIu64 " %15" PRIu64 " %s\n",
+				counter->cpus->map[cpu],
+				thread_map__pid(counter->threads, thread),
+				counts->val,
+				counts->ena,
+				counts->run,
+				time,
+				perf_evsel__name(counter));
+		}
+	}
+
+	return;
 }
 
 static void process_stat_interval(u64 time __maybe_unused) { }
