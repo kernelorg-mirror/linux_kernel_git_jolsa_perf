@@ -55,7 +55,8 @@ struct perf_tool {
 			auxtrace_info,
 			auxtrace_error,
 			stat,
-			stat_round;
+			stat_round,
+			stat_maps;
 	event_op3	auxtrace;
 	bool		ordered_events;
 	bool		ordering_requires_timestamps;
