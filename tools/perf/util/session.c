@@ -2055,7 +2055,8 @@ static void *processing_thread_idx(void *arg)
 	return arg;
 }
 
-int perf_session__process_events_mt(struct perf_session *session, void *arg)
+int perf_session__process_events_mt(struct perf_session *session,
+				    int nr_thread, void *arg)
 {
 	struct perf_data *data = session->data;
 	struct perf_evlist *evlist = session->evlist;
@@ -2071,7 +2072,6 @@ int perf_session__process_events_mt(struct perf_session *session, void *arg)
 	int err, i, k;
 	int nr_index = session->header.nr_index;
 	u64 size = perf_data__size(data);
-	int nr_thread = sysconf(_SC_NPROCESSORS_ONLN);
 
 	if (perf_data__is_pipe(data) || !session->header.index) {
 		pr_err("data doesn't contain the index table\n");
