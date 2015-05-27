@@ -959,6 +959,19 @@ int perf_evsel__alloc_counts(struct perf_evsel *evsel, int ncpus, int nthreads)
 	return evsel->counts != NULL ? 0 : -ENOMEM;
 }
 
+int perf_evsel__alloc_stats(struct perf_evsel *evsel, bool alloc_raw)
+{
+	int ncpus = perf_evsel__nr_cpus(evsel);
+	int nthreads = thread_map__nr(evsel->threads);
+
+	if (perf_evsel__alloc_stat_priv(evsel) < 0 ||
+	    perf_evsel__alloc_counts(evsel, ncpus, nthreads) < 0 ||
+	    (alloc_raw && perf_evsel__alloc_prev_raw_counts(evsel, ncpus, nthreads) < 0))
+		return -ENOMEM;
+
+	return 0;
+}
+
 static void perf_evsel__free_fd(struct perf_evsel *evsel)
 {
 	xyarray__delete(evsel->fd);
