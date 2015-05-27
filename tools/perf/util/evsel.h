@@ -201,6 +201,8 @@ void perf_evsel__reset_stat_priv(struct perf_evsel *evsel);
 int perf_evsel__alloc_stat_priv(struct perf_evsel *evsel);
 void perf_evsel__free_stat_priv(struct perf_evsel *evsel);
 
+int perf_evsel__alloc_stats(struct perf_evsel *evsel, bool alloc_raw);
+
 void perf_evsel__reset_counts(struct perf_evsel *evsel, int ncpus);
 void perf_evsel__free_counts(struct perf_evsel *evsel);
 void perf_evsel__close_fd(struct perf_evsel *evsel, int ncpus, int nthreads);
@@ -395,5 +397,4 @@ typedef int (*attr__fprintf_f)(FILE *, const char *, const char *, void *);
 
 int perf_event_attr__fprintf(FILE *fp, struct perf_event_attr *attr,
 			     attr__fprintf_f attr__fprintf, void *priv);
-
 #endif /* __PERF_EVSEL_H */
