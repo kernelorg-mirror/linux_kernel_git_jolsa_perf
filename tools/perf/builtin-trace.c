@@ -2468,9 +2468,13 @@ static int trace__replay(struct trace *trace)
 	/* add tid to output */
 	trace->multiple_threads = true;
 
+	trace->tool.machines = machines__new();
+	if (trace->tool.machines == NULL)
+		return -1;
+
 	session = perf_session__new(&data, false, &trace->tool);
 	if (session == NULL)
-		return -1;
+		goto out_delete;
 
 	if (trace->opts.target.pid)
 		symbol_conf.pid_list_str = strdup(trace->opts.target.pid);
@@ -2532,6 +2536,8 @@ static int trace__replay(struct trace *trace)
 
 out:
 	perf_session__delete(session);
+out_delete:
+	machines__delete(trace->tool.machines);
 
 	return err;
 }

@@ -473,6 +473,10 @@ int cmd_annotate(int argc, const char **argv)
 
 	data.file.path = input_name;
 
+	annotate.tool.machines = machines__new();
+	if (annotate.tool.machines == NULL)
+		return -1;
+
 	annotate.session = perf_session__new(&data, false, &annotate.tool);
 	if (annotate.session == NULL)
 		return -1;
@@ -513,6 +517,7 @@ out_delete:
 	 * up we'll get here.
 	 *
 	 * perf_session__delete(session);
+	 * machines__delete(annotate.tool.machines);
 	 */
 	return ret;
 }
