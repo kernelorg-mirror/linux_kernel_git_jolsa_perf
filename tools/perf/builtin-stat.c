@@ -597,6 +597,24 @@ static int store_counter_ids(struct perf_evsel *counter)
 	return __store_counter_ids(counter, cpus, threads);
 }
 
+static int process_synthesized_event(struct perf_tool *tool __maybe_unused,
+				     union perf_event *event,
+				     struct perf_sample *sample __maybe_unused,
+				     struct machine *machine __maybe_unused)
+{
+	static int off = sizeof(struct perf_pipe_file_header);
+
+	off += event->header.size;
+
+	if (perf_data_file__write(&record.file, event, event->header.size) < 0) {
+		pr_err("failed to write perf data, error: %m\n");
+		return -1;
+	}
+
+	record.bytes_written += event->header.size;
+	return 0;
+}
+
 static int __run_perf_stat(int argc, const char **argv)
 {
 	char msg[512];
@@ -673,7 +691,26 @@ static int __run_perf_stat(int argc, const char **argv)
 	if (do_record()) {
 		int err, fd = perf_data_file__fd(&record.file);
 
-		if (!is_pipe) {
+		if (is_pipe) {
+			err = perf_header__write_pipe(perf_data_file__fd(&record.file));
+			if (err < 0)
+				return err;
+
+			err = perf_event__synthesize_attrs(NULL, record.session,
+							   process_synthesized_event);
+			if (err < 0) {
+				pr_err("Couldn't synthesize attrs.\n");
+				return err;
+			}
+
+			err = perf_evlist__synthesize_stat_maps(evsel_list, NULL,
+								process_synthesized_event,
+								NULL);
+			if (err < 0) {
+				pr_err("Couldn't synthesize maps.\n");
+				return err;
+			}
+		} else {
 			err = perf_session__write_header(record.session, evsel_list,
 							 fd, false);
 			if (err < 0)
