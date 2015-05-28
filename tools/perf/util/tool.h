@@ -12,6 +12,7 @@ struct perf_evsel;
 struct perf_sample;
 struct perf_tool;
 struct machine;
+struct machines;
 struct ordered_events;
 
 typedef int (*event_sample)(struct perf_tool *tool, union perf_event *event,
@@ -41,6 +42,7 @@ enum show_feature_header {
 };
 
 struct perf_tool {
+	struct machines *machines;
 	event_sample	sample,
 			read;
 	event_op	mmap,
