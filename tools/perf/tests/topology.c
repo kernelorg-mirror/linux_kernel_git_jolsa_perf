@@ -28,11 +28,15 @@ static int get_temp(char *path)
 
 static int session_write_header(char *path)
 {
+	struct machines *machines;
 	struct perf_session *session;
 	struct perf_data data = {
 		.file.path = path,
 		.mode      = PERF_DATA_MODE_WRITE,
 	};
+
+	machines = machines__new();
+	TEST_ASSERT_VAL("can't get machines", machines);
 
 	session = perf_session__new(&data, false, NULL);
 	TEST_ASSERT_VAL("can't get session", session);
@@ -49,18 +53,23 @@ static int session_write_header(char *path)
 			!perf_session__write_header(session, session->evlist, data.file.fd, true));
 
 	perf_session__delete(session);
+	machines__delete(machines);
 
 	return 0;
 }
 
 static int check_cpu_topology(char *path, struct cpu_map *map)
 {
+	struct machines *machines;
 	struct perf_session *session;
 	struct perf_data data = {
 		.file.path = path,
 		.mode      = PERF_DATA_MODE_READ,
 	};
 	int i;
+
+	machines = machines__new();
+	TEST_ASSERT_VAL("can't get machines", machines);
 
 	session = perf_session__new(&data, false, NULL);
 	TEST_ASSERT_VAL("can't get session", session);
@@ -82,6 +91,7 @@ static int check_cpu_topology(char *path, struct cpu_map *map)
 	}
 
 	perf_session__delete(session);
+	machines__delete(machines);
 
 	return 0;
 }

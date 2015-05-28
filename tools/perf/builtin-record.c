@@ -1001,10 +1001,14 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		signal(SIGUSR2, SIG_IGN);
 	}
 
+	tool->machines = machines__new();
+	if (tool->machines == NULL)
+		return -1;
+
 	session = perf_session__new(data, false, tool);
 	if (session == NULL) {
 		pr_err("Perf session creation failed.\n");
-		return -1;
+		goto out_delete_machines;
 	}
 
 	fd = perf_data__fd(data);
@@ -1322,6 +1326,8 @@ out_child:
 
 out_delete_session:
 	perf_session__delete(session);
+out_delete_machines:
+	machines__delete(tool->machines);
 	return status;
 }
 
