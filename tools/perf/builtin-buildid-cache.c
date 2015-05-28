@@ -294,6 +294,9 @@ int cmd_buildid_cache(int argc, const char **argv)
 		.mode  = PERF_DATA_MODE_READ,
 	};
 	struct perf_session *session = NULL;
+	struct perf_tool tool = {
+		.machines = NULL,
+	};
 
 	const struct option buildid_cache_options[] = {
 	OPT_STRING('a', "add", &add_name_list_str,
@@ -329,9 +332,14 @@ int cmd_buildid_cache(int argc, const char **argv)
 		data.file.path = missing_filename;
 		data.force     = force;
 
-		session = perf_session__new(&data, false, NULL);
-		if (session == NULL)
+		ret = -1;
+
+		tool.machines = machines__new();
+		if (tool.machines == NULL)
 			return -1;
+		session = perf_session__new(&data, false, &tool);
+		if (session == NULL)
+			goto out;
 	}
 
 	if (symbol__init(session ? &session->header.env : NULL) < 0)
@@ -418,7 +426,10 @@ int cmd_buildid_cache(int argc, const char **argv)
 		pr_warning("Couldn't add %s\n", kcore_filename);
 
 out:
-	perf_session__delete(session);
+	if (session)
+		perf_session__delete(session);
+	if (tool.machines)
+		machines__delete(tool.machines);
 
 	return ret;
 }

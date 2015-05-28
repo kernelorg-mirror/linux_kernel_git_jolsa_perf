@@ -1491,10 +1491,14 @@ int bt_convert__perf2ctf(const char *input, const char *path,
 		return -1;
 
 	err = -1;
+	c.tool.machines = machines__new();
+	if (c.tool.machines == NULL)
+		goto free_writer;
+
 	/* perf.data session */
 	session = perf_session__new(&data, 0, &c.tool);
 	if (!session)
-		goto free_writer;
+		goto free_machines;
 
 	if (c.queue_size) {
 		ordered_events__set_alloc_size(&session->ordered_events,
@@ -1543,6 +1547,8 @@ int bt_convert__perf2ctf(const char *input, const char *path,
 
 free_session:
 	perf_session__delete(session);
+free_machines:
+	machines__delete(c.tool.machines);
 free_writer:
 	ctf_writer__cleanup(cw);
 	pr_err("Error during conversion setup.\n");

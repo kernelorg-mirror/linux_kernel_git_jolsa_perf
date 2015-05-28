@@ -773,6 +773,12 @@ static int __cmd_diff(void)
 	struct data__file *d;
 	int ret = -EINVAL, i;
 
+	tool.machines = machines__new();
+	if (tool.machines == NULL) {
+		pr_err("Failed to allocate machines\n");
+		goto out_free;
+	}
+
 	data__for_each_file(i, d) {
 		d->session = perf_session__new(&d->data, false, &tool);
 		if (!d->session) {
@@ -798,6 +804,8 @@ static int __cmd_diff(void)
 		data__free(d);
 	}
 
+	machines__delete(tool.machines);
+out_free:
 	free(data__files);
 	return ret;
 }

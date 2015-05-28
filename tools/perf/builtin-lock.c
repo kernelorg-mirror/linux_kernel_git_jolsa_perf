@@ -867,10 +867,14 @@ static int __cmd_report(bool display_info)
 		.force     = force,
 	};
 
+	eops.machines = machines__new();
+	if (eops.machines == NULL)
+		return -1;
+
 	session = perf_session__new(&data, false, &eops);
 	if (!session) {
 		pr_err("Initializing perf session failed\n");
-		return -1;
+		goto out_delete_machine;
 	}
 
 	symbol__init(&session->header.env);
@@ -900,6 +904,8 @@ static int __cmd_report(bool display_info)
 
 out_delete:
 	perf_session__delete(session);
+out_delete_machine:
+	machines__delete(eops.machines);
 	return err;
 }
 
