@@ -890,7 +890,7 @@ int parse_events_name(struct list_head *list, char *name)
 
 	__evlist__for_each(list, evsel) {
 		if (!evsel->name)
-			evsel->name = strdup(name);
+			perf_evsel__name_init(evsel, name);
 	}
 
 	return 0;
