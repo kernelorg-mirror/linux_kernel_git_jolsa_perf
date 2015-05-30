@@ -46,6 +46,13 @@ struct perf_sample_id {
 
 struct cgroup_sel;
 
+enum perf_evsel_nameid {
+	PERF_EVSEL_NAMEID__NONE = 0,
+	PERF_EVSEL_NAMEID__MAX,
+};
+
+#define perf_evsel__is(evsel, id) (evsel->nameid == PERF_EVSEL_NAMEID__ ## id)
+
 /** struct perf_evsel - event selector
  *
  * @name - Can be set to retain the original event name passed by the user,
@@ -100,6 +107,8 @@ struct perf_evsel {
 	unsigned long		*per_pkg_mask;
 	struct perf_evsel	*leader;
 	char			*group_name;
+
+	enum perf_evsel_nameid	nameid;
 };
 
 union u64_swap {
@@ -365,5 +374,7 @@ typedef int (*attr__fprintf_f)(FILE *, const char *, const char *, void *);
 
 int perf_event_attr__fprintf(FILE *fp, struct perf_event_attr *attr,
 			     attr__fprintf_f attr__fprintf, void *priv);
+
+void perf_evsel__name_init(struct perf_evsel *evsel, char *name);
 
 #endif /* __PERF_EVSEL_H */

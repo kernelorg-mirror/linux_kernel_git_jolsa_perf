@@ -80,6 +80,28 @@ set_methods:
 	return 0;
 }
 
+#define ID(id, name) [PERF_EVSEL_NAMEID__##id] = #name
+static const char *nameid_str[PERF_EVSEL_NAMEID__MAX] = {
+	ID(NONE, x),
+};
+#undef ID
+
+void perf_evsel__name_init(struct perf_evsel *evsel, char *name)
+{
+	enum perf_evsel_nameid nameid = PERF_EVSEL_NAMEID__NONE;
+	int i;
+
+	for (i = 0; i < PERF_EVSEL_NAMEID__MAX; i++) {
+		if (!strcmp(name, nameid_str[i])) {
+			nameid = i;
+			break;
+		}
+	}
+
+	evsel->nameid = nameid;
+	evsel->name   = strdup(name);
+}
+
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 
 int __perf_evsel__sample_size(u64 sample_type)
