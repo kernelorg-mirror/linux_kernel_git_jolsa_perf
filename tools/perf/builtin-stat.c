@@ -102,17 +102,9 @@ static struct target target = {
 	.uid	= UINT_MAX,
 };
 
-enum aggr_mode {
-	AGGR_NONE,
-	AGGR_GLOBAL,
-	AGGR_SOCKET,
-	AGGR_CORE,
-};
-
 static int			run_count			=  1;
 static bool			no_inherit			= false;
 static bool			scale				=  true;
-static enum aggr_mode		aggr_mode			= AGGR_GLOBAL;
 static volatile pid_t		child_pid			= -1;
 static bool			null_run			=  false;
 static int			detailed_run			=  0;

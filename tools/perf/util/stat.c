@@ -2,6 +2,8 @@
 
 #include "stat.h"
 
+enum aggr_mode aggr_mode = AGGR_GLOBAL;
+
 void update_stats(struct stats *stats, u64 val)
 {
 	double delta;

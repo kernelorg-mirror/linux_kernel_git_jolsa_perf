@@ -22,4 +22,13 @@ static inline void init_stats(struct stats *stats)
 	stats->min  = (u64) -1;
 	stats->max  = 0;
 }
+
+enum aggr_mode {
+	AGGR_NONE,
+	AGGR_GLOBAL,
+	AGGR_SOCKET,
+	AGGR_CORE,
+};
+
+extern enum aggr_mode aggr_mode;
 #endif
