@@ -2,6 +2,7 @@
 #define __PERF_STATS_H
 
 #include <linux/types.h>
+#include <stdio.h>
 
 struct stats
 {
@@ -32,5 +33,14 @@ enum aggr_mode {
 
 extern enum aggr_mode aggr_mode;
 extern bool perf_stat_scale;
+
+extern struct stats walltime_nsecs_stats;
+struct perf_evsel;
+
+void perf_stat__reset_shadow_stats(void);
+void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 *count,
+				    int cpu);
+void perf_stat__print_shadow_stats(FILE *out, struct perf_evsel *evsel,
+				   double avg, int cpu);
 
 #endif
