@@ -48,8 +48,14 @@ struct cgroup_sel;
 
 enum perf_evsel_nameid {
 	PERF_EVSEL_NAMEID__NONE = 0,
+	PERF_EVSEL_NAMEID__CYCLES_IN_TX,
+	PERF_EVSEL_NAMEID__TRANSACTION_START,
+	PERF_EVSEL_NAMEID__ELISION_START,
+	PERF_EVSEL_NAMEID__CYCLES_IN_TX_CP,
 	PERF_EVSEL_NAMEID__MAX,
 };
+
+#define perf_evsel__is(evsel, id) (evsel->nameid == PERF_EVSEL_NAMEID__ ## id)
 
 /** struct perf_evsel - event selector
  *

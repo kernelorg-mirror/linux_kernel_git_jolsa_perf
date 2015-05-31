@@ -354,29 +354,6 @@ static inline int nsec_counter(struct perf_evsel *evsel)
 	return 0;
 }
 
-static struct perf_evsel *nth_evsel(int n)
-{
-	static struct perf_evsel **array;
-	static int array_len;
-	struct perf_evsel *ev;
-	int j;
-
-	/* Assumes this only called when evsel_list does not change anymore. */
-	if (!array) {
-		evlist__for_each(evsel_list, ev)
-			array_len++;
-		array = malloc(array_len * sizeof(void *));
-		if (!array)
-			exit(ENOMEM);
-		j = 0;
-		evlist__for_each(evsel_list, ev)
-			array[j++] = ev;
-	}
-	if (n < array_len)
-		return array[n];
-	return NULL;
-}
-
 /*
  * Update various tracking values we maintain to print
  * more semantic information such as miss/hit ratios,
@@ -391,14 +368,11 @@ static void update_shadow_stats(struct perf_evsel *counter, u64 *count,
 		update_stats(&runtime_nsecs_stats[cpu], count[0]);
 	else if (perf_evsel__match(counter, HARDWARE, HW_CPU_CYCLES))
 		update_stats(&runtime_cycles_stats[ctx][cpu], count[0]);
-	else if (transaction_run &&
-		 perf_evsel__cmp(counter, nth_evsel(T_CYCLES_IN_TX)))
+	else if (transaction_run && perf_evsel__is(counter, CYCLES_IN_TX))
 		update_stats(&runtime_transaction_stats[ctx][cpu], count[0]);
-	else if (transaction_run &&
-		 perf_evsel__cmp(counter, nth_evsel(T_TRANSACTION_START)))
+	else if (transaction_run && perf_evsel__is(counter, TRANSACTION_START))
 		update_stats(&runtime_transaction_stats[ctx][cpu], count[0]);
-	else if (transaction_run &&
-		 perf_evsel__cmp(counter, nth_evsel(T_ELISION_START)))
+	else if (transaction_run && perf_evsel__is(counter, ELISION_START))
 		update_stats(&runtime_elision_stats[ctx][cpu], count[0]);
 	else if (perf_evsel__match(counter, HARDWARE, HW_STALLED_CYCLES_FRONTEND))
 		update_stats(&runtime_stalled_cycles_front_stats[ctx][cpu], count[0]);
@@ -1209,15 +1183,13 @@ static void abs_printout(int id, int nr, struct perf_evsel *evsel, double avg)
 		} else {
 			fprintf(output, "                                   ");
 		}
-	} else if (transaction_run &&
-		   perf_evsel__cmp(evsel, nth_evsel(T_CYCLES_IN_TX))) {
+	} else if (transaction_run && perf_evsel__is(evsel, CYCLES_IN_TX)) {
 		total = avg_stats(&runtime_cycles_stats[ctx][cpu]);
 		if (total)
 			fprintf(output,
 				" #   %5.2f%% transactional cycles   ",
 				100.0 * (avg / total));
-	} else if (transaction_run &&
-		   perf_evsel__cmp(evsel, nth_evsel(T_CYCLES_IN_TX_CP))) {
+	} else if (transaction_run && perf_evsel__is(evsel, CYCLES_IN_TX_CP)) {
 		total = avg_stats(&runtime_cycles_stats[ctx][cpu]);
 		total2 = avg_stats(&runtime_cycles_in_tx_stats[ctx][cpu]);
 		if (total2 < avg)
@@ -1226,8 +1198,7 @@ static void abs_printout(int id, int nr, struct perf_evsel *evsel, double avg)
 			fprintf(output,
 				" #   %5.2f%% aborted cycles         ",
 				100.0 * ((total2-avg) / total));
-	} else if (transaction_run &&
-		   perf_evsel__cmp(evsel, nth_evsel(T_TRANSACTION_START)) &&
+	} else if (transaction_run && perf_evsel__is(evsel, TRANSACTION_START) &&
 		   avg > 0 &&
 		   runtime_cycles_in_tx_stats[ctx][cpu].n != 0) {
 		total = avg_stats(&runtime_cycles_in_tx_stats[ctx][cpu]);
@@ -1236,8 +1207,7 @@ static void abs_printout(int id, int nr, struct perf_evsel *evsel, double avg)
 			ratio = total / avg;
 
 		fprintf(output, " # %8.0f cycles / transaction   ", ratio);
-	} else if (transaction_run &&
-		   perf_evsel__cmp(evsel, nth_evsel(T_ELISION_START)) &&
+	} else if (transaction_run && perf_evsel__is(evsel, ELISION_START) &&
 		   avg > 0 &&
 		   runtime_cycles_in_tx_stats[ctx][cpu].n != 0) {
 		total = avg_stats(&runtime_cycles_in_tx_stats[ctx][cpu]);
