@@ -104,7 +104,6 @@ static struct target target = {
 
 static int			run_count			=  1;
 static bool			no_inherit			= false;
-static bool			scale				=  true;
 static volatile pid_t		child_pid			= -1;
 static bool			null_run			=  false;
 static int			detailed_run			=  0;
@@ -305,7 +304,7 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 
-	if (scale)
+	if (perf_stat_scale)
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 				    PERF_FORMAT_TOTAL_TIME_RUNNING;
 
@@ -432,14 +431,14 @@ static int read_cb(struct perf_evsel *evsel, int cpu, int thread __maybe_unused,
 	case AGGR_NONE:
 		if (!evsel->snapshot)
 			perf_evsel__compute_deltas(evsel, cpu, count);
-		perf_counts_values__scale(count, scale, NULL);
+		perf_counts_values__scale(count, perf_stat_scale, NULL);
 		evsel->counts->cpu[cpu] = *count;
 		if (aggr_mode == AGGR_NONE)
 			update_shadow_stats(evsel, count->values, cpu);
 		break;
 	case AGGR_GLOBAL:
 		aggr->val += count->val;
-		if (scale) {
+		if (perf_stat_scale) {
 			aggr->ena += count->ena;
 			aggr->run += count->run;
 		}
@@ -470,7 +469,7 @@ static int read_counter_aggr(struct perf_evsel *counter)
 
 	if (!counter->snapshot)
 		perf_evsel__compute_deltas(counter, -1, aggr);
-	perf_counts_values__scale(aggr, scale, &counter->counts->scaled);
+	perf_counts_values__scale(aggr, perf_stat_scale, &counter->counts->scaled);
 
 	for (i = 0; i < 3; i++)
 		update_stats(&ps->res_stats[i], count[i]);
@@ -1711,7 +1710,7 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "system-wide collection from all CPUs"),
 	OPT_BOOLEAN('g', "group", &group,
 		    "put the counters into a counter group"),
-	OPT_BOOLEAN('c', "scale", &scale, "scale/normalize counters"),
+	OPT_BOOLEAN('c', "scale", &perf_stat_scale, "scale/normalize counters"),
 	OPT_INCR('v', "verbose", &verbose,
 		    "be more verbose (show counter open errors, etc)"),
 	OPT_INTEGER('r', "repeat", &run_count,
