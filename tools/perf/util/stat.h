@@ -2,6 +2,7 @@
 #define __PERF_STATS_H
 
 #include <linux/types.h>
+#include <stdio.h>
 
 struct stats
 {
@@ -22,4 +23,21 @@ static inline void init_stats(struct stats *stats)
 	stats->min  = (u64) -1;
 	stats->max  = 0;
 }
+
+enum aggr_mode {
+	AGGR_NONE,
+	AGGR_GLOBAL,
+	AGGR_SOCKET,
+	AGGR_CORE,
+};
+
+extern struct stats walltime_nsecs_stats;
+struct perf_evsel;
+
+void perf_stat__reset_shadow_stats(void);
+void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 *count,
+				    int cpu);
+void perf_stat__print_shadow_stats(FILE *out, struct perf_evsel *evsel,
+				   double avg, int cpu, enum aggr_mode aggr);
+
 #endif
