@@ -47,4 +47,6 @@ void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 *count,
 void perf_stat__print_shadow_stats(FILE *out, struct perf_evsel *evsel,
 				   double avg, int cpu);
 
+struct perf_evsel;
+int perf_stat__process_counter(struct perf_evsel *counter);
 #endif
