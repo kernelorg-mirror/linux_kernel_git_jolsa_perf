@@ -31,4 +31,6 @@ enum aggr_mode {
 };
 
 extern enum aggr_mode aggr_mode;
+extern bool perf_stat_scale;
+
 #endif

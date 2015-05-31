@@ -3,6 +3,7 @@
 #include "stat.h"
 
 enum aggr_mode aggr_mode = AGGR_GLOBAL;
+bool perf_stat_scale	 = true;
 
 void update_stats(struct stats *stats, u64 val)
 {
