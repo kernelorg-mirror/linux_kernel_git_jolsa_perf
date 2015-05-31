@@ -73,8 +73,8 @@ static void print_counter(struct perf_evsel *counter, char *prefix);
 static void print_aggr(char *prefix);
 
 /* Default events used for perf stat -T */
-static const char * const transaction_attrs[] = {
-	"task-clock",
+static const char *transaction_attrs = {
+	"task-clock"
 	"{"
 	"instructions,"
 	"cycles,"
@@ -86,25 +86,14 @@ static const char * const transaction_attrs[] = {
 };
 
 /* More limited version when the CPU does not have all events. */
-static const char * const transaction_limited_attrs[] = {
-	"task-clock",
+static const char * transaction_limited_attrs = {
+	"task-clock"
 	"{"
 	"instructions,"
 	"cycles,"
 	"cpu/cycles-t/,"
 	"cpu/tx-start/"
 	"}"
-};
-
-/* must match transaction_attrs and the beginning limited_attrs */
-enum {
-	T_TASK_CLOCK,
-	T_INSTRUCTIONS,
-	T_CYCLES,
-	T_CYCLES_IN_TX,
-	T_TRANSACTION_START,
-	T_ELISION_START,
-	T_CYCLES_IN_TX_CP,
 };
 
 static struct perf_evlist	*evsel_list;
@@ -1546,17 +1535,6 @@ static int perf_stat_init_aggr_mode(void)
 	return 0;
 }
 
-static int setup_events(const char * const *attrs, unsigned len)
-{
-	unsigned i;
-
-	for (i = 0; i < len; i++) {
-		if (parse_events(evsel_list, attrs[i], NULL))
-			return -1;
-	}
-	return 0;
-}
-
 /*
  * Add default attributes, if there were no attributes specified or
  * if -d/--detailed, -d -d or -d -d -d is used:
@@ -1678,11 +1656,9 @@ static int add_default_attributes(void)
 		int err;
 		if (pmu_have_event("cpu", "cycles-ct") &&
 		    pmu_have_event("cpu", "el-start"))
-			err = setup_events(transaction_attrs,
-					ARRAY_SIZE(transaction_attrs));
+			err = parse_events(evsel_list, transaction_attrs, NULL);
 		else
-			err = setup_events(transaction_limited_attrs,
-				 ARRAY_SIZE(transaction_limited_attrs));
+			err = parse_events(evsel_list, transaction_limited_attrs, NULL);
 		if (err < 0) {
 			fprintf(stderr, "Cannot set up transaction events\n");
 			return -1;
