@@ -338,6 +338,15 @@ static int process_stat_maps_stub(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int process_stat_config_stub(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event __maybe_unused,
+				    struct perf_session *perf_session
+				    __maybe_unused)
+{
+	dump_printf(": unhandled!\n");
+	return 0;
+}
+
 void perf_tool__fill_defaults(struct perf_tool *tool)
 {
 	if (tool->sample == NULL)
@@ -390,6 +399,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 		tool->stat_round = process_stat_round_stub;
 	if (tool->stat_maps == NULL)
 		tool->stat_maps = process_stat_maps_stub;
+	if (tool->stat_config == NULL)
+		tool->stat_config = process_stat_config_stub;
 }
 
 static void swap_sample_id_all(union perf_event *event, void *data)
@@ -650,6 +661,13 @@ static void perf_event__stat_maps_swap(union perf_event *event,
 	mem_bswap_64(event->stat_maps.array, size);
 }
 
+static void perf_event__stat_config_swap(union perf_event *event,
+					 bool sample_id_all __maybe_unused)
+{
+	event->stat_config.aggr_mode = bswap_64(event->stat_config.aggr_mode);
+	event->stat_config.interval  = bswap_64(event->stat_config.interval);
+}
+
 typedef void (*perf_event__swap_op)(union perf_event *event,
 				    bool sample_id_all);
 
@@ -677,6 +695,7 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_STAT]		  = perf_event__stat_swap,
 	[PERF_RECORD_STAT_ROUND]	  = perf_event__stat_round_swap,
 	[PERF_RECORD_STAT_MAPS]		  = perf_event__stat_maps_swap,
+	[PERF_RECORD_STAT_CONFIG]	  = perf_event__stat_config_swap,
 	[PERF_RECORD_HEADER_MAX]	  = NULL,
 };
 
@@ -1197,6 +1216,8 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->stat_round(tool, event, session);
 	case PERF_RECORD_STAT_MAPS:
 		return tool->stat_maps(tool, event, session);
+	case PERF_RECORD_STAT_CONFIG:
+		return tool->stat_config(tool, event, session);
 	default:
 		return -EINVAL;
 	}

@@ -38,6 +38,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_STAT]			= "STAT",
 	[PERF_RECORD_STAT_ROUND]		= "STAT_ROUND",
 	[PERF_RECORD_STAT_MAPS]			= "STAT_MAPS",
+	[PERF_RECORD_STAT_CONFIG]		= "STAT_CONFIG",
 };
 
 const char *perf_event__name(unsigned int id)
@@ -619,6 +620,31 @@ int perf_event__synthesize_stat_maps(struct perf_tool *tool,
 
 	free(event);
 	return ret;
+}
+
+int perf_event__synthesize_stat_config(struct perf_tool *tool,
+				       struct perf_stat_config *config,
+				       perf_event__handler_t process,
+				       struct machine *machine)
+{
+	struct stat_config_event event;
+
+	event.header.type = PERF_RECORD_STAT_CONFIG;
+	event.header.size = sizeof(event);
+	event.aggr_mode   = config->aggr_mode;
+	event.interval    = config->interval;
+
+	return process(tool, (union perf_event *) &event, NULL, machine);
+}
+
+int perf_event__process_stat_config(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event,
+				    struct perf_session *session __maybe_unused)
+{
+	struct stat_config_event *config = &event->stat_config;
+
+	aggr_mode = config->aggr_mode;
+	return 0;
 }
 
 struct process_symbol_args {
