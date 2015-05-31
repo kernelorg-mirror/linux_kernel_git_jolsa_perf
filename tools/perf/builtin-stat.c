@@ -1277,6 +1277,9 @@ static int __cmd_record(int argc, const char **argv)
 
 	init_features(session);
 
+	session->stat_config.aggr_mode = (u64) aggr_mode;
+	session->stat_config.interval  = (u64) interval;
+
 	session->evlist = evsel_list;
 	record.session  = session;
 	record.enabled  = true;
@@ -1326,6 +1329,7 @@ static int __cmd_report(int argc, const char **argv)
 		.stat		= perf_event__process_stat_event,
 		.stat_round	= process_stat_round_event,
 	};
+	struct perf_stat_config *stat_config;
 	int ret;
 
 	argc = parse_options(argc, argv, options, report_usage, 0);
@@ -1335,6 +1339,10 @@ static int __cmd_report(int argc, const char **argv)
 		return -1;
 
 	evsel_list = session->evlist;
+
+	stat_config = &session->stat_config;
+	aggr_mode   = stat_config->aggr_mode;
+	interval    = stat_config->interval;
 
 	if (perf_evlist__alloc_stats(evsel_list, interval))
 		return -1;
