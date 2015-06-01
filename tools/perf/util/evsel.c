@@ -82,7 +82,11 @@ set_methods:
 
 #define ID(id, name) [PERF_EVSEL_NAMEID__##id] = #name
 static const char *nameid_str[PERF_EVSEL_NAMEID__MAX] = {
-	ID(NONE, x),
+	ID(NONE,		x),
+	ID(CYCLES_IN_TX,	cpu/cycles-t/),
+	ID(TRANSACTION_START,	cpu/tx-start/),
+	ID(ELISION_START,	cpu/el-start/),
+	ID(CYCLES_IN_TX_CP,	cpu/cycles-ct/),
 };
 #undef ID
 
