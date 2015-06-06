@@ -29,6 +29,7 @@ enum aggr_mode {
 	AGGR_GLOBAL,
 	AGGR_SOCKET,
 	AGGR_CORE,
+	AGGR_TASK,
 };
 
 void update_stats(struct stats *stats, u64 val);
