@@ -237,6 +237,7 @@ process_counter_values(struct perf_evsel *evsel, int cpu, int thread,
 		count = &zero;
 
 	switch (aggr_mode) {
+	case AGGR_TASK:
 	case AGGR_CORE:
 	case AGGR_SOCKET:
 	case AGGR_NONE:
@@ -605,6 +606,11 @@ static void aggr_printout(struct perf_evsel *evsel, int id, int nr)
 			csv_output ? 0 : -4,
 			perf_evsel__cpus(evsel)->map[id], csv_sep);
 		break;
+	case AGGR_TASK:
+		fprintf(output, "TASK-%*d%s",
+			csv_output ? 0 : -8,
+			evsel->threads->map[id], csv_sep);
+		break;
 	case AGGR_GLOBAL:
 	default:
 		break;
@@ -753,6 +759,40 @@ static void print_aggr(char *prefix)
 	}
 }
 
+static void print_aggr_task(struct perf_evsel *counter, char *prefix)
+{
+	int nthreads = thread_map__nr(counter->threads);
+	int ncpus = cpu_map__nr(counter->cpus);
+	int cpu, thread;
+	double uval;
+
+	for (thread = 0; thread < nthreads; thread++) {
+		u64 ena = 0, run = 0, val = 0;
+
+		for (cpu = 0; cpu < ncpus; cpu++) {
+			val += perf_counts(counter->counts, cpu, thread)->val;
+			ena += perf_counts(counter->counts, cpu, thread)->ena;
+			run += perf_counts(counter->counts, cpu, thread)->run;
+		}
+
+		if (prefix)
+			fprintf(output, "%s", prefix);
+
+		uval = val * counter->scale;
+
+		if (nsec_counter(counter))
+			nsec_printout(thread, 0, counter, uval);
+		else
+			abs_printout(thread, 0, counter, uval);
+
+		if (!csv_output)
+			print_noise(counter, 1.0);
+
+		print_running(run, ena);
+		fputc('\n', output);
+	}
+}
+
 /*
  * Print out the results of a single counter:
  * aggregated counts in system-wide mode
@@ -879,6 +919,9 @@ static void print_interval(char *prefix, struct timespec *ts)
 		case AGGR_NONE:
 			fprintf(output, "#           time CPU                counts %*s events\n", unit_width, "unit");
 			break;
+		case AGGR_TASK:
+			fprintf(output, "#           time task                      counts %*s events\n", unit_width, "unit");
+			break;
 		case AGGR_GLOBAL:
 		default:
 			fprintf(output, "#           time             counts %*s events\n", unit_width, "unit");
@@ -946,6 +989,10 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 	case AGGR_CORE:
 	case AGGR_SOCKET:
 		print_aggr(prefix);
+		break;
+	case AGGR_TASK:
+		evlist__for_each(evsel_list, counter)
+			print_aggr_task(counter, prefix);
 		break;
 	case AGGR_GLOBAL:
 		evlist__for_each(evsel_list, counter)
@@ -1034,6 +1081,7 @@ static int perf_stat_init_aggr_mode(void)
 		break;
 	case AGGR_NONE:
 	case AGGR_GLOBAL:
+	case AGGR_TASK:
 	default:
 		break;
 	}
@@ -1258,6 +1306,8 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		     "aggregate counts per processor socket", AGGR_SOCKET),
 	OPT_SET_UINT(0, "per-core", &aggr_mode,
 		     "aggregate counts per physical processor core", AGGR_CORE),
+	OPT_SET_UINT(0, "per-task", &aggr_mode,
+		     "aggregate counts per task", AGGR_TASK),
 	OPT_UINTEGER('D', "delay", &initial_delay,
 		     "ms to wait before starting measurement after program start"),
 	OPT_END()
@@ -1349,8 +1399,11 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 		run_count = 1;
 	}
 
-	/* no_aggr, cgroup are for system-wide only */
-	if ((aggr_mode != AGGR_GLOBAL || nr_cgroups) &&
+	/*
+	 * no_aggr, cgroup are for system-wide only
+	 * --per-task is aggregated per task, we dont mix it with cpu mode
+	 */
+	if (((aggr_mode != AGGR_GLOBAL && aggr_mode != AGGR_TASK) || nr_cgroups) &&
 	    !target__has_cpu(&target)) {
 		fprintf(stderr, "both cgroup and no-aggregation "
 			"modes only available in system-wide mode\n");
