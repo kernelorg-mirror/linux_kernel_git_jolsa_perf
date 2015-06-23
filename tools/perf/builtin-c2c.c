@@ -15,6 +15,13 @@
 #include <sys/mman.h>
 #include <sched.h>
 
+#define DISPLAY_LINE_LIMIT  0.0015
+#define MAXTITLE_SZ          400
+#define MAXLBL_SZ            256
+#define SIZE                 50000
+#define ODD(a)               ((a) & 0x01)
+
+
 typedef struct {
 	int  locks;               /* count of 'lock' transactions */
 	int  store;               /* count of all stores in trace */
@@ -42,6 +49,7 @@ typedef struct {
 	int  noparse;             /* count of unparsable data sources */
 } trinfo_t;
 
+
 struct c2c_stats {
 	cpu_set_t		cpuset;
 	int			nr_entries;
@@ -49,6 +57,7 @@ struct c2c_stats {
 	trinfo_t		t;
 	struct stats		stats;
 };
+
 
 struct perf_c2c {
 	struct perf_tool tool;
@@ -60,9 +69,6 @@ struct perf_c2c {
 	struct c2c_stats	stats;
 };
 
-#define DISPLAY_LINE_LIMIT  0.0015
-#define MAXTITLE_SZ          400
-#define MAXLBL_SZ            256
 
 struct c2c_hit {
 	struct rb_node		 rb_node;
@@ -78,35 +84,118 @@ struct c2c_hit {
 	struct callchain_root	 callchain[0]; /* must be last member */
 };
 
+typedef struct {
+	int		ovfl;
+	int		min;
+	int		max;
+	int		totcnt;
+	uint32_t	dist[SIZE];
+} histo_t;
+
+
 enum { OP, LVL, SNP, LCK, TLB };
-
-#define RMT_RAM              (PERF_MEM_LVL_REM_RAM1 | PERF_MEM_LVL_REM_RAM2)
-#define RMT_LLC              (PERF_MEM_LVL_REM_CCE1 | PERF_MEM_LVL_REM_CCE2)
-
-#define L1CACHE_HIT(a)       (((a) & PERF_MEM_LVL_L1 ) && ((a) & PERF_MEM_LVL_HIT))
-#define FILLBUF_HIT(a)       (((a) & PERF_MEM_LVL_LFB) && ((a) & PERF_MEM_LVL_HIT))
-#define L2CACHE_HIT(a)       (((a) & PERF_MEM_LVL_L2 ) && ((a) & PERF_MEM_LVL_HIT))
-#define L3CACHE_HIT(a)       (((a) & PERF_MEM_LVL_L3 ) && ((a) & PERF_MEM_LVL_HIT))
-
-#define L1CACHE_MISS(a)      (((a) & PERF_MEM_LVL_L1 ) && ((a) & PERF_MEM_LVL_MISS))
-#define L3CACHE_MISS(a)      (((a) & PERF_MEM_LVL_L3 ) && ((a) & PERF_MEM_LVL_MISS))
-
-#define LD_UNCACHED(a)       (((a) & PERF_MEM_LVL_UNC) && ((a) & PERF_MEM_LVL_HIT))
-#define ST_UNCACHED(a)       (((a) & PERF_MEM_LVL_UNC) && ((a) & PERF_MEM_LVL_HIT))
-
-#define RMT_LLCHIT(a)        (((a) & RMT_LLC) && ((a) & PERF_MEM_LVL_HIT))
-#define RMT_HIT(a,b)         (((a) & RMT_LLC) && ((b) & PERF_MEM_SNOOP_HIT))
-#define RMT_HITM(a,b)        (((a) & RMT_LLC) && ((b) & PERF_MEM_SNOOP_HITM))
-#define RMT_MEM(a)           (((a) & RMT_RAM) && ((a) & PERF_MEM_LVL_HIT))
-
-#define LCL_HIT(a,b)         (L3CACHE_HIT(a) && ((b) & PERF_MEM_SNOOP_HIT))
-#define LCL_HITM(a,b)        (L3CACHE_HIT(a) && ((b) & PERF_MEM_SNOOP_HITM))
-#define LCL_MEM(a)           (((a) & PERF_MEM_LVL_LOC_RAM) && ((a) & PERF_MEM_LVL_HIT))
-
 enum { LVL0, LVL1, LVL2, LVL3, LVL4, MAX_LVL };
+
 static int cloffset = LVL1;
 static int node_info = 0;
 static int coalesce_level = LVL1;
+static histo_t  histogram;
+
+
+static void init_hist(void)
+{
+	histogram.ovfl   = 0;
+	histogram.totcnt = 0;
+	histogram.min    = INT32_MAX;
+	histogram.max    = INT32_MIN;
+	memset(histogram.dist, 0, sizeof(histogram.dist));
+}
+
+
+static void update_latency_histogram(struct hist_entry *entry)
+{
+	union perf_mem_data_src *data_src;
+
+	uint64_t memop;
+	int64_t  cycles;
+   
+	data_src = &entry->mem_info->data_src;
+	memop    = data_src->mem_op;
+
+	/* only LOADS have an associated latency */
+	if (!(memop & PERF_MEM_OP_LOAD)) 
+		return;
+
+
+	cycles = (int64_t)entry->stat.weight;
+
+	if (cycles >= SIZE) {
+		histogram.ovfl++;
+		return;
+	}
+
+	if (cycles < 0) 
+		return;
+
+	if (cycles < histogram.min) histogram.min = cycles;
+	if (cycles > histogram.max) histogram.max = cycles;
+
+	histogram.totcnt++;
+	histogram.dist[cycles]++;
+
+}
+
+
+static double  estimate_median(void)
+{
+	int    i,j;
+	int    cnt;
+	double median;
+
+	cnt    = 0;
+	median = 0.0;
+
+	if ((histogram.totcnt == 0) || (histogram.ovfl > 0)) 
+		return (-1.0);
+
+	for(i=0; i<SIZE; i++) {
+
+		cnt += histogram.dist[i];
+
+		if (ODD(histogram.totcnt)) {
+
+			if (cnt >= (histogram.totcnt/2 + 1)) {
+				median = (double)i;  
+				break;
+			}
+		}
+		else {
+
+			if (cnt == histogram.totcnt/2) {
+   
+				for(j=i+1; j<SIZE; j++) {
+					if (histogram.dist[j] > 0) break;
+				}
+
+				median = (double)i + (double)(j - i)/2.;  
+				break;
+			}
+
+			if (cnt > histogram.totcnt/2) {
+
+				median = (double)i;  
+				break;
+
+			}
+
+		}
+
+
+	}
+   
+	return (median);
+}
+
 
 static int perf_c2c__scnprintf_data_src(char *bf, size_t size, uint64_t val)
 {
@@ -711,6 +800,7 @@ err:
 		err = 0;
 	return err;
 }
+
 static int perf_c2c__process_mmap2(struct perf_tool *tool,
 				    union perf_event *event,
 				    struct perf_sample *sample,
@@ -1273,7 +1363,8 @@ static void print_socket_shared_str(struct c2c_stats *node_stats)
 
 static void print_hitm_cacheline_offset(struct c2c_hit *clo,
 					struct c2c_hit *h,
-					struct c2c_stats *node_stats)
+					struct c2c_stats *node_stats,
+					double median)
 {
 #define SHORT_STR_LEN	7
 #define LONG_STR_LEN	30
@@ -1311,7 +1402,8 @@ static void print_hitm_cacheline_offset(struct c2c_hit *clo,
 		double std = stddev_stats(&stats->stats);
 
 		sprintf(latstr, "%8.0f %8.0f %7.1f%%",
-			-1.0, /* FIXME */
+//	-1.0, /* FIXME */
+                        median,
 			mean,
 			rel_stddev_stats(std, mean));
 	} else {
@@ -1361,6 +1453,9 @@ static void print_hitm_cacheline_offset(struct c2c_hit *clo,
 					23, stdout);
 	}
 }
+
+
+
 static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 				  struct c2c_stats *hitm_stats __maybe_unused,
 				  struct c2c_stats *c2c_stats)
@@ -1370,6 +1465,7 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 	u64		addr;
 	double		tot_dist, tot_cumm;
 	double		ld_dist, ld_cumm;
+        double          median;
 	int		llc_misses;
 	int		record = 0;
 	struct c2c_stats *node_stats = NULL;
@@ -1395,6 +1491,7 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 	tot_cumm = 0.0;
 	ld_cumm  = 0.0;
 
+
 	while (next) {
 		struct hist_entry *entry;
 
@@ -1413,13 +1510,18 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 		if (ld_dist < DISPLAY_LINE_LIMIT)
 			break;
 
+        	init_hist();
+
 		print_hitm_cacheline(h, record, tot_cumm, ld_cumm, tot_dist, ld_dist);
 
 		list_for_each_entry(entry, &h->list, pairs.node) {
 
 			if (!clo || !matching_coalescing(clo, entry)) {
-				if (clo)
-					print_hitm_cacheline_offset(clo, h, node_stats);
+				if (clo) {
+					median = estimate_median();
+					print_hitm_cacheline_offset(clo, h, node_stats, median);
+					init_hist();
+				}
 
 				free(clo);
 				addr = entry->mem_info->iaddr.al_addr;
@@ -1427,6 +1529,8 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 				if (node_info)
 					memset(node_stats, 0, sizeof(struct c2c_stats) * cpu__max_node());
 			}
+
+			update_latency_histogram(entry);
 			c2c_decode_stats(&clo->stats, entry);
 			c2c_hit__update_strings(clo, entry);
 
@@ -1435,6 +1539,7 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 				c2c_decode_stats(&node_stats[node], entry);
 				CPU_SET(entry->cpu, &(node_stats[node].cpuset));
 			}
+
 			if (symbol_conf.use_callchain) {
 				callchain_cursor_reset(&callchain_cursor);
 				callchain_merge(&callchain_cursor,
@@ -1443,8 +1548,10 @@ static void print_c2c_hitm_report(struct rb_root *hitm_tree,
 			}
 
 		}
+
 		if (clo) {
-			print_hitm_cacheline_offset(clo, h, node_stats);
+			median = estimate_median();
+			print_hitm_cacheline_offset(clo, h, node_stats, median);
 			free(clo);
 			clo = NULL;
 		}
