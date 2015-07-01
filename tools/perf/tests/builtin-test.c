@@ -179,6 +179,10 @@ static struct test {
 		.func = test__thread_map_synthesize,
 	},
 	{
+		.desc = "Test cpu map synthesize",
+		.func = test__cpu_map_synthesize,
+	},
+	{
 		.func = NULL,
 	},
 };
