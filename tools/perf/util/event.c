@@ -737,6 +737,127 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 	return err;
 }
 
+static void synthesize_cpus(struct cpu_map_data_cpus *cpus,
+			    struct cpu_map *map)
+{
+	int i;
+
+	cpus->nr = map->nr;
+
+	for (i = 0; i < map->nr; i++)
+		cpus->cpu[i] = map->map[i];
+}
+
+static void synthesize_mask(struct cpu_map_data_mask *mask,
+			    struct cpu_map *map, int max)
+{
+	int i;
+
+	mask->nr = BITS_TO_LONGS(max);
+	mask->long_size = sizeof(long);
+
+	for (i = 0; i < map->nr; i++)
+		set_bit(map->map[i], mask->mask);
+}
+
+static size_t cpus_size(struct cpu_map *map)
+{
+	return sizeof(struct cpu_map_data_cpus) + map->nr * sizeof(u64);
+}
+
+static size_t mask_size(struct cpu_map *map, int *max)
+{
+	int i;
+
+	*max = 0;
+
+	for (i = 0; i < map->nr; i++) {
+		if (map->map[i] > *max)
+			*max = map->map[i];
+	}
+
+	return sizeof(struct cpu_map_data_mask) + BITS_TO_LONGS(*max) * sizeof(long);
+}
+
+static bool cpu_map__is_dummy(struct cpu_map *map)
+{
+	return (map->nr == 1) && (map->map[0] == -1);
+}
+
+void *cpu_map_data__alloc(struct cpu_map *map, size_t *size, u64 *type, int *max)
+{
+	size_t size_cpus, size_mask;
+	bool is_dummy = cpu_map__is_dummy(map);
+
+	size_cpus = cpus_size(map);
+	size_mask = mask_size(map, max);
+
+	if (is_dummy || (size_cpus < size_mask)) {
+		*size += size_cpus;
+		*type  = PERF_CPU_MAP__CPUS;
+	} else {
+		*size += size_mask;
+		*type  = PERF_CPU_MAP__MASK;
+	}
+
+	*size += sizeof(struct cpu_map_data);
+
+	return zalloc(*size);
+}
+
+void cpu_map_data__synthesize(struct cpu_map_data *data, struct cpu_map *map,
+			      u64 type, int max)
+{
+	data->type = type;
+
+	switch (type) {
+	case PERF_CPU_MAP__CPUS:
+		synthesize_cpus((struct cpu_map_data_cpus *) data->data, map);
+		break;
+	case PERF_CPU_MAP__MASK:
+		synthesize_mask((struct cpu_map_data_mask *) data->data, map, max);
+	default:
+		break;
+	};
+}
+
+static struct cpu_map_event* cpu_map_event__new(struct cpu_map *map)
+{
+	size_t size = sizeof(struct cpu_map_event);
+	struct cpu_map_event *event;
+	int max;
+	u64 type;
+
+	event = cpu_map_data__alloc(map, &size, &type, &max);
+	if (!event)
+		return NULL;
+
+	event->header.type = PERF_RECORD_CPU_MAP;
+	event->header.size = size;
+	event->data.type   = type;
+
+	cpu_map_data__synthesize(&event->data, map, type, max);
+	return event;
+}
+
+int perf_event__synthesize_cpu_map(struct perf_tool *tool,
+				   struct cpu_map *map,
+				   perf_event__handler_t process,
+				   struct machine *machine)
+{
+	struct cpu_map_event *event;
+	int err;
+
+	event = cpu_map_event__new(map);
+	if (!event)
+		return -ENOMEM;
+
+	err = process(tool, (union perf_event *) event, NULL, machine);
+
+	free(event);
+	return err;
+}
+
 size_t perf_event__fprintf_comm(union perf_event *event, FILE *fp)
 {
 	const char *s;
