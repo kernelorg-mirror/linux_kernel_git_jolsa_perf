@@ -175,6 +175,7 @@ static struct test {
 		.func = test__thread_map,
 	},
 	{
+
 		.desc = "Test LLVM searching and compiling",
 		.func = test__llvm,
 	},
@@ -189,6 +190,10 @@ static struct test {
 	{
 		.desc = "Test topology in session",
 		.func = test_session_topology,
+	},
+	{
+		.desc = "Test thread map synthesize",
+		.func = test__thread_map_synthesize,
 	},
 	{
 		.func = NULL,
