@@ -34,6 +34,7 @@ perf-y += kmod-path.o
 perf-y += thread-map.o
 perf-y += llvm.o
 perf-y += topology.o
+perf-y += cpumap.o
 
 perf-$(CONFIG_X86) += perf-time-to-tsc.o
 ifdef CONFIG_AUXTRACE
