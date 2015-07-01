@@ -737,6 +737,36 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 	return err;
 }
 
+int perf_event__synthesize_cpu_map(struct perf_tool *tool,
+				   struct cpu_map *cpus,
+				   perf_event__handler_t process,
+				   struct machine *machine,
+				   u64 type)
+{
+	union perf_event *event;
+	int i, err, size;
+
+	size  = sizeof(event->cpu_map);
+	size +=	cpus->nr * sizeof(event->cpu_map.cpu[0]);
+
+	event = zalloc(size);
+	if (!event)
+		return -ENOMEM;
+
+	event->header.type = PERF_RECORD_CPU_MAP;
+	event->header.size = size;
+	event->cpu_map.nr = cpus->nr;
+	event->cpu_map.type = type;
+
+	for (i = 0; i < cpus->nr; i++)
+		event->cpu_map.cpu[i] = cpus->map[i];
+
+	err = process(tool, event, NULL, machine);
+
+	free(event);
+	return err;
+}
+
 size_t perf_event__fprintf_comm(union perf_event *event, FILE *fp)
 {
 	const char *s;
