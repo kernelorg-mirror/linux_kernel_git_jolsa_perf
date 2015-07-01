@@ -179,6 +179,33 @@ out:
 	return cpus;
 }
 
+static void cpu_map__copy_event(struct cpu_map *cpus,
+				struct cpu_map_event *event)
+{
+	unsigned i;
+
+	cpus->nr = event->nr;
+
+	for (i = 0; i < event->nr; i++)
+		cpus->map[i] = (int) event->cpu[i];
+
+	atomic_set(&cpus->refcnt, 1);
+}
+
+struct cpu_map *cpu_map__new_event(struct cpu_map_event *event)
+{
+	struct cpu_map *cpus;
+	int size;
+
+	size = sizeof(cpus) + (event->nr * sizeof(cpus->map[0]));
+
+	cpus = zalloc(size);
+	if (cpus)
+		cpu_map__copy_event(cpus, event);
+
+	return cpus;
+}
+
 size_t cpu_map__fprintf(struct cpu_map *map, FILE *fp)
 {
 	int i;
