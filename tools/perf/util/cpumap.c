@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <linux/bitmap.h>
 #include "asm/bug.h"
 
 static struct cpu_map *cpu_map__default_new(void)
@@ -177,6 +178,62 @@ invalid:
 	free(tmp_cpus);
 out:
 	return cpus;
+}
+
+static void cpu_map__copy_cpus(struct cpu_map *map,
+			       struct cpu_map_data_cpus *cpus)
+{
+	unsigned i;
+
+	map->nr = cpus->nr;
+
+	for (i = 0; i < cpus->nr; i++)
+		map->map[i] = (int) cpus->cpu[i];
+}
+
+static struct cpu_map *cpu_map__from_cpus(struct cpu_map_data_cpus *cpus)
+{
+	struct cpu_map *map;
+	int size;
+
+	size = sizeof(map) + (cpus->nr * sizeof(map->map[0]));
+
+	map = zalloc(size);
+	if (map) {
+		cpu_map__copy_cpus(map, cpus);
+		atomic_set(&map->refcnt, 1);
+	}
+	return map;
+}
+
+static struct cpu_map *cpu_map__from_mask(struct cpu_map_data_mask *mask)
+{
+	struct cpu_map *map;
+	int size, nr, nbits = mask->nr * mask->long_size * BITS_PER_BYTE;
+
+	nr = bitmap_weight(mask->mask, nbits);
+
+	size = sizeof(map) + (nr * sizeof(map->map[0]));
+
+	map = zalloc(size);
+	if (map) {
+		int cpu, i = 0;
+
+		map->nr = nr;
+		atomic_set(&map->refcnt, 1);
+		for_each_set_bit(cpu, mask->mask, nbits)
+			map->map[i++] = cpu;
+	}
+	return map;
+
+}
+
+struct cpu_map *cpu_map__new_data(struct cpu_map_data *data)
+{
+	if (data->type == PERF_CPU_MAP__CPUS)
+		return cpu_map__from_cpus((struct cpu_map_data_cpus *) data->data);
+	else
+		return cpu_map__from_mask((struct cpu_map_data_mask *) data->data);
 }
 
 size_t cpu_map__fprintf(struct cpu_map *map, FILE *fp)
