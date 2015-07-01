@@ -67,6 +67,7 @@ int test__kmod_path__parse(void);
 int test__thread_map(void);
 int test__llvm(void);
 int test_session_topology(void);
+int test__thread_map_synthesize(void);
 
 #if defined(__arm__) || defined(__aarch64__)
 #ifdef HAVE_DWARF_UNWIND_SUPPORT
