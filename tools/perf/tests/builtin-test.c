@@ -204,6 +204,10 @@ static struct test {
 		.func = test__synthesize_stat_config,
 	},
 	{
+		.desc = "Test stat synthesize",
+		.func = test__synthesize_stat,
+	},
+	{
 		.func = NULL,
 	},
 };
