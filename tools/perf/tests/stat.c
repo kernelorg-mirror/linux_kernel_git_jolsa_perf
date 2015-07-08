@@ -87,3 +87,22 @@ int test__synthesize_stat(void)
 
 	return 0;
 }
+
+static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
+				    union perf_event *event,
+				    struct perf_sample *sample __maybe_unused,
+				    struct machine *machine __maybe_unused)
+{
+	struct stat_round_event *stat_round = &event->stat_round;
+
+	TEST_ASSERT_VAL("wrong time",    stat_round->time == 0xdeadbeef);
+	return 0;
+}
+
+int test__synthesize_stat_round(void)
+{
+	TEST_ASSERT_VAL("failed to synthesize stat_config",
+		!perf_event__synthesize_stat_round(NULL, 0xdeadbeef, process_stat_round_event, NULL));
+
+	return 0;
+}

@@ -66,6 +66,8 @@ int test__thread_map_synthesize(void);
 int test__cpu_map_synthesize(void);
 int test__synthesize_stat_config(void);
 int test__synthesize_stat(void);
+int test__synthesize_stat_round(void);
+
 
 #if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
 #ifdef HAVE_DWARF_UNWIND_SUPPORT

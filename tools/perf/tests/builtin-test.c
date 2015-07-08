@@ -191,6 +191,10 @@ static struct test {
 		.func = test__synthesize_stat,
 	},
 	{
+		.desc = "Test stat round synthesize",
+		.func = test__synthesize_stat_round,
+	},
+	{
 		.func = NULL,
 	},
 };
