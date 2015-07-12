@@ -59,6 +59,7 @@
 #include "util/thread.h"
 #include "util/thread_map.h"
 #include "util/counts.h"
+#include "util/session.h"
 
 #include <stdlib.h>
 #include <sys/prctl.h>
@@ -120,6 +121,16 @@ static bool			forever				= false;
 static struct timespec		ref_time;
 static struct cpu_map		*aggr_map;
 static int			(*aggr_get_id)(struct cpu_map *m, int cpu);
+
+struct perf_stat {
+	bool			 record;
+	struct perf_data_file	 file;
+	struct perf_session	*session;
+	u64			 bytes_written;
+};
+
+static struct perf_stat		perf_stat;
+#define STAT_RECORD		perf_stat.record
 
 static volatile int done = 0;
 
@@ -337,6 +348,15 @@ static int __run_perf_stat(int argc, const char **argv)
 			counter->filter, perf_evsel__name(counter), errno,
 			strerror_r(errno, msg, sizeof(msg)));
 		return -1;
+	}
+
+	if (STAT_RECORD) {
+		int err, fd = perf_data_file__fd(&perf_stat.file);
+
+		err = perf_session__write_header(perf_stat.session, evsel_list,
+						 fd, false);
+		if (err < 0)
+			return err;
 	}
 
 	/*
@@ -1130,6 +1150,39 @@ static int add_default_attributes(void)
 	return perf_evlist__add_default_attrs(evsel_list, very_very_detailed_attrs);
 }
 
+static const char * const recort_usage[] = {
+	"perf stat record [<options>]",
+	NULL,
+};
+
+static int __cmd_record(int argc, const char **argv)
+{
+	struct perf_session *session;
+	struct perf_data_file *file = &perf_stat.file;
+	const struct option options[] = {
+	OPT_STRING('o', "output", &perf_stat.file.path, "file", "output file name"),
+	OPT_END()
+	};
+
+	argc = parse_options(argc, argv, options, record_usage,
+			     PARSE_OPT_STOP_AT_NON_OPTION);
+
+	session = perf_session__new(file, false, NULL);
+	if (session == NULL) {
+		pr_err("Perf session creation failed.\n");
+		return -1;
+	}
+
+	/* No pipe support ATM */
+	if (perf_stat.file.is_pipe)
+		return -EINVAL;
+
+	session->evlist   = evsel_list;
+	perf_stat.session = session;
+	perf_stat.record  = true;
+	return argc;
+}
+
 int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool append_file = false;
@@ -1203,6 +1256,7 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	const char *mode;
 	FILE *output = stderr;
 	unsigned int interval;
+	const char * const stat_subcommands[] = { "record" };
 
 	setlocale(LC_ALL, "");
 
@@ -1210,8 +1264,15 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (evsel_list == NULL)
 		return -ENOMEM;
 
-	argc = parse_options(argc, argv, options, stat_usage,
-		PARSE_OPT_STOP_AT_NON_OPTION);
+	argc = parse_options_subcommand(argc, argv, options, stat_subcommands,
+					(const char **) stat_usage,
+					PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (argc && !strncmp(argv[0], "rec", 3)) {
+		argc = __cmd_record(argc, argv);
+		if (argc < 0)
+			return -1;
+	}
 
 	interval = stat_config.interval;
 
@@ -1381,6 +1442,15 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	if (!forever && status != -1 && !interval)
 		print_counters(NULL, argc, argv);
+
+	if (STAT_RECORD) {
+		int fd = perf_data_file__fd(&perf_stat.file);
+
+		perf_stat.session->header.data_size += perf_stat.bytes_written;
+		perf_session__write_header(perf_stat.session, evsel_list, fd, true);
+
+		perf_session__delete(perf_stat.session);
+	}
 
 	perf_evlist__free_stats(evsel_list);
 out:
