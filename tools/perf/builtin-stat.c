@@ -1338,6 +1338,16 @@ static int __cmd_record(int argc, const char **argv)
 	return argc;
 }
 
+static
+int process_stat_config_event(struct perf_tool *tool __maybe_unused,
+			      union perf_event *event,
+			      struct perf_session *session __maybe_unused)
+{
+	perf_event__read_stat_config(&stat_config, &event->stat_config);
+	perf_stat_init_aggr_mode(false);
+	return 0;
+}
+
 static int set_maps(struct perf_stat *stat)
 {
 	if (!stat->cpus || !stat->threads)
@@ -1419,6 +1429,7 @@ static struct perf_stat perf_stat = {
 		.attr		= perf_event__process_attr,
 		.thread_map	= process_thread_map_event,
 		.cpu_map	= process_cpu_map_event,
+		.stat_config	= process_stat_config_event,
 	},
 };
 
