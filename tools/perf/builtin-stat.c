@@ -129,6 +129,9 @@ struct perf_stat {
 	struct perf_session	*session;
 	u64			 bytes_written;
 	struct perf_tool	 tool;
+	bool			 maps_allocated;
+	struct cpu_map		*cpus;
+	struct thread_map	*threads;
 };
 
 static struct perf_stat		perf_stat;
@@ -1335,6 +1338,77 @@ static int __cmd_record(int argc, const char **argv)
 	return argc;
 }
 
+static int set_maps(struct perf_stat *stat)
+{
+	if (!stat->cpus || !stat->threads)
+		return 0;
+
+	if (WARN_ONCE(stat->maps_allocated, "stats double allocation\n"))
+		return -EINVAL;
+
+	if (perf_evlist__set_maps(evsel_list, stat->cpus, stat->threads) ||
+	    perf_evlist__alloc_stats(evsel_list, true))
+		return -ENOMEM;
+
+	stat->maps_allocated = true;
+	return 0;
+}
+
+static
+int process_thread_map_event(struct perf_tool *tool __maybe_unused,
+			     union perf_event *event,
+			     struct perf_session *session __maybe_unused)
+{
+	struct perf_stat *stat = container_of(tool, struct perf_stat, tool);
+
+	if (stat->threads) {
+		pr_warning("Extra thread map event, ignoring.\n");
+		return 0;
+	}
+
+	stat->threads = thread_map__new_event(&event->thread_map);
+	if (!stat->threads)
+		return -ENOMEM;
+
+	return set_maps(stat);
+}
+
+static
+int process_cpu_map_event(struct perf_tool *tool __maybe_unused,
+			  union perf_event *event,
+			  struct perf_session *session __maybe_unused)
+{
+	struct perf_stat *stat = container_of(tool, struct perf_stat, tool);
+	struct cpu_map *cpus;
+
+	cpus = cpu_map__new_event(&event->cpu_map);
+	if (!cpus)
+		return -ENOMEM;
+
+	switch (event->cpu_map.type) {
+	case PERF_STAT_CPU_MAP_TYPE__GLOBAL:
+		if (stat->cpus) {
+			pr_warning("Extra cpu map event, ignoring.\n");
+			return 0;
+		}
+
+		stat->cpus = cpus;
+		return set_maps(stat);
+	case PERF_STAT_CPU_MAP_TYPE__AGGR:
+		if (aggr_map) {
+			pr_warning("Extra aggr map event, ignoring.\n");
+			return 0;
+		}
+
+		aggr_map = cpus;
+		return 0;
+	default:
+		break;
+	}
+
+	return -EINVAL;
+}
+
 static const char * const report_usage[] = {
 	"perf stat report [<options>]",
 	NULL,
@@ -1343,6 +1417,8 @@ static const char * const report_usage[] = {
 static struct perf_stat perf_stat = {
 	.tool = {
 		.attr		= perf_event__process_attr,
+		.thread_map	= process_thread_map_event,
+		.cpu_map	= process_cpu_map_event,
 	},
 };
 
