@@ -19,6 +19,7 @@
 #include "util/auxtrace.h"
 #include "util/cpumap.h"
 #include "util/thread_map.h"
+#include "util/stat.h"
 #include <linux/bitmap.h>
 #include "asm/bug.h"
 
@@ -33,6 +34,7 @@ static bool			system_wide;
 static bool			print_flags;
 static const char		*cpu_list;
 static DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
+static struct perf_stat_config	stat_config;
 
 enum perf_output_field {
 	PERF_OUTPUT_COMM            = 1U << 0,
@@ -1570,6 +1572,14 @@ static int have_cmd(int argc, const char **argv)
 	return 0;
 }
 
+static int process_stat_config_event(struct perf_tool *tool __maybe_unused,
+				     union perf_event *event,
+				     struct perf_session *session __maybe_unused)
+{
+	perf_event__read_stat_config(&stat_config, &event->stat_config);
+	return 0;
+}
+
 static int set_maps(struct perf_script *script)
 {
 	struct perf_evlist *evlist = script->session->evlist;
@@ -1654,6 +1664,7 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 			.auxtrace_info	 = perf_event__process_auxtrace_info,
 			.auxtrace	 = perf_event__process_auxtrace,
 			.auxtrace_error	 = perf_event__process_auxtrace_error,
+			.stat_config	 = process_stat_config_event,
 			.thread_map	 = process_thread_map_event,
 			.cpu_map	 = process_cpu_map_event,
 			.ordered_events	 = true,
