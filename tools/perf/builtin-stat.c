@@ -940,18 +940,18 @@ static int stat__set_big_num(const struct option *opt __maybe_unused,
 	return 0;
 }
 
-static int perf_stat_init_aggr_mode(void)
+static int perf_stat_init_aggr_mode(bool live)
 {
 	switch (stat_config.aggr_mode) {
 	case AGGR_SOCKET:
-		if (cpu_map__build_socket_map(evsel_list->cpus, &aggr_map)) {
+		if (live && cpu_map__build_socket_map(evsel_list->cpus, &aggr_map)) {
 			perror("cannot build socket map");
 			return -1;
 		}
 		aggr_get_id = cpu_map__get_socket;
 		break;
 	case AGGR_CORE:
-		if (cpu_map__build_core_map(evsel_list->cpus, &aggr_map)) {
+		if (live && cpu_map__build_core_map(evsel_list->cpus, &aggr_map)) {
 			perror("cannot build core map");
 			return -1;
 		}
@@ -1340,7 +1340,7 @@ int cmd_stat(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (perf_evlist__alloc_stats(evsel_list, interval))
 		goto out;
 
-	if (perf_stat_init_aggr_mode())
+	if (perf_stat_init_aggr_mode(true))
 		goto out;
 
 	/*
