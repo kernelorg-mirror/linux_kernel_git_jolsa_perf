@@ -284,7 +284,7 @@ export INSTALL SHELL_PATH
 
 SHELL = $(SHELL_PATH)
 
-all: shell_compatibility_test $(ALL_PROGRAMS) $(LANG_BINDINGS) $(OTHER_PROGRAMS)
+all: shell_compatibility_test build_init $(ALL_PROGRAMS) $(LANG_BINDINGS) $(OTHER_PROGRAMS)
 
 please_set_SHELL_PATH_to_a_more_modern_shell:
 	$(Q)$$(:)
@@ -298,6 +298,9 @@ PERF_IN := $(OUTPUT)perf-in.o
 
 export srctree OUTPUT RM CC LD AR CFLAGS V BISON FLEX AWK
 build := -f $(srctree)/tools/build/Makefile.build dir=. obj
+
+build_init:
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build build_init
 
 $(PERF_IN): $(OUTPUT)PERF-VERSION-FILE $(OUTPUT)common-cmds.h FORCE
 	$(Q)$(MAKE) $(build)=perf
@@ -589,7 +592,7 @@ endif
 
 FORCE:
 
-.PHONY: all install clean config-clean strip install-gtk
+.PHONY: all install clean config-clean strip install-gtk build_init
 .PHONY: shell_compatibility_test please_set_SHELL_PATH_to_a_more_modern_shell
 .PHONY: $(GIT-HEAD-PHONY) TAGS tags cscope FORCE single_dep
 .PHONY: libtraceevent_plugins
