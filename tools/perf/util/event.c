@@ -1565,8 +1565,12 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 {
 	struct thread *thread;
 
-	thread = machine__findnew_thread_by_time(machine, sample->pid,
-						 sample->tid, sample->time);
+	thread = machine__find_thread_by_time(machine, sample->pid,
+					      sample->tid, sample->time);
+	if (thread == NULL)
+		thread = machine__findnew_thread_by_time(machine, sample->pid,
+							 sample->tid,
+							 sample->time);
 	if (thread == NULL)
 		return -1;
 
