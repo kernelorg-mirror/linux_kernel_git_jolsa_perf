@@ -1315,6 +1315,11 @@ static int __cmd_record(int argc, const char **argv)
 	argc = parse_options(argc, argv, options, record_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
+	if (run_count != 1 || forever) {
+		pr_err("Cannot use -r option with perf stat record.\n");
+		return -1;
+	}
+
 	session = perf_session__new(file, false, NULL);
 	if (session == NULL) {
 		pr_err("Perf session creation failed.\n");
