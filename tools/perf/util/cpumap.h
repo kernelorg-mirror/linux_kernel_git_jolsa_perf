@@ -17,6 +17,7 @@ struct cpu_map {
 struct cpu_map_event;
 
 struct cpu_map *cpu_map__new(const char *cpu_list);
+struct cpu_map *cpu_map__empty_new(int nr);
 struct cpu_map *cpu_map__dummy_new(void);
 struct cpu_map *cpu_map__new_data(struct cpu_map_data *data);
 struct cpu_map *cpu_map__read(FILE *file);
