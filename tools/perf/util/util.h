@@ -357,4 +357,6 @@ int fetch_kernel_version(unsigned int *puint,
 #define KVER_FMT	"%d.%d.%d"
 #define KVER_PARAM(x)	KVER_VERSION(x), KVER_PATCHLEVEL(x), KVER_SUBLEVEL(x)
 
+bool is_regular_file(const char *file);
+
 #endif /* GIT_COMPAT_UTIL_H */
