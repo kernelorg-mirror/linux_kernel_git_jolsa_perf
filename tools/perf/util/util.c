@@ -648,3 +648,13 @@ fetch_kernel_version(unsigned int *puint, char *str,
 		*puint = (version << 16) + (patchlevel << 8) + sublevel;
 	return 0;
 }
+
+bool is_regular_file(const char *file)
+{
+	struct stat st;
+
+	if (stat(file, &st))
+		return false;
+
+	return S_ISREG(st.st_mode);
+}
