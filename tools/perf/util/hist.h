@@ -365,4 +365,5 @@ int parse_filter_percentage(const struct option *opt __maybe_unused,
 			    const char *arg, int unset __maybe_unused);
 int perf_hist_config(const char *var, const char *value);
 
+void __hists__init(struct hists *hists);
 #endif	/* __PERF_HIST_H */
