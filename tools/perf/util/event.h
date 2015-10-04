@@ -282,10 +282,18 @@ struct attr_event {
 	u64 id[];
 };
 
+
+enum {
+	PERF_ATTR_UPDATE__UNIT  = 0,
+};
+
 struct attr_update_event {
 	struct perf_event_header header;
 	u64 type;
 	u64 id;
+
+	/* Having 'str' for all string updates. */
+	char str[];
 };
 
 #define MAX_EVENT_NAME 64
