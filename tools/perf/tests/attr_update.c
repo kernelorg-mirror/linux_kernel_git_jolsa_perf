@@ -17,6 +17,18 @@ static int process_event_unit(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int process_event_scale(struct perf_tool *tool __maybe_unused,
+			       union perf_event *event,
+			       struct perf_sample *sample __maybe_unused,
+			       struct machine *machine __maybe_unused)
+{
+	struct attr_update_event *ev = (struct attr_update_event*) event;
+
+	TEST_ASSERT_VAL("wrong id", ev->id == 123);
+	TEST_ASSERT_VAL("wrong scale", ev->scale = 0.123);
+	return 0;
+}
+
 int test__attr_update(void)
 {
 	struct perf_evlist *evlist;
@@ -36,6 +48,11 @@ int test__attr_update(void)
 
 	TEST_ASSERT_VAL("failed to synthesize attr update unit",
 			!perf_event__synthesize_attr_update_unit(NULL, evsel, process_event_unit));
+
+	evsel->scale = 0.123;
+
+	TEST_ASSERT_VAL("failed to synthesize attr update scale",
+			!perf_event__synthesize_attr_update_scale(NULL, evsel, process_event_scale));
 
 	return 0;
 }
