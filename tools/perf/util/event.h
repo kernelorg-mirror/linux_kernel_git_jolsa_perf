@@ -285,12 +285,15 @@ struct attr_event {
 
 enum {
 	PERF_ATTR_UPDATE__UNIT  = 0,
+	PERF_ATTR_UPDATE__SCALE = 1,
 };
 
 struct attr_update_event {
 	struct perf_event_header header;
 	u64 type;
 	u64 id;
+
+	double scale;
 
 	/* Having 'str' for all string updates. */
 	char str[];
