@@ -36,6 +36,7 @@ perf-y += llvm.o
 perf-y += topology.o
 perf-y += cpumap.o
 perf-y += stat.o
+perf-y += attr_update.o
 
 perf-$(CONFIG_X86) += perf-time-to-tsc.o
 ifdef CONFIG_AUXTRACE

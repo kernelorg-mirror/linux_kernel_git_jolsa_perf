@@ -212,6 +212,10 @@ static struct test {
 		.func = test__synthesize_stat_round,
 	},
 	{
+		.desc = "Test attr update synthesize",
+		.func = test__attr_update,
+	},
+	{
 		.func = NULL,
 	},
 };
