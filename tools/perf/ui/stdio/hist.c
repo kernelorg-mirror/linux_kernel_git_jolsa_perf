@@ -578,3 +578,22 @@ size_t events_stats__fprintf(struct events_stats *stats, FILE *fp)
 
 	return ret;
 }
+
+size_t callchain__sort_fprintf(struct callchain_root *unsorted_callchain,
+			       u64 total_samples, u64 relative_samples,
+			       int left_margin, FILE *fp)
+{
+	struct rb_root sorted_chain;
+	u64 min_callchain_hits;
+
+	if (!symbol_conf.use_callchain)
+		return 0;
+
+	min_callchain_hits = total_samples * (callchain_param.min_percent / 100);
+
+	callchain_param.sort(&sorted_chain, unsorted_callchain,
+				min_callchain_hits, &callchain_param);
+
+	return callchain__fprintf(&sorted_chain, total_samples,
+				  relative_samples, left_margin, fp);
+}
