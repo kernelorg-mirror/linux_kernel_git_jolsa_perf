@@ -319,26 +319,21 @@ static size_t callchain__fprintf_folded(FILE *fp, struct rb_root *tree,
 	return ret;
 }
 
-static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
-					    u64 total_samples, int left_margin,
-					    FILE *fp)
+static size_t callchain__fprintf(struct rb_root *chain, u64 total_samples,
+				 u64 relative_samples, int left_margin, FILE *fp)
 {
 	switch (callchain_param.mode) {
 	case CHAIN_GRAPH_REL:
-		return callchain__fprintf_graph(fp, &he->sorted_chain,
-						symbol_conf.cumulate_callchain ?
-						he->stat_acc->period : he->stat.period,
-						left_margin);
+		return callchain__fprintf_graph(fp, chain, relative_samples, left_margin);
 		break;
 	case CHAIN_GRAPH_ABS:
-		return callchain__fprintf_graph(fp, &he->sorted_chain, total_samples,
-						left_margin);
+		return callchain__fprintf_graph(fp, chain, total_samples, left_margin);
 		break;
 	case CHAIN_FLAT:
-		return callchain__fprintf_flat(fp, &he->sorted_chain, total_samples);
+		return callchain__fprintf_flat(fp, chain, total_samples);
 		break;
 	case CHAIN_FOLDED:
-		return callchain__fprintf_folded(fp, &he->sorted_chain, total_samples);
+		return callchain__fprintf_folded(fp, chain, total_samples);
 		break;
 	case CHAIN_NONE:
 		break;
@@ -347,6 +342,18 @@ static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
 	}
 
 	return 0;
+}
+
+
+static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
+					    u64 total_samples, int left_margin,
+					    FILE *fp)
+{
+	u64 relative_samples = symbol_conf.cumulate_callchain ?
+			       he->stat_acc->period : he->stat.period;
+
+	return callchain__fprintf(&he->sorted_chain, total_samples,
+				  relative_samples, left_margin, fp);
 }
 
 static size_t hist_entry__callchain_fprintf(struct hist_entry *he,
