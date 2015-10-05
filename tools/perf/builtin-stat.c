@@ -352,16 +352,20 @@ static int perf_stat_synthesize_config(bool is_pipe)
 		if (!counter->supported)
 			continue;
 
-		err = perf_event__synthesize_attr_update_unit(NULL, counter, process_synthesized_event);
-		if (err < 0) {
-			pr_err("Couldn't synthesize evsel unit.\n");
-			return err;
+		if (counter->unit && *counter->unit) {
+			err = perf_event__synthesize_attr_update_unit(NULL, counter, process_synthesized_event);
+			if (err < 0) {
+				pr_err("Couldn't synthesize evsel unit.\n");
+				return err;
+			}
 		}
 
-		err = perf_event__synthesize_attr_update_scale(NULL, counter, process_synthesized_event);
-		if (err < 0) {
-			pr_err("Couldn't synthesize evsel scale.\n");
-			return err;
+		if (counter->scale != 1) {
+			err = perf_event__synthesize_attr_update_scale(NULL, counter, process_synthesized_event);
+			if (err < 0) {
+				pr_err("Couldn't synthesize evsel scale.\n");
+				return err;
+			}
 		}
 
 		if (is_pipe) {

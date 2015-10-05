@@ -3,6 +3,7 @@
 #include "evlist.h"
 #include "evsel.h"
 #include "thread_map.h"
+#include "stat.h"
 
 void update_stats(struct stats *stats, u64 val)
 {
@@ -363,4 +364,39 @@ int perf_event__process_stat_event(struct perf_tool *tool __maybe_unused,
 	*perf_counts(counter->counts, stat->cpu, stat->thread) = count;
 	counter->supported = true;
 	return 0;
+}
+
+int perf_event__fprintf_stat(union perf_event *event)
+{
+	struct stat_event *stat = (struct stat_event*) event;
+
+	printf("\n... id %" PRIu64 ", cpu %d, thread %d\n",
+	       stat->id, stat->cpu, stat->thread);
+	printf("... value %" PRIu64 ", enabled %" PRIu64 ", running %" PRIu64 "\n",
+	       stat->val, stat->ena, stat->run);
+	return 0;
+}
+
+int perf_event__fprintf_stat_round(union perf_event *event)
+{
+	struct stat_round_event *round = (struct stat_round_event*) event;
+
+	printf("\n... time %" PRIu64 ", type %s\n", round->time,
+	       round->type == PERF_STAT_ROUND_TYPE__FINAL ? "FINAL" : "INTERVAL");
+	return 0;
+}
+
+size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp)
+{
+	struct perf_stat_config sc;
+	size_t ret;
+
+	perf_event__read_stat_config(&sc, &event->stat_config);
+
+	ret  = fprintf(fp, "\n");
+	ret += fprintf(fp, "... aggr_mode %d\n", sc.aggr_mode);
+	ret += fprintf(fp, "... scale     %d\n", sc.scale);
+	ret += fprintf(fp, "... interval  %u\n", sc.interval);
+
+	return ret;
 }

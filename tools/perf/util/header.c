@@ -2774,6 +2774,31 @@ perf_event__synthesize_attr_update_name(struct perf_tool *tool,
 	return err;
 }
 
+size_t perf_event__fprintf_attr_update(union perf_event *event, FILE *fp)
+{
+	struct attr_update_event *ev = &event->attr_update;
+	size_t ret;
+
+	ret = fprintf(fp, "\n... id:    %" PRIu64 "\n", ev->id);
+
+	switch (ev->type) {
+	case PERF_ATTR_UPDATE__SCALE:
+		ret += fprintf(fp, "... scale: %f\n", ev->scale);
+		break;
+	case PERF_ATTR_UPDATE__UNIT:
+		ret += fprintf(fp, "... unit:  %s\n", ev->str);
+		break;
+	case PERF_ATTR_UPDATE__NAME:
+		ret += fprintf(fp, "... name:  %s\n", ev->str);
+		break;
+	default:
+		ret += fprintf(fp, "... unknown type\n");
+		break;
+	}
+
+	return ret;
+}
+
 int perf_event__synthesize_attrs(struct perf_tool *tool,
 				   struct perf_session *session,
 				   perf_event__handler_t process)

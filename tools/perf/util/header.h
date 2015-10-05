@@ -135,6 +135,7 @@ int perf_event__synthesize_build_id(struct perf_tool *tool,
 int perf_event__process_build_id(struct perf_tool *tool,
 				 union perf_event *event,
 				 struct perf_session *session);
+size_t perf_event__fprintf_attr_update(union perf_event *event, FILE *fp);
 bool is_perf_magic(u64 magic);
 
 #define NAME_ALIGN 64
