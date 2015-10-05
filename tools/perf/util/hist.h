@@ -146,6 +146,10 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		      int max_cols, float min_pcnt, FILE *fp);
 size_t perf_evlist__fprintf_nr_events(struct perf_evlist *evlist, FILE *fp);
 
+size_t callchain__sort_fprintf(struct callchain_root *unsorted_callchain,
+			       u64 total_samples, u64 relative_samples,
+			       int left_margin, FILE *fp);
+
 void hists__filter_by_dso(struct hists *hists);
 void hists__filter_by_thread(struct hists *hists);
 void hists__filter_by_symbol(struct hists *hists);
