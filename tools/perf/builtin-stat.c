@@ -327,6 +327,7 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 
 static int perf_stat_synthesize_config(bool is_pipe)
 {
+	struct perf_evsel *counter;
 	int err;
 
 	if (is_pipe) {
@@ -335,6 +336,31 @@ static int perf_stat_synthesize_config(bool is_pipe)
 		if (err < 0) {
 			pr_err("Couldn't synthesize attrs.\n");
 			return err;
+		}
+	}
+
+	evlist__for_each(evsel_list, counter) {
+		if (!counter->supported)
+			continue;
+
+		err = perf_event__synthesize_attr_update_unit(NULL, counter, process_synthesized_event);
+		if (err < 0) {
+			pr_err("Couldn't synthesize evsel unit.\n");
+			return err;
+		}
+
+		err = perf_event__synthesize_attr_update_scale(NULL, counter, process_synthesized_event);
+		if (err < 0) {
+			pr_err("Couldn't synthesize evsel scale.\n");
+			return err;
+		}
+
+		if (is_pipe) {
+			err = perf_event__synthesize_attr_update_name(NULL, counter, process_synthesized_event);
+			if (err < 0) {
+				pr_err("Couldn't synthesize evsel name.\n");
+				return err;
+			}
 		}
 	}
 
