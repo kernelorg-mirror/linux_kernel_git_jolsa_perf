@@ -2741,6 +2741,24 @@ perf_event__synthesize_attr_update_scale(struct perf_tool *tool,
 	return err;
 }
 
+int
+perf_event__synthesize_attr_update_name(struct perf_tool *tool,
+					struct perf_evsel *evsel,
+					perf_event__handler_t process)
+{
+	struct attr_update_event *ev;
+	size_t len = strlen(evsel->name);
+	int err;
+
+	ev = attr_update_event__alloc(len + 1, PERF_ATTR_UPDATE__NAME, evsel->id[0]);
+	if (ev == NULL)
+		return -ENOMEM;
+
+	strncpy(ev->str, evsel->name, len);
+	err = process(tool, (union perf_event*) ev, NULL, NULL);
+	free(ev);
+	return err;
+}
 
 int perf_event__synthesize_attrs(struct perf_tool *tool,
 				   struct perf_session *session,
@@ -2821,6 +2839,9 @@ int perf_event__process_attr_update(struct perf_tool *tool __maybe_unused,
 	switch (ev->type) {
 	case PERF_ATTR_UPDATE__UNIT:
 		evsel->unit = strdup(ev->str);
+		break;
+	case PERF_ATTR_UPDATE__NAME:
+		evsel->name = strdup(ev->str);
 		break;
 	case PERF_ATTR_UPDATE__SCALE:
 		evsel->scale = ev->scale;
