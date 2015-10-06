@@ -369,7 +369,7 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
  * Reading the pmu event aliases definition, which should be located at:
  * /sys/bus/event_source/devices/<dev>/events as sysfs group attributes.
  */
-static int pmu_aliases(const char *name, struct list_head *head)
+static int pmu_aliases_sysfs(const char *name, struct list_head *head)
 {
 	struct stat st;
 	char path[PATH_MAX];
@@ -388,6 +388,23 @@ static int pmu_aliases(const char *name, struct list_head *head)
 		return -1;
 
 	return 0;
+}
+
+static int pmu_aliases_user(const char *name, struct list_head *head)
+{
+	struct user_events *events;
+
+	events = find_events(name);
+	if (!events)
+		return 0;
+
+	return pmu_aliases_parse(events->dir, head);
+}
+
+static int pmu_aliases(const char *name, struct list_head *head)
+{
+	return pmu_aliases_sysfs(name, head) ||
+	       pmu_aliases_user(name, head);
 }
 
 static int pmu_alias_terms(struct perf_pmu_alias *alias,
