@@ -20,12 +20,59 @@ struct perf_pmu_format {
 	struct list_head list;
 };
 
+struct user_events {
+	char *pmu;
+	char *dir;
+	struct list_head list;
+};
+
+static LIST_HEAD(user_events);
+
 #define EVENT_SOURCE_DEVICE_PATH "/bus/event_source/devices/"
 
 int perf_pmu_parse(struct list_head *list, char *name);
 extern FILE *perf_pmu_in;
 
 static LIST_HEAD(pmus);
+
+static struct user_events* find_events(const char *pmu)
+{
+	struct user_events *events;
+
+	list_for_each_entry(events, &user_events, list) {
+		if (!strcmp(events->pmu, pmu))
+			return events;
+	}
+
+	return NULL;
+}
+
+int perf_pmu_events_config(const char *var, const char *value)
+{
+	struct user_events *events;
+	struct stat st;
+	const char *pmu = var + sizeof("pmu-events");
+
+	if (find_events(pmu)) {
+		pr_warning("user events: pmu '%s' already defined\n", pmu);
+		return -1;
+	}
+
+	if (stat(value, &st) || !S_ISDIR(st.st_mode)) {
+		pr_warning("user events: '%s' directory does not exists",
+			   value);
+		return -EINVAL;
+	}
+
+	events = zalloc(sizeof(*events));
+	if (events) {
+		events->pmu = strdup(pmu);
+		events->dir = strdup(value);
+		list_add_tail(&events->list, &user_events);
+	}
+
+	return events ? 0 : -ENOMEM;
+}
 
 /*
  * Parse & process all the sysfs attributes located under

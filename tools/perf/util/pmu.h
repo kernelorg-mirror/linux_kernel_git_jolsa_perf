@@ -79,4 +79,6 @@ int perf_pmu__test(void);
 
 struct perf_event_attr *perf_pmu__get_default_config(struct perf_pmu *pmu);
 
+int perf_pmu_events_config(const char *var, const char *value);
+
 #endif /* __PMU_H */

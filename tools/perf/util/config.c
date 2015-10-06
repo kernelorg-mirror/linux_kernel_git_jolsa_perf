@@ -13,6 +13,7 @@
 #include "exec_cmd.h"
 #include "util/hist.h"  /* perf_hist_config */
 #include "util/llvm-utils.h"   /* perf_llvm_config */
+#include "pmu.h"   /* perf_pmu_events_config */
 
 #define MAXNAME (256)
 
@@ -397,6 +398,9 @@ static int perf_ui_config(const char *var, const char *value)
 int perf_default_config(const char *var, const char *value,
 			void *dummy __maybe_unused)
 {
+	if (!prefixcmp(var, "pmu-events."))
+		return perf_pmu_events_config(var, value);
+
 	if (!prefixcmp(var, "core."))
 		return perf_default_core_config(var, value);
 
