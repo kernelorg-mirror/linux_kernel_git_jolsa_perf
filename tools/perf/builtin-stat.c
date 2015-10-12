@@ -1640,7 +1640,7 @@ int process_cpu_map_event(struct perf_tool *tool __maybe_unused,
 		return 0;
 	}
 
-	cpus = cpu_map__new_event(&event->cpu_map);
+	cpus = cpu_map__new_data(&event->cpu_map.data);
 	if (!cpus)
 		return -ENOMEM;
 
