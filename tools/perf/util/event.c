@@ -785,25 +785,48 @@ static size_t mask_size(struct cpu_map *map, int *max)
 	return sizeof(struct cpu_map_data_mask) + BITS_TO_BYTES(*max);
 }
 
+void *cpu_map_data__alloc(struct cpu_map *map, size_t size, u64 *type, int *max)
+{
+	size_t size_cpus, size_mask;
+
+	size_cpus = cpus_size(map);
+	size_mask = mask_size(map, max);
+
+	if (size_cpus < size_mask) {
+		size += size_cpus;
+		*type  = PERF_CPU_MAP__CPUS;
+	} else {
+		size += size_mask;
+		*type  = PERF_CPU_MAP__MASK;
+	}
+
+	return zalloc(size);
+}
+
+void cpu_map_data__synthesize(struct cpu_map_data *data, struct cpu_map *map,
+			      u64 type, int max)
+{
+	data->type = type;
+
+	switch (type) {
+	case PERF_CPU_MAP__CPUS:
+		synthesize_cpus((struct cpu_map_data_cpus *) data->data, map);
+		break;
+	case PERF_CPU_MAP__MASK:
+		synthesize_mask((struct cpu_map_data_mask *) data->data, map, max);
+	default:
+		break;
+	};
+}
+
 static struct cpu_map_event* cpu_map_event__new(struct cpu_map *map)
 {
-	size_t size_cpus, size_mask, size = sizeof(struct cpu_map_event);
+	size_t size = sizeof(struct cpu_map_event);
 	struct cpu_map_event *event;
 	int max;
 	u64 type;
 
-	size_cpus = cpus_size(map);
-	size_mask = mask_size(map, &max);
-
-	if (size_cpus < size_mask) {
-		size += size_cpus;
-		type  = PERF_CPU_MAP__CPUS;
-	} else {
-		size += size_mask;
-		type  = PERF_CPU_MAP__MASK;
-	}
-
-	event = zalloc(size);
+	event = cpu_map_data__alloc(map, size, &type, &max);
 	if (!event)
 		return NULL;
 
@@ -811,16 +834,7 @@ static struct cpu_map_event* cpu_map_event__new(struct cpu_map *map)
 	event->header.size = size;
 	event->data.type   = type;
 
-	switch (type) {
-	case PERF_CPU_MAP__CPUS:
-		synthesize_cpus((struct cpu_map_data_cpus *) event->data.data, map);
-		break;
-	case PERF_CPU_MAP__MASK:
-		synthesize_mask((struct cpu_map_data_mask *) event->data.data, map, max);
-	default:
-		break;
-	};
-
+	cpu_map_data__synthesize(&event->data, map, type, max);
 	return event;
 }
 

@@ -645,4 +645,7 @@ size_t perf_event__fprintf(union perf_event *event, FILE *fp);
 u64 kallsyms__get_function_start(const char *kallsyms_filename,
 				 const char *symbol_name);
 
+void *cpu_map_data__alloc(struct cpu_map *map, size_t size, u64 *type, int *max);
+void  cpu_map_data__synthesize(struct cpu_map_data *data, struct cpu_map *map,
+			       u64 type, int max);
 #endif /* __PERF_RECORD_H */
