@@ -287,6 +287,16 @@ enum {
 	PERF_ATTR_UPDATE__UNIT  = 0,
 	PERF_ATTR_UPDATE__SCALE = 1,
 	PERF_ATTR_UPDATE__NAME  = 2,
+	PERF_ATTR_UPDATE__CPUS  = 3,
+};
+
+struct cpu_map_data {
+	u64	type;
+	char	data[];
+};
+
+struct attr_update_event_cpus {
+	struct cpu_map_data cpus;
 };
 
 struct attr_update_event_scale {
@@ -406,11 +416,6 @@ struct cpu_map_data_mask {
 	u64	nr;
 	u64	long_size;
 	unsigned long mask[];
-};
-
-struct cpu_map_data {
-	u64	type;
-	char	data[];
 };
 
 struct cpu_map_event {

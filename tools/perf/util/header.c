@@ -2762,6 +2762,38 @@ perf_event__synthesize_attr_update_name(struct perf_tool *tool,
 	return err;
 }
 
+int
+perf_event__synthesize_attr_update_cpus(struct perf_tool *tool,
+					struct perf_evsel *evsel,
+					perf_event__handler_t process)
+{
+	size_t size = sizeof(struct attr_update_event);
+	struct attr_update_event *ev;
+	int max, err;
+	u64 type;
+
+	if (!evsel->own_cpus)
+		return 0;
+
+	ev = cpu_map_data__alloc(evsel->own_cpus, size, &type, &max);
+	if (!ev)
+		return -ENOMEM;
+
+	ev->header.type = PERF_RECORD_HEADER_ATTR_UPDATE;
+	ev->header.size = (u16)size;
+	ev->type = PERF_ATTR_UPDATE__CPUS;
+	ev->id   = evsel->id[0];
+
+	cpu_map_data__synthesize((struct cpu_map_data *) ev->data,
+				 evsel->own_cpus,
+				 type, max);
+
+	err = process(tool, (union perf_event*) ev, NULL, NULL);
+	free(ev);
+	return err;
+}
+
+
 int perf_event__synthesize_attrs(struct perf_tool *tool,
 				   struct perf_session *session,
 				   perf_event__handler_t process)
