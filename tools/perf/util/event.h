@@ -313,6 +313,11 @@ enum {
 	PERF_ATTR_UPDATE__UNIT  = 0,
 	PERF_ATTR_UPDATE__SCALE = 1,
 	PERF_ATTR_UPDATE__NAME  = 2,
+	PERF_ATTR_UPDATE__CPUS  = 3,
+};
+
+struct attr_update_event_cpus {
+	struct cpu_map_data cpus;
 };
 
 struct attr_update_event_scale {
