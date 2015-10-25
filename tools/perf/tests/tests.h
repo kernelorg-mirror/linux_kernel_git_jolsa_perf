@@ -72,6 +72,7 @@ int test__cpu_map_synthesize(void);
 int test__synthesize_stat_config(void);
 int test__synthesize_stat(void);
 int test__synthesize_stat_round(void);
+int test__event_update(void);
 
 
 #if defined(__arm__) || defined(__aarch64__)
