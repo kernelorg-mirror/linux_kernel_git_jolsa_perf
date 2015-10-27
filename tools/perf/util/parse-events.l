@@ -188,6 +188,7 @@ time			{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_TIME); }
 call-graph		{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_CALLGRAPH); }
 stack-size		{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_STACKSIZE); }
 slot			{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_SLOT); }
+pmi			{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_PMI); }
 ,			{ return ','; }
 "/"			{ BEGIN(INITIAL); return '/'; }
 {name_minus}		{ return str(yyscanner, PE_NAME); }

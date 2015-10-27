@@ -1286,6 +1286,13 @@ static int test__checkevent_slot(struct perf_evlist *evlist)
 	return 0;
 }
 
+static int test__checkevent_slot_pmi(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	TEST_ASSERT_VAL("wrong no_pmi_disable", evsel->attr.no_pmi_disable);
+	return test__checkevent_slot(evlist);
+}
 
 static int count_tracepoints(void)
 {
@@ -1599,6 +1606,11 @@ static struct evlist_test test__events[] = {
 		.name  = "cycles/slot=1/",
 		.check = test__checkevent_slot,
 		.id    = 45,
+	},
+	{
+		.name  = "cycles/slot=1,pmi/",
+		.check = test__checkevent_slot_pmi,
+		.id    = 46,
 	},
 };
 
