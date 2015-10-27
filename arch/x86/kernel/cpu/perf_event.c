@@ -101,6 +101,9 @@ again:
 	local64_add(delta, &event->count);
 	local64_sub(delta, &hwc->period_left);
 
+	if (has_slot(event))
+		event->slot_count = perf_slot_read(event->slot_id);
+
 	return new_raw_count;
 }
 

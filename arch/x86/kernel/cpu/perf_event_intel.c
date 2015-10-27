@@ -1518,6 +1518,14 @@ static void perf_slot_disable(struct perf_slot *slot)
 	atomic_set(&slot->state, PERF_SLOT_DISABLED);
 }
 
+u64 perf_slot_read(unsigned int id)
+{
+	struct perf_slot *slot;
+
+	slot = get_slot(id, smp_processor_id(), false);
+	return slot ? slot->nb : (u64) -1;
+}
+
 void perf_slot_start(unsigned int id)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);

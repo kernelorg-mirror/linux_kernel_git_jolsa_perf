@@ -472,6 +472,7 @@ struct perf_event {
 	unsigned int			attach_state;
 	local64_t			count;
 	atomic64_t			child_count;
+	u64				slot_count;
 
 	/*
 	 * These are the total time in nanoseconds that the event

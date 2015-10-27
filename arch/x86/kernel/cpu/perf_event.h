@@ -40,6 +40,7 @@ struct perf_slot {
 
 void perf_slot_start(unsigned int id);
 void perf_slot_stop(unsigned int id);
+u64 perf_slot_read(unsigned int id);
 
 /*
  *          |   NHM/WSM    |      SNB     |
