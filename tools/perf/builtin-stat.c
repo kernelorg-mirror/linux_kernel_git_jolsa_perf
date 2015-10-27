@@ -154,6 +154,9 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 				    PERF_FORMAT_TOTAL_TIME_RUNNING;
 
+	if (attr->slot)
+		attr->read_format |= PERF_FORMAT_SLOT_COUNT;
+
 	attr->inherit = !no_inherit;
 
 	if (target__has_cpu(&target))
@@ -724,7 +727,7 @@ static void print_counter_aggr(struct perf_evsel *counter, char *prefix)
 static void print_counter(struct perf_evsel *counter, char *prefix)
 {
 	FILE *output = stat_config.output;
-	u64 ena, run, val;
+	u64 ena, run, val, sct;
 	double uval;
 	int cpu;
 
@@ -732,6 +735,7 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 		val = perf_counts(counter->counts, cpu, 0)->val;
 		ena = perf_counts(counter->counts, cpu, 0)->ena;
 		run = perf_counts(counter->counts, cpu, 0)->run;
+		sct = perf_counts(counter->counts, cpu, 0)->sct;
 
 		if (prefix)
 			fprintf(output, "%s", prefix);
@@ -761,12 +765,18 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 			continue;
 		}
 
-		uval = val * counter->scale;
+		if (!counter->attr.slot)
+			sct = 1;
+
+		uval = val * counter->scale / sct;
 
 		if (nsec_counter(counter))
 			nsec_printout(cpu, 0, counter, uval);
 		else
 			abs_printout(cpu, 0, counter, uval);
+
+		if (counter->attr.slot)
+			fprintf(output, "  slot %" PRIu64 "x", sct);
 
 		if (!csv_output)
 			print_noise(counter, 1.0);

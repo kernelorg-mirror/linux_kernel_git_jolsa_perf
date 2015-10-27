@@ -268,6 +268,7 @@ process_counter_values(struct perf_stat_config *config, struct perf_evsel *evsel
 		break;
 	case AGGR_GLOBAL:
 		aggr->val += count->val;
+		aggr->sct += count->sct;
 		if (config->scale) {
 			aggr->ena += count->ena;
 			aggr->run += count->run;
@@ -309,7 +310,7 @@ int perf_stat_process_counter(struct perf_stat_config *config,
 	u64 *count = counter->counts->aggr.values;
 	int i, ret;
 
-	aggr->val = aggr->ena = aggr->run = 0;
+	aggr->val = aggr->ena = aggr->run = aggr->sct = 0;
 	init_stats(ps->res_stats);
 
 	if (counter->per_pkg)
