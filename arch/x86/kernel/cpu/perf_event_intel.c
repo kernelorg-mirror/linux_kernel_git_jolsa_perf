@@ -1508,6 +1508,16 @@ static bool perf_slot_enabled(struct perf_slot *slot)
 	return atomic_read(&slot->state) == PERF_SLOT_ENABLED && !!slot->ctrl_set;
 }
 
+static void perf_slot_enable(struct perf_slot *slot)
+{
+	atomic_set(&slot->state, PERF_SLOT_ENABLED);
+}
+
+static void perf_slot_disable(struct perf_slot *slot)
+{
+	atomic_set(&slot->state, PERF_SLOT_DISABLED);
+}
+
 void perf_slot_start(unsigned int id)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
@@ -1579,6 +1589,79 @@ static int slot_init(struct perf_event *event)
 		return -EINVAL;
 
 	return get_slot(id, event->cpu, true) ? 0 : -ENOMEM;
+}
+
+static int __slot_ioctl_cpu(unsigned int cmd, u64 id, int cpu)
+{
+	struct perf_slot *slot;
+
+	slot = get_slot(id, cpu, false);
+	if (!slot)
+		return -EINVAL;
+
+	if (cmd == PERF_EVENT_IOC_SLOT_ENABLE)
+		perf_slot_enable(slot);
+	else
+		perf_slot_disable(slot);
+
+	return 0;
+}
+
+static int slot_ioctl_cpu(unsigned int cmd, u64 id, u64 cpu)
+{
+	int err = -EINVAL;
+
+	if (cpu == PERF_EVENT_SLOT_CPU_ALL) {
+		int _cpu;
+
+		for_each_online_cpu(_cpu) {
+			err = __slot_ioctl_cpu(cmd, id, _cpu);
+			if (err)
+				break;
+		}
+	} else {
+		err = __slot_ioctl_cpu(cmd, id, (int) cpu);
+	}
+
+	return err;
+}
+
+static int slot_ioctl(unsigned int cmd, struct perf_event_slot *slot)
+{
+	int i, err = -EINVAL;
+
+	for (i = 0; i < slot->count; i++)
+		err = slot_ioctl_cpu(cmd, slot->ids[i], slot->cpu);
+
+	return err;
+}
+
+int perf_event_slot_ioctl(unsigned int cmd, struct perf_event_slot *arg)
+{
+	struct perf_event_slot buf, *slot;
+	size_t size;
+	int err;
+
+	if (copy_from_user(&buf, arg, sizeof(buf)))
+		return -EFAULT;
+
+	if (buf.count >= x86_pmu.slots_num)
+		return -EINVAL;
+
+	size = sizeof(*slot) + buf.count * sizeof(u64);
+	slot = kmalloc(size, GFP_KERNEL);
+	if (!slot)
+		return -ENOMEM;
+
+	if (copy_from_user(slot, arg, size)) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	err = slot_ioctl(cmd, slot);
+out:
+	kfree(slot);
+	return err;;
 }
 
 /*
