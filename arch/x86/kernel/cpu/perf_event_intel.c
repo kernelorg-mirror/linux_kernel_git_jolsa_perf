@@ -3172,6 +3172,26 @@ static __init void intel_ht_bug(void)
 EVENT_ATTR_STR(mem-loads,	mem_ld_hsw,	"event=0xcd,umask=0x1,ldlat=3");
 EVENT_ATTR_STR(mem-stores,	mem_st_hsw,	"event=0xd0,umask=0x82")
 
+EVENT_ATTR_STR(mem-stlb-miss-loads,	hsw_stlb_miss_loads,	"event=0xd0,umask=0x11");
+EVENT_ATTR_STR(mem-stlb-miss-stores,	hsw_stlb_miss_stores,	"event=0xd0,umask=0x12");
+EVENT_ATTR_STR(mem-lock-loads,		hsw_lock_loads,		"event=0xd0,umask=0x21");
+EVENT_ATTR_STR(mem-split-loads,		hsw_split_loads,	"event=0xd0,umask=0x41");
+EVENT_ATTR_STR(mem-split-stores,	hsw_split_stores,	"event=0xd0,umask=0x42");
+EVENT_ATTR_STR(mem-all-loads,		hsw_all_loads,		"event=0xd0,umask=0x81");
+EVENT_ATTR_STR(mem-all-stores,		hsw_all_stores,		"event=0xd0,umask=0x82");
+EVENT_ATTR_STR(mem-load-l1-hit,		hsw_load_l1_hit,	"event=0xd1,umask=0x01");
+EVENT_ATTR_STR(mem-load-l2-hit,		hsw_load_l2_hit,	"event=0xd1,umask=0x02");
+EVENT_ATTR_STR(mem-load-l3-hit,		hsw_load_l3_hit,	"event=0xd1,umask=0x04");
+EVENT_ATTR_STR(mem-load-l1-miss,	hsw_load_l1_miss,	"event=0xd1,umask=0x08");
+EVENT_ATTR_STR(mem-load-l2-miss,	hsw_load_l2_miss,	"event=0xd1,umask=0x10");
+EVENT_ATTR_STR(mem-load-l3-miss,	hsw_load_l3_miss,	"event=0xd1,umask=0x20");
+EVENT_ATTR_STR(mem-load-hit-lfb,	hsw_load_hit_lfb,	"event=0xd1,umask=0x40");
+EVENT_ATTR_STR(mem-snp-miss,		hsw_snp_miss,		"event=0xd2,umask=0x01");
+EVENT_ATTR_STR(mem-snp-hit,		hsw_snp_hit,		"event=0xd2,umask=0x02");
+EVENT_ATTR_STR(mem-snp-hitm,		hsw_snp_hitm,		"event=0xd2,umask=0x04");
+EVENT_ATTR_STR(mem-snp-none,		hsw_snp_none,		"event=0xd2,umask=0x08");
+EVENT_ATTR_STR(mem-local-dram,		hsw_local_dram,		"event=0xd3,umask=0x01");
+
 /* Haswell special events */
 EVENT_ATTR_STR(tx-start,	tx_start,	"event=0xc9,umask=0x1");
 EVENT_ATTR_STR(tx-commit,	tx_commit,	"event=0xc9,umask=0x2");
@@ -3201,6 +3221,25 @@ static struct attribute *hsw_events_attrs[] = {
 	EVENT_PTR(cycles_ct),
 	EVENT_PTR(mem_ld_hsw),
 	EVENT_PTR(mem_st_hsw),
+	EVENT_PTR(hsw_stlb_miss_loads),
+	EVENT_PTR(hsw_stlb_miss_stores),
+	EVENT_PTR(hsw_lock_loads),
+	EVENT_PTR(hsw_split_loads),
+	EVENT_PTR(hsw_split_stores),
+	EVENT_PTR(hsw_all_loads),
+	EVENT_PTR(hsw_all_stores),
+	EVENT_PTR(hsw_load_l1_hit),
+	EVENT_PTR(hsw_load_l2_hit),
+	EVENT_PTR(hsw_load_l3_hit),
+	EVENT_PTR(hsw_load_l1_miss),
+	EVENT_PTR(hsw_load_l2_miss),
+	EVENT_PTR(hsw_load_l3_miss),
+	EVENT_PTR(hsw_load_hit_lfb),
+	EVENT_PTR(hsw_snp_miss),
+	EVENT_PTR(hsw_snp_hit),
+	EVENT_PTR(hsw_snp_hitm),
+	EVENT_PTR(hsw_snp_none),
+	EVENT_PTR(hsw_local_dram),
 	NULL
 };
 
