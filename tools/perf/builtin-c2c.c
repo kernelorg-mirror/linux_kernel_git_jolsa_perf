@@ -594,33 +594,46 @@ HANDLER(snp_hit,		_P(SNOOP, HIT))
 HANDLER(snp_hitm,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM))
 HANDLER(snp_none,		_P(SNOOP, NONE))
 HANDLER(local_dram,		_P(LVL, LOC_RAM))
-
 #undef _P
 #undef HANDLER
 
-static const struct perf_evsel_str_handler handlers[] = {
-	{ "cpu/mem-loads,ldlat=30/P",	process_load_store,		},
-	{ "cpu/mem-stores/P",		process_load_store,		},
-	{ "cpu/mem-stlb-miss-loads/P",	process_stlb_miss_loads,	},
-	{ "cpu/mem-stlb-miss-stores/P",	process_stlb_miss_stores,	},
-	{ "cpu/mem-lock-loads/P",	process_lock_loads,		},
-	{ "cpu/mem-split-loads/P",	process_split_loads,		},
-	{ "cpu/mem-split-stores/P",	process_split_stores,		},
-	{ "cpu/mem-all-loads/P",	process_all_loads,		},
-	{ "cpu/mem-all-stores/P",	process_all_stores,		},
-	{ "cpu/mem-load-l1-hit/P",	process_load_l1_hit,		},
-	{ "cpu/mem-load-l2-hit/P",	process_load_l2_hit,		},
-	{ "cpu/mem-load-l3-hit/P",	process_load_l3_hit,		},
-	{ "cpu/mem-load-l1-miss/P",	process_load_l1_miss,		},
-	{ "cpu/mem-load-l2-miss/P",	process_load_l2_miss,		},
-	{ "cpu/mem-load-l3-miss/P",	process_load_l3_miss,		},
-	{ "cpu/mem-load-hit-lfb/P",	process_load_hit_lfb,		},
-	{ "cpu/mem-snp-miss/P",		process_snp_miss,		},
-	{ "cpu/mem-snp-hit/P",		process_snp_hit,		},
-	{ "cpu/mem-snp-hitm/P",		process_snp_hitm,		},
-	{ "cpu/mem-snp-none/P",		process_snp_none,		},
-	{ "cpu/mem-local-dram/P",	process_local_dram,		},
+struct mem_event {
+	bool record;
+	const char *name;
+	struct perf_evsel_str_handler handler;
 };
+
+#define HANDLER(__n, __e, __f)					\
+	{							\
+		.name = __n,					\
+		.handler = { .name = __e, .handler = __f, },	\
+	}
+
+static struct mem_event events[] = {
+	HANDLER("ldlat-loads",	    "cpu/mem-loads,ldlat=30/P",		process_load_store),
+	HANDLER("ldlat-stores",	    "cpu/mem-stores/P",			process_load_store),
+	HANDLER("stlb-miss-loads",  "cpu/mem-stlb-miss-loads/P",	process_stlb_miss_loads),
+	HANDLER("stlb-miss-stores", "cpu/mem-stlb-miss-stores/P",	process_stlb_miss_stores),
+	HANDLER("lock-loads",	    "cpu/mem-lock-loads/P",		process_lock_loads),
+	HANDLER("split-loads",	    "cpu/mem-split-loads/P",		process_split_loads),
+	HANDLER("split-stores",	    "cpu/mem-split-stores/P",		process_split_stores),
+	HANDLER("all-loads",	    "cpu/mem-all-loads/P",		process_all_loads),
+	HANDLER("all-stores",	    "cpu/mem-all-stores/P",		process_all_stores),
+	HANDLER("l1-hit",	    "cpu/mem-load-l1-hit/P",		process_load_l1_hit),
+	HANDLER("l2-hit",	    "cpu/mem-load-l2-hit/P",		process_load_l2_hit),
+	HANDLER("l3-hit",	    "cpu/mem-load-l3-hit/P",		process_load_l3_hit),
+	HANDLER("l1-miss",	    "cpu/mem-load-l1-miss/P",		process_load_l1_miss),
+	HANDLER("l2-miss",	    "cpu/mem-load-l2-miss/P",		process_load_l2_miss),
+	HANDLER("l3-miss",	    "cpu/mem-load-l3-miss/P",		process_load_l3_miss),
+	HANDLER("lfb",		    "cpu/mem-load-hit-lfb/P",		process_load_hit_lfb),
+	HANDLER("snp-miss",	    "cpu/mem-snp-miss/P",		process_snp_miss),
+	HANDLER("snp-hit",	    "cpu/mem-snp-hit/P",		process_snp_hit),
+	HANDLER("snp-hitm",	    "cpu/mem-snp-hitm/P",		process_snp_hitm),
+	HANDLER("snp-none",	    "cpu/mem-snp-none/P",		process_snp_none),
+	HANDLER("local-dram",	    "cpu/mem-local-dram/P",		process_local_dram),
+};
+
+#undef HANDLER
 
 typedef int (*sample_handler)(struct perf_c2c *c2c,
 			      struct addr_location *al,
@@ -1226,9 +1239,9 @@ static int perf_c2c__read_events(struct perf_c2c *c2c)
 		const char *name = perf_evsel__name(evsel);
 		unsigned int i;
 
-		for (i = 0; i < ARRAY_SIZE(handlers); i++) {
-			if (!strcmp(name, handlers[i].name))
-				evsel->handler = handlers[i].handler;
+		for (i = 0; i < ARRAY_SIZE(events); i++) {
+			if (!strcmp(name, events[i].handler.name))
+				evsel->handler = events[i].handler.handler;
 		}
 	}
 
@@ -1287,7 +1300,7 @@ static int perf_c2c__record(int argc, const char **argv)
 		"-a",
 	};
 
-	rec_argc = ARRAY_SIZE(record_args) + 2 * ARRAY_SIZE(handlers) + argc - 1;
+	rec_argc = ARRAY_SIZE(record_args) + 2 * ARRAY_SIZE(events) + argc - 1;
 	rec_argv = calloc(rec_argc + 1, sizeof(char *));
 
 	if (rec_argv == NULL)
@@ -1296,17 +1309,68 @@ static int perf_c2c__record(int argc, const char **argv)
 	for (i = 0; i < ARRAY_SIZE(record_args); i++)
 		rec_argv[i] = strdup(record_args[i]);
 
-	for (j = 0; j < ARRAY_SIZE(handlers); j++) {
+	pr_debug("events:\n");
+
+	for (j = 0; j < ARRAY_SIZE(events); j++) {
+		if (!events[j].record)
+			continue;
+
 		rec_argv[i++] = strdup("-e");
-		rec_argv[i++] = strdup(handlers[j].name);
+		rec_argv[i++] = strdup(events[j].handler.name);
+		pr_debug("  %s\n", events[j].handler.name);
 	}
 
 	for (j = 1; j < (unsigned int)argc; j++, i++)
 		rec_argv[i] = argv[j];
 
-	BUG_ON(i != rec_argc);
-
 	return cmd_record(i, rec_argv, NULL);
+}
+
+static int event_option(const struct option *opt __maybe_unused, const char *str,
+			int unset __maybe_unused)
+{
+	char *tok, *saveptr = NULL;
+	bool found = false;
+	char *buf;
+	unsigned j;
+
+	if (!strcmp(str, "list"))
+		goto err;
+
+	/* We need buffer that we know we can write to. */
+	buf = malloc(strlen(str) + 1);
+	if (!buf)
+		return -ENOMEM;
+
+	strcpy(buf, str);
+
+	tok = strtok_r((char *)buf, ",", &saveptr);
+
+	while (tok) {
+		for (j = 0; j < ARRAY_SIZE(events); j++) {
+			struct mem_event *e = &events[j];
+
+			if (strstr(e->name, tok))
+				e->record = found = true;
+		}
+
+		tok = strtok_r(NULL, ",", &saveptr);
+	}
+	free(buf);
+
+	if (found)
+		return 0;
+
+	fprintf(stderr, "event '%s' not found, ", str);
+
+err:
+	fprintf(stderr, "available events:\n");
+	for (j = 0; j < ARRAY_SIZE(events); j++) {
+		struct mem_event *e = &events[j];
+
+		fprintf(stderr, "  %s\n", e->name);
+	}
+	exit(0);
 }
 
 int cmd_c2c(int argc, const char **argv, const char *prefix __maybe_unused)
@@ -1337,6 +1401,8 @@ int cmd_c2c(int argc, const char **argv, const char *prefix __maybe_unused)
 		   "separator",
 		   "separator for columns, no spaces will be added"
 		   " between columns '.' is reserved."),
+	OPT_CALLBACK('e', "event", NULL, "event",
+		     "event selector", event_option),
 	OPT_END()
 	};
 	const char * const c2c_usage[] = {
