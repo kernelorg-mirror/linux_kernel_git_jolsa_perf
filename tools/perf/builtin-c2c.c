@@ -482,10 +482,11 @@ static inline bool matching_coalescing(struct c2c_hit *h,
 	return value;
 }
 
-static int perf_c2c__process_load_store(struct perf_c2c *c2c,
-					struct addr_location *al,
-					struct perf_sample *sample,
-					struct perf_evsel *evsel)
+static int process_load_store_dsrc(struct perf_c2c *c2c,
+				   struct addr_location *al,
+				   struct perf_sample *sample,
+				   struct perf_evsel *evsel,
+				   union perf_mem_data_src *data_src)
 {
 	struct symbol *parent = NULL;
 	struct hist_entry *he;
@@ -521,6 +522,9 @@ static int perf_c2c__process_load_store(struct perf_c2c *c2c,
 		goto out_mem;
 	}
 
+	if (data_src)
+		he->mem_info->data_src = *data_src;
+
 	err = c2c_decode_stats(&c2c->stats, he);
 	if (err < 0) {
 		err = 0;
@@ -551,9 +555,71 @@ out:
 	return err;
 }
 
+static int process_load_store(struct perf_c2c *c2c,
+			      struct addr_location *al,
+			      struct perf_sample *sample,
+			      struct perf_evsel *evsel)
+{
+	return process_load_store_dsrc(c2c, al, sample, evsel, NULL);
+}
+
+#define HANDLER(f, __s)								\
+static int process_ ## f(struct perf_c2c *c2c,					\
+	       struct addr_location *al,					\
+	       struct perf_sample *sample,					\
+	       struct perf_evsel *evsel)					\
+{										\
+	union perf_mem_data_src data_src = { .val = __s };			\
+	return process_load_store_dsrc(c2c, al, sample, evsel, &data_src);	\
+}
+
+#define _P(a, s) PERF_MEM_S(a, s)
+
+HANDLER(stlb_miss_loads,	_P(OP, LOAD) | _P(TLB, MISS))
+HANDLER(stlb_miss_stores,	_P(OP, STORE) | _P(TLB, MISS))
+HANDLER(lock_loads,		_P(OP, LOAD) | _P(LOCK, LOCKED))
+HANDLER(split_loads,		_P(OP, LOAD))
+HANDLER(split_stores,		_P(OP, STORE))
+HANDLER(all_loads,		_P(OP, LOAD))
+HANDLER(all_stores,		_P(OP, STORE))
+HANDLER(load_l1_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L1))
+HANDLER(load_l2_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L2))
+HANDLER(load_l3_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3))
+HANDLER(load_l1_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1))
+HANDLER(load_l2_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2))
+HANDLER(load_l3_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3))
+HANDLER(load_hit_lfb,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LFB))
+HANDLER(snp_miss,		_P(SNOOP, MISS))
+HANDLER(snp_hit,		_P(SNOOP, HIT))
+HANDLER(snp_hitm,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM))
+HANDLER(snp_none,		_P(SNOOP, NONE))
+HANDLER(local_dram,		_P(LVL, LOC_RAM))
+
+#undef _P
+#undef HANDLER
+
 static const struct perf_evsel_str_handler handlers[] = {
-	{ "cpu/mem-loads,ldlat=30/P",	perf_c2c__process_load_store, },
-	{ "cpu/mem-stores/P",		perf_c2c__process_load_store, },
+	{ "cpu/mem-loads,ldlat=30/P",	process_load_store,		},
+	{ "cpu/mem-stores/P",		process_load_store,		},
+	{ "cpu/mem-stlb-miss-loads/P",	process_stlb_miss_loads,	},
+	{ "cpu/mem-stlb-miss-stores/P",	process_stlb_miss_stores,	},
+	{ "cpu/mem-lock-loads/P",	process_lock_loads,		},
+	{ "cpu/mem-split-loads/P",	process_split_loads,		},
+	{ "cpu/mem-split-stores/P",	process_split_stores,		},
+	{ "cpu/mem-all-loads/P",	process_all_loads,		},
+	{ "cpu/mem-all-stores/P",	process_all_stores,		},
+	{ "cpu/mem-load-l1-hit/P",	process_load_l1_hit,		},
+	{ "cpu/mem-load-l2-hit/P",	process_load_l2_hit,		},
+	{ "cpu/mem-load-l3-hit/P",	process_load_l3_hit,		},
+	{ "cpu/mem-load-l1-miss/P",	process_load_l1_miss,		},
+	{ "cpu/mem-load-l2-miss/P",	process_load_l2_miss,		},
+	{ "cpu/mem-load-l3-miss/P",	process_load_l3_miss,		},
+	{ "cpu/mem-load-hit-lfb/P",	process_load_hit_lfb,		},
+	{ "cpu/mem-snp-miss/P",		process_snp_miss,		},
+	{ "cpu/mem-snp-hit/P",		process_snp_hit,		},
+	{ "cpu/mem-snp-hitm/P",		process_snp_hitm,		},
+	{ "cpu/mem-snp-none/P",		process_snp_none,		},
+	{ "cpu/mem-local-dram/P",	process_local_dram,		},
 };
 
 typedef int (*sample_handler)(struct perf_c2c *c2c,
