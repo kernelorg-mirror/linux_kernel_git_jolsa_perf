@@ -425,7 +425,7 @@ static int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
 			if (lvl & P(LVL,L3 )) {
 				if (snoop & P(SNOOP,HITM))
 					stats->t.lcl_hitm++;
-				else
+				else if (snoop & P(SNOOP, HIT))
 					stats->t.ld_llchit++;
 			}
 
@@ -707,6 +707,8 @@ static int process_ ## f(struct perf_c2c *c2c,					\
 
 #define _P(a, s) PERF_MEM_S(a, s)
 
+#define OP_LH (_P(OP, LOAD) | _P(LVL, HIT))
+
 HANDLER(stlb_miss_loads,	_P(OP, LOAD) | _P(TLB, MISS))
 HANDLER(stlb_miss_stores,	_P(OP, STORE) | _P(TLB, MISS))
 HANDLER(lock_loads,		_P(OP, LOAD) | _P(LOCK, LOCKED))
@@ -714,18 +716,23 @@ HANDLER(split_loads,		_P(OP, LOAD))
 HANDLER(split_stores,		_P(OP, STORE))
 HANDLER(all_loads,		_P(OP, LOAD))
 HANDLER(all_stores,		_P(OP, STORE))
-HANDLER(load_l1_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L1))
-HANDLER(load_l2_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L2))
-HANDLER(load_l3_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3))
+/* PEBS LL datasource equiv: 0x01: L1 local */
+HANDLER(load_l1_hit,		OP_LH | _P(LVL, L1) | _P(SNOOP, NONE))
+/* PEBS LL datasource equiv: 0x03: L2 hit */
+HANDLER(load_l2_hit,		OP_LH | _P(LVL, L2) | _P(SNOOP, NONE))
+/* PEBS LL datasource equiv: 0x04: L3 hit */
+HANDLER(load_l3_hit,		OP_LH | _P(LVL, L3) | _P(SNOOP, NONE))
 HANDLER(load_l1_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1))
 HANDLER(load_l2_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2))
 HANDLER(load_l3_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3))
-HANDLER(load_hit_lfb,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LFB))
-HANDLER(snp_miss,		_P(SNOOP, MISS))
-HANDLER(snp_hit,		_P(SNOOP, HIT))
+/* PEBS LL datasource equiv: 0x02 LFB hit */
+HANDLER(load_hit_lfb,		OP_LH | _P(LVL, LFB) | _P(SNOOP, NONE))
+HANDLER(snp_miss,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, MISS))
+HANDLER(snp_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HIT))
 HANDLER(snp_hitm,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM))
-HANDLER(snp_none,		_P(SNOOP, NONE))
-HANDLER(local_dram,		_P(LVL, LOC_RAM))
+HANDLER(snp_none,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, NONE))
+HANDLER(local_dram,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LOC_RAM))
+
 #undef _P
 #undef HANDLER
 
