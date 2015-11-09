@@ -425,7 +425,7 @@ static int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
 			if (lvl & P(LVL,L3 )) {
 				if (snoop & P(SNOOP,HITM))
 					stats->t.lcl_hitm++;
-				else
+				else if (snoop & P(SNOOP, HIT))
 					stats->t.ld_llchit++;
 			}
 
@@ -707,25 +707,32 @@ static int process_ ## f(struct perf_c2c *c2c,					\
 
 #define _P(a, s) PERF_MEM_S(a, s)
 
+#define OP_LH (_P(OP, LOAD) | _P(LVL, HIT))
+
 HANDLER(stlb_miss_loads,	_P(OP, LOAD) | _P(TLB, MISS))
 HANDLER(stlb_miss_stores,	_P(OP, STORE) | _P(TLB, MISS))
 HANDLER(lock_loads,		_P(OP, LOAD) | _P(LOCK, LOCKED))
 HANDLER(split_loads,		_P(OP, LOAD))
 HANDLER(split_stores,		_P(OP, STORE))
 HANDLER(all_loads,		_P(OP, LOAD))
-HANDLER(all_stores,		_P(OP, STORE))
-HANDLER(load_l1_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L1))
-HANDLER(load_l2_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L2))
-HANDLER(load_l3_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3))
+HANDLER(all_stores,		_P(OP, STORE) | _P(LVL, HIT) | _P(LVL, L1))
+/* PEBS LL datasource equiv: 0x01: L1 local */
+HANDLER(load_l1_hit,		OP_LH | _P(LVL, L1) | _P(SNOOP, NONE))
+/* PEBS LL datasource equiv: 0x03: L2 hit */
+HANDLER(load_l2_hit,		OP_LH | _P(LVL, L2) | _P(SNOOP, NONE))
+/* PEBS LL datasource equiv: 0x04: L3 hit */
+HANDLER(load_l3_hit,		OP_LH | _P(LVL, L3) | _P(SNOOP, NONE))
 HANDLER(load_l1_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1))
 HANDLER(load_l2_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2))
 HANDLER(load_l3_miss,		_P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3))
-HANDLER(load_hit_lfb,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LFB))
-HANDLER(snp_miss,		_P(SNOOP, MISS))
-HANDLER(snp_hit,		_P(SNOOP, HIT))
+/* PEBS LL datasource equiv: 0x02 LFB hit */
+HANDLER(load_hit_lfb,		OP_LH | _P(LVL, LFB) | _P(SNOOP, NONE))
+HANDLER(snp_miss,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, MISS))
+HANDLER(snp_hit,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HIT))
 HANDLER(snp_hitm,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM))
-HANDLER(snp_none,		_P(SNOOP, NONE))
-HANDLER(local_dram,		_P(LVL, LOC_RAM))
+HANDLER(snp_none,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, NONE))
+HANDLER(local_dram,		_P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LOC_RAM))
+
 #undef _P
 #undef HANDLER
 
@@ -750,19 +757,19 @@ static struct mem_event events[] = {
 	HANDLER("split-loads",	    "cpu/mem-split-loads/P",		process_split_loads),
 	HANDLER("split-stores",	    "cpu/mem-split-stores/P",		process_split_stores),
 	HANDLER("all-loads",	    "cpu/mem-all-loads/P",		process_all_loads),
-	HANDLER("all-stores",	    "cpu/mem-all-stores/P",		process_all_stores),
+	HANDLER("all-stores",	    "cpu/mem-all-stores/uP",		process_all_stores),
 	HANDLER("l1-hit",	    "cpu/mem-load-l1-hit/P",		process_load_l1_hit),
 	HANDLER("l2-hit",	    "cpu/mem-load-l2-hit/P",		process_load_l2_hit),
 	HANDLER("l3-hit",	    "cpu/mem-load-l3-hit/P",		process_load_l3_hit),
-	HANDLER("l1-miss",	    "cpu/mem-load-l1-miss/P",		process_load_l1_miss),
+	HANDLER("l1-miss",	    "cpu/mem-load-l1-miss/uP",		process_load_l1_miss),
 	HANDLER("l2-miss",	    "cpu/mem-load-l2-miss/P",		process_load_l2_miss),
 	HANDLER("l3-miss",	    "cpu/mem-load-l3-miss/P",		process_load_l3_miss),
-	HANDLER("lfb",		    "cpu/mem-load-hit-lfb/P",		process_load_hit_lfb),
-	HANDLER("snp-miss",	    "cpu/mem-snp-miss/P",		process_snp_miss),
-	HANDLER("snp-hit",	    "cpu/mem-snp-hit/P",		process_snp_hit),
-	HANDLER("snp-hitm",	    "cpu/mem-snp-hitm/P",		process_snp_hitm),
-	HANDLER("snp-none",	    "cpu/mem-snp-none/P",		process_snp_none),
-	HANDLER("local-dram",	    "cpu/mem-local-dram/P",		process_local_dram),
+	HANDLER("lfb",		    "cpu/mem-load-hit-lfb/uP",		process_load_hit_lfb),
+	HANDLER("snp-miss",	    "cpu/mem-snp-miss/uP",		process_snp_miss),
+	HANDLER("snp-hit",	    "cpu/mem-snp-hit/uP",		process_snp_hit),
+	HANDLER("snp-hitm",	    "cpu/mem-snp-hitm/uP",		process_snp_hitm),
+	HANDLER("snp-none",	    "cpu/mem-snp-none/uP",		process_snp_none),
+	HANDLER("local-dram",	    "cpu/mem-local-dram/uP",		process_local_dram),
 };
 
 #undef HANDLER
@@ -1003,10 +1010,9 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 	u32		crecords;
 	u32		lclmiss;
 	u32		ldcnt;
-	double		p_hitm;
+	double		p_hitm, hitm, tot_hitm;
 	double		p_all;
 	int		totmiss;
-	int		rmt_hitm;
 	int		len;
 	int		pad;
 	int		i;
@@ -1065,7 +1071,7 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 	printf("%s\n", header);
 	printf("%s\n", delimit);
 
-	rmt_hitm    = c2c_stats->t.rmt_hitm;
+	tot_hitm    = (double) (c2c_stats->t.rmt_hitm + c2c_stats->t.lcl_hitm);
 	totmiss     = c2c_stats->t.lcl_dram +
 		      c2c_stats->t.rmt_dram +
 		      c2c_stats->t.rmt_hit +
@@ -1092,8 +1098,9 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 			   h->stats.t.st_l1hit +
 			   h->stats.t.st_l1miss;
 
-		p_hitm = (double)h->stats.t.rmt_hitm / (double)rmt_hitm;
-		p_all  = (double)h->stats.t.rmt_hitm / (double)totmiss;
+		hitm = (double) (h->stats.t.rmt_hitm + h->stats.t.lcl_hitm);
+		p_hitm = hitm / tot_hitm;
+		p_all  = (double)totmiss / ldcnt;
 
 		/* stop when the percentage gets to low */
 		if (p_hitm < DISPLAY_LINE_LIMIT)
@@ -1963,7 +1970,6 @@ static int perf_c2c__record(int argc, const char **argv)
 		"record",
 		"-W",
 		"-d",
-		"-a",
 	};
 
 	rec_argc = ARRAY_SIZE(record_args) + 2 * ARRAY_SIZE(events) + argc - 1;
