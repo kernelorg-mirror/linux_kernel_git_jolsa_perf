@@ -1010,10 +1010,9 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 	u32		crecords;
 	u32		lclmiss;
 	u32		ldcnt;
-	double		p_hitm;
+	double		p_hitm, hitm, tot_hitm;
 	double		p_all;
 	int		totmiss;
-	int		rmt_hitm;
 	int		len;
 	int		pad;
 	int		i;
@@ -1072,7 +1071,7 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 	printf("%s\n", header);
 	printf("%s\n", delimit);
 
-	rmt_hitm    = c2c_stats->t.rmt_hitm;
+	tot_hitm    = (double) (c2c_stats->t.rmt_hitm + c2c_stats->t.lcl_hitm);
 	totmiss     = c2c_stats->t.lcl_dram +
 		      c2c_stats->t.rmt_dram +
 		      c2c_stats->t.rmt_hit +
@@ -1099,7 +1098,8 @@ static void print_c2c_shared_cacheline_report(struct rb_root *hitm_tree,
 			   h->stats.t.st_l1hit +
 			   h->stats.t.st_l1miss;
 
-		p_hitm = (double)h->stats.t.rmt_hitm / (double)rmt_hitm;
+		hitm = (double) (h->stats.t.rmt_hitm + h->stats.t.lcl_hitm);
+		p_hitm = hitm / tot_hitm;
 		p_all  = (double)h->stats.t.rmt_hitm / (double)totmiss;
 
 		/* stop when the percentage gets to low */
