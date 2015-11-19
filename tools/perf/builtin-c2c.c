@@ -1970,7 +1970,6 @@ static int perf_c2c__record(int argc, const char **argv)
 		"record",
 		"-W",
 		"-d",
-		"-a",
 	};
 
 	rec_argc = ARRAY_SIZE(record_args) + 2 * ARRAY_SIZE(events) + argc - 1;
