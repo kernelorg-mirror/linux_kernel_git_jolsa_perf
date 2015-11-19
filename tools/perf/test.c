@@ -12,12 +12,12 @@
 #define cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
 
 struct krava {
-#if 0
 	unsigned long a;
 	unsigned long b;
-#endif
+#if 0
 	unsigned long a cacheline_aligned;
 	unsigned long b cacheline_aligned;
+#endif
 };
 
 static struct krava k;
@@ -26,12 +26,15 @@ static struct krava k;
 static void set_cpu(unsigned long cpu)
 {
 	cpu_set_t set;
+	pid_t tid = syscall(SYS_gettid);
 
 	CPU_ZERO(&set);
 	CPU_SET(cpu, &set);
 
-	if (sched_setaffinity(syscall(SYS_gettid), sizeof(set), &set) == -1)
+	if (sched_setaffinity(tid, sizeof(set), &set) == -1)
 		fprintf(stderr, "failed to set cpu\n");
+
+	fprintf(stderr, "tid %d\n", tid);
 }
 
 void *worker1(void *arg)
@@ -41,6 +44,7 @@ void *worker1(void *arg)
 	set_cpu((unsigned long) arg);
 
 	for (i = 0; i < MAX; i++) {
+		k.a = i;
 		k.b = i;
 	}
 
@@ -55,6 +59,7 @@ void *worker2(void *arg)
 
 	for (i = 0; i < MAX; i++) {
 		k.a = i;
+		k.b = i;
 	}
 
 	return NULL;
