@@ -6950,6 +6950,29 @@ static int perf_tp_event_match(struct perf_event *event,
 	return 1;
 }
 
+void perf_ftrace_ops_event(struct ftrace_ops *ops, void *record, int entry_size,
+			   struct pt_regs *regs, struct hlist_head *head, int rctx)
+{
+	struct perf_sample_data data;
+	struct perf_event *event;
+
+	struct perf_raw_record raw = {
+		.size = entry_size,
+		.data = record,
+	};
+
+	perf_sample_data_init(&data, 0, 0);
+	data.raw = &raw;
+
+	hlist_for_each_entry_rcu(event, head, hlist_entry) {
+		if ((&event->ftrace_ops == ops) &&
+		    (perf_tp_event_match(event, &data, regs)))
+			perf_swevent_event(event, 1, &data, regs);
+	}
+
+	perf_swevent_put_recursion_context(rctx);
+}
+
 void perf_tp_event(u64 addr, u64 count, void *record, int entry_size,
 		   struct pt_regs *regs, struct hlist_head *head, int rctx,
 		   struct task_struct *task)

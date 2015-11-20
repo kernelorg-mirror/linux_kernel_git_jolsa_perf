@@ -1010,6 +1010,8 @@ extern void perf_tp_event(u64 addr, u64 count, void *record,
 			  struct hlist_head *head, int rctx,
 			  struct task_struct *task);
 extern void perf_bp_event(struct perf_event *event, void *data);
+void perf_ftrace_ops_event(struct ftrace_ops *ops, void *record, int entry_size,
+			   struct pt_regs *regs, struct hlist_head *head, int rctx);
 
 #ifndef perf_misc_flags
 # define perf_misc_flags(regs) \

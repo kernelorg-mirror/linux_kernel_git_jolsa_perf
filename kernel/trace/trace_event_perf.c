@@ -324,8 +324,7 @@ perf_ftrace_function_call(unsigned long ip, unsigned long parent_ip,
 
 	entry->ip = ip;
 	entry->parent_ip = parent_ip;
-	perf_trace_buf_submit(entry, ENTRY_SIZE, rctx, 0,
-			      1, &regs, head, NULL);
+	perf_ftrace_ops_event(ops, entry, ENTRY_SIZE, &regs, head, rctx);
 
 #undef ENTRY_SIZE
 }
