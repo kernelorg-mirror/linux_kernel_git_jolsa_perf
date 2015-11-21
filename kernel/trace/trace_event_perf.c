@@ -52,14 +52,14 @@ static int perf_trace_event_perm(struct trace_event_call *tp_event,
 		 * event, due to issues with page faults while tracing page
 		 * fault handler and its overall trickiness nature.
 		 */
-		if (!p_event->attr.exclude_callchain_user)
+		if (is_sampling_event(p_event) && !p_event->attr.exclude_callchain_user)
 			return -EINVAL;
 
 		/*
 		 * Same reason to disable user stack dump as for user space
 		 * callchains above.
 		 */
-		if (p_event->attr.sample_type & PERF_SAMPLE_STACK_USER)
+		if (is_sampling_event(p_event) && p_event->attr.sample_type & PERF_SAMPLE_STACK_USER)
 			return -EINVAL;
 	}
 
