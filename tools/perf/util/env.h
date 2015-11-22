@@ -1,9 +1,21 @@
 #ifndef __PERF_ENV_H
 #define __PERF_ENV_H
 
+#include <linux/types.h>
+
 struct cpu_topology_map {
 	int	socket_id;
 	int	core_id;
+};
+
+struct cache_level {
+	u32	level;
+	u32	line_size;
+	u32	sets;
+	u32	ways;
+	char	*type;
+	char	*size;
+	char	*map;
 };
 
 struct perf_env {
@@ -31,6 +43,8 @@ struct perf_env {
 	char			*numa_nodes;
 	char			*pmu_mappings;
 	struct cpu_topology_map	*cpu;
+	struct cache_level	*caches;
+	int			 caches_cnt;
 };
 
 extern struct perf_env perf_env;
