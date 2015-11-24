@@ -431,7 +431,7 @@ $(LIBAPI)-clean:
 	$(Q)$(MAKE) -C $(LIB_DIR) O=$(OUTPUT) clean >/dev/null
 
 $(LIBBPF): fixdep FORCE
-	$(Q)$(MAKE) -C $(BPF_DIR) O=$(OUTPUT) $(OUTPUT)libbpf.a
+	$(Q)$(MAKE) -C $(BPF_DIR) O=$(OUTPUT) $(OUTPUT)libbpf.a FEATURES=$(realpath $(OUTPUT)FEATURE-DUMP.include)
 
 $(LIBBPF)-clean:
 	$(call QUIET_CLEAN, libbpf)

@@ -71,7 +71,11 @@ FEATURE_DISPLAY = libelf bpf
 INCLUDES = -I. -I$(srctree)/tools/include -I$(srctree)/arch/$(ARCH)/include/uapi -I$(srctree)/include/uapi
 FEATURE_CHECK_CFLAGS-bpf = $(INCLUDES)
 
+ifeq ($(FEATURES),)
 include $(srctree)/tools/build/Makefile.feature
+else
+include $(FEATURES)
+endif
 
 export prefix libdir src obj
 

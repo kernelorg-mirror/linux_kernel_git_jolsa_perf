@@ -131,6 +131,8 @@ ifeq ($(dwarf-post-unwind),1)
   FEATURE_DUMP += dwarf-post-unwind($(dwarf-post-unwind-text))
 endif
 
+FEATURE_INCLUDE_FILENAME = $(OUTPUT)FEATURE-DUMP$(FEATURE_USER).include
+
 # The $(feature_display) controls the default detection message
 # output. It's set if:
 # - detected features differes from stored features from
@@ -140,6 +142,8 @@ endif
 
 ifneq ("$(FEATURE_DUMP)","$(FEATURE_DUMP_FILE)")
   $(shell echo "$(FEATURE_DUMP)" > $(FEATURE_DUMP_FILENAME))
+  $(shell rm -f $(FEATURE_INCLUDE_FILENAME))
+  $(foreach feat,$(FEATURE_TESTS),$(shell echo "feature-$(feat)=$(feature-$(feat))" >> $(FEATURE_INCLUDE_FILENAME)))
   feature_display := 1
 endif
 
