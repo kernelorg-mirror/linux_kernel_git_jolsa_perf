@@ -626,6 +626,89 @@ static int perf_evlist__max_name_len(struct perf_evlist *evlist)
 	return max;
 }
 
+enum { OP, LVL, SNP, LCK, TLB };
+enum { LVL0, LVL1, LVL2, LVL3, LVL4, MAX_LVL };
+
+static int data_src__scnprintf(char *bf, size_t size, uint64_t val)
+{
+#define PREFIX       "["
+#define SUFFIX       "]"
+#define ELLIPSIS     "..."
+	static const struct {
+		uint64_t   bit;
+		int64_t    field;
+		const char *name;
+	} decode_bits[] = {
+	{ PERF_MEM_OP_LOAD,       OP,  "LOAD"     },
+	{ PERF_MEM_OP_STORE,      OP,  "STORE"    },
+	{ PERF_MEM_OP_NA,         OP,  "OP_NA"    },
+	{ PERF_MEM_LVL_LFB,       LVL, "LFB"      },
+	{ PERF_MEM_LVL_L1,        LVL, "L1"       },
+	{ PERF_MEM_LVL_L2,        LVL, "L2"       },
+	{ PERF_MEM_LVL_L3,        LVL, "LCL_LLC"  },
+	{ PERF_MEM_LVL_LOC_RAM,   LVL, "LCL_RAM"  },
+	{ PERF_MEM_LVL_REM_RAM1,  LVL, "RMT_RAM"  },
+	{ PERF_MEM_LVL_REM_RAM2,  LVL, "RMT_RAM"  },
+	{ PERF_MEM_LVL_REM_CCE1,  LVL, "RMT_LLC"  },
+	{ PERF_MEM_LVL_REM_CCE2,  LVL, "RMT_LLC"  },
+	{ PERF_MEM_LVL_IO,        LVL, "I/O"	  },
+	{ PERF_MEM_LVL_UNC,       LVL, "UNCACHED" },
+	{ PERF_MEM_LVL_NA,        LVL, "N"        },
+	{ PERF_MEM_LVL_HIT,       LVL, "HIT"      },
+	{ PERF_MEM_LVL_MISS,      LVL, "MISS"     },
+	{ PERF_MEM_SNOOP_NONE,    SNP, "SNP_NONE" },
+	{ PERF_MEM_SNOOP_HIT,     SNP, "SNP_HIT"  },
+	{ PERF_MEM_SNOOP_MISS,    SNP, "SNP_MISS" },
+	{ PERF_MEM_SNOOP_HITM,    SNP, "SNP_HITM" },
+	{ PERF_MEM_SNOOP_NA,      SNP, "SNP_NA"   },
+	{ PERF_MEM_LOCK_LOCKED,   LCK, "LOCKED"   },
+	{ PERF_MEM_LOCK_NA,       LCK, "LOCK_NA"  },
+	};
+	union perf_mem_data_src dsrc = { .val = val, };
+	int printed = scnprintf(bf, size, PREFIX);
+	size_t i;
+	bool first_present = true;
+
+	for (i = 0; i < ARRAY_SIZE(decode_bits); i++) {
+		int bitval;
+
+		switch (decode_bits[i].field) {
+		case OP:  bitval = decode_bits[i].bit & dsrc.mem_op;    break;
+		case LVL: bitval = decode_bits[i].bit & dsrc.mem_lvl;   break;
+		case SNP: bitval = decode_bits[i].bit & dsrc.mem_snoop; break;
+		case LCK: bitval = decode_bits[i].bit & dsrc.mem_lock;  break;
+		case TLB: bitval = decode_bits[i].bit & dsrc.mem_dtlb;  break;
+		default: bitval = 0;					break;
+		}
+
+		if (!bitval)
+			continue;
+
+		if (strlen(decode_bits[i].name) + !!i > size - printed - sizeof(SUFFIX)) {
+			sprintf(bf + size - sizeof(SUFFIX) - sizeof(ELLIPSIS) + 1, ELLIPSIS);
+			printed = size - sizeof(SUFFIX);
+			break;
+		}
+
+		printed += scnprintf(bf + printed, size - printed, "%s%s",
+				     first_present ? "" : "|", decode_bits[i].name);
+		first_present = false;
+	}
+
+	printed += scnprintf(bf + printed, size - printed, SUFFIX);
+	return printed;
+}
+
+static size_t data_src__printf(u64 data_src)
+{
+	char out[100];
+	char decode[50];
+
+	data_src__scnprintf(decode, 50, data_src);
+	scnprintf(out, 50, "%16" PRIx64 " %s", data_src, decode);
+	return printf("%-50s", out);
+}
+
 static void process_event(struct perf_script *script, union perf_event *event,
 			  struct perf_sample *sample, struct perf_evsel *evsel,
 			  struct addr_location *al)
@@ -666,7 +749,7 @@ static void process_event(struct perf_script *script, union perf_event *event,
 		print_sample_addr(event, sample, thread, attr);
 
 	if (PRINT_FIELD(DATA_SRC))
-		printf("%16" PRIx64, sample->data_src);
+		data_src__printf(sample->data_src);
 
 	if (PRINT_FIELD(WEIGHT))
 		printf("%16" PRIx64, sample->weight);
