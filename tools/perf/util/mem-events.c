@@ -232,6 +232,11 @@ int perf_mem__lock_scnprintf(char *bf, size_t size, uint64_t val)
 	return data_src__scnprintf(bf, size, val, LCK);
 }
 
+int perf_script__data_src_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, NA);
+}
+
 int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
 {
 	union perf_mem_data_src *data_src = &entry->mem_info->data_src;

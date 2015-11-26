@@ -23,6 +23,7 @@
 #include "util/stat.h"
 #include <linux/bitmap.h>
 #include "asm/bug.h"
+#include "util/mem-events.h"
 
 static char const		*script_name;
 static char const		*generate_script_lang;
@@ -649,6 +650,16 @@ static int perf_evlist__max_name_len(struct perf_evlist *evlist)
 	return max;
 }
 
+static size_t data_src__printf(u64 data_src)
+{
+	char out[100];
+	char decode[100];
+
+	perf_script__data_src_scnprintf(decode, 100, data_src);
+	scnprintf(out, 100, "%16" PRIx64 " %s", data_src, decode);
+	return printf("%-100s", out);
+}
+
 static void process_event(struct perf_script *script, union perf_event *event,
 			  struct perf_sample *sample, struct perf_evsel *evsel,
 			  struct addr_location *al)
@@ -689,7 +700,7 @@ static void process_event(struct perf_script *script, union perf_event *event,
 		print_sample_addr(event, sample, thread, attr);
 
 	if (PRINT_FIELD(DATA_SRC))
-		printf("%16" PRIx64, sample->data_src);
+		data_src__printf(sample->data_src);
 
 	if (PRINT_FIELD(WEIGHT))
 		printf("%16" PRIx64, sample->weight);
