@@ -185,10 +185,35 @@ static void perf_trace_event_close(struct perf_event *p_event)
 	tp_event->class->reg(tp_event, TRACE_REG_PERF_CLOSE, p_event);
 }
 
+static int perf_trace_event_attr(struct trace_event_call *tp_event,
+				 struct perf_event *event)
+{
+	/*
+	 * All tracepoints and kprobes are from kernel-space.
+	 */
+	if (((tp_event->flags & TRACE_EVENT_FL_TRACEPOINT) ||
+	     (tp_event->flags & TRACE_EVENT_FL_KPROBE)) &&
+	     event->attr.exclude_kernel)
+		return -EINVAL;
+
+	/*
+	 * All uprobes are from user-space.
+	 */
+	if ((tp_event->flags & TRACE_EVENT_FL_UPROBE) &&
+	    event->attr.exclude_user)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int perf_trace_event_init(struct trace_event_call *tp_event,
 				 struct perf_event *p_event)
 {
 	int ret;
+
+	ret = perf_trace_event_attr(tp_event, p_event);
+	if (ret)
+		return ret;
 
 	ret = perf_trace_event_perm(tp_event, p_event);
 	if (ret)
