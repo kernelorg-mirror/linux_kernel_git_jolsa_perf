@@ -331,13 +331,8 @@ perf_ftrace_function_call(unsigned long ip, unsigned long parent_ip,
 			  struct ftrace_ops *ops, struct pt_regs *pt_regs)
 {
 	struct ftrace_entry *entry;
-	struct hlist_head *head;
 	struct pt_regs regs;
 	int rctx;
-
-	head = this_cpu_ptr(event_function.perf_events);
-	if (hlist_empty(head))
-		return;
 
 #define ENTRY_SIZE (ALIGN(sizeof(struct ftrace_entry) + sizeof(u32), \
 		    sizeof(u64)) - sizeof(u32))
@@ -352,8 +347,8 @@ perf_ftrace_function_call(unsigned long ip, unsigned long parent_ip,
 
 	entry->ip = ip;
 	entry->parent_ip = parent_ip;
-	perf_trace_buf_submit(entry, ENTRY_SIZE, rctx, 0,
-			      1, &regs, head, NULL);
+	perf_function_event(ops->private, entry, ENTRY_SIZE, &regs);
+	perf_swevent_put_recursion_context(rctx);
 
 #undef ENTRY_SIZE
 }
@@ -362,6 +357,7 @@ static int perf_ftrace_function_register(struct perf_event *event)
 {
 	struct ftrace_ops *ops = &event->ftrace_ops;
 
+	ops->private = event;
 	ops->flags |= FTRACE_OPS_FL_PER_CPU | FTRACE_OPS_FL_RCU;
 	ops->func = perf_ftrace_function_call;
 	return register_ftrace_function(ops);

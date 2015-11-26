@@ -7063,6 +7063,28 @@ static void perf_event_free_bpf_prog(struct perf_event *event)
 	}
 }
 
+#ifdef CONFIG_FUNCTION_TRACER
+void perf_function_event(struct perf_event *event,
+			 void *record, int entry_size,
+			 struct pt_regs *regs)
+
+{
+	struct perf_sample_data data;
+	struct perf_raw_record raw = {
+		.size = entry_size,
+		.data = record,
+	};
+
+	if (event->hw.state & PERF_HES_STOPPED)
+		return;
+
+	perf_sample_data_init(&data, 0, 0);
+	data.raw = &raw;
+
+	perf_swevent_event(event, 1, &data, regs);
+}
+#endif /* CONFIG_FUNCTION_TRACER */
+
 #else
 
 static inline void perf_tp_register(void)
