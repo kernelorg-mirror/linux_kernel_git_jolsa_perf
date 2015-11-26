@@ -94,5 +94,9 @@ double perf_c2c_stats__percent_hitm(struct c2c_stats *stats,
 double perf_c2c_stats__percent_ldmiss(struct c2c_stats *stats,
 				      struct c2c_stats *total);
 char *perf_mem_events__name(int i);
+struct perf_session;
+void perf_c2c__setup_events_dsrc(struct perf_session *session);
+
+int perf_script__data_src_scnprintf(char *bf, size_t size, uint64_t val);
 #endif /* __PERF_MEM_EVENTS_H */
 

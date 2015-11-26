@@ -23,6 +23,7 @@
 #include "util/stat.h"
 #include <linux/bitmap.h>
 #include "asm/bug.h"
+#include "util/mem-events.h"
 
 static char const		*script_name;
 static char const		*generate_script_lang;
@@ -649,6 +650,16 @@ static int perf_evlist__max_name_len(struct perf_evlist *evlist)
 	return max;
 }
 
+static size_t data_src__printf(u64 data_src)
+{
+	char out[100];
+	char decode[100];
+
+	perf_script__data_src_scnprintf(decode, 100, data_src);
+	scnprintf(out, 100, "%16" PRIx64 " %s", data_src, decode);
+	return printf("%-100s", out);
+}
+
 static void process_event(struct perf_script *script, union perf_event *event,
 			  struct perf_sample *sample, struct perf_evsel *evsel,
 			  struct addr_location *al)
@@ -688,8 +699,14 @@ static void process_event(struct perf_script *script, union perf_event *event,
 	if (PRINT_FIELD(ADDR))
 		print_sample_addr(event, sample, thread, attr);
 
-	if (PRINT_FIELD(DATA_SRC))
-		printf("%16" PRIx64, sample->data_src);
+	if (PRINT_FIELD(DATA_SRC)) {
+		u64 data_src = sample->data_src;
+
+		if (evsel->handler)
+			data_src = (u64) (unsigned long) evsel->handler;
+
+		data_src__printf(data_src);
+	}
 
 	if (PRINT_FIELD(WEIGHT))
 		printf("%16" PRIx64, sample->weight);
@@ -2156,6 +2173,8 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 	session = perf_session__new(&file, false, &script.tool);
 	if (session == NULL)
 		return -1;
+
+	perf_c2c__setup_events_dsrc(session);
 
 	if (header || header_only) {
 		perf_session__fprintf_info(session, stdout, show_full_info);

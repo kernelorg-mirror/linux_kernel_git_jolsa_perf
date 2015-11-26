@@ -9,6 +9,7 @@
 #include "mem-events.h"
 #include "debug.h"
 #include "sort.h"
+#include "session.h"
 
 #define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 
@@ -250,6 +251,11 @@ int perf_mem__snp_scnprintf(char *bf, size_t size, uint64_t val)
 int perf_mem__lock_scnprintf(char *bf, size_t size, uint64_t val)
 {
 	return data_src__scnprintf(bf, size, val, LCK);
+}
+
+int perf_script__data_src_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, NA);
 }
 
 int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)

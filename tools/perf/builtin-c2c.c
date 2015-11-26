@@ -910,6 +910,20 @@ static int setup_groups(struct perf_session *session)
 	return 0;
 }
 
+void perf_c2c__setup_events_dsrc(struct perf_session *session)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(session->evlist, evsel) {
+		int i = perf_mem_events__find(evsel->name);
+
+		if (i == PERF_MEM_EVENTS__MAX)
+			continue;
+
+		evsel->handler = (void *) (unsigned long) events[i].dsrc;
+	}
+}
+
 static void setup_events_dsrc(struct perf_session *session)
 {
 	struct perf_evsel *evsel;
