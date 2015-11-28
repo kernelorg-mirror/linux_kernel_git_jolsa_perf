@@ -1807,25 +1807,25 @@ static void perf_evlist__setup_data_src(struct perf_evlist *evlist)
 		const char *name;
 		u64 data_src;
 	} events[] = {
-		E("cpu/mem-stlb-miss-loads/P",        _P(OP, LOAD) | _P(TLB, MISS)),
-		E("cpu/mem-stlb-miss-stores/P",       _P(OP, STORE) | _P(TLB, MISS)),
-		E("cpu/mem-lock-loads/P",             _P(OP, LOAD) | _P(LOCK, LOCKED)),
-		E("cpu/mem-split-loads/P",            _P(OP, LOAD)),
-		E("cpu/mem-split-stores/P",           _P(OP, STORE)),
-		E("cpu/mem-all-loads/P",              _P(OP, LOAD)),
-		E("cpu/mem-all-stores/P",             _P(OP, STORE)),
-		E("cpu/mem-load-l1-hit/P",            OP_LH | _P(LVL, L1) | _P(SNOOP, NONE)),
-		E("cpu/mem-load-l2-hit/P",            OP_LH | _P(LVL, L2) | _P(SNOOP, NONE)),
-		E("cpu/mem-load-l3-hit/P",            OP_LH | _P(LVL, L3) | _P(SNOOP, NONE)),
-		E("cpu/mem-load-l1-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1)),
-		E("cpu/mem-load-l2-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2)),
-		E("cpu/mem-load-l3-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3)),
-		E("cpu/mem-load-hit-lfb/P",           OP_LH | _P(LVL, LFB) | _P(SNOOP, NONE)),
-		E("cpu/mem-snp-miss/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, MISS)),
-		E("cpu/mem-snp-hit/P",                _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HIT)),
-		E("cpu/mem-snp-hitm/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM)),
-		E("cpu/mem-snp-none/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, NONE)),
-		E("cpu/mem-local-dram/P",             _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LOC_RAM)),
+		E("mem-stlb-miss-loads/",        _P(OP, LOAD) | _P(TLB, MISS)),
+		E("mem-stlb-miss-stores/",       _P(OP, STORE) | _P(TLB, MISS)),
+		E("mem-lock-loads/",             _P(OP, LOAD) | _P(LOCK, LOCKED)),
+		E("mem-split-loads/",            _P(OP, LOAD)),
+		E("mem-split-stores/",           _P(OP, STORE)),
+		E("mem-all-loads/",              OP_LH | _P(LVL, L1)),
+		E("mem-all-stores/",             _P(OP, STORE) | _P(LVL, HIT) | _P(LVL, L1)),
+		E("mem-load-l1-hit/",            OP_LH | _P(LVL, L1) | _P(SNOOP, NONE)),
+		E("mem-load-l2-hit/",            OP_LH | _P(LVL, L2) | _P(SNOOP, NONE)),
+		E("mem-load-l3-hit/",            OP_LH | _P(LVL, L3) | _P(SNOOP, NONE)),
+		E("mem-load-l1-miss/",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1)),
+		E("mem-load-l2-miss/",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2)),
+		E("mem-load-l3-miss/",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3)),
+		E("mem-load-hit-lfb/",           OP_LH | _P(LVL, LFB) | _P(SNOOP, NONE)),
+		E("mem-snp-miss/",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, MISS)),
+		E("mem-snp-hit/",                _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HIT)),
+		E("mem-snp-hitm/",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM)),
+		E("mem-snp-none/",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, NONE)),
+		E("mem-local-dram/",             _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LOC_RAM)),
 	};
 
 #undef _P
@@ -1836,7 +1836,7 @@ static void perf_evlist__setup_data_src(struct perf_evlist *evlist)
 		unsigned i;
 
 		for (i = 0; i < ARRAY_SIZE(events); i++) {
-			if (!strcmp(events[i].name, perf_evsel__name(evsel))) {
+			if (strstr(perf_evsel__name(evsel), events[i].name)) {
 				evsel->data_src = events[i].data_src;
 				break;
 			}

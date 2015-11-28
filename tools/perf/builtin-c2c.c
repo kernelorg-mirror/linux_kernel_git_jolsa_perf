@@ -715,7 +715,7 @@ HANDLER(lock_loads,		_P(OP, LOAD) | _P(LOCK, LOCKED))
 HANDLER(split_loads,		_P(OP, LOAD))
 HANDLER(split_stores,		_P(OP, STORE))
 HANDLER(all_loads,		_P(OP, LOAD))
-HANDLER(all_stores,		_P(OP, STORE))
+HANDLER(all_stores,		_P(OP, STORE) | _P(LVL, HIT) | _P(LVL, L1))
 /* PEBS LL datasource equiv: 0x01: L1 local */
 HANDLER(load_l1_hit,		OP_LH | _P(LVL, L1) | _P(SNOOP, NONE))
 /* PEBS LL datasource equiv: 0x03: L2 hit */
@@ -757,19 +757,19 @@ static struct mem_event events[] = {
 	HANDLER("split-loads",	    "cpu/mem-split-loads/P",		process_split_loads),
 	HANDLER("split-stores",	    "cpu/mem-split-stores/P",		process_split_stores),
 	HANDLER("all-loads",	    "cpu/mem-all-loads/P",		process_all_loads),
-	HANDLER("all-stores",	    "cpu/mem-all-stores/P",		process_all_stores),
+	HANDLER("all-stores",	    "cpu/mem-all-stores/uP",		process_all_stores),
 	HANDLER("l1-hit",	    "cpu/mem-load-l1-hit/P",		process_load_l1_hit),
 	HANDLER("l2-hit",	    "cpu/mem-load-l2-hit/P",		process_load_l2_hit),
 	HANDLER("l3-hit",	    "cpu/mem-load-l3-hit/P",		process_load_l3_hit),
-	HANDLER("l1-miss",	    "cpu/mem-load-l1-miss/P",		process_load_l1_miss),
+	HANDLER("l1-miss",	    "cpu/mem-load-l1-miss/uP",		process_load_l1_miss),
 	HANDLER("l2-miss",	    "cpu/mem-load-l2-miss/P",		process_load_l2_miss),
 	HANDLER("l3-miss",	    "cpu/mem-load-l3-miss/P",		process_load_l3_miss),
-	HANDLER("lfb",		    "cpu/mem-load-hit-lfb/P",		process_load_hit_lfb),
-	HANDLER("snp-miss",	    "cpu/mem-snp-miss/P",		process_snp_miss),
-	HANDLER("snp-hit",	    "cpu/mem-snp-hit/P",		process_snp_hit),
-	HANDLER("snp-hitm",	    "cpu/mem-snp-hitm/P",		process_snp_hitm),
-	HANDLER("snp-none",	    "cpu/mem-snp-none/P",		process_snp_none),
-	HANDLER("local-dram",	    "cpu/mem-local-dram/P",		process_local_dram),
+	HANDLER("lfb",		    "cpu/mem-load-hit-lfb/uP",		process_load_hit_lfb),
+	HANDLER("snp-miss",	    "cpu/mem-snp-miss/uP",		process_snp_miss),
+	HANDLER("snp-hit",	    "cpu/mem-snp-hit/uP",		process_snp_hit),
+	HANDLER("snp-hitm",	    "cpu/mem-snp-hitm/uP",		process_snp_hitm),
+	HANDLER("snp-none",	    "cpu/mem-snp-none/uP",		process_snp_none),
+	HANDLER("local-dram",	    "cpu/mem-local-dram/uP",		process_local_dram),
 };
 
 #undef HANDLER

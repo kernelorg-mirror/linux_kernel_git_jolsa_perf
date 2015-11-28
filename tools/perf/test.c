@@ -40,12 +40,16 @@ static void set_cpu(unsigned long cpu)
 void *worker1(void *arg)
 {
 	unsigned long i;
+	unsigned long tmp;
 
 	set_cpu((unsigned long) arg);
 
 	for (i = 0; i < MAX; i++) {
-		k.a = i;
-		k.b = i;
+#if 0
+		if (i % 10000000 == 0)
+			fprintf(stderr, ".");
+#endif
+		tmp += k.a;
 	}
 
 	return NULL;
@@ -58,7 +62,10 @@ void *worker2(void *arg)
 	set_cpu((unsigned long) arg);
 
 	for (i = 0; i < MAX; i++) {
-		k.a = i;
+#if 0
+		if (i % 10000000 == 0)
+			fprintf(stderr, ".");
+#endif
 		k.b = i;
 	}
 
