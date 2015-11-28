@@ -748,8 +748,11 @@ static void process_event(struct perf_script *script, union perf_event *event,
 	if (PRINT_FIELD(ADDR))
 		print_sample_addr(event, sample, thread, attr);
 
-	if (PRINT_FIELD(DATA_SRC))
-		data_src__printf(sample->data_src);
+	if (PRINT_FIELD(DATA_SRC)) {
+		u64 data_src = evsel->data_src ?: sample->data_src;
+
+		data_src__printf(data_src);
+	}
 
 	if (PRINT_FIELD(WEIGHT))
 		printf("%16" PRIx64, sample->weight);
@@ -1792,6 +1795,55 @@ static void script__setup_sample_type(struct perf_script *script)
 	}
 }
 
+static void perf_evlist__setup_data_src(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+#define _P(a, s) PERF_MEM_S(a, s)
+#define OP_LH (_P(OP, LOAD) | _P(LVL, HIT))
+#define E(n, v) { .name = n, .data_src = v }
+
+	static struct mem_event {
+		const char *name;
+		u64 data_src;
+	} events[] = {
+		E("cpu/mem-stlb-miss-loads/P",        _P(OP, LOAD) | _P(TLB, MISS)),
+		E("cpu/mem-stlb-miss-stores/P",       _P(OP, STORE) | _P(TLB, MISS)),
+		E("cpu/mem-lock-loads/P",             _P(OP, LOAD) | _P(LOCK, LOCKED)),
+		E("cpu/mem-split-loads/P",            _P(OP, LOAD)),
+		E("cpu/mem-split-stores/P",           _P(OP, STORE)),
+		E("cpu/mem-all-loads/P",              _P(OP, LOAD)),
+		E("cpu/mem-all-stores/P",             _P(OP, STORE)),
+		E("cpu/mem-load-l1-hit/P",            OP_LH | _P(LVL, L1) | _P(SNOOP, NONE)),
+		E("cpu/mem-load-l2-hit/P",            OP_LH | _P(LVL, L2) | _P(SNOOP, NONE)),
+		E("cpu/mem-load-l3-hit/P",            OP_LH | _P(LVL, L3) | _P(SNOOP, NONE)),
+		E("cpu/mem-load-l1-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L1)),
+		E("cpu/mem-load-l2-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L2)),
+		E("cpu/mem-load-l3-miss/P",           _P(OP, LOAD) | _P(LVL, MISS) | _P(LVL, L3)),
+		E("cpu/mem-load-hit-lfb/P",           OP_LH | _P(LVL, LFB) | _P(SNOOP, NONE)),
+		E("cpu/mem-snp-miss/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, MISS)),
+		E("cpu/mem-snp-hit/P",                _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HIT)),
+		E("cpu/mem-snp-hitm/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, HITM)),
+		E("cpu/mem-snp-none/P",               _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, L3) | _P(SNOOP, NONE)),
+		E("cpu/mem-local-dram/P",             _P(OP, LOAD) | _P(LVL, HIT) | _P(LVL, LOC_RAM)),
+	};
+
+#undef _P
+#undef OP_LH
+#undef E
+
+	evlist__for_each(evlist, evsel) {
+		unsigned i;
+
+		for (i = 0; i < ARRAY_SIZE(events); i++) {
+			if (!strcmp(events[i].name, perf_evsel__name(evsel))) {
+				evsel->data_src = events[i].data_src;
+				break;
+			}
+		}
+	}
+}
+
 int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	bool show_full_info = false;
@@ -2163,6 +2215,7 @@ int cmd_script(int argc, const char **argv, const char *prefix __maybe_unused)
 		script_started = true;
 	}
 
+	perf_evlist__setup_data_src(session->evlist);
 
 	err = perf_session__check_output_opt(session);
 	if (err < 0)
