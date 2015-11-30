@@ -8,13 +8,17 @@
 #include "util/data.h"
 #include "util/debug.h"
 
+#include <api/fs/fs.h>
+
 #define MEM_OPERATION_LOAD	0x1
 #define MEM_OPERATION_STORE	0x2
 
 struct mem_event {
 	bool		record;
+	bool		supported;
 	const char	*tag;
 	const char	*name;
+	const char	*sysfs_name;
 };
 
 enum {
@@ -23,10 +27,10 @@ enum {
 	MEM_EVENTS__MAX,
 };
 
-#define E(t, n) { .tag = t, .name = n }
+#define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 static struct mem_event events[MEM_EVENTS__MAX] = {
-	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P"),
-	E("ldlat-stores",	"cpu/mem-stores/P"),
+	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P",	"mem-loads"),
+	E("ldlat-stores",	"cpu/mem-stores/P",		"mem-stores"),
 };
 #undef E
 
@@ -40,6 +44,30 @@ struct perf_mem {
 	const char		*cpu_list;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 };
+
+static bool has_mem_events(void)
+{
+	const char *mnt = sysfs__mount();
+	bool found = false;
+	int j;
+
+	if (!mnt)
+		return false;
+
+	for (j = 0; j < MEM_EVENTS__MAX; j++) {
+		char path[PATH_MAX];
+		struct mem_event *e = &events[j];
+		struct stat st;
+
+		scnprintf(path, PATH_MAX, "%s/devices/cpu/events/%s",
+			  mnt, e->sysfs_name);
+
+		if (!stat(path, &st))
+			e->supported = found = true;
+	}
+
+	return found;
+}
 
 static int parse_record_events(const struct option *opt,
 			       const char *str, int unset __maybe_unused)
@@ -88,7 +116,8 @@ err:
 	for (j = 0; j < MEM_EVENTS__MAX; j++) {
 		struct mem_event *e = &events[j];
 
-		fprintf(stderr, "  %s\n", e->name);
+		fprintf(stderr, "%s %s\n",
+			e->supported ? "[ok] " : "[n/a]", e->name);
 	}
 	exit(0);
 }
@@ -139,6 +168,11 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem)
 	for (j = 0; j < MEM_EVENTS__MAX; j++) {
 		if (!events[j].record)
 			continue;
+
+		if (!events[j].supported) {
+			pr_err("failed: event '%s' not supported\n", events[j].name);
+			return -1;
+		}
 
 		rec_argv[i++] = "-e";
 		rec_argv[i++] = events[j].name;
@@ -403,6 +437,10 @@ int cmd_mem(int argc, const char **argv, const char *prefix __maybe_unused)
 		NULL
 	};
 
+	if (!has_mem_events()) {
+		pr_err("failed: memory events not supported\n");
+		return -1;
+	}
 
 	argc = parse_options_subcommand(argc, argv, mem_options, mem_subcommands,
 					mem_usage, PARSE_OPT_STOP_AT_NON_OPTION);
