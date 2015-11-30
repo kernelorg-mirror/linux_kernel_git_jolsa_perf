@@ -6,12 +6,14 @@
 #include "util/tool.h"
 #include "util/session.h"
 #include "util/data.h"
+#include "util/debug.h"
 
 #define MEM_OPERATION_LOAD	0x1
 #define MEM_OPERATION_STORE	0x2
 
 struct mem_event {
 	bool		record;
+	const char	*tag;
 	const char	*name;
 };
 
@@ -21,10 +23,10 @@ enum {
 	MEM_EVENTS__MAX,
 };
 
-#define E(n) { .name = n }
+#define E(t, n) { .tag = t, .name = n }
 static struct mem_event events[MEM_EVENTS__MAX] = {
-	E("cpu/mem-loads,ldlat=30/P"),
-	E("cpu/mem-stores/P"),
+	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P"),
+	E("ldlat-stores",	"cpu/mem-stores/P"),
 };
 #undef E
 
@@ -39,11 +41,83 @@ struct perf_mem {
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 };
 
+static int parse_record_events(const struct option *opt,
+			       const char *str, int unset __maybe_unused)
+{
+	struct perf_mem *mem = *(struct perf_mem **)opt->value;
+	char *tok, *saveptr = NULL;
+	bool found = false;
+	char *buf;
+	int j;
+
+	if (!strcmp(str, "list"))
+		goto err;
+
+	mem->operation = 0;
+
+	/* We need buffer that we know we can write to. */
+	buf = malloc(strlen(str) + 1);
+	if (!buf)
+		return -ENOMEM;
+
+	strcpy(buf, str);
+
+	tok = strtok_r((char *)buf, ",", &saveptr);
+
+	while (tok) {
+		for (j = 0; j < MEM_EVENTS__MAX; j++) {
+			struct mem_event *e = &events[j];
+
+			if (strstr(e->tag, tok))
+				e->record = found = true;
+		}
+
+		tok = strtok_r(NULL, ",", &saveptr);
+	}
+
+	free(buf);
+
+	if (found)
+		return 0;
+
+	fprintf(stderr, "event '%s' not found, ", str);
+
+err:
+	fprintf(stderr, "available events:\n");
+
+	for (j = 0; j < MEM_EVENTS__MAX; j++) {
+		struct mem_event *e = &events[j];
+
+		fprintf(stderr, "  %s\n", e->name);
+	}
+	exit(0);
+}
+
+
+static const char * const __usage[] = {
+	"perf mem record [<options>] [<command>]",
+	"perf mem record [<options>] -- <command> [<options>]",
+	NULL
+};
+
+static const char * const *record_mem_usage = __usage;
+
 static int __cmd_record(int argc, const char **argv, struct perf_mem *mem)
 {
 	int rec_argc, i = 0, j;
 	const char **rec_argv;
 	int ret;
+	struct option options[] = {
+	OPT_CALLBACK('e', "event", &mem, "event",
+		     "event selector. use 'perf mem record -e list' to list available events",
+		     parse_record_events),
+	OPT_INCR('v', "verbose", &verbose,
+		 "be more verbose (show counter open errors, etc)"),
+	OPT_END()
+	};
+
+        argc = parse_options(argc, argv, options, record_mem_usage,
+                            PARSE_OPT_STOP_AT_NON_OPTION);
 
 	rec_argc = argc + 7; /* max number of arguments */
 	rec_argv = calloc(rec_argc + 1, sizeof(char *));
@@ -70,8 +144,18 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem)
 		rec_argv[i++] = events[j].name;
 	};
 
-	for (j = 1; j < argc; j++, i++)
+	for (j = 0; j < argc; j++, i++)
 		rec_argv[i] = argv[j];
+
+	if (verbose > 0) {
+		pr_debug("calling: record ");
+
+		while (rec_argv[j]) {
+			pr_debug("%s ", rec_argv[j]);
+			j++;
+		}
+		pr_debug("\n");
+	}
 
 	ret = cmd_record(i, rec_argv, NULL);
 	free(rec_argv);
