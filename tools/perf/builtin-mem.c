@@ -24,13 +24,32 @@ struct mem_event {
 enum {
 	MEM_EVENTS__LOAD,
 	MEM_EVENTS__STORE,
-	MEM_EVENTS__MAX,
+	MEM_EVENTS__MAX		= 21,
 };
 
 #define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 static struct mem_event events[MEM_EVENTS__MAX] = {
 	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P",	"mem-loads"),
 	E("ldlat-stores",	"cpu/mem-stores/P",		"mem-stores"),
+	E("stlb-miss-loads",	"cpu/mem-stlb-miss-loads/P",	"mem-stlb-miss-loads"),
+	E("stlb-miss-stores",	"cpu/mem-stlb-miss-stores/P",	"mem-stlb-miss-stores"),
+	E("lock-loads",		"cpu/mem-lock-loads/P",		"mem-lock-loads"),
+	E("split-loads",	"cpu/mem-split-loads/P",	"mem-split-loads"),
+	E("split-stores",	"cpu/mem-split-stores/P",	"mem-split-stores"),
+	E("all-loads",		"cpu/mem-all-loads/P",		"mem-all-loads"),
+	E("all-stores",		"cpu/mem-all-stores/P",		"mem-all-stores"),
+	E("l1-hit",		"cpu/mem-load-l1-hit/P",	"mem-load-l1-hit"),
+	E("l2-hit",		"cpu/mem-load-l2-hit/P",	"mem-load-l2-hit"),
+	E("l3-hit",		"cpu/mem-load-l3-hit/P",	"mem-load-l3-hit"),
+	E("l1-miss",		"cpu/mem-load-l1-miss/P",	"mem-load-l1-miss"),
+	E("l2-miss",		"cpu/mem-load-l2-miss/P",	"mem-load-l2-miss"),
+	E("l3-miss",		"cpu/mem-load-l3-miss/P",	"mem-load-l3-miss"),
+	E("lfb",		"cpu/mem-load-hit-lfb/P",	"mem-load-hit-lfb"),
+	E("snp-miss",		"cpu/mem-snp-miss/P",		"mem-snp-miss"),
+	E("snp-hit",		"cpu/mem-snp-hit/P",		"mem-snp-hit"),
+	E("snp-hitm",		"cpu/mem-snp-hitm/P",		"mem-snp-hitm"),
+	E("snp-none",		"cpu/mem-snp-none/P",		"mem-snp-none"),
+	E("local-dram",		"cpu/mem-local-dram/P",		"mem-local-dram"),
 };
 #undef E
 
