@@ -10,6 +10,24 @@
 #define MEM_OPERATION_LOAD	0x1
 #define MEM_OPERATION_STORE	0x2
 
+struct mem_event {
+	bool		record;
+	const char	*name;
+};
+
+enum {
+	MEM_EVENTS__LOAD,
+	MEM_EVENTS__STORE,
+	MEM_EVENTS__MAX,
+};
+
+#define E(n) { .name = n }
+static struct mem_event events[MEM_EVENTS__MAX] = {
+	E("cpu/mem-loads,ldlat=30/P"),
+	E("cpu/mem-stores/P"),
+};
+#undef E
+
 struct perf_mem {
 	struct perf_tool	tool;
 	char const		*input_name;
@@ -34,20 +52,23 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem)
 
 	rec_argv[i++] = "record";
 
-	if (mem->operation & MEM_OPERATION_LOAD)
+	if (mem->operation & MEM_OPERATION_LOAD) {
+		events[MEM_EVENTS__LOAD].record = true;
 		rec_argv[i++] = "-W";
+	}
+
+	if (mem->operation & MEM_OPERATION_STORE)
+		events[MEM_EVENTS__STORE].record = true;
 
 	rec_argv[i++] = "-d";
 
-	if (mem->operation & MEM_OPERATION_LOAD) {
-		rec_argv[i++] = "-e";
-		rec_argv[i++] = "cpu/mem-loads/pp";
-	}
+	for (j = 0; j < MEM_EVENTS__MAX; j++) {
+		if (!events[j].record)
+			continue;
 
-	if (mem->operation & MEM_OPERATION_STORE) {
 		rec_argv[i++] = "-e";
-		rec_argv[i++] = "cpu/mem-stores/pp";
-	}
+		rec_argv[i++] = events[j].name;
+	};
 
 	for (j = 1; j < argc; j++, i++)
 		rec_argv[i] = argv[j];
