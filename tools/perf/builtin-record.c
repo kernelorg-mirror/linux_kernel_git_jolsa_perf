@@ -612,7 +612,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 
 	err = __machine__synthesize_threads(machine, tool, &opts->target, rec->evlist->threads,
-					    process_synthesized_event, opts->sample_address,
+					    process_synthesized_event,
 					    opts->proc_map_timeout);
 	if (err != 0)
 		goto out_child;

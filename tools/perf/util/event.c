@@ -229,7 +229,6 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 				       pid_t pid, pid_t tgid,
 				       perf_event__handler_t process,
 				       struct machine *machine,
-				       bool mmap_data,
 				       unsigned int proc_map_timeout)
 {
 	char filename[PATH_MAX];
@@ -320,7 +319,7 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 			event->mmap2.flags |= MAP_PRIVATE;
 
 		if (prot[2] != 'x') {
-			if (!mmap_data || prot[0] != 'r')
+			if (prot[0] != 'r')
 				continue;
 
 			event->header.misc |= PERF_RECORD_MISC_MMAP_DATA;
@@ -419,7 +418,6 @@ static int __event__synthesize_thread(union perf_event *comm_event,
 					  perf_event__handler_t process,
 				      struct perf_tool *tool,
 				      struct machine *machine,
-				      bool mmap_data,
 				      unsigned int proc_map_timeout)
 {
 	char filename[PATH_MAX];
@@ -437,7 +435,7 @@ static int __event__synthesize_thread(union perf_event *comm_event,
 			return -1;
 
 		return perf_event__synthesize_mmap_events(tool, mmap_event, pid, tgid,
-							  process, machine, mmap_data,
+							  process, machine,
 							  proc_map_timeout);
 	}
 
@@ -479,7 +477,7 @@ static int __event__synthesize_thread(union perf_event *comm_event,
 		if (_pid == pid) {
 			/* process the parent's maps too */
 			rc = perf_event__synthesize_mmap_events(tool, mmap_event, pid, tgid,
-						process, machine, mmap_data, proc_map_timeout);
+						process, machine, proc_map_timeout);
 			if (rc)
 				break;
 		}
@@ -493,7 +491,6 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 				      struct thread_map *threads,
 				      perf_event__handler_t process,
 				      struct machine *machine,
-				      bool mmap_data,
 				      unsigned int proc_map_timeout)
 {
 	union perf_event *comm_event, *mmap_event, *fork_event;
@@ -517,7 +514,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 					       fork_event,
 					       thread_map__pid(threads, thread), 0,
 					       process, tool, machine,
-					       mmap_data, proc_map_timeout)) {
+					       proc_map_timeout)) {
 			err = -1;
 			break;
 		}
@@ -543,7 +540,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 						       fork_event,
 						       comm_event->comm.pid, 0,
 						       process, tool, machine,
-						       mmap_data, proc_map_timeout)) {
+						       proc_map_timeout)) {
 				err = -1;
 				break;
 			}
@@ -561,7 +558,6 @@ out:
 int perf_event__synthesize_threads(struct perf_tool *tool,
 				   perf_event__handler_t process,
 				   struct machine *machine,
-				   bool mmap_data,
 				   unsigned int proc_map_timeout)
 {
 	DIR *proc;
@@ -602,7 +598,7 @@ int perf_event__synthesize_threads(struct perf_tool *tool,
  		 * one thread couldn't be synthesized.
  		 */
 		__event__synthesize_thread(comm_event, mmap_event, fork_event, pid,
-					   1, process, tool, machine, mmap_data,
+					   1, process, tool, machine,
 					   proc_map_timeout);
 	}
 

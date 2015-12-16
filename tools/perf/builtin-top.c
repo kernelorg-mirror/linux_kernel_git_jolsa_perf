@@ -961,7 +961,7 @@ static int __cmd_top(struct perf_top *top)
 		goto out_delete;
 
 	machine__synthesize_threads(&top->session->machines.host, &opts->target,
-				    top->evlist->threads, false, opts->proc_map_timeout);
+				    top->evlist->threads, opts->proc_map_timeout);
 
 	if (sort__has_socket) {
 		ret = perf_env__read_cpu_topology_map(&perf_env);
