@@ -373,6 +373,13 @@ static int perf_stat_synthesize_config(bool is_pipe)
 	struct perf_evsel *counter;
 	int err;
 
+	err = perf_event__synthesize_stat_config(NULL, &stat_config,
+						 process_synthesized_event, NULL);
+	if (err < 0) {
+		pr_err("Couldn't synthesize config.\n");
+		return err;
+	}
+
 	if (is_pipe) {
 		err = perf_event__synthesize_attrs(NULL, perf_stat.session,
 						   process_synthesized_event);
@@ -442,13 +449,6 @@ static int perf_stat_synthesize_config(bool is_pipe)
 					     process_synthesized_event, NULL);
 	if (err < 0) {
 		pr_err("Couldn't synthesize thread map.\n");
-		return err;
-	}
-
-	err = perf_event__synthesize_stat_config(NULL, &stat_config,
-						 process_synthesized_event, NULL);
-	if (err < 0) {
-		pr_err("Couldn't synthesize config.\n");
 		return err;
 	}
 
