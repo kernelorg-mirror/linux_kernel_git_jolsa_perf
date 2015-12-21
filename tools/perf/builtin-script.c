@@ -224,6 +224,9 @@ static int perf_evsel__check_attr(struct perf_evsel *evsel,
 	allow_user_set = perf_header__has_feat(&session->header,
 					       HEADER_AUXTRACE);
 
+	if (perf_header__has_feat(&session->header, HEADER_STAT))
+		return 0;
+
 	if (PRINT_FIELD(TRACE) &&
 		!perf_session__has_traces(session, "record -R"))
 		return -EINVAL;
@@ -1692,9 +1695,10 @@ static void script__setup_sample_type(struct perf_script *script)
 
 static int process_stat_config_event(struct perf_tool *tool __maybe_unused,
 				     union perf_event *event,
-				     struct perf_session *session __maybe_unused)
+				     struct perf_session *session)
 {
 	perf_event__read_stat_config(&stat_config, &event->stat_config);
+	perf_header__set_feat(&session->header, HEADER_STAT);
 	return 0;
 }
 
