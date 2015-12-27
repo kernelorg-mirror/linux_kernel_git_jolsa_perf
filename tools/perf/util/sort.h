@@ -123,6 +123,11 @@ struct hist_entry {
 	struct branch_info	*branch_info;
 	struct hists		*hists;
 	struct mem_info		*mem_info;
+
+	/* store_all */
+	struct list_head	he_list;
+	struct list_head	he_entry;
+
 	struct callchain_root	callchain[0]; /* must be last member */
 };
 

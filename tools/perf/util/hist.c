@@ -370,6 +370,8 @@ static struct hist_entry *hist_entry__new(struct hist_entry *template,
 			callchain_init(he->callchain);
 
 		INIT_LIST_HEAD(&he->pairs.node);
+		INIT_LIST_HEAD(&he->he_list);
+		INIT_LIST_HEAD(&he->he_entry);
 		thread__get(he->thread);
 	}
 
@@ -386,7 +388,7 @@ static u8 symbol__parent_filter(const struct symbol *parent)
 static struct hist_entry *hists__findnew_entry(struct hists *hists,
 					       struct hist_entry *entry,
 					       struct addr_location *al,
-					       bool sample_self)
+					       bool sample_self, bool store_he)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -431,6 +433,15 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 				map__put(he->ms.map);
 				he->ms.map = map__get(entry->ms.map);
 			}
+
+			if (store_he) {
+				struct hist_entry *tmp = hist_entry__new(entry, sample_self);
+
+				if (!tmp)
+					return NULL;
+
+				list_add_tail(&tmp->he_entry, &he->he_list);
+			}
 			goto out;
 		}
 
@@ -462,7 +473,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 				      struct branch_info *bi,
 				      struct mem_info *mi,
 				      u64 period, u64 weight, u64 transaction,
-				      bool sample_self)
+				      bool sample_self, bool store_he)
 {
 	struct hist_entry entry = {
 		.thread	= al->thread,
@@ -489,7 +500,7 @@ struct hist_entry *__hists__add_entry(struct hists *hists,
 		.transaction = transaction,
 	};
 
-	return hists__findnew_entry(hists, &entry, al, sample_self);
+	return hists__findnew_entry(hists, &entry, al, sample_self, store_he);
 }
 
 static int
@@ -543,7 +554,7 @@ iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al
 	 * and the he_stat__add_period() function.
 	 */
 	he = __hists__add_entry(hists, al, iter->parent, NULL, mi,
-				cost, cost, 0, true);
+				cost, cost, 0, true, false);
 	if (!he)
 		return -ENOMEM;
 
@@ -643,7 +654,7 @@ iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *a
 	 */
 	he = __hists__add_entry(hists, al, iter->parent, &bi[i], NULL,
 				1, bi->flags.cycles ? bi->flags.cycles : 1,
-				0, true);
+				0, true, false);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -680,7 +691,7 @@ iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location 
 
 	he = __hists__add_entry(iter->hists, al, iter->parent, NULL, NULL,
 				sample->period, sample->weight,
-				sample->transaction, true);
+				sample->transaction, true, false);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -740,7 +751,7 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 
 	he = __hists__add_entry(hists, al, iter->parent, NULL, NULL,
 				sample->period, sample->weight,
-				sample->transaction, true);
+				sample->transaction, true, false);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -813,7 +824,7 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 
 	he = __hists__add_entry(iter->hists, al, iter->parent, NULL, NULL,
 				sample->period, sample->weight,
-				sample->transaction, false);
+				sample->transaction, false, false);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -958,6 +969,13 @@ void hist_entry__delete(struct hist_entry *he)
 		map__zput(he->mem_info->iaddr.map);
 		map__zput(he->mem_info->daddr.map);
 		zfree(&he->mem_info);
+	}
+
+	if (!list_empty(&he->he_list)) {
+		struct hist_entry *p, *h;
+
+		list_for_each_entry_safe(p, h, &he->he_list, he_entry)
+			hist_entry__delete(p);
 	}
 
 	zfree(&he->stat_acc);
