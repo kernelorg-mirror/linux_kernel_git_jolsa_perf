@@ -58,6 +58,11 @@ enum hist_column {
 struct thread;
 struct dso;
 
+struct hists_ops {
+	void (*entry_new)(struct hist_entry *he);
+	void (*entry_add)(struct hist_entry *he, struct hist_entry *added);
+};
+
 struct hists {
 	struct rb_root		entries_in_array[2];
 	struct rb_root		*entries_in;
@@ -74,6 +79,7 @@ struct hists {
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
 	int			socket_filter;
+	struct hists_ops	*ops;
 };
 
 struct hist_entry_iter;

@@ -309,6 +309,22 @@ void hists__delete_entries(struct hists *hists)
 	}
 }
 
+static void hists_ops__entry_new(struct hist_entry *he)
+{
+	struct hists *hists = he->hists;
+
+	if (hists && hists->ops)
+		hists->ops->entry_new(he);
+}
+
+static void hists_ops__entry_add(struct hist_entry *he, struct hist_entry *add)
+{
+	struct hists *hists = he->hists;
+
+	if (hists && hists->ops)
+		hists->ops->entry_add(he, add);
+}
+
 /*
  * histogram, sorted on item, collects periods
  */
@@ -373,6 +389,8 @@ static struct hist_entry *hist_entry__new(struct hist_entry *template,
 		INIT_LIST_HEAD(&he->he_list);
 		INIT_LIST_HEAD(&he->he_entry);
 		thread__get(he->thread);
+
+		hists_ops__entry_new(he);
 	}
 
 	return he;
@@ -442,6 +460,8 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 
 				list_add_tail(&tmp->he_entry, &he->he_list);
 			}
+
+			hists_ops__entry_add(he, entry);
 			goto out;
 		}
 
