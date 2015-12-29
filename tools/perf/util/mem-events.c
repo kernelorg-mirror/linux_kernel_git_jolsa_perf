@@ -97,3 +97,110 @@ int perf_mem_events__init(void)
 
 	return found ? 0 : -ENOENT;
 }
+
+enum { NA = -1, OP, LVL, SNP, LCK, TLB };
+
+static int data_src__scnprintf(char *bf, size_t size, uint64_t val, int64_t field)
+{
+#define SEPARATOR	"|"
+#define ELLIPSIS     "..."
+	static const struct {
+		uint64_t   bit;
+		int64_t    field;
+		const char *name;
+	} decode_bits[] = {
+	{ PERF_MEM_OP_LOAD,       OP,  "LOAD"     },
+	{ PERF_MEM_OP_STORE,      OP,  "STORE"    },
+	{ PERF_MEM_OP_NA,         OP,  "OP_NA"    },
+	{ PERF_MEM_LVL_LFB,       LVL, "LFB"      },
+	{ PERF_MEM_LVL_L1,        LVL, "L1"       },
+	{ PERF_MEM_LVL_L2,        LVL, "L2"       },
+	{ PERF_MEM_LVL_L3,        LVL, "LCL_LLC"  },
+	{ PERF_MEM_LVL_LOC_RAM,   LVL, "LCL_RAM"  },
+	{ PERF_MEM_LVL_REM_RAM1,  LVL, "RMT_RAM"  },
+	{ PERF_MEM_LVL_REM_RAM2,  LVL, "RMT_RAM"  },
+	{ PERF_MEM_LVL_REM_CCE1,  LVL, "RMT_LLC"  },
+	{ PERF_MEM_LVL_REM_CCE2,  LVL, "RMT_LLC"  },
+	{ PERF_MEM_LVL_IO,        LVL, "I/O"      },
+	{ PERF_MEM_LVL_UNC,       LVL, "UNCACHED" },
+	{ PERF_MEM_LVL_NA,        LVL, "NA"       },
+	{ PERF_MEM_LVL_HIT,       LVL, "HIT"      },
+	{ PERF_MEM_LVL_MISS,      LVL, "MISS"     },
+	{ PERF_MEM_SNOOP_NONE,    SNP, "SNP NONE" },
+	{ PERF_MEM_SNOOP_HIT,     SNP, "SNP HIT"  },
+	{ PERF_MEM_SNOOP_MISS,    SNP, "SNP MISS" },
+	{ PERF_MEM_SNOOP_HITM,    SNP, "SNP HITM" },
+	{ PERF_MEM_SNOOP_NA,      SNP, "SNP NA"   },
+	{ PERF_MEM_LOCK_LOCKED,   LCK, "LOCKED"   },
+	{ PERF_MEM_LOCK_NA,       LCK, "LOCK_NA"  },
+	{ PERF_MEM_TLB_NA,        TLB, "TLB_NA"   },
+	{ PERF_MEM_TLB_HIT,       TLB, "TLB_HIT"  },
+	{ PERF_MEM_TLB_MISS,      TLB, "TLB_MISS" },
+	{ PERF_MEM_TLB_L1,        TLB, "TLB_L1"   },
+	{ PERF_MEM_TLB_L2,        TLB, "TLB_L2"   },
+	{ PERF_MEM_TLB_WK,        TLB, "WALKER"   },
+	{ PERF_MEM_TLB_OS,        TLB, "FAULT"    },
+	};
+	union perf_mem_data_src dsrc = { .val = val, };
+	int printed = 0;
+	size_t i;
+	bool first_present = true;
+
+	bf[0] = 0;
+
+	for (i = 0; i < ARRAY_SIZE(decode_bits); i++) {
+		int bitval;
+
+		if (field != NA && decode_bits[i].field != field)
+			continue;
+
+		switch (decode_bits[i].field) {
+		case OP:  bitval = decode_bits[i].bit & dsrc.mem_op;    break;
+		case LVL: bitval = decode_bits[i].bit & dsrc.mem_lvl;   break;
+		case SNP: bitval = decode_bits[i].bit & dsrc.mem_snoop; break;
+		case LCK: bitval = decode_bits[i].bit & dsrc.mem_lock;  break;
+		case TLB: bitval = decode_bits[i].bit & dsrc.mem_dtlb;  break;
+		default: bitval = 0;					break;
+		}
+
+		if (!bitval)
+			continue;
+
+		if (strlen(decode_bits[i].name) + !!i > size - printed) {
+			sprintf(bf + size - sizeof(ELLIPSIS) + 1, ELLIPSIS);
+			printed = size;
+			break;
+		}
+
+		printed += scnprintf(bf + printed, size - printed, "%s%s",
+				     first_present ? "" : SEPARATOR, decode_bits[i].name);
+		first_present = false;
+	}
+
+	return printed;
+}
+
+int perf_mem__op_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, OP);
+}
+
+int perf_mem__lvl_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, LVL);
+}
+
+int perf_mem__tlb_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, TLB);
+}
+
+int perf_mem__snp_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, SNP);
+}
+
+int perf_mem__lock_scnprintf(char *bf, size_t size, uint64_t val)
+{
+	return data_src__scnprintf(bf, size, val, LCK);
+}
