@@ -6,6 +6,7 @@
 #include "evsel.h"
 #include "evlist.h"
 #include <traceevent/event-parse.h>
+#include "mem-events.h"
 
 regex_t		parent_regex;
 const char	default_parent_pattern[] = "^sys_|^do_page_fault";
@@ -797,19 +798,9 @@ sort__locked_cmp(struct hist_entry *left, struct hist_entry *right)
 static int hist_entry__locked_snprintf(struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
-	const char *out;
-	u64 mask = PERF_MEM_LOCK_NA;
+	char out[64];
 
-	if (he->mem_info)
-		mask = he->mem_info->data_src.mem_lock;
-
-	if (mask & PERF_MEM_LOCK_NA)
-		out = "N/A";
-	else if (mask & PERF_MEM_LOCK_LOCKED)
-		out = "Yes";
-	else
-		out = "No";
-
+	perf_mem__lock_scnprintf(out, 64, he->mem_info->data_src.val);
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
@@ -832,54 +823,12 @@ sort__tlb_cmp(struct hist_entry *left, struct hist_entry *right)
 	return (int64_t)(data_src_r.mem_dtlb - data_src_l.mem_dtlb);
 }
 
-static const char * const tlb_access[] = {
-	"N/A",
-	"HIT",
-	"MISS",
-	"L1",
-	"L2",
-	"Walker",
-	"Fault",
-};
-#define NUM_TLB_ACCESS (sizeof(tlb_access)/sizeof(const char *))
-
 static int hist_entry__tlb_snprintf(struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
 	char out[64];
-	size_t sz = sizeof(out) - 1; /* -1 for null termination */
-	size_t l = 0, i;
-	u64 m = PERF_MEM_TLB_NA;
-	u64 hit, miss;
 
-	out[0] = '\0';
-
-	if (he->mem_info)
-		m = he->mem_info->data_src.mem_dtlb;
-
-	hit = m & PERF_MEM_TLB_HIT;
-	miss = m & PERF_MEM_TLB_MISS;
-
-	/* already taken care of */
-	m &= ~(PERF_MEM_TLB_HIT|PERF_MEM_TLB_MISS);
-
-	for (i = 0; m && i < NUM_TLB_ACCESS; i++, m >>= 1) {
-		if (!(m & 0x1))
-			continue;
-		if (l) {
-			strcat(out, " or ");
-			l += 4;
-		}
-		strncat(out, tlb_access[i], sz - l);
-		l += strlen(tlb_access[i]);
-	}
-	if (*out == '\0')
-		strcpy(out, "N/A");
-	if (hit)
-		strncat(out, " hit", sz - l);
-	if (miss)
-		strncat(out, " miss", sz - l);
-
+	perf_mem__tlb_scnprintf(out, 64, he->mem_info->data_src.val);
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
@@ -902,61 +851,12 @@ sort__lvl_cmp(struct hist_entry *left, struct hist_entry *right)
 	return (int64_t)(data_src_r.mem_lvl - data_src_l.mem_lvl);
 }
 
-static const char * const mem_lvl[] = {
-	"N/A",
-	"HIT",
-	"MISS",
-	"L1",
-	"LFB",
-	"L2",
-	"L3",
-	"Local RAM",
-	"Remote RAM (1 hop)",
-	"Remote RAM (2 hops)",
-	"Remote Cache (1 hop)",
-	"Remote Cache (2 hops)",
-	"I/O",
-	"Uncached",
-};
-#define NUM_MEM_LVL (sizeof(mem_lvl)/sizeof(const char *))
-
 static int hist_entry__lvl_snprintf(struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
 	char out[64];
-	size_t sz = sizeof(out) - 1; /* -1 for null termination */
-	size_t i, l = 0;
-	u64 m =  PERF_MEM_LVL_NA;
-	u64 hit, miss;
 
-	if (he->mem_info)
-		m  = he->mem_info->data_src.mem_lvl;
-
-	out[0] = '\0';
-
-	hit = m & PERF_MEM_LVL_HIT;
-	miss = m & PERF_MEM_LVL_MISS;
-
-	/* already taken care of */
-	m &= ~(PERF_MEM_LVL_HIT|PERF_MEM_LVL_MISS);
-
-	for (i = 0; m && i < NUM_MEM_LVL; i++, m >>= 1) {
-		if (!(m & 0x1))
-			continue;
-		if (l) {
-			strcat(out, " or ");
-			l += 4;
-		}
-		strncat(out, mem_lvl[i], sz - l);
-		l += strlen(mem_lvl[i]);
-	}
-	if (*out == '\0')
-		strcpy(out, "N/A");
-	if (hit)
-		strncat(out, " hit", sz - l);
-	if (miss)
-		strncat(out, " miss", sz - l);
-
+	perf_mem__lvl_scnprintf(out, 64, he->mem_info->data_src.val);
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
@@ -979,42 +879,12 @@ sort__snoop_cmp(struct hist_entry *left, struct hist_entry *right)
 	return (int64_t)(data_src_r.mem_snoop - data_src_l.mem_snoop);
 }
 
-static const char * const snoop_access[] = {
-	"N/A",
-	"None",
-	"Miss",
-	"Hit",
-	"HitM",
-};
-#define NUM_SNOOP_ACCESS (sizeof(snoop_access)/sizeof(const char *))
-
 static int hist_entry__snoop_snprintf(struct hist_entry *he, char *bf,
 				    size_t size, unsigned int width)
 {
 	char out[64];
-	size_t sz = sizeof(out) - 1; /* -1 for null termination */
-	size_t i, l = 0;
-	u64 m = PERF_MEM_SNOOP_NA;
 
-	out[0] = '\0';
-
-	if (he->mem_info)
-		m = he->mem_info->data_src.mem_snoop;
-
-	for (i = 0; m && i < NUM_SNOOP_ACCESS; i++, m >>= 1) {
-		if (!(m & 0x1))
-			continue;
-		if (l) {
-			strcat(out, " or ");
-			l += 4;
-		}
-		strncat(out, snoop_access[i], sz - l);
-		l += strlen(snoop_access[i]);
-	}
-
-	if (*out == '\0')
-		strcpy(out, "N/A");
-
+	perf_mem__snp_scnprintf(out, 64, he->mem_info->data_src.val);
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
