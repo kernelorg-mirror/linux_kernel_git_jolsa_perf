@@ -1544,6 +1544,14 @@ static bool __sort__hpp_equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 	return hse_a->se == hse_b->se;
 }
 
+static void hse_free(struct perf_hpp_fmt *fmt)
+{
+	struct hpp_sort_entry *hse;
+
+	hse = container_of(fmt, struct hpp_sort_entry, hpp);
+	free(hse);
+}
+
 static struct hpp_sort_entry *
 __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 {
@@ -1566,6 +1574,7 @@ __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 	hse->hpp.collapse = __sort__hpp_collapse;
 	hse->hpp.sort = __sort__hpp_sort;
 	hse->hpp.equal = __sort__hpp_equal;
+	hse->hpp.free = hse_free;
 
 	INIT_LIST_HEAD(&hse->hpp.list);
 	INIT_LIST_HEAD(&hse->hpp.sort_list);
@@ -1576,6 +1585,11 @@ __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 	return hse;
 }
 
+static void hpp_free(struct perf_hpp_fmt *fmt)
+{
+	free(fmt);
+}
+
 static struct perf_hpp_fmt *__hpp_dimension__alloc_hpp(struct hpp_dimension *hd)
 {
 	struct perf_hpp_fmt *fmt;
@@ -1584,6 +1598,7 @@ static struct perf_hpp_fmt *__hpp_dimension__alloc_hpp(struct hpp_dimension *hd)
 	if (fmt) {
 		INIT_LIST_HEAD(&fmt->list);
 		INIT_LIST_HEAD(&fmt->sort_list);
+		fmt->free = hpp_free;
 	}
 
 	return fmt;
@@ -1817,6 +1832,14 @@ bool perf_hpp__is_dynamic_entry(struct perf_hpp_fmt *fmt)
 	return fmt->cmp == __sort__hde_cmp;
 }
 
+static void hde_free(struct perf_hpp_fmt *fmt)
+{
+	struct hpp_dynamic_entry *hde;
+
+	hde = container_of(fmt, struct hpp_dynamic_entry, hpp);
+	free(hde);
+}
+
 static struct hpp_dynamic_entry *
 __alloc_dynamic_entry(struct perf_evsel *evsel, struct format_field *field)
 {
@@ -1841,6 +1864,7 @@ __alloc_dynamic_entry(struct perf_evsel *evsel, struct format_field *field)
 	hde->hpp.cmp = __sort__hde_cmp;
 	hde->hpp.collapse = __sort__hde_cmp;
 	hde->hpp.sort = __sort__hde_cmp;
+	hde->hpp.free = hde_free;
 
 	INIT_LIST_HEAD(&hde->hpp.list);
 	INIT_LIST_HEAD(&hde->hpp.sort_list);
