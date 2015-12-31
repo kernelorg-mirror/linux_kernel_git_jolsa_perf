@@ -586,6 +586,12 @@ next:
 	}
 }
 
+static void fmt_free(struct perf_hpp_fmt *fmt)
+{
+	if (fmt->free)
+		fmt->free(fmt);
+}
+
 void perf_hpp__reset_output_field(void)
 {
 	struct perf_hpp_fmt *fmt, *tmp;
@@ -594,12 +600,14 @@ void perf_hpp__reset_output_field(void)
 	perf_hpp_list__for_each_format_safe(&perf_hpp_list, fmt, tmp) {
 		list_del_init(&fmt->list);
 		list_del_init(&fmt->sort_list);
+		fmt_free(fmt);
 	}
 
 	/* reset sort keys */
 	perf_hpp_list__for_each_sort_list_safe(&perf_hpp_list, fmt, tmp) {
 		list_del_init(&fmt->list);
 		list_del_init(&fmt->sort_list);
+		fmt_free(fmt);
 	}
 }
 
