@@ -371,6 +371,19 @@ static int64_t hpp__nop_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return 0;
 }
 
+static bool perf_hpp__is_hpp_entry(struct perf_hpp_fmt *a)
+{
+	return a->header == hpp__header_fn;
+}
+
+static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
+{
+	if (!perf_hpp__is_hpp_entry(a) || !perf_hpp__is_hpp_entry(b))
+		return false;
+
+	return a->idx == b->idx;
+}
+
 #define HPP__COLOR_PRINT_FNS(_name, _fn, _idx)		\
 	{						\
 		.name   = _name,			\
@@ -382,6 +395,7 @@ static int64_t hpp__nop_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 		.collapse = hpp__nop_cmp,		\
 		.sort	= hpp__sort_ ## _fn,		\
 		.idx	= PERF_HPP__ ## _idx,		\
+		.equal	= hpp__equal,			\
 	}
 
 #define HPP__COLOR_ACC_PRINT_FNS(_name, _fn, _idx)	\
@@ -395,6 +409,7 @@ static int64_t hpp__nop_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 		.collapse = hpp__nop_cmp,		\
 		.sort	= hpp__sort_ ## _fn,		\
 		.idx	= PERF_HPP__ ## _idx,		\
+		.equal	= hpp__equal,			\
 	}
 
 #define HPP__PRINT_FNS(_name, _fn, _idx)		\
@@ -407,6 +422,7 @@ static int64_t hpp__nop_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 		.collapse = hpp__nop_cmp,		\
 		.sort	= hpp__sort_ ## _fn,		\
 		.idx	= PERF_HPP__ ## _idx,		\
+		.equal	= hpp__equal,			\
 	}
 
 struct perf_hpp_fmt perf_hpp__format[] = {
@@ -535,21 +551,11 @@ void perf_hpp__setup_output_field(void)
 
 	/* append sort keys to output field */
 	perf_hpp__for_each_sort_list(fmt) {
-		if (!list_empty(&fmt->list))
-			continue;
+		struct perf_hpp_fmt *pos;
 
-		/*
-		 * sort entry fields are dynamically created,
-		 * so they can share a same sort key even though
-		 * the list is empty.
-		 */
-		if (perf_hpp__is_sort_entry(fmt)) {
-			struct perf_hpp_fmt *pos;
-
-			perf_hpp__for_each_format(pos) {
-				if (fmt_equal(fmt, pos))
-					goto next;
-			}
+		perf_hpp__for_each_format(pos) {
+			if (fmt_equal(fmt, pos))
+				goto next;
 		}
 
 		perf_hpp__column_register(fmt);
@@ -564,21 +570,11 @@ void perf_hpp__append_sort_keys(void)
 
 	/* append output fields to sort keys */
 	perf_hpp__for_each_format(fmt) {
-		if (!list_empty(&fmt->sort_list))
-			continue;
+		struct perf_hpp_fmt *pos;
 
-		/*
-		 * sort entry fields are dynamically created,
-		 * so they can share a same sort key even though
-		 * the list is empty.
-		 */
-		if (perf_hpp__is_sort_entry(fmt)) {
-			struct perf_hpp_fmt *pos;
-
-			perf_hpp__for_each_sort_list(pos) {
-				if (fmt_equal(fmt, pos))
-					goto next;
-			}
+		perf_hpp__for_each_sort_list(pos) {
+			if (fmt_equal(fmt, pos))
+				goto next;
 		}
 
 		perf_hpp__register_sort_field(fmt);
