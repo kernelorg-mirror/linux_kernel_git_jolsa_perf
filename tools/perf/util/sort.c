@@ -1434,20 +1434,6 @@ struct hpp_sort_entry {
 	struct sort_entry *se;
 };
 
-bool perf_hpp__same_sort_entry(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
-{
-	struct hpp_sort_entry *hse_a;
-	struct hpp_sort_entry *hse_b;
-
-	if (!perf_hpp__is_sort_entry(a) || !perf_hpp__is_sort_entry(b))
-		return false;
-
-	hse_a = container_of(a, struct hpp_sort_entry, hpp);
-	hse_b = container_of(b, struct hpp_sort_entry, hpp);
-
-	return hse_a->se == hse_b->se;
-}
-
 void perf_hpp__reset_sort_width(struct perf_hpp_fmt *fmt, struct hists *hists)
 {
 	struct hpp_sort_entry *hse;
@@ -1533,6 +1519,25 @@ static int64_t __sort__hpp_sort(struct perf_hpp_fmt *fmt,
 	return sort_fn(a, b);
 }
 
+bool perf_hpp__is_sort_entry(struct perf_hpp_fmt *format)
+{
+	return format->header == __sort__hpp_header;
+}
+
+static bool __sort__hpp_equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
+{
+	struct hpp_sort_entry *hse_a;
+	struct hpp_sort_entry *hse_b;
+
+	if (!perf_hpp__is_sort_entry(a) || !perf_hpp__is_sort_entry(b))
+		return false;
+
+	hse_a = container_of(a, struct hpp_sort_entry, hpp);
+	hse_b = container_of(b, struct hpp_sort_entry, hpp);
+
+	return hse_a->se == hse_b->se;
+}
+
 static struct hpp_sort_entry *
 __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 {
@@ -1554,6 +1559,7 @@ __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 	hse->hpp.cmp = __sort__hpp_cmp;
 	hse->hpp.collapse = __sort__hpp_collapse;
 	hse->hpp.sort = __sort__hpp_sort;
+	hse->hpp.equal = __sort__hpp_equal;
 
 	INIT_LIST_HEAD(&hse->hpp.list);
 	INIT_LIST_HEAD(&hse->hpp.sort_list);
@@ -1562,11 +1568,6 @@ __sort_dimension__alloc_hpp(struct sort_dimension *sd)
 	hse->hpp.user_len = 0;
 
 	return hse;
-}
-
-bool perf_hpp__is_sort_entry(struct perf_hpp_fmt *format)
-{
-	return format->header == __sort__hpp_header;
 }
 
 static int __sort_dimension__add_hpp_sort(struct sort_dimension *sd)
