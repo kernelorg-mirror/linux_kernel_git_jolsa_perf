@@ -2408,7 +2408,7 @@ void perf_hpp__set_elide(int idx, bool elide)
 	struct perf_hpp_fmt *fmt;
 	struct hpp_sort_entry *hse;
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (!perf_hpp__is_sort_entry(fmt))
 			continue;
 
@@ -2468,7 +2468,7 @@ void sort__setup_elide(FILE *output)
 	struct perf_hpp_fmt *fmt;
 	struct hpp_sort_entry *hse;
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (!perf_hpp__is_sort_entry(fmt))
 			continue;
 
@@ -2480,7 +2480,7 @@ void sort__setup_elide(FILE *output)
 	 * It makes no sense to elide all of sort entries.
 	 * Just revert them to show up again.
 	 */
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (!perf_hpp__is_sort_entry(fmt))
 			continue;
 
@@ -2488,7 +2488,7 @@ void sort__setup_elide(FILE *output)
 			return;
 	}
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (!perf_hpp__is_sort_entry(fmt))
 			continue;
 

@@ -1040,7 +1040,7 @@ static int hist_browser__show_entry(struct hist_browser *browser,
 
 		hist_browser__gotorc(browser, row, 0);
 
-		perf_hpp__for_each_format(fmt) {
+		perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 			if (perf_hpp__should_skip(fmt, entry->hists) ||
 			    column++ < browser->b.horiz_scroll)
 				continue;
@@ -1144,7 +1144,7 @@ static int hists_browser__scnprintf_headers(struct hist_browser *browser, char *
 			return ret;
 	}
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (perf_hpp__should_skip(fmt, hists)  || column++ < browser->b.horiz_scroll)
 			continue;
 
@@ -1414,7 +1414,7 @@ static int hist_browser__fprintf_entry(struct hist_browser *browser,
 	if (symbol_conf.use_callchain)
 		printed += fprintf(fp, "%c ", folded_sign);
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		if (perf_hpp__should_skip(fmt, he->hists))
 			continue;
 
@@ -2077,7 +2077,7 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 	memset(options, 0, sizeof(options));
 	memset(actions, 0, sizeof(actions));
 
-	perf_hpp__for_each_format(fmt) {
+	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
 		perf_hpp__reset_width(fmt, hists);
 		/*
 		 * This is done just once, and activates the horizontal scrolling
