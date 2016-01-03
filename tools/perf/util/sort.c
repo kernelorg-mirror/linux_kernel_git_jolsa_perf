@@ -1589,14 +1589,15 @@ static struct perf_hpp_fmt *__hpp_dimension__alloc_hpp(struct hpp_dimension *hd)
 	return fmt;
 }
 
-static int __sort_dimension__add_hpp_sort(struct sort_dimension *sd)
+static int __sort_dimension__add_hpp_sort(struct perf_hpp_list *list,
+					  struct sort_dimension *sd)
 {
 	struct hpp_sort_entry *hse = __sort_dimension__alloc_hpp(sd);
 
 	if (hse == NULL)
 		return -1;
 
-	perf_hpp__register_sort_field(&hse->hpp);
+	perf_hpp_list__register_sort_field(list, &hse->hpp);
 	return 0;
 }
 
@@ -2060,12 +2061,13 @@ out:
 	return ret;
 }
 
-static int __sort_dimension__add(struct sort_dimension *sd)
+static int __sort_dimension__add(struct perf_hpp_list *list,
+				 struct sort_dimension *sd)
 {
 	if (sd->taken)
 		return 0;
 
-	if (__sort_dimension__add_hpp_sort(sd) < 0)
+	if (__sort_dimension__add_hpp_sort(list, sd) < 0)
 		return -1;
 
 	if (sd->entry->se_collapse)
@@ -2076,7 +2078,8 @@ static int __sort_dimension__add(struct sort_dimension *sd)
 	return 0;
 }
 
-static int __hpp_dimension__add(struct hpp_dimension *hd)
+static int __hpp_dimension__add(struct perf_hpp_list *list,
+				struct hpp_dimension *hd)
 {
 	struct perf_hpp_fmt *fmt;
 
@@ -2088,7 +2091,7 @@ static int __hpp_dimension__add(struct hpp_dimension *hd)
 		return -1;
 
 	hd->taken = 1;
-	perf_hpp__register_sort_field(fmt);
+	perf_hpp_list__register_sort_field(list, fmt);
 	return 0;
 }
 
@@ -2126,7 +2129,7 @@ int hpp_dimension__add_output(unsigned col)
 	return __hpp_dimension__add_output(&hpp_sort_dimensions[col]);
 }
 
-static int sort_dimension__add(const char *tok,
+static int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 			       struct perf_evlist *evlist __maybe_unused)
 {
 	unsigned int i;
@@ -2164,7 +2167,7 @@ static int sort_dimension__add(const char *tok,
 			sort__has_socket = 1;
 		}
 
-		return __sort_dimension__add(sd);
+		return __sort_dimension__add(list, sd);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(hpp_sort_dimensions); i++) {
@@ -2173,7 +2176,7 @@ static int sort_dimension__add(const char *tok,
 		if (strncasecmp(tok, hd->name, strlen(tok)))
 			continue;
 
-		return __hpp_dimension__add(hd);
+		return __hpp_dimension__add(list, hd);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(bstack_sort_dimensions); i++) {
@@ -2188,7 +2191,7 @@ static int sort_dimension__add(const char *tok,
 		if (sd->entry == &sort_sym_from || sd->entry == &sort_sym_to)
 			sort__has_sym = 1;
 
-		__sort_dimension__add(sd);
+		__sort_dimension__add(list, sd);
 		return 0;
 	}
 
@@ -2204,7 +2207,7 @@ static int sort_dimension__add(const char *tok,
 		if (sd->entry == &sort_mem_daddr_sym)
 			sort__has_sym = 1;
 
-		__sort_dimension__add(sd);
+		__sort_dimension__add(list, sd);
 		return 0;
 	}
 
@@ -2214,14 +2217,15 @@ static int sort_dimension__add(const char *tok,
 	return -ESRCH;
 }
 
-static int setup_sort_list(char *str, struct perf_evlist *evlist)
+static int setup_sort_list(struct perf_hpp_list *list, char *str,
+			   struct perf_evlist *evlist)
 {
 	char *tmp, *tok;
 	int ret = 0;
 
 	for (tok = strtok_r(str, ", ", &tmp);
 			tok; tok = strtok_r(NULL, ", ", &tmp)) {
-		ret = sort_dimension__add(tok, evlist);
+		ret = sort_dimension__add(list, tok, evlist);
 		if (ret == -EINVAL) {
 			error("Invalid --sort key: `%s'", tok);
 			break;
@@ -2363,7 +2367,7 @@ static int __setup_sorting(struct perf_evlist *evlist)
 		}
 	}
 
-	ret = setup_sort_list(str, evlist);
+	ret = setup_sort_list(&perf_hpp_list, str, evlist);
 
 	free(str);
 	return ret;
@@ -2585,7 +2589,7 @@ int setup_sorting(struct perf_evlist *evlist)
 		return err;
 
 	if (parent_pattern != default_parent_pattern) {
-		err = sort_dimension__add("parent", evlist);
+		err = sort_dimension__add(&perf_hpp_list, "parent", evlist);
 		if (err < 0)
 			return err;
 	}
