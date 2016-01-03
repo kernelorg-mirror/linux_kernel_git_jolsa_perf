@@ -226,20 +226,24 @@ struct perf_hpp_fmt {
 	int idx;
 };
 
-extern struct list_head perf_hpp__list;
-extern struct list_head perf_hpp__sort_list;
+struct perf_hpp_list {
+	struct list_head list;
+	struct list_head sort_list;
+};
+
+extern struct perf_hpp_list perf_hpp_list;
 
 #define perf_hpp__for_each_format(format) \
-	list_for_each_entry(format, &perf_hpp__list, list)
+	list_for_each_entry(format, &perf_hpp_list.list, list)
 
 #define perf_hpp__for_each_format_safe(format, tmp)	\
-	list_for_each_entry_safe(format, tmp, &perf_hpp__list, list)
+	list_for_each_entry_safe(format, tmp, &perf_hpp_list.list, list)
 
 #define perf_hpp__for_each_sort_list(format) \
-	list_for_each_entry(format, &perf_hpp__sort_list, sort_list)
+	list_for_each_entry(format, &perf_hpp_list.sort_list, sort_list)
 
 #define perf_hpp__for_each_sort_list_safe(format, tmp)	\
-	list_for_each_entry_safe(format, tmp, &perf_hpp__sort_list, sort_list)
+	list_for_each_entry_safe(format, tmp, &perf_hpp_list.sort_list, sort_list)
 
 extern struct perf_hpp_fmt perf_hpp__format[];
 
