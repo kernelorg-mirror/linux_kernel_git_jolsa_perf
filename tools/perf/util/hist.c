@@ -951,7 +951,7 @@ hist_entry__cmp(struct hist_entry *left, struct hist_entry *right)
 	struct perf_hpp_fmt *fmt;
 	int64_t cmp = 0;
 
-	perf_hpp__for_each_sort_list(fmt) {
+	perf_hpp_list__for_each_sort_list(&perf_hpp_list, fmt) {
 		cmp = fmt->cmp(fmt, left, right);
 		if (cmp)
 			break;
@@ -966,7 +966,7 @@ hist_entry__collapse(struct hist_entry *left, struct hist_entry *right)
 	struct perf_hpp_fmt *fmt;
 	int64_t cmp = 0;
 
-	perf_hpp__for_each_sort_list(fmt) {
+	perf_hpp_list__for_each_sort_list(&perf_hpp_list, fmt) {
 		cmp = fmt->collapse(fmt, left, right);
 		if (cmp)
 			break;
@@ -1110,7 +1110,7 @@ static int hist_entry__sort(struct hist_entry *a, struct hist_entry *b)
 	struct perf_hpp_fmt *fmt;
 	int64_t cmp = 0;
 
-	perf_hpp__for_each_sort_list(fmt) {
+	perf_hpp_list__for_each_sort_list(&perf_hpp_list, fmt) {
 		if (perf_hpp__should_skip(fmt, a->hists))
 			continue;
 
