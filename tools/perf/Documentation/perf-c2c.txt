@@ -8,7 +8,7 @@ perf-c2c - Shared Data C2C/HITM Analyzer.
 SYNOPSIS
 --------
 [verse]
-'perf c2c'
+'perf c2c' record
 
 DESCRIPTION
 -----------
