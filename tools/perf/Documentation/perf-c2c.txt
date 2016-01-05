@@ -8,7 +8,8 @@ perf-c2c - Shared Data C2C/HITM Analyzer.
 SYNOPSIS
 --------
 [verse]
-'perf c2c'
+'perf c2c record' [<options>] <command>
+'perf c2c record' [<options>] -- [<record command options>] <command>
 
 DESCRIPTION
 -----------
@@ -17,6 +18,51 @@ C2C/HITM analysis. It allows you to track down
 the cacheline contentions.
 
 C2C stands for Cache 2(To) Cache.
+
+C2C RECORD
+----------
+The perf c2c record command setup options related
+to HITM cacheline analysis and calls standard perf
+record command.
+
+Following perf record options are configured by default:
+(check perf record man page for details)
+
+  -W,-d,--sample-cpu
+
+Unless specified otherwise with '-e'options following
+events are monitored by default:
+
+  cpu/mem-loads,ldlat=30/P
+  cpu/mem-stores/P
+
+You can pass any 'perf record' option behind '--' mark.
+
+Please check RECORD OPTIONS section for specific
+record options.
+
+RECORD OPTIONS
+--------------
+-e::
+--event=::
+	Select the PMU event. Use 'perf mem record -e list'
+	to list available events.
+
+-v::
+--verbose::
+	Be more verbose (show counter open errors, etc).
+
+-l::
+--ldlat::
+	Configure mem-loads latency.
+
+-k::
+--all-kernel::
+	Configure all used events to run in kernel space.
+
+-u::
+--all-user::
+	Configure all used events to run in user space.
 
 SEE ALSO
 --------
