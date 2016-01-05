@@ -360,7 +360,7 @@ static size_t hist_entry__callchain_fprintf(struct hist_entry *he,
 				    !prefixcmp(sort_order, "comm"))) {
 		struct perf_hpp_fmt *fmt;
 
-		perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
+		hists__for_each_format(hists, fmt) {
 			if (!perf_hpp__is_sort_entry(fmt))
 				continue;
 
@@ -384,7 +384,7 @@ static int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp)
 	if (symbol_conf.exclude_other && !he->parent)
 		return 0;
 
-	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
+	hists__for_each_format(he->hists, fmt) {
 		if (perf_hpp__should_skip(fmt, he->hists))
 			continue;
 
@@ -452,7 +452,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 
 	init_rem_hits();
 
-	perf_hpp_list__for_each_format(&perf_hpp_list, fmt)
+	hists__for_each_format(hists, fmt)
 		perf_hpp__reset_width(fmt, hists);
 
 	if (symbol_conf.col_width_list_str)
@@ -463,7 +463,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 
 	fprintf(fp, "# ");
 
-	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
+	hists__for_each_format(hists, fmt) {
 		if (perf_hpp__should_skip(fmt, hists))
 			continue;
 
@@ -487,7 +487,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 
 	fprintf(fp, "# ");
 
-	perf_hpp_list__for_each_format(&perf_hpp_list, fmt) {
+	hists__for_each_format(hists, fmt) {
 		unsigned int i;
 
 		if (perf_hpp__should_skip(fmt, hists))
