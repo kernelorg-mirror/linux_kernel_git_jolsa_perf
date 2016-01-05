@@ -40,9 +40,9 @@ static int parse_record_events(const struct option *opt,
 	for (j = 0; j < PERF_MEM_EVENTS__MAX; j++) {
 		struct perf_mem_event *e = &perf_mem_events[j];
 
-		fprintf(stderr, "%-13s%-*s%s\n",
+		fprintf(stderr, "%-17s%-*s%s\n",
 			e->tag,
-			verbose ? 25 : 0,
+			verbose ? 27 : 0,
 			verbose ? perf_mem_events__name(j) : "",
 			e->supported ? ": available" : "");
 	}
