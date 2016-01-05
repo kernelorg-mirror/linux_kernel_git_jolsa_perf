@@ -1591,6 +1591,7 @@ int __hists__init(struct hists *hists)
 	hists->entries = RB_ROOT;
 	pthread_mutex_init(&hists->lock, NULL);
 	hists->socket_filter = -1;
+	hists->hpp_list = &perf_hpp_list;
 	return 0;
 }
 
