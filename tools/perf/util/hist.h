@@ -75,6 +75,7 @@ struct hists {
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
 	int			socket_filter;
+	struct perf_hpp_list	*hpp_list;
 };
 
 struct hist_entry_iter;
