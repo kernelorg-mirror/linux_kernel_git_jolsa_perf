@@ -1220,6 +1220,25 @@ struct sort_entry sort_transaction = {
 	.se_cmp		= sort__transaction_cmp,
 	.se_snprintf	= hist_entry__transaction_snprintf,
 	.se_width_idx	= HISTC_TRANSACTION,
+}
+;
+static int
+hist_entry__c2c_dcacheline_snprintf(struct hist_entry *he, char *bf,
+				    size_t size, unsigned int width)
+{
+	uint64_t addr = 0;
+
+	if (he->mem_info)
+		addr = cl_address(he->mem_info->daddr.al_addr);
+
+	return repsep_snprintf(bf, size, "0x%-*llx", width, addr);
+}
+
+struct sort_entry sort_c2c_dcacheline = {
+	.se_header	= "Data Cacheline",
+	.se_cmp		= sort__dcacheline_cmp,
+	.se_snprintf	= hist_entry__c2c_dcacheline_snprintf,
+	.se_width_idx	= HISTC_C2C_DCACHELINE,
 };
 
 struct sort_dimension {
@@ -1281,7 +1300,7 @@ static struct sort_dimension memory_sort_dimensions[] = {
 #define DIM(d, n, func) [d - __SORT_C2C_MODE] = { .name = n, .entry = &(func) }
 
 static struct sort_dimension c2c_sort_dimensions[] = {
-	0
+	DIM(SORT_C2C_DCACHELINE, "c2c_dcacheline", sort_c2c_dcacheline),
 };
 
 #undef DIM
