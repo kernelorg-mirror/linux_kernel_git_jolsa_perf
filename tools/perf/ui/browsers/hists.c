@@ -2069,6 +2069,8 @@ struct hist_browser *hist_browser__new(struct hists *hists,
 	struct hist_browser *browser = zalloc(sizeof(*browser));
 
 	if (browser) {
+		struct perf_hpp_fmt *fmt;
+
 		browser->hists = hists;
 		browser->b.refresh = hist_browser__refresh;
 		browser->b.refresh_dimensions = hist_browser__refresh_dimensions;
@@ -2079,6 +2081,11 @@ struct hist_browser *hist_browser__new(struct hists *hists,
 		browser->hbt = hbt;
 		browser->env = env;
 		browser->title = hists_browser__title;
+
+		hists__for_each_format(hists, fmt) {
+			perf_hpp__reset_width(fmt, hists);
+			++browser->b.columns;
+		}
 	}
 
 	return browser;
@@ -2673,7 +2680,6 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 	int key = -1;
 	char buf[64];
 	int delay_secs = hbt ? hbt->refresh : 0;
-	struct perf_hpp_fmt *fmt;
 
 #define HIST_BROWSER_HELP_COMMON					\
 	"h/?/F1        Show this window\n"				\
@@ -2731,18 +2737,6 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 
 	memset(options, 0, sizeof(options));
 	memset(actions, 0, sizeof(actions));
-
-	hists__for_each_format(browser->hists, fmt) {
-		perf_hpp__reset_width(fmt, hists);
-		/*
-		 * This is done just once, and activates the horizontal scrolling
-		 * code in the ui_browser code, it would be better to have a the
-		 * counter in the perf_hpp code, but I couldn't find doing it here
-		 * works, FIXME by setting this in hist_browser__new, for now, be
-		 * clever 8-)
-		 */
-		++browser->b.columns;
-	}
 
 	if (symbol_conf.col_width_list_str)
 		perf_hpp__set_user_width(symbol_conf.col_width_list_str);
