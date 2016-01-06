@@ -2766,3 +2766,38 @@ void reset_output_field(void)
 	reset_dimensions();
 	perf_hpp__reset_output_field(&perf_hpp_list);
 }
+
+int hists__setup_hpp_list(struct hists *hists,
+			  const char *sort_,
+			  const char *output_)
+{
+	struct perf_hpp_list *list = hists->hpp_list;
+	char *output = output_ ? strdup(output_) : strdup(sort_);
+	char *sort   = strdup(sort_);
+	int ret;
+
+	if (!sort || !output)
+		return -ENOMEM;
+
+	reset_dimensions();
+
+	ret = setup_sort_list(list, (char *) sort, NULL);
+	if (ret)
+		goto out;
+
+	reset_dimensions();
+
+	ret = setup_output_list(list, (char *) output);
+	if (ret)
+		goto out;
+
+	/* copy sort keys to output fields */
+	perf_hpp__setup_output_field(list);
+	/* and then copy output fields to sort keys */
+	perf_hpp__append_sort_keys(list);
+
+out:
+	free(output);
+	free(sort);
+	return ret;
+}

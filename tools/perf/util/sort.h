@@ -267,4 +267,8 @@ int report_parse_ignore_callees_opt(const struct option *opt, const char *arg, i
 bool is_strict_order(const char *order);
 
 int hpp_dimension__add_output(unsigned col);
+
+int hists__setup_hpp_list(struct hists *hists,
+			  const char *sort_,
+			  const char *output_);
 #endif	/* __PERF_SORT_H */
