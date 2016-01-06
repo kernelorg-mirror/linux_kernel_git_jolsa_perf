@@ -804,6 +804,7 @@ int record_parse_callchain_opt(const struct option *opt,
 	int ret;
 	struct record_opts *record = (struct record_opts *)opt->value;
 
+	record->sample_address = true;
 	record->callgraph_set = true;
 	callchain_param.enabled = !unset;
 
