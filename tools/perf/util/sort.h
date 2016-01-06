@@ -230,6 +230,7 @@ enum sort_type {
 	/* c2c mode specific sort keys */
 	__SORT_C2C_MODE,
 	SORT_C2C_DCACHELINE = __SORT_C2C_MODE,
+	SORT_C2C_DADDR,
 };
 
 /*
