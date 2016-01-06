@@ -10,6 +10,7 @@ SYNOPSIS
 [verse]
 'perf c2c record' [<options>] <command>
 'perf c2c record' [<options>] -- [<record command options>] <command>
+'perf c2c report' [<options>]
 
 DESCRIPTION
 -----------
@@ -41,6 +42,11 @@ You can pass any 'perf record' option behind '--' mark.
 Please check RECORD OPTIONS section for specific
 record options.
 
+C2C REPORT
+----------
+The perf c2c report command displays shared data analysis.
+It comes in two display modes: stdio and tui (default).
+
 RECORD OPTIONS
 --------------
 -e::
@@ -63,6 +69,20 @@ RECORD OPTIONS
 -u::
 --all-user::
 	Configure all used events to run in user space.
+
+RECORD OPTIONS
+--------------
+-k::
+--vmlinux=<file>::
+	vmlinux pathname
+
+-v::
+--verbose::
+	Be more verbose (show counter open errors, etc).
+
+-i::
+--input=::
+	Input file name. (default: perf.data unless stdin is a fifo)
 
 SEE ALSO
 --------
