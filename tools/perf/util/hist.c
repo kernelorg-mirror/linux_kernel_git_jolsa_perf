@@ -169,6 +169,8 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 	hists__new_col_len(hists, HISTC_LOCAL_WEIGHT, 12);
 	hists__new_col_len(hists, HISTC_GLOBAL_WEIGHT, 12);
 
+	hists__new_col_len(hists, HISTC_C2C_DCACHELINE, 25);
+
 	if (h->srcline)
 		hists__new_col_len(hists, HISTC_SRCLINE, strlen(h->srcline));
 
