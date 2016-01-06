@@ -9,12 +9,146 @@
 #include "hist.h"
 #include "tool.h"
 #include "data.h"
+#include "sort.h"
 
 struct perf_c2c {
 	struct perf_tool tool;
+	struct c2c_hists c2c_hists;
 };
 
 static struct perf_c2c c2c;
+
+#define C2C_HISTS (&c2c.c2c_hists.hists)
+
+static int c2c_hists__init(struct c2c_hists *c2c_hists,
+			   const char *sort, const char *output)
+{
+	perf_hpp_list__init(&c2c_hists->hpp_list);
+	__hists__init(&c2c_hists->hists, &c2c_hists->hpp_list);
+	return hists__setup_hpp_list(&c2c_hists->hists, sort, output);
+}
+
+static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
+			     const char *sort, const char *output)
+{
+	perf_hpp__reset_output_field(&c2c_hists->hpp_list);
+	return hists__setup_hpp_list(&c2c_hists->hists, sort, output);
+}
+
+static struct hist_entry*
+__hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
+{
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
+	struct hist_entry *he;
+	int64_t cmp;
+
+	p = &hists->entries_in->rb_node;
+
+	while (*p != NULL) {
+		parent = *p;
+		he = rb_entry(parent, struct hist_entry, rb_node_in);
+
+		cmp = hist_entry__cmp(he, entry);
+
+		if (!cmp) {
+			/*
+			 * This mem info was allocated from sample__resolve_mem
+			 * and will not be used anymore.
+			 */
+			zfree(&entry->mem_info);
+
+			/* If the map of an existing hist_entry has
+			 * become out-of-date due to an exec() or
+			 * similar, update it.  Otherwise we will
+			 * mis-adjust symbol addresses when computing
+			 * the history counter to increment.
+			 */
+			if (he->ms.map != entry->ms.map) {
+				map__put(he->ms.map);
+				he->ms.map = map__get(entry->ms.map);
+			}
+
+			goto out;
+		}
+
+		if (cmp < 0)
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
+
+	he = hist_entry__new(entry, true);
+	if (!he)
+		return NULL;
+
+	hists->nr_entries++;
+
+	rb_link_node(&he->rb_node_in, parent, p);
+	rb_insert_color(&he->rb_node_in, hists->entries_in);
+out:
+	return he;
+}
+
+static struct hist_entry*
+hists__add_main_entry(struct hists *hists, struct addr_location *al,
+		     struct mem_info *mi)
+{
+	struct hist_entry entry = {
+		.thread	= al->thread,
+		.comm = thread__comm(al->thread),
+		.ms = {
+			.map	= al->map,
+			.sym	= al->sym,
+		},
+		.socket		= al->socket,
+		.cpu		= al->cpu,
+		.cpumode	= al->cpumode,
+		.ip		= al->addr,
+		.level		= al->level,
+		.hists		= hists,
+		.mem_info	= mi,
+	};
+
+	return __hists__add_main_entry(hists, &entry);
+}
+
+static int process_sample_event(struct perf_tool *tool __maybe_unused,
+				union perf_event *event,
+				struct perf_sample *sample,
+				struct perf_evsel *evsel __maybe_unused,
+				struct machine *machine)
+{
+	struct addr_location al;
+	struct mem_info *mi;
+	struct hist_entry *he;
+
+	if (perf_event__preprocess_sample(event, machine, &al, sample) < 0) {
+		fprintf(stderr, "problem processing %d event, skipping it.\n",
+				event->header.type);
+		return -1;
+	}
+
+	mi = sample__resolve_mem(sample, &al);
+	if (mi == NULL)
+		return -ENOMEM;
+
+	he = hists__add_main_entry(C2C_HISTS, &al, mi);
+	return he ? 0 : -1;
+}
+
+static struct perf_c2c c2c = {
+	.tool = {
+		.sample		= process_sample_event,
+		.mmap		= perf_event__process_mmap,
+		.mmap2		= perf_event__process_mmap2,
+		.comm		= perf_event__process_comm,
+		.lost		= perf_event__process_lost,
+		.fork		= perf_event__process_fork,
+		.build_id	= perf_event__process_build_id,
+		.ordered_events	= true,
+	},
+};
 
 static const char * const c2c_usage[] = {
 	"perf c2c {record|report}",
@@ -27,6 +161,13 @@ static const char * const __usage_report[] = {
 };
 
 static const char * const *report_c2c_usage = __usage_report;
+
+static int perf_c2c_report(void)
+{
+	c2c_hists__reinit(&c2c.c2c_hists, "c2c_dcacheline", NULL);
+	hists__output_resort(C2C_HISTS, NULL);
+	return 0;
+}
 
 static int perf_c2c__report(int argc, const char **argv)
 {
@@ -46,8 +187,12 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	argc = parse_options(argc, argv, c2c_options, report_c2c_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
-	if (!argc)
-		usage_with_options(report_c2c_usage, c2c_options);
+
+	use_browser = 1;
+	setup_browser(false);
+
+	if (c2c_hists__init(&c2c.c2c_hists, "c2c_dcacheline", NULL))
+		return -1;
 
 	session = perf_session__new(&file, 0, &c2c.tool);
 	if (session == NULL) {
@@ -64,6 +209,10 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_debug("No pipe support at the moment.\n");
 		goto out_session;
 	}
+
+	err = perf_session__process_events(session);
+	if (!err)
+		err = perf_c2c_report();
 
 out_session:
 	perf_session__delete(session);
