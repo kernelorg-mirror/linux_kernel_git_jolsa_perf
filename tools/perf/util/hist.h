@@ -409,4 +409,6 @@ int perf_hist_config(const char *var, const char *value);
 struct hist_entry *hist_entry__new(struct hist_entry *template,
 				   bool sample_self);
 
+void perf_hpp_list__init(struct perf_hpp_list *list);
+
 #endif	/* __PERF_HIST_H */
