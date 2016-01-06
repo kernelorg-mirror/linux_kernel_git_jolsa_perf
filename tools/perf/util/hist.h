@@ -55,6 +55,7 @@ enum hist_column {
 	HISTC_CYCLES,
 	HISTC_TRACE,
 	HISTC_C2C_DCACHELINE,
+	HISTC_C2C_DADDR,
 	HISTC_NR_COLS, /* Last entry */
 };
 
