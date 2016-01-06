@@ -37,6 +37,8 @@ struct hist_browser {
 	/* Get title string. */
 	int		     (*title)(struct hist_browser *browser,
 				      char *bf, size_t size);
+
+	bool		     c2c_filter;
 };
 
 extern void hist_browser__init_hpp(void);
@@ -50,7 +52,7 @@ static struct rb_node *hists__filter_entries(struct rb_node *nd,
 
 static bool hist_browser__has_filter(struct hist_browser *hb)
 {
-	return hists__has_filter(hb->hists) || hb->min_pcnt || symbol_conf.has_filter;
+	return hists__has_filter(hb->hists) || hb->min_pcnt || symbol_conf.has_filter || hb->c2c_filter;
 }
 
 static int hist_browser__get_folding(struct hist_browser *browser)
@@ -2033,6 +2035,23 @@ static void hist_browser__update_nr_entries(struct hist_browser *hb)
 	hb->nr_non_filtered_entries = nr_entries;
 }
 
+static void c2c_browser__update_nr_entries(struct hist_browser *hb)
+{
+	u64 nr_entries = 0;
+	struct rb_node *nd = rb_first(&hb->hists->entries);
+
+	do {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+
+		if (!he->filtered)
+			nr_entries++;
+
+		nd = rb_next(nd);
+	} while (nd);
+
+	hb->nr_non_filtered_entries = nr_entries;
+}
+
 static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 				    const char *helpline,
 				    bool left_exits,
@@ -2371,6 +2390,58 @@ out:
 	hist_browser__delete(browser);
 	free_popup_options(options, MAX_OPTIONS);
 	return key;
+}
+
+static int perf_c2c_browser__title(struct hist_browser *browser,
+				   char *bf, size_t size)
+{
+	scnprintf(bf, size,
+		  "%lu entries", browser->nr_non_filtered_entries);
+	return 0;
+}
+
+static struct hist_browser*
+perf_c2c_browser__new(struct hists *hists)
+{
+	struct hist_browser *browser = hist_browser__new(hists);
+
+	if (browser) {
+		browser->title = perf_c2c_browser__title;
+		browser->c2c_filter = true;
+	}
+
+	return browser;
+}
+
+int perf_c2c__hists_browse(struct hists *hists)
+{
+	struct hist_browser *browser;
+	int key = -1;
+
+	browser = perf_c2c_browser__new(hists);
+	if (browser == NULL)
+		return -1;
+
+	/* reset abort key so that it can get Ctrl-C as a key */
+	SLang_reset_tty();
+	SLang_init_tty(0, 0, 0);
+
+	c2c_browser__update_nr_entries(browser);
+
+	while (1) {
+		key = hist_browser__run(browser, "help");
+
+		switch (key) {
+		case 'q':
+			goto out;
+		default:
+			break;
+		}
+	}
+
+out:
+	hist_browser__delete(browser);
+	return 0;
 }
 
 struct perf_evsel_menu {
