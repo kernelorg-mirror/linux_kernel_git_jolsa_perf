@@ -10,6 +10,7 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include "ui/browsers/hists.h"
 
 struct c2c_hists {
 	struct hists		hists;
@@ -30,6 +31,7 @@ struct c2c_hist_entry {
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
+	bool			use_stdio;
 };
 
 static struct perf_c2c c2c;
@@ -569,6 +571,76 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	print_cachelines(out);
 }
 
+static void c2c_browser__update_nr_entries(struct hist_browser *hb)
+{
+	u64 nr_entries = 0;
+	struct rb_node *nd = rb_first(&hb->hists->entries);
+
+	do {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+
+		if (!he->filtered)
+			nr_entries++;
+
+		nd = rb_next(nd);
+	} while (nd);
+
+	hb->nr_non_filtered_entries = nr_entries;
+}
+
+static int perf_c2c_browser__title(struct hist_browser *browser,
+				   char *bf, size_t size)
+{
+	scnprintf(bf, size,
+		  "Shared Data Cache Line Table "
+		  "(%lu entries)", browser->nr_non_filtered_entries);
+	return 0;
+}
+
+static struct hist_browser*
+perf_c2c_browser__new(struct hists *hists)
+{
+	struct hist_browser *browser = hist_browser__new(hists);
+
+	if (browser) {
+		browser->title = perf_c2c_browser__title;
+		browser->c2c_filter = true;
+	}
+
+	return browser;
+}
+
+static int perf_c2c__hists_browse(struct hists *hists)
+{
+	struct hist_browser *browser;
+	int key = -1;
+
+	browser = perf_c2c_browser__new(hists);
+	if (browser == NULL)
+		return -1;
+
+	/* reset abort key so that it can get Ctrl-C as a key */
+	SLang_reset_tty();
+	SLang_init_tty(0, 0, 0);
+
+	c2c_browser__update_nr_entries(browser);
+
+	while (1) {
+		key = hist_browser__run(browser, "help");
+
+		switch (key) {
+		case 'q':
+			goto out;
+		default:
+			break;
+		}
+	}
+
+out:
+	hist_browser__delete(browser);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -583,6 +655,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
+	OPT_BOOLEAN(0, "stdio", &c2c.use_stdio,
+		    "Use the stdio interface"),
 	OPT_END()
 	};
 	int err = 0;
@@ -591,6 +665,13 @@ static int perf_c2c__report(int argc, const char **argv)
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc)
 		usage_with_options(report_c2c_usage, c2c_options);
+
+	if (c2c.use_stdio)
+		use_browser = 0;
+	else
+		use_browser = 1;
+
+	setup_browser(false);
 
 	if (!input_name || !strlen(input_name))
 		input_name = "perf.data";
@@ -632,7 +713,10 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	ui_progress__finish();
 
-	perf_c2c__hists_fprintf(stdout);
+	if (c2c.use_stdio)
+		perf_c2c__hists_fprintf(stdout);
+	else
+		perf_c2c__hists_browse(&c2c.hists.hists);
 
 out_session:
 	perf_session__delete(session);
