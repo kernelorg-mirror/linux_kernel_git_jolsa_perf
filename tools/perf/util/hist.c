@@ -314,8 +314,8 @@ void hists__delete_entries(struct hists *hists)
  * histogram, sorted on item, collects periods
  */
 
-static struct hist_entry *hist_entry__new(struct hist_entry *template,
-					  bool sample_self)
+struct hist_entry *hist_entry__new(struct hist_entry *template,
+				   bool sample_self)
 {
 	size_t callchain_size = 0;
 	struct hist_entry *he;
