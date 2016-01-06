@@ -1278,6 +1278,14 @@ static struct sort_dimension memory_sort_dimensions[] = {
 
 #undef DIM
 
+#define DIM(d, n, func) [d - __SORT_C2C_MODE] = { .name = n, .entry = &(func) }
+
+static struct sort_dimension c2c_sort_dimensions[] = {
+	0
+};
+
+#undef DIM
+
 struct hpp_dimension {
 	const char		*name;
 	struct perf_hpp_fmt	*fmt;
@@ -2099,6 +2107,16 @@ static int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 		return 0;
 	}
 
+	for (i = 0; i < ARRAY_SIZE(c2c_sort_dimensions); i++) {
+		struct sort_dimension *sd = &c2c_sort_dimensions[i];
+
+		if (strncasecmp(tok, sd->name, strlen(tok)))
+			continue;
+
+		__sort_dimension__add(list, sd);
+		return 0;
+	}
+
 	if (!add_dynamic_entry(evlist, tok))
 		return 0;
 
@@ -2394,6 +2412,15 @@ static int output_field_add(struct perf_hpp_list *list, char *tok)
 		return __sort_dimension__add_output(list, sd);
 	}
 
+	for (i = 0; i < ARRAY_SIZE(c2c_sort_dimensions); i++) {
+		struct sort_dimension *sd = &c2c_sort_dimensions[i];
+
+		if (strncasecmp(tok, sd->name, strlen(tok)))
+			continue;
+
+		return __sort_dimension__add_output(list, sd);
+	}
+
 	return -ESRCH;
 }
 
@@ -2432,6 +2459,9 @@ static void reset_dimensions(void)
 
 	for (i = 0; i < ARRAY_SIZE(memory_sort_dimensions); i++)
 		memory_sort_dimensions[i].taken = 0;
+
+	for (i = 0; i < ARRAY_SIZE(c2c_sort_dimensions); i++)
+		c2c_sort_dimensions[i].taken = 0;
 }
 
 bool is_strict_order(const char *order)
