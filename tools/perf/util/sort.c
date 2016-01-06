@@ -1260,6 +1260,26 @@ struct sort_entry sort_c2c_daddr = {
 	.se_width_idx	= HISTC_C2C_DADDR,
 };
 
+static int
+hist_entry__c2c_dcacheline_offset_snprintf(struct hist_entry *he,
+					   char *bf, size_t size,
+					   unsigned int width)
+{
+	uint64_t addr = 0;
+
+	if (he->mem_info)
+		addr = cl_offset(he->mem_info->daddr.al_addr);
+
+	return repsep_snprintf(bf, size, "%*llu", width, addr);
+}
+
+struct sort_entry sort_c2c_dcacheline_offset = {
+	.se_header	= "Off",
+	.se_cmp		= sort__daddr_cmp,
+	.se_snprintf	= hist_entry__c2c_dcacheline_offset_snprintf,
+	.se_width_idx	= HISTC_C2C_DCACHELINE_OFFSET,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1321,6 +1341,7 @@ static struct sort_dimension memory_sort_dimensions[] = {
 static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_DCACHELINE, "c2c_dcacheline", sort_c2c_dcacheline),
 	DIM(SORT_C2C_DADDR, "c2c_daddr", sort_c2c_daddr),
+	DIM(SORT_C2C_DCACHELINE_OFFSET, "c2c_offset", sort_c2c_dcacheline_offset),
 };
 
 #undef DIM
