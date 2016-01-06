@@ -321,7 +321,7 @@ static int perf_c2c_report(void)
 {
 	c2c_hists__reinit(&c2c.c2c_hists, "c2c_dcacheline", NULL);
 	hists__output_resort_cb(C2C_HISTS, NULL, resort_cl_cb);
-	return 0;
+	return perf_c2c__hists_browse(C2C_HISTS);
 }
 
 static int perf_c2c__report(int argc, const char **argv)
