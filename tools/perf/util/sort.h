@@ -226,6 +226,9 @@ enum sort_type {
 	SORT_MEM_SNOOP,
 	SORT_MEM_DCACHELINE,
 	SORT_MEM_IADDR_SYMBOL,
+
+	/* c2c mode specific sort keys */
+	__SORT_C2C_MODE,
 };
 
 /*
