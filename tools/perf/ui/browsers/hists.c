@@ -2368,6 +2368,71 @@ out:
 	return key;
 }
 
+static int perf_c2c__browse_cacheline(struct hist_entry *he)
+{
+	struct c2c_hists *c2c_hists = he->c2c_hists;
+	struct hist_browser *browser;
+	int key = -1;
+
+	browser = hist_browser__new(&c2c_hists->hists);
+	if (browser == NULL)
+		return -1;
+
+	/* reset abort key so that it can get Ctrl-C as a key */
+	SLang_reset_tty();
+	SLang_init_tty(0, 0, 0);
+
+	hist_browser__update_nr_entries(browser);
+
+	while (1) {
+		key = hist_browser__run(browser, "help");
+
+		switch (key) {
+		case 'q':
+			goto out;
+		default:
+			break;
+		}
+	}
+
+out:
+	hist_browser__delete(browser);
+	return 0;
+}
+
+int perf_c2c__hists_browse(struct hists *hists)
+{
+	struct hist_browser *browser = hist_browser__new(hists);
+	int key = -1;
+
+	if (browser == NULL)
+		return -1;
+
+	/* reset abort key so that it can get Ctrl-C as a key */
+	SLang_reset_tty();
+	SLang_init_tty(0, 0, 0);
+
+	hist_browser__update_nr_entries(browser);
+
+	while (1) {
+		key = hist_browser__run(browser, "help");
+
+		switch (key) {
+		case 'q':
+			goto out;
+		case K_ENTER:
+			perf_c2c__browse_cacheline(browser->he_selection);
+			break;
+		default:
+			break;
+		}
+	}
+
+out:
+	hist_browser__delete(browser);
+	return 0;
+}
+
 struct perf_evsel_menu {
 	struct ui_browser b;
 	struct perf_evsel *selection;

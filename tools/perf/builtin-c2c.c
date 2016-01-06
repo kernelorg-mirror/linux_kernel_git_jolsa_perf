@@ -239,7 +239,7 @@ static int perf_c2c_browse_report(struct perf_c2c *c2c)
                 nd = rb_next(nd);
         } while (nd);
 
-	return 0;
+	return perf_c2c__hists_browse(&c2c->hists);
 }
 
 static int perf_c2c__report(int argc, const char **argv)
