@@ -406,4 +406,7 @@ int parse_filter_percentage(const struct option *opt __maybe_unused,
 			    const char *arg, int unset __maybe_unused);
 int perf_hist_config(const char *var, const char *value);
 
+struct hist_entry *hist_entry__new(struct hist_entry *template,
+				   bool sample_self);
+
 #endif	/* __PERF_HIST_H */
