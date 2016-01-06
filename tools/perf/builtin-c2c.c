@@ -11,6 +11,7 @@
 #include "sort.h"
 #include "tool.h"
 #include "data.h"
+#include "ui/browsers/hists.h"
 
 struct c2c_hists {
 	struct hists		hists;
@@ -492,6 +493,75 @@ static void resort_cl_cb(struct hist_entry *he)
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
 }
 
+static void c2c_browser__update_nr_entries(struct hist_browser *hb)
+{
+	u64 nr_entries = 0;
+	struct rb_node *nd = rb_first(&hb->hists->entries);
+
+	do {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+
+		if (!he->filtered)
+			nr_entries++;
+
+		nd = rb_next(nd);
+	} while (nd);
+
+	hb->nr_non_filtered_entries = nr_entries;
+}
+
+static int perf_c2c_browser__title(struct hist_browser *browser,
+				   char *bf, size_t size)
+{
+	scnprintf(bf, size,
+		  "%lu entries", browser->nr_non_filtered_entries);
+	return 0;
+}
+
+static struct hist_browser*
+perf_c2c_browser__new(struct hists *hists)
+{
+	struct hist_browser *browser = hist_browser__new(hists);
+
+	if (browser) {
+		browser->title = perf_c2c_browser__title;
+		browser->c2c_filter = true;
+	}
+
+	return browser;
+}
+
+static int perf_c2c__hists_browse(struct hists *hists)
+{
+	struct hist_browser *browser;
+	int key = -1;
+
+	browser = perf_c2c_browser__new(hists);
+	if (browser == NULL)
+		return -1;
+
+	/* reset abort key so that it can get Ctrl-C as a key */
+	SLang_reset_tty();
+	SLang_init_tty(0, 0, 0);
+
+	c2c_browser__update_nr_entries(browser);
+
+	while (1) {
+		key = hist_browser__run(browser, "help");
+
+		switch (key) {
+		case 'q':
+			goto out;
+		default:
+			break;
+		}
+	}
+
+out:
+	hist_browser__delete(browser);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -508,6 +578,9 @@ static int perf_c2c__report(int argc, const char **argv)
 	OPT_END()
 	};
 	int err = 0;
+
+	use_browser = 1;
+	setup_browser(false);
 
 	argc = parse_options(argc, argv, c2c_options, report_c2c_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
@@ -551,7 +624,9 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	hists__output_resort_cb(&c2c.hists.hists, NULL, resort_cl_cb);
 
-	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
+	//hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
+
+	perf_c2c__hists_browse(&c2c.hists.hists);
 
 out_session:
 	perf_session__delete(session);
