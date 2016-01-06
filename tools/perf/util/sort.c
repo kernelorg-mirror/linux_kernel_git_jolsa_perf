@@ -2092,9 +2092,6 @@ static int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 		if (strncasecmp(tok, sd->name, strlen(tok)))
 			continue;
 
-		if (sort__mode != SORT_MODE__MEMORY)
-			return -EINVAL;
-
 		if (sd->entry == &sort_mem_daddr_sym)
 			sort__has_sym = 1;
 
