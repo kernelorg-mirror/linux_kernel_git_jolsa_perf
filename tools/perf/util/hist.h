@@ -439,4 +439,6 @@ void perf_hpp_list__init(struct perf_hpp_list *list);
 struct hist_entry *hist_entry__new(struct hist_entry *template,
 				   bool sample_self);
 
+int perf_c2c__hists_browse(struct hists *hists);
+
 #endif	/* __PERF_HIST_H */
