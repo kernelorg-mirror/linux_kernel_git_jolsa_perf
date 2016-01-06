@@ -47,6 +47,11 @@ extern struct sort_entry sort_sym_to;
 extern enum sort_type sort__first_dimension;
 extern const char default_mem_sort_order[];
 
+struct c2c_hists {
+	struct hists		hists;
+	struct perf_hpp_list	hpp_list;
+};
+
 struct he_stat {
 	u64			period;
 	u64			period_sys;
@@ -97,6 +102,8 @@ struct hist_entry {
 
 	/* We are added by hists__add_dummy_entry. */
 	bool			dummy;
+
+	struct c2c_hists	*c2c_hists;
 
 	char			level;
 	u8			filtered;
