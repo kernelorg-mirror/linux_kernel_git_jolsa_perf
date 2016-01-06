@@ -2064,9 +2064,7 @@ static int hist_browser__dump(struct hist_browser *browser)
 	return 0;
 }
 
-struct hist_browser *hist_browser__new(struct hists *hists,
-				       struct hist_browser_timer *hbt,
-				       struct perf_env *env)
+struct hist_browser* hist_browser__new(struct hists *hists)
 {
 	struct hist_browser *browser = zalloc(sizeof(*browser));
 
@@ -2080,9 +2078,6 @@ struct hist_browser *hist_browser__new(struct hists *hists,
 		browser->b.use_navkeypressed = true;
 		browser->show_headers = symbol_conf.show_hist_headers;
 		browser->header_lines = 1;
-		browser->hbt = hbt;
-		browser->env = env;
-		browser->title = hists_browser__title;
 
 		hists__for_each_format(hists, fmt) {
 			perf_hpp__reset_width(fmt, hists);
@@ -2090,6 +2085,21 @@ struct hist_browser *hist_browser__new(struct hists *hists,
 		}
 	}
 
+	return browser;
+}
+
+static struct hist_browser*
+perf_evsel_browser__new(struct perf_evsel *evsel,
+			struct hist_browser_timer *hbt,
+			struct perf_env *env)
+{
+	struct hist_browser *browser = hist_browser__new(evsel__hists(evsel));
+
+	if (browser) {
+		browser->hbt   = hbt;
+		browser->env   = env;
+		browser->title = hists_browser__title;
+	}
 	return browser;
 }
 
@@ -2675,7 +2685,7 @@ static int perf_evsel__hists_browse(struct perf_evsel *evsel, int nr_events,
 				    struct perf_env *env)
 {
 	struct hists *hists = evsel__hists(evsel);
-	struct hist_browser *browser = hist_browser__new(hists, hbt, env);
+	struct hist_browser *browser = perf_evsel_browser__new(evsel, hbt, env);
 	struct branch_info *bi;
 #define MAX_OPTIONS  16
 	char *options[MAX_OPTIONS];
