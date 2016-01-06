@@ -1231,7 +1231,7 @@ hist_entry__c2c_dcacheline_snprintf(struct hist_entry *he, char *bf,
 	if (he->mem_info)
 		addr = cl_address(he->mem_info->daddr.addr);
 
-	return repsep_snprintf(bf, size, "0x%-*llx", width, addr);
+	return repsep_snprintf(bf, size, "0x%-*llx", width - 2, addr);
 }
 
 static int64_t
@@ -1257,6 +1257,25 @@ struct sort_entry sort_c2c_dcacheline = {
 	.se_cmp		= hist_entry__c2c_dcacheline_cmp,
 	.se_snprintf	= hist_entry__c2c_dcacheline_snprintf,
 	.se_width_idx	= HISTC_C2C_DCACHELINE,
+};
+
+static int
+hist_entry__c2c_daddr_snprintf(struct hist_entry *he, char *bf,
+			       size_t size, unsigned int width)
+{
+	uint64_t addr = 0;
+
+	if (he->mem_info)
+		addr = he->mem_info->daddr.al_addr;
+
+	return repsep_snprintf(bf, size, "0x%-*llx", width - 2, addr);
+}
+
+struct sort_entry sort_c2c_daddr = {
+	.se_header	= "Data Address",
+	.se_cmp		= sort__daddr_cmp,
+	.se_snprintf	= hist_entry__c2c_daddr_snprintf,
+	.se_width_idx	= HISTC_C2C_DADDR,
 };
 
 struct sort_dimension {
@@ -1319,6 +1338,7 @@ static struct sort_dimension memory_sort_dimensions[] = {
 
 static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_DCACHELINE, "c2c_dcacheline", sort_c2c_dcacheline),
+	DIM(SORT_C2C_DADDR, "c2c_daddr", sort_c2c_daddr),
 };
 
 #undef DIM
