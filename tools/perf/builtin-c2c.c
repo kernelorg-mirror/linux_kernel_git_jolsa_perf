@@ -10,10 +10,13 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include "evlist.h"
 
 struct perf_c2c {
 	struct perf_tool tool;
 	struct c2c_hists c2c_hists;
+	bool		 dont_use_callchains;
+	int		 max_stack;
 };
 
 static struct perf_c2c c2c;
@@ -306,6 +309,7 @@ static struct perf_c2c c2c = {
 		.build_id	= perf_event__process_build_id,
 		.ordered_events	= true,
 	},
+	.max_stack = PERF_MAX_STACK_DEPTH,
 };
 
 static const char * const c2c_usage[] = {
@@ -342,6 +346,51 @@ static int perf_c2c_report(void)
 	return perf_c2c__hists_browse(C2C_HISTS);
 }
 
+#define CALLCHAIN_DEFAULT_OPT  "graph,0.5,caller,function,percent"
+
+const char c2c_callchain_help[] = "Display call graph (stack chain/backtrace):\n\n"
+				     CALLCHAIN_REPORT_HELP
+				     "\n\t\t\t\tDefault: " CALLCHAIN_DEFAULT_OPT;
+
+static int
+c2c_parse_callchain_opt(const struct option *opt __maybe_unused,
+			const char *arg, int unset)
+{
+	/*
+	 * --no-call-graph
+	 */
+	if (unset) {
+		c2c.dont_use_callchains = true;
+		return 0;
+	}
+
+	return parse_callchain_c2c_opt(arg);
+}
+
+static int setup_callchains(struct perf_session *session)
+{
+	u64 sample_type = perf_evlist__combined_sample_type(session->evlist);
+
+	if (!(sample_type & PERF_SAMPLE_CALLCHAIN)) {
+		if (symbol_conf.use_callchain) {
+			ui__error("Selected -g or --branch-history but no "
+				  "callchain data. Did\n"
+				  "you call 'perf record' without -g?\n");
+			return -1;
+		}
+	} else if (!c2c.dont_use_callchains &&
+		   callchain_param.mode != CHAIN_NONE &&
+		   !symbol_conf.use_callchain) {
+		symbol_conf.use_callchain = true;
+		if (callchain_register_param(&callchain_param) < 0) {
+			ui__error("Can't register callchain params.\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -349,11 +398,16 @@ static int perf_c2c__report(int argc, const char **argv)
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
+	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const struct option c2c_options[] = {
 	OPT_INCR('v', "verbose", &verbose,
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
+	OPT_CALLBACK_DEFAULT('g', "call-graph", NULL,
+			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
+			     c2c_callchain_help, &c2c_parse_callchain_opt,
+			     callchain_default_opt),
 	OPT_END()
 	};
 	int err = 0;
@@ -376,6 +430,11 @@ static int perf_c2c__report(int argc, const char **argv)
 	/* No pipe support at the moment. */
 	if (perf_data_file__is_pipe(session->file)) {
 		pr_debug("No pipe support at the moment.\n");
+		goto out_session;
+	}
+
+	if (setup_callchains(session)) {
+		pr_err("Failed to setup callchains.\n");
 		goto out_session;
 	}
 
