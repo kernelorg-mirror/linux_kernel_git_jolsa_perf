@@ -61,6 +61,8 @@ __he__add_c2c_entry(struct hists *hists, struct hist_entry *entry)
 		cmp = hist_entry__cmp(he, entry);
 
 		if (!cmp) {
+			c2c_decode_stats(&he->c2c_stats, entry);
+
 			/*
 			 * This mem info was allocated from sample__resolve_mem
 			 * and will not be used anymore.
@@ -119,6 +121,8 @@ __hists__add_c2c_entry(struct hists *hists, struct hist_entry *entry)
 	struct hist_entry *he;
 	int64_t cmp;
 
+	c2c_decode_stats(&entry->c2c_stats, entry);
+
 	p = &hists->entries_in->rb_node;
 
 	while (*p != NULL) {
@@ -139,6 +143,7 @@ __hists__add_c2c_entry(struct hists *hists, struct hist_entry *entry)
 				he->ms.map = map__get(entry->ms.map);
 			}
 
+			c2c_decode_stats(&he->c2c_stats, entry);
 			goto out;
 		}
 

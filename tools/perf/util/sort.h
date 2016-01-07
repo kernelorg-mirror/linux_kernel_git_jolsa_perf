@@ -22,6 +22,7 @@
 #include "parse-events.h"
 #include "hist.h"
 #include "thread.h"
+#include "mem-events.h"
 
 extern regex_t parent_regex;
 extern const char *sort_order;
@@ -104,6 +105,7 @@ struct hist_entry {
 	bool			dummy;
 
 	struct c2c_hists	*c2c_hists;
+	struct c2c_stats	c2c_stats;
 
 	char			level;
 	u8			filtered;
