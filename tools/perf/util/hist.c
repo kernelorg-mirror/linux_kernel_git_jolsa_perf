@@ -171,6 +171,7 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 
 	hists__new_col_len(hists, HISTC_C2C_DCACHELINE, 25);
 	hists__new_col_len(hists, HISTC_C2C_DADDR, 25);
+	hists__new_col_len(hists, HISTC_C2C_IADDR, 25);
 	hists__new_col_len(hists, HISTC_C2C_DCACHELINE_OFFSET, 3);
 	hists__new_col_len(hists, HISTC_C2C_STATS_NR, 4);
 
