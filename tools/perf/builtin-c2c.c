@@ -10,11 +10,14 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include "evlist.h"
 
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct hists		hists;
 	struct perf_hpp_list	hpp_list;
+	bool			dont_use_callchains;
+	int			max_stack;
 };
 
 static int perf_c2c_hists_init(struct perf_c2c *c2c)
@@ -162,10 +165,7 @@ __hists__add_c2c_entry(struct hists *hists, struct hist_entry *entry)
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->entries_in);
 out:
-	if (!he__add_c2c_entry(he, entry))
-		return NULL;
-
-	return he;
+	return he__add_c2c_entry(he, entry);
 }
 
 static struct hist_entry*
@@ -194,7 +194,7 @@ hists__add_c2c_entry(struct hists *hists, struct addr_location *al,
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
-				struct perf_evsel *evsel __maybe_unused,
+				struct perf_evsel *evsel,
 				struct machine *machine)
 {
 	struct perf_c2c *c2c = container_of(tool, struct perf_c2c, tool);
@@ -208,6 +208,10 @@ static int process_sample_event(struct perf_tool *tool,
 		return -1;
 	}
 
+	if (sample__resolve_callchain(sample, NULL, evsel, &al,
+                                      c2c->max_stack))
+		return -1;
+
 	mi = sample__resolve_mem(sample, &al);
 	if (mi == NULL)
 		return -ENOMEM;
@@ -216,7 +220,7 @@ static int process_sample_event(struct perf_tool *tool,
 	if (!he)
 		return -1;
 
-	return 0;
+	return hist_entry__append_callchain(he, sample);
 }
 
 static const char * const c2c_usage[] = {
@@ -248,6 +252,52 @@ static int perf_c2c_browse_report(struct perf_c2c *c2c)
 	return perf_c2c__hists_browse(&c2c->hists);
 }
 
+#define CALLCHAIN_DEFAULT_OPT  "graph,0.5,caller,function,percent"
+
+const char c2c_callchain_help[] = "Display call graph (stack chain/backtrace):\n\n"
+				     CALLCHAIN_REPORT_HELP
+				     "\n\t\t\t\tDefault: " CALLCHAIN_DEFAULT_OPT;
+
+static int
+c2c_parse_callchain_opt(const struct option *opt, const char *arg, int unset)
+{
+	struct perf_c2c *c2c = (struct perf_c2c *)opt->value;
+
+	/*
+	 * --no-call-graph
+	 */
+	if (unset) {
+		c2c->dont_use_callchains = true;
+		return 0;
+	}
+
+	return parse_callchain_c2c_opt(arg);
+}
+
+static int setup_callchains(struct perf_c2c *c2c, struct perf_session *session)
+{
+	u64 sample_type = perf_evlist__combined_sample_type(session->evlist);
+
+	if (!(sample_type & PERF_SAMPLE_CALLCHAIN)) {
+		if (symbol_conf.use_callchain) {
+			ui__error("Selected -g or --branch-history but no "
+				  "callchain data. Did\n"
+				  "you call 'perf record' without -g?\n");
+			return -1;
+		}
+	} else if (!c2c->dont_use_callchains &&
+		   callchain_param.mode != CHAIN_NONE &&
+		   !symbol_conf.use_callchain) {
+		symbol_conf.use_callchain = true;
+		if (callchain_register_param(&callchain_param) < 0) {
+			ui__error("Can't register callchain params.\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -262,16 +312,22 @@ static int perf_c2c__report(int argc, const char **argv)
 			.build_id	= perf_event__process_build_id,
 			.ordered_events	= true,
 		},
+		.max_stack = PERF_MAX_STACK_DEPTH,
 	};
 	struct perf_data_file file = {
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
+	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const struct option c2c_options[] = {
 	OPT_INCR('v', "verbose", &verbose,
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
+	OPT_CALLBACK_DEFAULT('g', "call-graph", &c2c,
+			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
+			     c2c_callchain_help, &c2c_parse_callchain_opt,
+			     callchain_default_opt),
 	OPT_END()
 	};
 	int err = -1;
@@ -294,6 +350,11 @@ static int perf_c2c__report(int argc, const char **argv)
 	/* No pipe support at the moment. */
 	if (perf_data_file__is_pipe(session->file)) {
 		pr_debug("No pipe support at the moment.\n");
+		goto out_session;
+	}
+
+	if (setup_callchains(&c2c, session)) {
+		pr_err("Failed to setup callchains.\n");
 		goto out_session;
 	}
 

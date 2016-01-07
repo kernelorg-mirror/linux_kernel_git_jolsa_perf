@@ -181,6 +181,11 @@ int parse_callchain_top_opt(const char *arg)
 	return __parse_callchain_report_opt(arg, true);
 }
 
+int parse_callchain_c2c_opt(const char *arg)
+{
+	return __parse_callchain_report_opt(arg, false);
+}
+
 int perf_callchain_config(const char *var, const char *value)
 {
 	char *endptr;
