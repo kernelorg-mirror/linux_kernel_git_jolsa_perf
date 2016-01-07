@@ -25,7 +25,8 @@ static int perf_c2c_hists_init(struct perf_c2c *c2c)
 	__hists__init(&c2c->hists);
 	c2c->hists.hpp_list = &c2c->hpp_list;
 	perf_hpp_list__init(&c2c->hpp_list);
-	return hists__setup_hpp_list(&c2c->hists, "c2c_dcacheline", "c2c_dcacheline,c2c_stats_nr");
+	return hists__setup_hpp_list(&c2c->hists, "c2c_dcacheline",
+		"c2c_dcacheline,c2c_stats_nr,c2c_ld_fbhit,c2c_ld_l1hit,c2c_ld_l2hit,c2c_ld_llchit,c2c_ld_rmthit,c2c_tot_hitm,c2c_rmt_hitm,c2c_lcl_hitm,c2c_stores,c2c_stores_l1hit,c2c_stores_l1_miss");
 }
 
 static struct c2c_hists* get_c2c_hists(struct hist_entry *he)
@@ -41,7 +42,8 @@ static struct c2c_hists* get_c2c_hists(struct hist_entry *he)
 		c2c_hists->hists.hpp_list = &c2c_hists->hpp_list;
 
 		perf_hpp_list__init(&c2c_hists->hpp_list);
-		hists__setup_hpp_list(&c2c_hists->hists, "c2c_offset","c2c_offset,symbol_daddr,dso_daddr,symbol_iaddr,pid,dso,c2c_stats_nr");
+		hists__setup_hpp_list(&c2c_hists->hists,
+		"c2c_offset","c2c_offset,symbol_daddr,dso_daddr,c2c_iaddr,symbol_iaddr,pid,dso,c2c_stats_nr,c2c_ld_fbhit,c2c_ld_l1hit,c2c_ld_l2hit,c2c_ld_llchit,c2c_ld_rmthit,c2c_tot_hitm,c2c_rmt_hitm,c2c_lcl_hitm,c2c_stores,c2c_stores_l1hit,c2c_stores_l1_miss");
 	}
 
 	return c2c_hists;
