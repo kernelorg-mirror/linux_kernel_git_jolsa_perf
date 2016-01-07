@@ -1337,6 +1337,75 @@ struct sort_entry sort_c2c_stats_nr = {
 	.se_width_idx	= HISTC_C2C_STATS_NR,
 };
 
+static int64_t
+sort__c2c_tot_hitm(struct hist_entry *left, struct hist_entry *right)
+{
+	int left_tot_hitm, right_tot_hitm;
+
+	left_tot_hitm  = left->c2c_stats.t.lcl_hitm + left->c2c_stats.t.rmt_hitm;
+	right_tot_hitm = right->c2c_stats.t.lcl_hitm + right->c2c_stats.t.rmt_hitm;
+
+	return left_tot_hitm - right_tot_hitm;
+}
+
+static int64_t
+sort__c2c_rmt_hitm(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.rmt_hitm - right->c2c_stats.t.rmt_hitm;
+}
+
+static int64_t
+sort__c2c_lcl_hitm(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.lcl_hitm - right->c2c_stats.t.lcl_hitm;
+}
+
+static int
+hist_entry__c2c_tot_hitm_snprintf(struct hist_entry *he, char *bf,
+				  size_t size, unsigned int width)
+{
+	int tot_hitm;
+
+	tot_hitm = he->c2c_stats.t.lcl_hitm + he->c2c_stats.t.rmt_hitm;
+	return repsep_snprintf(bf, size, "%*llu", width, tot_hitm);
+}
+
+static int
+hist_entry__c2c_rmt_hitm_snprintf(struct hist_entry *he, char *bf,
+				  size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.rmt_hitm);
+}
+
+static int
+hist_entry__c2c_lcl_hitm_snprintf(struct hist_entry *he, char *bf,
+				  size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.lcl_hitm);
+}
+
+
+struct sort_entry sort_c2c_tot_hitm = {
+	.se_header	= "Tot HITM",
+	.se_cmp		= sort__c2c_tot_hitm,
+	.se_snprintf	= hist_entry__c2c_tot_hitm_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_TOT_HITM,
+};
+
+struct sort_entry sort_c2c_rmt_hitm = {
+	.se_header	= "Rmt HITM",
+	.se_cmp		= sort__c2c_rmt_hitm,
+	.se_snprintf	= hist_entry__c2c_rmt_hitm_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_RMT_HITM,
+};
+
+struct sort_entry sort_c2c_lcl_hitm = {
+	.se_header	= "Lcl HITM",
+	.se_cmp		= sort__c2c_lcl_hitm,
+	.se_snprintf	= hist_entry__c2c_lcl_hitm_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_LCL_HITM,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1401,6 +1470,9 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_IADDR, "c2c_iaddr", sort_c2c_iaddr),
 	DIM(SORT_C2C_DCACHELINE_OFFSET, "c2c_offset", sort_c2c_dcacheline_offset),
 	DIM(SORT_C2C_STATS_NR, "c2c_stats_nr", sort_c2c_stats_nr),
+	DIM(SORT_C2C_STATS_TOT_HITM, "c2c_tot_hitm", sort_c2c_tot_hitm),
+	DIM(SORT_C2C_STATS_RMT_HITM, "c2c_rmt_hitm", sort_c2c_rmt_hitm),
+	DIM(SORT_C2C_STATS_LCL_HITM, "c2c_lcl_hitm", sort_c2c_lcl_hitm),
 };
 
 #undef DIM
