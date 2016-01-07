@@ -1298,6 +1298,26 @@ struct sort_entry sort_c2c_dcacheline_offset = {
 	.se_width_idx	= HISTC_C2C_DCACHELINE_OFFSET,
 };
 
+static int64_t
+sort__c2c_stats_nr(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.nr_entries - right->c2c_stats.nr_entries;
+}
+
+static int
+hist_entry__c2c_stats_nr_snprintf(struct hist_entry *he, char *bf,
+				  size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%-*llu", width, he->c2c_stats.nr_entries);
+}
+
+struct sort_entry sort_c2c_stats_nr = {
+	.se_header	= "Tot records",
+	.se_cmp		= sort__c2c_stats_nr,
+	.se_snprintf	= hist_entry__c2c_stats_nr_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_NR,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1360,6 +1380,7 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_DCACHELINE, "c2c_dcacheline", sort_c2c_dcacheline),
 	DIM(SORT_C2C_DADDR, "c2c_daddr", sort_c2c_daddr),
 	DIM(SORT_C2C_DCACHELINE_OFFSET, "c2c_offset", sort_c2c_dcacheline_offset),
+	DIM(SORT_C2C_STATS_NR, "c2c_stats_nr", sort_c2c_stats_nr),
 };
 
 #undef DIM
