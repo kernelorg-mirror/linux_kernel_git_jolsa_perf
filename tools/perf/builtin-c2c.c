@@ -68,6 +68,8 @@ __he__add_offset_entry(struct hists *hists, struct hist_entry *entry)
 		cmp = hist_entry__cmp(he, entry);
 
 		if (!cmp) {
+			c2c_decode_stats(&he->c2c_stats, entry);
+
 			/*
 			 * This mem info was allocated from sample__resolve_mem
 			 * and will not be used anymore.
@@ -116,6 +118,10 @@ he__add_offset_entry(struct hist_entry *he, struct hist_entry *entry)
 		return NULL;
 
 	entry->hists = &c2c_hists->hists;
+
+	/* Account cacheline offset overall stats. */
+	c2c_decode_stats(&c2c_hists->hists.c2c_stats, entry);
+
 	return __he__add_offset_entry(&c2c_hists->hists, entry);
 }
 
@@ -147,6 +153,7 @@ __he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry)
 				he->ms.map = map__get(entry->ms.map);
 			}
 
+			c2c_decode_stats(&he->c2c_stats, entry);
 			goto out;
 		}
 
@@ -178,6 +185,10 @@ he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry)
 		return NULL;
 
 	entry->hists = &c2c_hists->hists;
+
+	/* Account cacheline offset overall stats. */
+	c2c_decode_stats(&c2c_hists->hists.c2c_stats, entry);
+
 	return __he__add_cacheline_entry(&c2c_hists->hists, entry);
 }
 
@@ -209,6 +220,7 @@ __hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
 				he->ms.map = map__get(entry->ms.map);
 			}
 
+			c2c_decode_stats(&he->c2c_stats, entry);
 			goto out;
 		}
 
@@ -249,6 +261,12 @@ hists__add_main_entry(struct hists *hists, struct addr_location *al,
 		.hists		= hists,
 		.mem_info	= mi,
 	};
+
+	/* Account entry itself. */
+	c2c_decode_stats(&entry.c2c_stats, &entry);
+
+	/* Account overall numbers. */
+	c2c_decode_stats(&hists->c2c_stats, &entry);
 
 	return __hists__add_main_entry(hists, &entry);
 }
