@@ -1526,6 +1526,46 @@ struct sort_entry sort_c2c_ld_l2hit = {
 	.se_width_idx	= HISTC_C2C_STATS_LD_L2HIT,
 };
 
+static int64_t
+sort__c2c_ld_llchit(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.ld_llchit - right->c2c_stats.t.ld_llchit;
+}
+
+static int
+hist_entry__c2c_ld_llchit_snprintf(struct hist_entry *he, char *bf,
+				   size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.ld_llchit);
+}
+
+static int64_t
+sort__c2c_ld_rmthit(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.rmt_hit - right->c2c_stats.t.rmt_hit;
+}
+
+static int
+hist_entry__c2c_ld_rmthit_snprintf(struct hist_entry *he, char *bf,
+				   size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.ld_llchit);
+}
+
+struct sort_entry sort_c2c_ld_llchit = {
+	.se_header	= "Load LlcHit",
+	.se_cmp		= sort__c2c_ld_llchit,
+	.se_snprintf	= hist_entry__c2c_ld_llchit_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_LD_LLCHIT,
+};
+
+struct sort_entry sort_c2c_ld_rmthit = {
+	.se_header	= "Load RmtHit",
+	.se_cmp		= sort__c2c_ld_rmthit,
+	.se_snprintf	= hist_entry__c2c_ld_rmthit_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_LD_RMTHIT,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1599,6 +1639,8 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_STATS_LD_FBHIT, "c2c_ld_fbhit", sort_c2c_ld_fbhit),
 	DIM(SORT_C2C_STATS_LD_L1HIT, "c2c_ld_l1hit", sort_c2c_ld_l1hit),
 	DIM(SORT_C2C_STATS_LD_L2HIT, "c2c_ld_l2hit", sort_c2c_ld_l2hit),
+	DIM(SORT_C2C_STATS_LD_LLCHIT, "c2c_ld_llchit", sort_c2c_ld_llchit),
+	DIM(SORT_C2C_STATS_LD_RMTHIT, "c2c_ld_rmthit", sort_c2c_ld_rmthit),
 };
 
 #undef DIM
