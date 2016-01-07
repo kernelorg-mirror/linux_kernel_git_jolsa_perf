@@ -183,6 +183,8 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 	hists__new_col_len(hists, HISTC_C2C_STATS_LD_FBHIT, 7);
 	hists__new_col_len(hists, HISTC_C2C_STATS_LD_L1HIT, 7);
 	hists__new_col_len(hists, HISTC_C2C_STATS_LD_L2HIT, 7);
+	hists__new_col_len(hists, HISTC_C2C_STATS_LD_LLCHIT, 7);
+	hists__new_col_len(hists, HISTC_C2C_STATS_LD_RMTHIT, 7);
 
 	if (h->srcline)
 		hists__new_col_len(hists, HISTC_SRCLINE, strlen(h->srcline));
