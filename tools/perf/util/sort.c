@@ -1388,6 +1388,66 @@ struct sort_entry sort_c2c_lcl_hitm = {
 	.se_width_idx	= HISTC_C2C_STATS_LCL_HITM,
 };
 
+static int64_t
+sort__c2c_stores(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.store - right->c2c_stats.t.store;
+}
+
+static int
+hist_entry__c2c_stores_snprintf(struct hist_entry *he, char *bf,
+				size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.store);
+}
+
+static int64_t
+sort__c2c_stores_l1hit(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.st_l1hit - right->c2c_stats.t.st_l1hit;
+}
+
+static int
+hist_entry__c2c_stores_l1hit_snprintf(struct hist_entry *he, char *bf,
+				      size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.st_l1hit);
+}
+
+static int64_t
+sort__c2c_stores_l1miss(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->c2c_stats.t.st_l1miss - right->c2c_stats.t.st_l1miss;
+}
+
+static int
+hist_entry__c2c_stores_l1miss_snprintf(struct hist_entry *he, char *bf,
+				      size_t size, unsigned int width)
+{
+	return repsep_snprintf(bf, size, "%*llu", width, he->c2c_stats.t.st_l1miss);
+}
+
+struct sort_entry sort_c2c_stores = {
+	.se_header	= "Stores",
+	.se_cmp		= sort__c2c_stores,
+	.se_snprintf	= hist_entry__c2c_stores_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_STORES,
+};
+
+struct sort_entry sort_c2c_stores_l1hit = {
+	.se_header	= "St L1Hit",
+	.se_cmp		= sort__c2c_stores_l1hit,
+	.se_snprintf	= hist_entry__c2c_stores_l1hit_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_STORES_L1HIT,
+};
+
+struct sort_entry sort_c2c_stores_l1miss = {
+	.se_header	= "St L1Miss",
+	.se_cmp		= sort__c2c_stores_l1miss,
+	.se_snprintf	= hist_entry__c2c_stores_l1miss_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_STORES_L1MISS,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1455,6 +1515,9 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_STATS_TOT_HITM, "c2c_tot_hitm", sort_c2c_tot_hitm),
 	DIM(SORT_C2C_STATS_RMT_HITM, "c2c_rmt_hitm", sort_c2c_rmt_hitm),
 	DIM(SORT_C2C_STATS_LCL_HITM, "c2c_lcl_hitm", sort_c2c_lcl_hitm),
+	DIM(SORT_C2C_STATS_STORES, "c2c_stores", sort_c2c_stores),
+	DIM(SORT_C2C_STATS_STORES_L1HIT, "c2c_stores_l1hit", sort_c2c_stores_l1hit),
+	DIM(SORT_C2C_STATS_STORES_L1MISS, "c2c_stores_l1_miss", sort_c2c_stores_l1miss),
 };
 
 #undef DIM
