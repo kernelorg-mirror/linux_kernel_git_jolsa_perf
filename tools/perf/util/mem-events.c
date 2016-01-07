@@ -8,6 +8,7 @@
 #include <api/fs/fs.h>
 #include "mem-events.h"
 #include "debug.h"
+#include "sort.h"
 
 #define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 
@@ -203,4 +204,103 @@ int perf_mem__snp_scnprintf(char *bf, size_t size, uint64_t val)
 int perf_mem__lock_scnprintf(char *bf, size_t size, uint64_t val)
 {
 	return data_src__scnprintf(bf, size, val, LCK);
+}
+
+int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
+{
+	union perf_mem_data_src *data_src = &entry->mem_info->data_src;
+	u64 daddr  = entry->mem_info->daddr.addr;
+//	u64 weight = entry->stat.weight;
+	u64 op     = data_src->mem_op;
+	u64 lvl    = data_src->mem_lvl;
+	u64 snoop  = data_src->mem_snoop;
+	u64 lock   = data_src->mem_lock;
+	int err = 0;
+
+#define P(a,b) PERF_MEM_##a##_##b
+
+	stats->nr_entries++;
+	stats->total_period += entry->stat.period;
+
+	if (lock & P(LOCK,LOCKED)) stats->t.locks++;
+
+	if (op & P(OP,LOAD)) {
+		stats->t.load++;
+
+		if (!daddr) {
+			stats->t.ld_noadrs++;
+			return -1;
+		}
+
+		if (lvl & P(LVL,HIT)) {
+			if (lvl & P(LVL,UNC)) stats->t.ld_uncache++;
+			if (lvl & P(LVL,IO))  stats->t.ld_io++;
+			if (lvl & P(LVL,LFB)) stats->t.ld_fbhit++;
+			if (lvl & P(LVL,L1 )) stats->t.ld_l1hit++;
+			if (lvl & P(LVL,L2 )) stats->t.ld_l2hit++;
+			if (lvl & P(LVL,L3 )) {
+				if (snoop & P(SNOOP,HITM))
+					stats->t.lcl_hitm++;
+				else
+					stats->t.ld_llchit++;
+			}
+
+			if (lvl & P(LVL,LOC_RAM)) {
+				stats->t.lcl_dram++;
+				if (snoop & P(SNOOP,HIT))
+					stats->t.ld_shared++;
+				else
+					stats->t.ld_excl++;
+			}
+
+			if ((lvl & P(LVL,REM_RAM1)) ||
+			    (lvl & P(LVL,REM_RAM2))) {
+				stats->t.rmt_dram++;
+				if (snoop & P(SNOOP,HIT))
+					stats->t.ld_shared++;
+				else
+					stats->t.ld_excl++;
+			}
+		}
+
+		if ((lvl & P(LVL,REM_CCE1)) ||
+		    (lvl & P(LVL,REM_CCE2))) {
+			if (snoop & P(SNOOP, HIT))
+				stats->t.rmt_hit++;
+			else if (snoop & P(SNOOP, HITM)) {
+				stats->t.rmt_hitm++;
+//				update_stats(&stats->stats, weight);
+			}
+		}
+
+		if ((lvl & P(LVL,MISS)))
+			stats->t.ld_miss++;
+
+	} else if (op & P(OP,STORE)) {
+		/* store */
+		stats->t.store++;
+
+		if (!daddr) {
+			stats->t.st_noadrs++;
+			return -1;
+		}
+
+		if (lvl & P(LVL,HIT)) {
+			if (lvl & P(LVL,UNC)) stats->t.st_uncache++;
+			if (lvl & P(LVL,L1 )) stats->t.st_l1hit++;
+		}
+		if (lvl & P(LVL,MISS))
+			if (lvl & P(LVL,L1)) stats->t.st_l1miss++;
+	} else {
+		/* unparsable data_src? */
+		stats->t.noparse++;
+		return -1;
+	}
+
+	if (!entry->mem_info->daddr.map || !entry->mem_info->iaddr.map) {
+		stats->t.nomap++;
+		return -1;
+	}
+
+	return err;
 }
