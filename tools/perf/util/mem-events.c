@@ -9,6 +9,7 @@
 #include "mem-events.h"
 #include "debug.h"
 #include "symbol.h"
+#include "sort.h"
 
 unsigned int perf_mem_events__loads_ldlat = 30;
 
@@ -286,4 +287,104 @@ int perf_script__meminfo_scnprintf(char *out, size_t sz, struct mem_info *mem_in
 	i += perf_mem__lck_scnprintf(out + i, sz - i, mem_info);
 
 	return i;
+}
+
+int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *he)
+{
+	union perf_mem_data_src *data_src = &he->mem_info->data_src;
+	u64 daddr  = he->mem_info->daddr.addr;
+	u64 weight = he->stat.weight;
+	u64 op     = data_src->mem_op;
+	u64 lvl    = data_src->mem_lvl;
+	u64 snoop  = data_src->mem_snoop;
+	u64 lock   = data_src->mem_lock;
+	int err = 0;
+
+#define P(a, b) PERF_MEM_##a##_##b
+
+	stats->nr_entries++;
+
+	if (lock & P(LOCK, LOCKED)) stats->locks++;
+
+	if (op & P(OP, LOAD)) {
+		/* load */
+		stats->load++;
+
+		if (!daddr) {
+			stats->ld_noadrs++;
+			return -1;
+		}
+
+		if (lvl & P(LVL, HIT)) {
+			if (lvl & P(LVL, UNC)) stats->ld_uncache++;
+			if (lvl & P(LVL, IO))  stats->ld_io++;
+			if (lvl & P(LVL, LFB)) stats->ld_fbhit++;
+			if (lvl & P(LVL, L1 )) stats->ld_l1hit++;
+			if (lvl & P(LVL, L2 )) stats->ld_l2hit++;
+			if (lvl & P(LVL, L3 )) {
+				if (snoop & P(SNOOP, HITM))
+					stats->lcl_hitm++;
+				else
+					stats->ld_llchit++;
+			}
+
+			if (lvl & P(LVL, LOC_RAM)) {
+				stats->lcl_dram++;
+				if (snoop & P(SNOOP, HIT))
+					stats->ld_shared++;
+				else
+					stats->ld_excl++;
+			}
+
+			if ((lvl & P(LVL, REM_RAM1)) ||
+			    (lvl & P(LVL, REM_RAM2))) {
+				stats->rmt_dram++;
+				if (snoop & P(SNOOP, HIT))
+					stats->ld_shared++;
+				else
+					stats->ld_excl++;
+			}
+		}
+
+		if ((lvl & P(LVL, REM_CCE1)) ||
+		    (lvl & P(LVL, REM_CCE2))) {
+			if (snoop & P(SNOOP, HIT))
+				stats->rmt_hit++;
+			else if (snoop & P(SNOOP, HITM)) {
+				stats->rmt_hitm++;
+				update_stats(&stats->stats, weight);
+			}
+		}
+
+		if ((lvl & P(LVL, MISS)))
+			stats->ld_miss++;
+
+	} else if (op & P(OP, STORE)) {
+		/* store */
+		stats->store++;
+
+		if (!daddr) {
+			stats->st_noadrs++;
+			return -1;
+		}
+
+		if (lvl & P(LVL, HIT)) {
+			if (lvl & P(LVL, UNC)) stats->st_uncache++;
+			if (lvl & P(LVL, L1 )) stats->st_l1hit++;
+		}
+		if (lvl & P(LVL, MISS))
+			if (lvl & P(LVL, L1)) stats->st_l1miss++;
+	} else {
+		/* unparsable data_src? */
+		stats->noparse++;
+		return -1;
+	}
+
+	if (!he->mem_info->daddr.map || !he->mem_info->iaddr.map) {
+		stats->nomap++;
+		return -1;
+	}
+
+#undef P
+	return err;
 }
