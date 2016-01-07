@@ -1279,6 +1279,25 @@ struct sort_entry sort_c2c_daddr = {
 };
 
 static int
+hist_entry__c2c_iaddr_snprintf(struct hist_entry *he, char *bf,
+			       size_t size, unsigned int width)
+{
+	uint64_t addr = 0;
+
+	if (he->mem_info)
+		addr = he->mem_info->iaddr.addr;
+
+	return repsep_snprintf(bf, size, "0x%-*llx", width - 2, addr);
+}
+
+struct sort_entry sort_c2c_iaddr = {
+	.se_header	= "Code Address",
+	.se_cmp		= sort__iaddr_cmp,
+	.se_snprintf	= hist_entry__c2c_iaddr_snprintf,
+	.se_width_idx	= HISTC_C2C_IADDR,
+};
+
+static int
 hist_entry__c2c_dcacheline_offset_snprintf(struct hist_entry *he,
 					   char *bf, size_t size,
 					   unsigned int width)
@@ -1379,6 +1398,7 @@ static struct sort_dimension memory_sort_dimensions[] = {
 static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_DCACHELINE, "c2c_dcacheline", sort_c2c_dcacheline),
 	DIM(SORT_C2C_DADDR, "c2c_daddr", sort_c2c_daddr),
+	DIM(SORT_C2C_IADDR, "c2c_iaddr", sort_c2c_iaddr),
 	DIM(SORT_C2C_DCACHELINE_OFFSET, "c2c_offset", sort_c2c_dcacheline_offset),
 	DIM(SORT_C2C_STATS_NR, "c2c_stats_nr", sort_c2c_stats_nr),
 };
