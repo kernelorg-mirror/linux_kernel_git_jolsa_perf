@@ -1613,6 +1613,44 @@ struct sort_entry sort_c2c_percent_hitm = {
 	.se_width_idx	= HISTC_C2C_STATS_PERCENT_HITM,
 };
 
+static int64_t
+sort__c2c_percent_ldmiss(struct hist_entry *left, struct hist_entry *right)
+{
+	struct hists *left_hists  = left->hists;
+	struct hists *right_hists = right->hists;
+	double left_p, right_p;
+
+	left_p  = perf_c2c_stats__percent_ldmiss(&left->c2c_stats,
+						 &left_hists->c2c_stats);
+	right_p = perf_c2c_stats__percent_ldmiss(&right->c2c_stats,
+						 &right_hists->c2c_stats);
+
+	if (left_p < right_p)
+		return -1;
+	else if (left_p > right_p)
+		return 1;
+
+	return 0;
+}
+
+static int
+hist_entry__c2c_percent_ldmiss_snprintf(struct hist_entry *he, char *bf,
+				       size_t size, unsigned int width)
+{
+	struct hists *hists = he->hists;
+	double p;
+
+	p = perf_c2c_stats__percent_ldmiss(&he->c2c_stats, &hists->c2c_stats);
+	return repsep_snprintf(bf, size, "%*.2F%%", width - 1, p);
+}
+
+struct sort_entry sort_c2c_percent_ldmiss = {
+	.se_header	= "%AllLdMiss",
+	.se_cmp		= sort__c2c_percent_ldmiss,
+	.se_snprintf	= hist_entry__c2c_percent_ldmiss_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_PERCENT_LDMISS,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1690,6 +1728,7 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_STATS_LD_RMTHIT, "c2c_ld_rmthit", sort_c2c_ld_rmthit),
 	DIM(SORT_C2C_STATS_TOT_RECS, "c2c_tot_recs", sort_c2c_tot_recs),
 	DIM(SORT_C2C_STATS_PERCENT_HITM, "c2c_percent_hitm", sort_c2c_percent_hitm),
+	DIM(SORT_C2C_STATS_PERCENT_LDMISS, "c2c_percent_ldmiss", sort_c2c_percent_ldmiss),
 };
 
 #undef DIM
