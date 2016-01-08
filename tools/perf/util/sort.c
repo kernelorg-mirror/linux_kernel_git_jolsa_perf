@@ -1669,6 +1669,144 @@ struct sort_entry sort_c2c_percent_ldmiss = {
 	.se_width_idx	= HISTC_C2C_STATS_PERCENT_LDMISS,
 };
 
+static double percent(int st, int tot)
+{
+	return tot ? 100. * (double) st / (double) tot : 0;
+}
+
+#define PERCENT(_he, _hists, _field) \
+	percent(_he->c2c_stats.t._field, _hists->c2c_stats.t._field)
+
+static int64_t percent_compare(double left, double right)
+{
+	if (left<  right)
+		return -1;
+	else if (left > right)
+		return 1;
+
+	return 0;
+}
+
+static int64_t
+sort__c2c_percent_rmt_hitm(struct hist_entry *left, struct hist_entry *right)
+{
+	struct hists *left_hists  = left->hists;
+	struct hists *right_hists = right->hists;
+	double left_p, right_p;
+
+	left_p  = PERCENT(left, left_hists, rmt_hitm);
+	right_p = PERCENT(right, right_hists, rmt_hitm);
+
+	return percent_compare(left_p, right_p);
+}
+
+static int64_t
+sort__c2c_percent_lcl_hitm(struct hist_entry *left, struct hist_entry *right)
+{
+	struct hists *left_hists  = left->hists;
+	struct hists *right_hists = right->hists;
+	double left_p, right_p;
+
+	left_p  = PERCENT(left, left_hists, lcl_hitm);
+	right_p = PERCENT(right, right_hists, lcl_hitm);
+
+	return percent_compare(left_p, right_p);
+}
+
+static int64_t
+sort__c2c_percent_st_l1hit(struct hist_entry *left, struct hist_entry *right)
+{
+	struct hists *left_hists  = left->hists;
+	struct hists *right_hists = right->hists;
+	double left_p, right_p;
+
+	left_p  = PERCENT(left, left_hists, st_l1hit);
+	right_p = PERCENT(right, right_hists, st_l1hit);
+
+	return percent_compare(left_p, right_p);
+}
+
+static int64_t
+sort__c2c_percent_st_l1miss(struct hist_entry *left, struct hist_entry *right)
+{
+	struct hists *left_hists  = left->hists;
+	struct hists *right_hists = right->hists;
+	double left_p, right_p;
+
+	left_p  = PERCENT(left, left_hists, st_l1miss);
+	right_p = PERCENT(right, right_hists, st_l1miss);
+
+	return percent_compare(left_p, right_p);
+}
+
+static int
+hist_entry__c2c_percent_rmt_hitm_snprintf(struct hist_entry *he, char *bf,
+					  size_t size, unsigned int width)
+{
+	double p;
+
+	p = PERCENT(he, he->hists, rmt_hitm);
+	return repsep_snprintf(bf, size, "%*.2F%%", width - 1, p);
+}
+
+static int
+hist_entry__c2c_percent_lcl_hitm_snprintf(struct hist_entry *he, char *bf,
+					  size_t size, unsigned int width)
+{
+	double p;
+
+	p = PERCENT(he, he->hists, lcl_hitm);
+	return repsep_snprintf(bf, size, "%*.2F%%", width - 1, p);
+}
+
+static int
+hist_entry__c2c_percent_st_l1hit_snprintf(struct hist_entry *he, char *bf,
+					  size_t size, unsigned int width)
+{
+	double p;
+
+	p = PERCENT(he, he->hists, st_l1hit);
+	return repsep_snprintf(bf, size, "%*.2F%%", width - 1, p);
+}
+
+static int
+hist_entry__c2c_percent_st_l1miss_snprintf(struct hist_entry *he, char *bf,
+					   size_t size, unsigned int width)
+{
+	double p;
+
+	p = PERCENT(he, he->hists, st_l1miss);
+	return repsep_snprintf(bf, size, "%*.2F%%", width - 1, p);
+}
+
+struct sort_entry sort_c2c_percent_rmt_hitm = {
+	.se_header	= "%RmtHitm",
+	.se_cmp		= sort__c2c_percent_rmt_hitm,
+	.se_snprintf	= hist_entry__c2c_percent_rmt_hitm_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_PERCENT_RMT_HITM,
+};
+
+struct sort_entry sort_c2c_percent_lcl_hitm = {
+	.se_header	= "%LclHitm",
+	.se_cmp		= sort__c2c_percent_lcl_hitm,
+	.se_snprintf	= hist_entry__c2c_percent_lcl_hitm_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_PERCENT_LCL_HITM,
+};
+
+struct sort_entry sort_c2c_percent_st_l1hit = {
+	.se_header	= "%StL1Hit",
+	.se_cmp		= sort__c2c_percent_st_l1hit,
+	.se_snprintf	= hist_entry__c2c_percent_st_l1hit_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_PERCENT_ST_L1HIT,
+};
+
+struct sort_entry sort_c2c_percent_st_l1miss = {
+	.se_header	= "%StL1Miss",
+	.se_cmp		= sort__c2c_percent_st_l1miss,
+	.se_snprintf	= hist_entry__c2c_percent_st_l1miss_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_PERCENT_ST_L1MISS,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1747,6 +1885,10 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_STATS_TOT_RECS, "c2c_tot_recs", sort_c2c_tot_recs),
 	DIM(SORT_C2C_STATS_PERCENT_HITM, "c2c_percent_hitm", sort_c2c_percent_hitm),
 	DIM(SORT_C2C_STATS_PERCENT_LDMISS, "c2c_percent_ldmiss", sort_c2c_percent_ldmiss),
+	DIM(SORT_C2C_STATS_PERCENT_RMT_HITM, "c2c_percent_rmt_hitm", sort_c2c_percent_rmt_hitm),
+	DIM(SORT_C2C_STATS_PERCENT_LCL_HITM, "c2c_percent_lcl_hitm", sort_c2c_percent_lcl_hitm),
+	DIM(SORT_C2C_STATS_PERCENT_ST_L1HIT, "c2c_percent_st_l1hit", sort_c2c_percent_st_l1hit),
+	DIM(SORT_C2C_STATS_PERCENT_ST_L1MISS, "c2c_percent_st_l1miss", sort_c2c_percent_st_l1miss),
 };
 
 #undef DIM
