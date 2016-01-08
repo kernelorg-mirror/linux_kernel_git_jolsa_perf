@@ -8,6 +8,7 @@
 #include "header.h"
 #include "color.h"
 #include "ui/progress.h"
+#include "mem-events.h"
 
 struct hist_entry;
 struct addr_location;
@@ -75,6 +76,7 @@ struct hists {
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
 	int			socket_filter;
+	struct c2c_stats	c2c_stats;
 	struct perf_hpp_list	*hpp_list;
 };
 
