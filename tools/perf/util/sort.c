@@ -1566,6 +1566,33 @@ struct sort_entry sort_c2c_ld_rmthit = {
 	.se_width_idx	= HISTC_C2C_STATS_LD_RMTHIT,
 };
 
+static int64_t
+sort__c2c_tot_recs(struct hist_entry *left, struct hist_entry *right)
+{
+	uint64_t left_tot_recs, right_tot_recs;
+
+	left_tot_recs  = perf_c2c_stats__total_records(&left->c2c_stats);
+	right_tot_recs = perf_c2c_stats__total_records(&right->c2c_stats);
+
+	return left_tot_recs - right_tot_recs;
+}
+
+static int
+hist_entry__c2c_tot_recs_snprintf(struct hist_entry *he, char *bf,
+				  size_t size, unsigned int width)
+{
+	uint64_t tot_recs = perf_c2c_stats__total_records(&he->c2c_stats);
+
+	return repsep_snprintf(bf, size, "%*llu", width, tot_recs);
+}
+
+struct sort_entry sort_c2c_tot_recs = {
+	.se_header	= "Tot Records",
+	.se_cmp		= sort__c2c_tot_recs,
+	.se_snprintf	= hist_entry__c2c_tot_recs_snprintf,
+	.se_width_idx	= HISTC_C2C_STATS_TOT_RECS,
+};
+
 struct sort_dimension {
 	const char		*name;
 	struct sort_entry	*entry;
@@ -1641,6 +1668,7 @@ static struct sort_dimension c2c_sort_dimensions[] = {
 	DIM(SORT_C2C_STATS_LD_L2HIT, "c2c_ld_l2hit", sort_c2c_ld_l2hit),
 	DIM(SORT_C2C_STATS_LD_LLCHIT, "c2c_ld_llchit", sort_c2c_ld_llchit),
 	DIM(SORT_C2C_STATS_LD_RMTHIT, "c2c_ld_rmthit", sort_c2c_ld_rmthit),
+	DIM(SORT_C2C_STATS_TOT_RECS, "c2c_tot_recs", sort_c2c_tot_recs),
 };
 
 #undef DIM
