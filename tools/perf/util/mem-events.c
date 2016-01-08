@@ -304,3 +304,26 @@ int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
 
 	return err;
 }
+
+uint64_t perf_c2c_stats__total_records(struct c2c_stats *stats)
+{
+	uint64_t lclmiss, ldcnt, total;
+
+	lclmiss  = stats->t.lcl_dram +
+		   stats->t.rmt_dram +
+		   stats->t.rmt_hitm +
+		   stats->t.rmt_hit;
+
+	ldcnt    = lclmiss +
+		   stats->t.ld_fbhit +
+		   stats->t.ld_l1hit +
+		   stats->t.ld_l2hit +
+		   stats->t.ld_llchit +
+		   stats->t.lcl_hitm;
+
+	total    = ldcnt +
+		   stats->t.st_l1hit +
+		   stats->t.st_l1miss;
+
+	return total;
+}
