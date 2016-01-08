@@ -335,6 +335,8 @@ static const char * const __usage_report[] = {
 
 static const char * const *report_c2c_usage = __usage_report;
 
+#define HAS_HITMS(_he) (_he->c2c_stats.t.lcl_hitm || _he->c2c_stats.t.rmt_hitm)
+
 static void resort_offset_cb(struct hist_entry *he)
 {
 	struct c2c_hists *c2c_hists = he->c2c_hists;
@@ -348,6 +350,9 @@ static void resort_cl_cb(struct hist_entry *he)
 	struct c2c_hists *c2c_hists = he->c2c_hists;
 	if (c2c_hists)
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
+
+	if (!HAS_HITMS(he))
+		he->filtered = (1 << HIST_FILTER__C2C_HITM);
 }
 
 static int perf_c2c_report(void)
