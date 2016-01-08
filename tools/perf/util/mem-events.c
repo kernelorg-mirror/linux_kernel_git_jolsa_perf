@@ -341,3 +341,20 @@ double perf_c2c_stats__percent_hitm(struct c2c_stats *stats,
 
 	return 100 * p;
 }
+
+double perf_c2c_stats__percent_ldmiss(struct c2c_stats *stats,
+				      struct c2c_stats *total)
+{
+	int tot, st;
+	double p;
+
+	st  = stats->t.rmt_hitm;
+        tot = total->t.lcl_dram +
+              total->t.rmt_dram +
+              total->t.rmt_hit +
+              total->t.rmt_hitm;
+
+	p = tot ? (double) st / tot : 0;
+
+	return 100 * p;
+}
