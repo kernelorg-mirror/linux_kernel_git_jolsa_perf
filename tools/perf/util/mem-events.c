@@ -327,3 +327,17 @@ uint64_t perf_c2c_stats__total_records(struct c2c_stats *stats)
 
 	return total;
 }
+
+double perf_c2c_stats__percent_hitm(struct c2c_stats *stats,
+				 struct c2c_stats *total)
+{
+	int tot, st;
+	double p;
+
+	st  = stats->t.lcl_hitm + stats->t.rmt_hitm;
+	tot = total->t.lcl_hitm + total->t.rmt_hitm;
+
+	p = tot ? (double) st / tot : 0;
+
+	return 100 * p;
+}
