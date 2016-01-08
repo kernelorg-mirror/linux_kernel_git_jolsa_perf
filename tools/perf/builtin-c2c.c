@@ -17,6 +17,7 @@ struct perf_c2c {
 	struct c2c_hists c2c_hists;
 	bool		 dont_use_callchains;
 	int		 max_stack;
+	bool		 use_stdio;
 };
 
 static struct perf_c2c c2c;
@@ -250,7 +251,8 @@ __hists__add_main_entry(struct hists *hists, struct hist_entry *entry,
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->entries_in);
 out:
-	hist_entry__append_callchain(he, sample);
+	if (!c2c.use_stdio)
+		hist_entry__append_callchain(he, sample);
 	return he__add_cacheline_entry(he, entry, sample);
 }
 
@@ -338,6 +340,39 @@ static const char * const *report_c2c_usage = __usage_report;
 
 #define HAS_HITMS(_he) (_he->c2c_stats.t.lcl_hitm || _he->c2c_stats.t.rmt_hitm)
 
+static int perf_c2c__stdio_browse(struct hists *hists)
+{
+        struct rb_node *nd;
+
+	printf("\n#\n");
+	printf("# Shared Data Cache Line Table\n");
+	printf("# ============================\n");
+	printf("#\n");
+
+	hists__fprintf(hists, true, 0, 0, 0, stdout);
+
+	printf("\nShared Cache Line Distribution Pareto\n\n");
+
+        nd = rb_first(&hists->entries);
+	do {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+		struct c2c_hists *c2c_hists = he->c2c_hists;
+
+		if (HAS_HITMS(he)) {
+			printf("\n#\n");
+			printf("# Cacheline: 0x%lx\n", he->mem_info->daddr.addr);
+			printf("# ==========\n");
+			printf("#\n");
+
+			hists__fprintf(&c2c_hists->hists, true, 0, 0, 0, stdout);
+		}
+
+                nd = rb_next(nd);
+        } while (nd);
+
+	return 0;
+}
+
 static void resort_offset_cb(struct hist_entry *he)
 {
 	struct c2c_hists *c2c_hists = he->c2c_hists;
@@ -360,6 +395,10 @@ static int perf_c2c_report(void)
 {
 	c2c_hists__reinit(&c2c.c2c_hists, "c2c_dcacheline", NULL);
 	hists__output_resort_cb(C2C_HISTS, NULL, resort_cl_cb);
+
+	if (c2c.use_stdio)
+		return perf_c2c__stdio_browse(C2C_HISTS);
+
 	return perf_c2c__hists_browse(C2C_HISTS);
 }
 
@@ -421,6 +460,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
+	OPT_BOOLEAN(0, "stdio", &c2c.use_stdio,
+		    "Use the stdio interface"),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", NULL,
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     c2c_callchain_help, &c2c_parse_callchain_opt,
@@ -432,8 +473,14 @@ static int perf_c2c__report(int argc, const char **argv)
 	argc = parse_options(argc, argv, c2c_options, report_c2c_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
-	use_browser = 1;
-	setup_browser(false);
+	/*
+	 * The use_browser variable is -1 by default,
+	 *  which will set TUI in setup_browser.
+	 */
+	if (c2c.use_stdio)
+		use_browser = 0;
+
+	setup_browser(true);
 
 	if (c2c_hists__init(&c2c.c2c_hists, "c2c_dcacheline", NULL))
 		return -1;
