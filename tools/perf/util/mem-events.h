@@ -85,6 +85,7 @@ struct c2c_stats {
 
 struct hist_entry;
 int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry);
+uint64_t perf_c2c_stats__total_records(struct c2c_stats *stats);
 
 #endif /* __PERF_MEM_EVENTS_H */
 
