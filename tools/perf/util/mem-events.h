@@ -43,6 +43,7 @@ extern struct perf_mem_event perf_mem_events[PERF_MEM_EVENTS__MAX];
 
 int perf_mem_events__parse(const char *str);
 int perf_mem_events__init(void);
+int perf_mem_events__find(char *name);
 
 int perf_mem__op_scnprintf(char *bf, size_t size, uint64_t val);
 int perf_mem__lvl_scnprintf(char *bf, size_t size, uint64_t val);
