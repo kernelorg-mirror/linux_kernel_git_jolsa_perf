@@ -99,6 +99,20 @@ int perf_mem_events__init(void)
 	return found ? 0 : -ENOENT;
 }
 
+int perf_mem_events__find(char *name)
+{
+	unsigned i;
+
+	for (i = 0; i < PERF_MEM_EVENTS__MAX; i++) {
+		struct perf_mem_event *event = &perf_mem_events[i];
+
+		if (strstr(name, event->sysfs_name))
+			break;
+	}
+
+	return i;
+}
+
 enum { NA = -1, OP, LVL, SNP, LCK, TLB };
 
 static int data_src__scnprintf(char *bf, size_t size, uint64_t val, int64_t field)
