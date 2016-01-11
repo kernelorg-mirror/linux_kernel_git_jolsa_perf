@@ -18,11 +18,30 @@ struct perf_c2c {
 	bool		 dont_use_callchains;
 	int		 max_stack;
 	bool		 use_stdio;
+
+	/* Initial list output entries. */
+	char			*list_sort;
+	char			*list_output;
+
+	/* Detailed (cacheline) list sort and output entries */
+	char			*cl_sort;
+	char			*cl_output;
 };
 
 static struct perf_c2c c2c;
 
 #define C2C_HISTS (&c2c.c2c_hists.hists)
+
+struct c2c_event {
+	const char **list_sort;
+	const char **list_output;
+	const char **cl_sort;
+	const char **cl_output;
+	unsigned size_list_sort;
+	unsigned size_list_output;
+	unsigned size_cl_sort;
+	unsigned size_cl_output;
+};
 
 static int c2c_hists__init(struct c2c_hists *c2c_hists,
 			   const char *sort, const char *output)
@@ -190,7 +209,7 @@ he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry,
 {
 	struct c2c_hists *c2c_hists;
 
-	c2c_hists = he__get_c2c_hists(he, "c2c_offset", "symbol_daddr");
+	c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, c2c.cl_output);
 	if (!c2c_hists)
 		return NULL;
 
@@ -392,7 +411,7 @@ static void resort_cl_cb(struct hist_entry *he)
 
 static int perf_c2c_report(void)
 {
-	c2c_hists__reinit(&c2c.c2c_hists, "c2c_dcacheline", NULL);
+	c2c_hists__reinit(&c2c.c2c_hists, c2c.list_sort, c2c.list_output);
 	hists__output_resort_cb(C2C_HISTS, NULL, resort_cl_cb);
 
 	if (c2c.use_stdio)
@@ -442,6 +461,158 @@ static int setup_callchains(struct perf_session *session)
 			return -EINVAL;
 		}
 	}
+
+	return 0;
+}
+
+/* ldlat-loads */
+static const char *ldlat_loads__list_sort[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+};
+
+static const char *ldlat_loads__list_output[] = {
+	"c2c_percent_ldmiss",
+	"c2c_percent_hitm",
+	"c2c_ld_fbhit",
+	"c2c_ld_l1hit",
+	"c2c_ld_l2hit",
+	"c2c_ld_llchit",
+	"c2c_ld_rmthit",
+	"c2c_tot_hitm",
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+};
+
+static const char *ldlat_loads__cl_sort[] = {
+};
+
+static const char *ldlat_loads__cl_output[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_ldmiss",
+	"c2c_percent_hitm",
+	"c2c_percent_rmt_hitm",
+	"c2c_percent_lcl_hitm",
+};
+
+/* ldlat-stores */
+static const char *ldlat_stores__list_output[] = {
+	"c2c_stores",
+	"c2c_stores_l1hit",
+	"c2c_stores_l1_miss",
+	"c2c_ld_fbhit",
+	"c2c_ld_l1hit",
+	"c2c_ld_l2hit",
+};
+
+static const char *ldlat_stores__cl_output[] = {
+	"c2c_percent_st_l1hit",
+	"c2c_percent_st_l1miss",
+};
+
+#define L(__v, __l)					\
+	.__l          = __v ## __ ## __l,		\
+	.size_ ## __l = ARRAY_SIZE(__v ## __ ## __l)
+
+static struct c2c_event events[] = {
+	[PERF_MEM_EVENTS__LOAD] = {
+		L(ldlat_loads, list_sort),
+		L(ldlat_loads, list_output),
+		L(ldlat_loads, cl_sort),
+		L(ldlat_loads, cl_output),
+	},
+	[PERF_MEM_EVENTS__STORE] = {
+		L(ldlat_stores, list_output),
+		L(ldlat_stores, cl_output),
+	},
+};
+
+#undef LIST
+
+#define LIST_STR_MAX 1000
+static char *get_list_str(const char **list, unsigned list_size)
+{
+	char buf[LIST_STR_MAX];
+	unsigned i;
+
+	*buf= 0x0;
+
+	for (i = 0; i < list_size; i++) {
+		strcat(buf, list[i]);
+		if (i < (list_size - 1))
+			strcat(buf, ",");
+	}
+
+	return strdup(buf);
+}
+#undef LIST_STR_MAX
+
+static int append_str(char **dest, const char *src)
+{
+	char *str;
+
+	if (*dest) {
+		if (asprintf(&str, "%s,%s", *dest, src) < 0)
+			return -ENOMEM;
+	} else {
+		if (asprintf(&str, "%s", src) < 0)
+			return -ENOMEM;
+	}
+
+	free(*dest);
+	*dest = str;
+	return 0;
+}
+
+static int setup_event(struct c2c_event *event)
+{
+#define LIST_STR(__list)							\
+	if (event->__list) {							\
+		char *str;							\
+										\
+		str = get_list_str(event->__list, event->size_ ## __list);	\
+		if (!str)							\
+			return -ENOMEM;						\
+										\
+		if (append_str(&c2c.__list, str))				\
+			return -ENOMEM;						\
+	}
+
+	LIST_STR(list_sort);
+	LIST_STR(list_output);
+	LIST_STR(cl_sort);
+	LIST_STR(cl_output);
+
+#undef LIST_STR
+	return 0;
+}
+
+static int setup_events(struct perf_session *session)
+{
+	struct perf_evsel *evsel;
+
+	c2c.list_output = strdup("c2c_dcacheline,c2c_stats_nr,c2c_tot_recs");
+	c2c.cl_sort     = strdup("c2c_offset");
+	c2c.cl_output   = strdup("c2c_offset,c2c_iaddr");
+
+	if (!c2c.list_output || !c2c.cl_output)
+		return -ENOMEM;
+
+	evlist__for_each(session->evlist, evsel) {
+		unsigned i;
+
+		i = perf_mem_events__find(evsel->name);
+		if (i == PERF_MEM_EVENTS__MAX)
+			continue;
+
+		setup_event(&events[i]);
+	};
+
+	pr_debug("list_sort   %s\n", c2c.list_sort);
+	pr_debug("list_output %s\n", c2c.list_output);
+	pr_debug("cl_sort     %s\n", c2c.cl_sort);
+	pr_debug("cl_output   %s\n", c2c.cl_output);
 
 	return 0;
 }
@@ -498,6 +669,11 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	if (setup_callchains(session)) {
 		pr_err("Failed to setup callchains.\n");
+		goto out_session;
+	}
+
+	if (setup_events(session)) {
+		pr_err("Failed to setup events.\n");
 		goto out_session;
 	}
 
