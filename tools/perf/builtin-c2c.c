@@ -41,6 +41,7 @@ struct c2c_event {
 	unsigned size_list_output;
 	unsigned size_cl_sort;
 	unsigned size_cl_output;
+	u64	   dsrc;
 };
 
 static int c2c_hists__init(struct c2c_hists *c2c_hists,
@@ -313,6 +314,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	struct addr_location al;
 	struct mem_info *mi;
 	struct hist_entry *he;
+	struct c2c_event *c2c_event = evsel->handler;
 
 	if (perf_event__preprocess_sample(event, machine, &al, sample) < 0) {
 		fprintf(stderr, "problem processing %d event, skipping it.\n",
@@ -326,6 +328,9 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	mi = sample__resolve_mem(sample, &al);
 	if (mi == NULL)
 		return -ENOMEM;
+
+	if (c2c_event->dsrc)
+		mi->data_src.val = c2c_event->dsrc;
 
 	he = hists__add_main_entry(C2C_HISTS, &al, mi, sample);
 	return he ? 0 : -1;
@@ -516,6 +521,8 @@ static const char *ldlat_stores__cl_output[] = {
 	.__l          = __v ## __ ## __l,		\
 	.size_ ## __l = ARRAY_SIZE(__v ## __ ## __l)
 
+#define P(a, s) PERF_MEM_S(a, s)
+
 static struct c2c_event events[] = {
 	[PERF_MEM_EVENTS__LOAD] = {
 		L(ldlat_loads, list_sort),
@@ -526,6 +533,63 @@ static struct c2c_event events[] = {
 	[PERF_MEM_EVENTS__STORE] = {
 		L(ldlat_stores, list_output),
 		L(ldlat_stores, cl_output),
+	},
+	[PERF_MEM_EVENTS__STLB_MISS_LOADS] = {
+		.dsrc = P(OP, LOAD) | P(TLB, MISS),
+	},
+	[PERF_MEM_EVENTS__STLB_MISS_STORES] = {
+		.dsrc = P(OP, STORE) | P(TLB, MISS)
+	},
+	[PERF_MEM_EVENTS__LOCK_LOADS] = {
+		.dsrc = P(OP, LOAD) | P(LOCK, LOCKED)
+	},
+	[PERF_MEM_EVENTS__SPLIT_LOADS] = {
+		.dsrc = P(OP, LOAD)
+	},
+	[PERF_MEM_EVENTS__SPLIT_STORES] = {
+		.dsrc = P(OP, STORE)
+	},
+	[PERF_MEM_EVENTS__ALL_LOADS] = {
+		.dsrc = P(OP, LOAD)
+	},
+	[PERF_MEM_EVENTS__ALL_STORES] = {
+		.dsrc = P(OP, STORE)
+	},
+	[PERF_MEM_EVENTS__L1_HIT] = {
+		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, L1)
+	},
+	[PERF_MEM_EVENTS__L2_HIT] = {
+		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, L2)
+	},
+	[PERF_MEM_EVENTS__L3_HIT] = {
+		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, L3)
+	},
+	[PERF_MEM_EVENTS__L1_MISS] = {
+		.dsrc = P(OP, LOAD) | P(LVL, MISS) | P(LVL, L1)
+	},
+	[PERF_MEM_EVENTS__L2_MISS] = {
+		.dsrc = P(OP, LOAD) | P(LVL, MISS) | P(LVL, L2)
+	},
+	[PERF_MEM_EVENTS__L3_MISS] = {
+		.dsrc = P(OP, LOAD) | P(LVL, MISS) | P(LVL, L3)
+	},
+	[PERF_MEM_EVENTS__LFB] = {
+		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, LFB)
+	},
+	[PERF_MEM_EVENTS__SNP_MISS] = {
+		.dsrc = P(SNOOP, MISS)
+	},
+	[PERF_MEM_EVENTS__SNP_HIT] = {
+		.dsrc = P(SNOOP, HIT)
+	},
+	[PERF_MEM_EVENTS__SNP_HITM] = {
+		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, L3) | P(SNOOP, HITM)
+	},
+	[PERF_MEM_EVENTS__SNP_NONE] = {
+		.dsrc = P(SNOOP, NONE)
+	},
+	[PERF_MEM_EVENTS__LOCAL_DRAM] = {
+		.dsrc = P(LVL, LOC_RAM)
 	},
 };
 
@@ -566,7 +630,7 @@ static int append_str(char **dest, const char *src)
 	return 0;
 }
 
-static int setup_event(struct c2c_event *event)
+static int setup_event(struct perf_evsel *evsel, struct c2c_event *event)
 {
 #define LIST_STR(__list)							\
 	if (event->__list) {							\
@@ -586,6 +650,8 @@ static int setup_event(struct c2c_event *event)
 	LIST_STR(cl_output);
 
 #undef LIST_STR
+
+	evsel->handler = event;
 	return 0;
 }
 
@@ -607,7 +673,7 @@ static int setup_events(struct perf_session *session)
 		if (i == PERF_MEM_EVENTS__MAX)
 			continue;
 
-		setup_event(&events[i]);
+		setup_event(evsel, &events[i]);
 	};
 
 	pr_debug("list_sort   %s\n", c2c.list_sort);
