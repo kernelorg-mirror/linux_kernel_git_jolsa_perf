@@ -516,6 +516,50 @@ static const char *ldlat_stores__cl_output[] = {
 	"c2c_percent_st_l1miss",
 };
 
+/* snp-hitm */
+static const char *snp_hitm__list_sort[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+};
+
+static const char *snp_hitm__list_output[] = {
+	"c2c_percent_hitm",
+	"c2c_tot_hitm",
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+};
+
+static const char *snp_hitm__cl_sort[] = {
+};
+
+static const char *snp_hitm__cl_output[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_hitm",
+	"c2c_percent_rmt_hitm",
+	"c2c_percent_lcl_hitm",
+};
+
+/* all-stores */
+static const char *all_stores__list_sort[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_hitm",
+	"c2c_stores",
+};
+
+static const char *all_stores__list_output[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_hitm",
+	"c2c_stores",
+};
+
+static const char *all_stores__cl_output[] = {
+	"c2c_stores",
+};
+
+
 #define L(__v, __l)					\
 	.__l          = __v ## __ ## __l,		\
 	.size_ ## __l = ARRAY_SIZE(__v ## __ ## __l)
@@ -552,6 +596,9 @@ static struct c2c_event events[] = {
 		.dsrc = P(OP, LOAD)
 	},
 	[PERF_MEM_EVENTS__ALL_STORES] = {
+		L(all_stores, list_sort),
+		L(all_stores, list_output),
+		L(all_stores, cl_output),
 		.dsrc = P(OP, STORE)
 	},
 	[PERF_MEM_EVENTS__L1_HIT] = {
@@ -582,6 +629,10 @@ static struct c2c_event events[] = {
 		.dsrc = P(SNOOP, HIT)
 	},
 	[PERF_MEM_EVENTS__SNP_HITM] = {
+		L(snp_hitm, list_sort),
+		L(snp_hitm, list_output),
+		L(snp_hitm, cl_sort),
+		L(snp_hitm, cl_output),
 		.dsrc = P(OP, LOAD) | P(LVL, HIT) | P(LVL, L3) | P(SNOOP, HITM)
 	},
 	[PERF_MEM_EVENTS__SNP_NONE] = {
