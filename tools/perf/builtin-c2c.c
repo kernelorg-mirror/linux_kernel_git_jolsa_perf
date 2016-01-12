@@ -56,7 +56,8 @@ static struct c2c_hists* he__get_c2c_hists(struct hist_entry *he,
 }
 
 static struct hist_entry*
-__he__add_offset_entry(struct hists *hists, struct hist_entry *entry)
+__he__add_offset_entry(struct hists *hists, struct hist_entry *entry,
+		       struct perf_sample *sample __maybe_unused)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -113,7 +114,8 @@ out:
 }
 
 static struct hist_entry*
-he__add_offset_entry(struct hist_entry *he, struct hist_entry *entry)
+he__add_offset_entry(struct hist_entry *he, struct hist_entry *entry,
+		     struct perf_sample *sample)
 {
 	struct c2c_hists *c2c_hists;
 
@@ -126,11 +128,12 @@ he__add_offset_entry(struct hist_entry *he, struct hist_entry *entry)
 	/* Account cacheline offset overall stats. */
 	c2c_decode_stats(&c2c_hists->hists.c2c_stats, entry);
 
-	return __he__add_offset_entry(&c2c_hists->hists, entry);
+	return __he__add_offset_entry(&c2c_hists->hists, entry, sample);
 }
 
 static struct hist_entry*
-__he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry)
+__he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry,
+			  struct perf_sample *sample)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -176,11 +179,12 @@ __he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry)
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node, hists->entries_in);
 out:
-	return he__add_offset_entry(he, entry);
+	return he__add_offset_entry(he, entry, sample);
 }
 
 static struct hist_entry*
-he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry)
+he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry,
+			struct perf_sample *sample)
 {
 	struct c2c_hists *c2c_hists;
 
@@ -193,11 +197,12 @@ he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry)
 	/* Account cacheline offset overall stats. */
 	c2c_decode_stats(&c2c_hists->hists.c2c_stats, entry);
 
-	return __he__add_cacheline_entry(&c2c_hists->hists, entry);
+	return __he__add_cacheline_entry(&c2c_hists->hists, entry, sample);
 }
 
 static struct hist_entry*
-__hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
+__hists__add_main_entry(struct hists *hists, struct hist_entry *entry,
+			struct perf_sample *sample)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -243,12 +248,12 @@ __hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->entries_in);
 out:
-	return he__add_cacheline_entry(he, entry);
+	return he__add_cacheline_entry(he, entry, sample);
 }
 
 static struct hist_entry*
 hists__add_main_entry(struct hists *hists, struct addr_location *al,
-		     struct mem_info *mi)
+		     struct mem_info *mi, struct perf_sample *sample)
 {
 	struct hist_entry entry = {
 		.thread	= al->thread,
@@ -272,7 +277,7 @@ hists__add_main_entry(struct hists *hists, struct addr_location *al,
 	/* Account overall numbers. */
 	c2c_decode_stats(&hists->c2c_stats, &entry);
 
-	return __hists__add_main_entry(hists, &entry);
+	return __hists__add_main_entry(hists, &entry, sample);
 }
 
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
@@ -295,7 +300,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (mi == NULL)
 		return -ENOMEM;
 
-	he = hists__add_main_entry(C2C_HISTS, &al, mi);
+	he = hists__add_main_entry(C2C_HISTS, &al, mi, sample);
 	return he ? 0 : -1;
 }
 
