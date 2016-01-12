@@ -109,6 +109,7 @@ __he__add_offset_entry(struct hists *hists, struct hist_entry *entry,
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node, hists->entries_in);
 out:
+	hist_entry__append_callchain(he, sample);
 	return he;
 }
 
@@ -178,6 +179,7 @@ __he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry,
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node, hists->entries_in);
 out:
+	hist_entry__append_callchain(he, sample);
 	return he__add_offset_entry(he, entry, sample);
 }
 
@@ -247,6 +249,7 @@ __hists__add_main_entry(struct hists *hists, struct hist_entry *entry,
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->entries_in);
 out:
+	hist_entry__append_callchain(he, sample);
 	return he__add_cacheline_entry(he, entry, sample);
 }
 
@@ -282,7 +285,7 @@ hists__add_main_entry(struct hists *hists, struct addr_location *al,
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				union perf_event *event,
 				struct perf_sample *sample,
-				struct perf_evsel *evsel __maybe_unused,
+				struct perf_evsel *evsel,
 				struct machine *machine)
 {
 	struct addr_location al;
@@ -294,6 +297,9 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				event->header.type);
 		return -1;
 	}
+
+	if (sample__resolve_callchain(sample, NULL, evsel, &al, c2c.max_stack))
+		return -1;
 
 	mi = sample__resolve_mem(sample, &al);
 	if (mi == NULL)
