@@ -154,8 +154,12 @@ int hist_entry__sort_snprintf(struct hist_entry *he, char *bf, size_t size,
 			      struct hists *hists);
 void hist_entry__delete(struct hist_entry *he);
 
+typedef void (*hists__resort_cb_t)(struct hist_entry *he);
+
 void perf_evsel__output_resort(struct perf_evsel *evsel, struct ui_progress *prog);
 void hists__output_resort(struct hists *hists, struct ui_progress *prog);
+void hists__output_resort_cb(struct hists *hists, struct ui_progress *prog,
+			     hists__resort_cb_t cb);
 void hists__collapse_resort(struct hists *hists, struct ui_progress *prog);
 
 void hists__decay_entries(struct hists *hists, bool zap_user, bool zap_kernel);
