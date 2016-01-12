@@ -36,8 +36,24 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 	return hists__setup_hpp_list(&c2c_hists->hists, sort, output);
 }
 
+static struct c2c_hists* he__get_c2c_hists(struct hist_entry *he,
+					   const char *sort, const char *output)
+{
+	struct c2c_hists *c2c_hists = he->c2c_hists;
+
+	if (!c2c_hists) {
+		he->c2c_hists = c2c_hists = malloc(sizeof(*c2c_hists));
+		if (!c2c_hists)
+			return NULL;
+
+		c2c_hists__init(c2c_hists, sort, output);
+	}
+
+	return c2c_hists;
+}
+
 static struct hist_entry*
-__hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
+__he__add_cacheline_entry(struct hists *hists, struct hist_entry *entry)
 {
 	struct rb_node **p;
 	struct rb_node *parent = NULL;
@@ -86,9 +102,71 @@ __hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
 	hists->nr_entries++;
 
 	rb_link_node(&he->rb_node_in, parent, p);
-	rb_insert_color(&he->rb_node_in, hists->entries_in);
+	rb_insert_color(&he->rb_node, hists->entries_in);
 out:
 	return he;
+}
+
+static struct hist_entry*
+he__add_cacheline_entry(struct hist_entry *he, struct hist_entry *entry)
+{
+	struct c2c_hists *c2c_hists;
+
+	c2c_hists = he__get_c2c_hists(he, "c2c_offset", "symbol_daddr");
+	if (!c2c_hists)
+		return NULL;
+
+	entry->hists = &c2c_hists->hists;
+	return __he__add_cacheline_entry(&c2c_hists->hists, entry);
+}
+
+static struct hist_entry*
+__hists__add_main_entry(struct hists *hists, struct hist_entry *entry)
+{
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
+	struct hist_entry *he;
+	int64_t cmp;
+
+	p = &hists->entries_in->rb_node;
+
+	while (*p != NULL) {
+		parent = *p;
+		he = rb_entry(parent, struct hist_entry, rb_node_in);
+
+		cmp = hist_entry__cmp(he, entry);
+
+		if (!cmp) {
+			/* If the map of an existing hist_entry has
+			 * become out-of-date due to an exec() or
+			 * similar, update it.  Otherwise we will
+			 * mis-adjust symbol addresses when computing
+			 * the history counter to increment.
+			 */
+			if (he->ms.map != entry->ms.map) {
+				map__put(he->ms.map);
+				he->ms.map = map__get(entry->ms.map);
+			}
+
+			goto out;
+		}
+
+		if (cmp < 0)
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
+
+	he = hist_entry__new(entry, true);
+	if (!he)
+		return NULL;
+
+	hists->nr_entries++;
+
+	rb_link_node(&he->rb_node_in, parent, p);
+	rb_insert_color(&he->rb_node_in, hists->entries_in);
+out:
+	return he__add_cacheline_entry(he, entry);
 }
 
 static struct hist_entry*
@@ -163,10 +241,17 @@ static const char * const __usage_report[] = {
 
 static const char * const *report_c2c_usage = __usage_report;
 
+static void resort_cl_cb(struct hist_entry *he)
+{
+	struct c2c_hists *c2c_hists = he->c2c_hists;
+	if (c2c_hists)
+		hists__output_resort(&c2c_hists->hists, NULL);
+}
+
 static int perf_c2c_report(void)
 {
 	c2c_hists__reinit(&c2c.c2c_hists, "c2c_dcacheline", NULL);
-	hists__output_resort(C2C_HISTS, NULL);
+	hists__output_resort_cb(C2C_HISTS, NULL, resort_cl_cb);
 	return 0;
 }
 
