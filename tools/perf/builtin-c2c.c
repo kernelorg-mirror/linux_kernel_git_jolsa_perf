@@ -744,6 +744,7 @@ struct c2c_group {
 
 enum {
 	C2C_GROUP__LDLAT,
+	C2C_GROUP__MEM,
 	C2C_GROUP__MAX,
 };
 
@@ -792,6 +793,27 @@ static const int ldlat__events[] = {
 	PERF_MEM_EVENTS__STORE,
 };
 
+static const char *mem__list_sort[] = {
+	"c2c_tot_hitm",
+	"c2c_stores",
+};
+
+static const char *mem__list_output[] = {
+	"c2c_tot_hitm",
+	"c2c_percent_hitm",
+	"c2c_stores",
+};
+
+static const char *mem__cl_output[] = {
+	"c2c_tot_hitm",
+	"c2c_stores",
+};
+
+static const int mem__events[] = {
+	PERF_MEM_EVENTS__SNP_HITM,
+	PERF_MEM_EVENTS__ALL_STORES,
+};
+
 struct c2c_group groups[C2C_GROUP__MAX] = {
 	[C2C_GROUP__LDLAT] = {
 		.name = "ldlat",
@@ -799,6 +821,13 @@ struct c2c_group groups[C2C_GROUP__MAX] = {
 		L(ldlat, list_output),
 		L(ldlat, cl_output),
 		L(ldlat, events),
+	},
+	[C2C_GROUP__MEM] = {
+		.name = "mem",
+		L(mem, list_sort),
+		L(mem, list_output),
+		L(mem, cl_output),
+		L(mem, events),
 	},
 };
 
