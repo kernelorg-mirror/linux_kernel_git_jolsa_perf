@@ -831,6 +831,20 @@ struct c2c_group groups[C2C_GROUP__MAX] = {
 	},
 };
 
+static struct c2c_group *find_group(const char *name)
+{
+	unsigned i;
+
+	for (i = 0; i < C2C_GROUP__MAX; i++) {
+		struct c2c_group *group = &groups[i];
+
+		if (!strcmp(name, group->name))
+			return group;
+	}
+
+	return NULL;
+}
+
 static int detect_group(struct perf_session *session, struct c2c_group *group)
 {
 	unsigned i;
@@ -1033,6 +1047,23 @@ static const char * const __usage_record[] = {
 
 static const char * const *record_mem_usage = __usage_record;
 
+static int record_group(const char *name)
+{
+	struct c2c_group *group = find_group(name);
+	unsigned i;
+
+	if (!group) {
+		pr_err("failed to find the group: %s\n", name);
+		return -1;
+	}
+
+	for (i = 0; i < group->size_events; i++) {
+		perf_mem_events[group->events[i]].record = true;
+	}
+
+	return 0;
+}
+
 static int perf_c2c__record(int argc, const char **argv)
 {
 	int rec_argc, i = 0, j;
@@ -1040,10 +1071,12 @@ static int perf_c2c__record(int argc, const char **argv)
 	int ret;
 	bool all_user = false, all_kernel = false;
 	bool event_set = false;
+	const char *group = NULL;
 	struct option options[] = {
 	OPT_CALLBACK('e', "event", &event_set, "event",
 		     "event selector. use 'perf mem record -e list' to list available events",
 		     parse_record_events),
+	OPT_STRING('g', "group", &group, "group", "record group"),
 	OPT_INCR('v', "verbose", &verbose,
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_BOOLEAN('u', "--all-user", &all_user, "collect only user level data"),
@@ -1066,7 +1099,15 @@ static int perf_c2c__record(int argc, const char **argv)
 
 	rec_argv[i++] = "record";
 
-	if (!event_set) {
+	if (event_set && group) {
+		pr_err("Can't set events and group together\n");
+		return -1;
+	}
+
+	if (group && record_group(group))
+		return -1;
+
+	if (!event_set && !group) {
 		perf_mem_events[PERF_MEM_EVENTS__LOAD].record  = true;
 		perf_mem_events[PERF_MEM_EVENTS__STORE].record = true;
 		all_kernel = true;
