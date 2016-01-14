@@ -742,10 +742,64 @@ struct c2c_group {
 };
 
 enum {
+	C2C_GROUP__LDLAT,
 	C2C_GROUP__MAX,
 };
 
-struct c2c_group groups[C2C_GROUP__MAX] = { };
+static const char *ldlat__list_sort[] = {
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_stores",
+};
+
+static const char *ldlat__list_output[] = {
+	"c2c_tot_hitm",
+	"c2c_percent_hitm",
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_rmt_hitm",
+	"c2c_percent_lcl_hitm",
+	"c2c_stores",
+	"c2c_percent_st_l1hit",
+	"c2c_percent_st_l1miss",
+	"c2c_ld_fbhit",
+	"c2c_ld_l1hit",
+	"c2c_ld_l2hit",
+	"c2c_ld_llchit",
+	"c2c_ld_rmthit",
+};
+
+static const char *ldlat__cl_output[] = {
+	"c2c_tot_hitm",
+	"c2c_percent_hitm",
+	"c2c_rmt_hitm",
+	"c2c_lcl_hitm",
+	"c2c_percent_rmt_hitm",
+	"c2c_percent_lcl_hitm",
+	"c2c_stores",
+	"c2c_percent_st_l1hit",
+	"c2c_percent_st_l1miss",
+	"c2c_ld_fbhit",
+	"c2c_ld_l1hit",
+	"c2c_ld_l2hit",
+	"c2c_ld_llchit",
+	"c2c_ld_rmthit",
+};
+
+static const int ldlat__events[] = {
+	PERF_MEM_EVENTS__LOAD,
+	PERF_MEM_EVENTS__STORE,
+};
+
+struct c2c_group groups[C2C_GROUP__MAX] = {
+	[C2C_GROUP__LDLAT] = {
+		.name = "ldlat",
+		L(ldlat, list_sort),
+		L(ldlat, list_output),
+		L(ldlat, cl_output),
+		L(ldlat, events),
+	},
+};
 
 static int detect_group(struct perf_session *session, struct c2c_group *group)
 {
