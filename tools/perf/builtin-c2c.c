@@ -680,7 +680,7 @@ static int append_str(char **dest, const char *src)
 	return 0;
 }
 
-static int setup_event(struct perf_evsel *evsel, struct c2c_event *event)
+static int setup_event(struct c2c_event *event)
 {
 #define LIST_STR(__list)							\
 	if (event->__list) {							\
@@ -700,12 +700,10 @@ static int setup_event(struct perf_evsel *evsel, struct c2c_event *event)
 	LIST_STR(cl_output);
 
 #undef LIST_STR
-
-	evsel->handler = event;
 	return 0;
 }
 
-static int setup_events(struct perf_session *session)
+static int __setup_events(struct perf_session *session)
 {
 	struct perf_evsel *evsel;
 
@@ -723,15 +721,130 @@ static int setup_events(struct perf_session *session)
 		if (i == PERF_MEM_EVENTS__MAX)
 			continue;
 
-		setup_event(evsel, &events[i]);
+		setup_event(&events[i]);
 	};
 
-	pr_debug("list_sort   %s\n", c2c.list_sort);
-	pr_debug("list_output %s\n", c2c.list_output);
-	pr_debug("cl_sort     %s\n", c2c.cl_sort);
-	pr_debug("cl_output   %s\n", c2c.cl_output);
+	return 0;
+}
+
+struct c2c_group {
+	const char *name;
+	const char **list_sort;
+	const char **list_output;
+	const char **cl_sort;
+	const char **cl_output;
+	unsigned size_list_sort;
+	unsigned size_list_output;
+	unsigned size_cl_sort;
+	unsigned size_cl_output;
+	const int  *events;
+	unsigned    size_events;
+};
+
+enum {
+	C2C_GROUP__MAX,
+};
+
+struct c2c_group groups[C2C_GROUP__MAX] = { };
+
+static int detect_group(struct perf_session *session, struct c2c_group *group)
+{
+	unsigned i;
+
+	for (i = 0; i < group->size_events; i++) {
+		struct perf_evsel *evsel;
+		bool found = false;
+		int event = group->events[i];
+
+		evlist__for_each(session->evlist, evsel) {
+			if (event == perf_mem_events__find(evsel->name)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			return 0;
+	}
+
+	return 1;
+}
+
+static int setup_groups(struct perf_session *session)
+{
+	struct c2c_group *group;
+	int i;
+
+	for (i = 0; i < C2C_GROUP__MAX; i++) {
+		if (detect_group(session, &groups[i]))
+			break;
+	}
+
+	if (i == C2C_GROUP__MAX)
+		return -1;
+
+	group = &groups[i];
+
+	pr_debug("detected group %s\n", group->name);
+
+	c2c.list_output = strdup("c2c_dcacheline,symbol_daddr,c2c_stats_nr");
+	c2c.cl_sort     = strdup("c2c_offset");
+	c2c.cl_output   = strdup("c2c_offset");
+
+#define LIST_STR(__list)							\
+	if (group->__list) {							\
+		char *str;							\
+										\
+		str = get_list_str(group->__list, group->size_ ## __list);	\
+		if (!str)							\
+			return -ENOMEM;						\
+										\
+		if (append_str(&c2c.__list, str))				\
+			return -ENOMEM;						\
+	}
+
+	LIST_STR(list_sort);
+	LIST_STR(list_output);
+	LIST_STR(cl_sort);
+	LIST_STR(cl_output);
+
+#undef LIST_STR
 
 	return 0;
+}
+
+static void setup_events_dsrc(struct perf_session *session)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(session->evlist, evsel) {
+		int i = perf_mem_events__find(evsel->name);
+
+		if (i == PERF_MEM_EVENTS__MAX)
+			continue;
+
+		evsel->handler = &events[i];
+	}
+}
+
+static int setup_events(struct perf_session *session)
+{
+	int err;
+
+	setup_events_dsrc(session);
+
+	err = setup_groups(session);
+	if (err)
+		err = __setup_events(session);
+
+	if (!err) {
+		pr_debug("list_sort   %s\n", c2c.list_sort);
+		pr_debug("list_output %s\n", c2c.list_output);
+		pr_debug("cl_sort     %s\n", c2c.cl_sort);
+		pr_debug("cl_output   %s\n", c2c.cl_output);
+	}
+
+	return err;
 }
 
 static int perf_c2c__report(int argc, const char **argv)
