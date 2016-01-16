@@ -125,6 +125,7 @@ struct trace_sched_handler {
 };
 
 #define COLOR_PIDS PERF_COLOR_BLUE
+#define COLOR_CPUS PERF_COLOR_BG_RED
 
 struct perf_sched_map {
 	DECLARE_BITMAP(comp_cpus_mask, MAX_CPUS);
@@ -132,6 +133,8 @@ struct perf_sched_map {
 	bool			 comp;
 	struct thread_map	*pids;
 	const char		*color_pids;
+	const char		*cpu_list;
+	struct cpu_map		*cpus;
 };
 
 struct perf_sched {
@@ -1475,14 +1478,18 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 		int cpu = sched->map.comp ? sched->map.comp_cpus[i] : i;
 		struct thread *curr_thread = sched->curr_thread[cpu];
 		const char *pid_color = color;
+		const char *cpu_color = color;
 
 		if (curr_thread && thread__has_color(curr_thread))
 			pid_color = COLOR_PIDS;
 
+		if (sched->map.cpus && cpu_map__has(sched->map.cpus, cpu))
+			cpu_color = COLOR_CPUS;
+
 		if (cpu != this_cpu)
-			color_fprintf(stdout, color, " ");
+			color_fprintf(stdout, cpu_color, " ");
 		else
-			color_fprintf(stdout, color, "*");
+			color_fprintf(stdout, cpu_color, "*");
 
 		if (sched->curr_thread[cpu])
 			color_fprintf(stdout, pid_color, "%2s ", sched->curr_thread[cpu]->shortname);
@@ -1763,13 +1770,26 @@ static int perf_sched__lat(struct perf_sched *sched)
 
 static int setup_map_cpus(struct perf_sched *sched)
 {
+	struct cpu_map *map;
+
 	sched->max_cpu  = sysconf(_SC_NPROCESSORS_CONF);
 
 	if (sched->map.comp) {
 		sched->map.comp_cpus = zalloc(sched->max_cpu * sizeof(int));
-		return sched->map.comp_cpus ? 0 : -1;
+		if (!sched->map.comp_cpus)
+			return -1;
 	}
 
+	if (!sched->map.cpu_list)
+		return 0;
+
+	map = cpu_map__new(sched->map.cpu_list);
+	if (!map) {
+		pr_err("failed to get thread map from %s\n", sched->map.cpu_list);
+		return -1;
+	}
+
+	sched->map.cpus = map;
 	return 0;
 }
 
@@ -1955,6 +1975,8 @@ int cmd_sched(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "map output in compact mode"),
 	OPT_STRING('p', "pids", &sched.map.color_pids, "pids",
                     "highlight given pids in map"),
+	OPT_STRING('C', "cpus", &sched.map.cpu_list, "cpus",
+                    "highlight given CPUs in map"),
 	OPT_END()
 	};
 	const char * const latency_usage[] = {
