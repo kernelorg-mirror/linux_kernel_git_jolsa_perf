@@ -11,6 +11,7 @@
 #include "util/session.h"
 #include "util/tool.h"
 #include "util/cloexec.h"
+#include "util/thread_map.h"
 #include "util/color.h"
 
 #include <subcmd/parse-options.h>
@@ -123,10 +124,14 @@ struct trace_sched_handler {
 				  struct machine *machine);
 };
 
+#define COLOR_PIDS PERF_COLOR_BLUE
+
 struct perf_sched_map {
 	DECLARE_BITMAP(comp_cpus_mask, MAX_CPUS);
 	int			*comp_cpus;
 	bool			 comp;
+	struct thread_map	*pids;
+	const char		*color_pids;
 };
 
 struct perf_sched {
@@ -1347,6 +1352,52 @@ static int process_sched_wakeup_event(struct perf_tool *tool,
 	return 0;
 }
 
+union map_priv {
+	void		*ptr;
+	unsigned long	 bits;
+};
+
+#define PID_SET   0x1
+#define PID_COLOR 0x2
+#define IS_SET(bits)   ((bits) & PID_SET)
+#define IS_COLOR(bits) ((bits) & PID_COLOR)
+
+static bool thread__is_set(struct thread *thread)
+{
+	union map_priv priv = {
+		.ptr = thread__priv(thread),
+	};
+
+	return IS_SET(priv.bits);
+}
+
+static bool thread__has_color(struct thread *thread)
+{
+	union map_priv priv = {
+		.ptr = thread__priv(thread),
+	};
+
+	return IS_COLOR(priv.bits);
+}
+
+static struct thread*
+map__findnew_thread(struct perf_sched *sched, struct machine *machine, pid_t pid, pid_t tid)
+{
+	struct thread *thread = machine__findnew_thread(machine, pid, tid);
+	union map_priv priv = {
+		.bits = PID_SET,
+	};
+
+	if (!sched->map.color_pids || !thread || thread__is_set(thread))
+		return thread;
+
+	if (thread_map__has(sched->map.pids, tid))
+		priv.bits |= PID_COLOR;
+
+	thread__set_priv(thread, priv.ptr);
+	return thread;
+}
+
 static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 			    struct perf_sample *sample, struct machine *machine)
 {
@@ -1386,7 +1437,7 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 		return -1;
 	}
 
-	sched_in = machine__findnew_thread(machine, -1, next_pid);
+	sched_in = map__findnew_thread(sched, machine, -1, next_pid);
 	if (sched_in == NULL)
 		return -1;
 
@@ -1422,6 +1473,11 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 
 	for (i = 0; i < cpus_nr; i++) {
 		int cpu = sched->map.comp ? sched->map.comp_cpus[i] : i;
+		struct thread *curr_thread = sched->curr_thread[cpu];
+		const char *pid_color = color;
+
+		if (curr_thread && thread__has_color(curr_thread))
+			pid_color = COLOR_PIDS;
 
 		if (cpu != this_cpu)
 			color_fprintf(stdout, color, " ");
@@ -1429,14 +1485,19 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 			color_fprintf(stdout, color, "*");
 
 		if (sched->curr_thread[cpu])
-			color_fprintf(stdout, color, "%2s ", sched->curr_thread[cpu]->shortname);
+			color_fprintf(stdout, pid_color, "%2s ", sched->curr_thread[cpu]->shortname);
 		else
 			color_fprintf(stdout, color, "   ");
 	}
 
 	color_fprintf(stdout, color, "  %12.6f secs ", (double)timestamp/1e9);
 	if (new_shortname) {
-		color_fprintf(stdout, color, "%s => %s:%d",
+		const char *pid_color = color;
+
+		if (thread__has_color(sched_in))
+			pid_color = COLOR_PIDS;
+
+		color_fprintf(stdout, pid_color, "%s => %s:%d",
 		       sched_in->shortname, thread__comm_str(sched_in), sched_in->tid);
 	}
 
@@ -1712,9 +1773,29 @@ static int setup_map_cpus(struct perf_sched *sched)
 	return 0;
 }
 
+static int setup_map_pids(struct perf_sched *sched)
+{
+	struct thread_map *map;
+
+	if (!sched->map.color_pids)
+		return 0;
+
+	map = thread_map__new_by_tid_str(sched->map.color_pids);
+	if (!map) {
+		pr_err("failed to get thread map from %s\n", sched->map.color_pids);
+		return -1;
+	}
+
+	sched->map.pids = map;
+	return 0;
+}
+
 static int perf_sched__map(struct perf_sched *sched)
 {
 	if (setup_map_cpus(sched))
+		return -1;
+
+	if (setup_map_pids(sched))
 		return -1;
 
 	setup_pager();
@@ -1872,6 +1953,8 @@ int cmd_sched(int argc, const char **argv, const char *prefix __maybe_unused)
 	const struct option map_options[] = {
 	OPT_BOOLEAN('c', "compact", &sched.map.comp,
 		    "map output in compact mode"),
+	OPT_STRING('p', "pids", &sched.map.color_pids, "pids",
+                    "highlight given pids in map"),
 	OPT_END()
 	};
 	const char * const latency_usage[] = {
@@ -1935,7 +2018,7 @@ int cmd_sched(int argc, const char **argv, const char *prefix __maybe_unused)
 		return perf_sched__lat(&sched);
 	} else if (!strcmp(argv[0], "map")) {
 		if (argc) {
-			argc = parse_options(argc, argv, map_options, replay_usage, 0);
+			argc = parse_options(argc, argv, map_options, map_usage, 0);
 			if (argc)
 				usage_with_options(map_usage, map_options);
 		}
