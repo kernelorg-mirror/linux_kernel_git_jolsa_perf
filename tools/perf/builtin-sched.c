@@ -135,6 +135,7 @@ struct perf_sched_map {
 	const char		*color_pids;
 	const char		*cpu_list;
 	struct cpu_map		*cpus;
+	bool			 cpus_only;
 };
 
 struct perf_sched {
@@ -1483,8 +1484,12 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 		if (curr_thread && thread__has_color(curr_thread))
 			pid_color = COLOR_PIDS;
 
-		if (sched->map.cpus && cpu_map__has(sched->map.cpus, cpu))
-			cpu_color = COLOR_CPUS;
+		if (sched->map.cpus) {
+			if (cpu_map__has(sched->map.cpus, cpu))
+				cpu_color = COLOR_CPUS;
+			else if (sched->map.cpus_only)
+				continue;
+		}
 
 		if (cpu != this_cpu)
 			color_fprintf(stdout, cpu_color, " ");
@@ -1496,6 +1501,9 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 		else
 			color_fprintf(stdout, color, "   ");
 	}
+
+	if (sched->map.cpus_only && !cpu_map__has(sched->map.cpus, this_cpu))
+		goto out;
 
 	color_fprintf(stdout, color, "  %12.6f secs ", (double)timestamp/1e9);
 	if (new_shortname) {
@@ -1511,6 +1519,7 @@ static int map_switch_event(struct perf_sched *sched, struct perf_evsel *evsel,
 	if (sched->map.comp && new_cpu)
 		color_fprintf(stdout, color, " (CPU %d)", this_cpu);
 
+out:
 	color_fprintf(stdout, color, "\n");
 
 	thread__put(sched_in);
@@ -1977,6 +1986,8 @@ int cmd_sched(int argc, const char **argv, const char *prefix __maybe_unused)
                     "highlight given pids in map"),
 	OPT_STRING('C', "cpus", &sched.map.cpu_list, "cpus",
                     "highlight given CPUs in map"),
+	OPT_BOOLEAN(0, "cpus-only", &sched.map.cpus_only,
+		    "display only given cpus"),
 	OPT_END()
 	};
 	const char * const latency_usage[] = {
