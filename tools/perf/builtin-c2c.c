@@ -1021,7 +1021,7 @@ static int parse_record_events(const struct option *opt __maybe_unused,
 		struct perf_mem_event *e = &perf_mem_events[j];
 
 		fprintf(stderr, "%s %s\n",
-			e->supported ? "[ok] " : "[n/a]", e->name);
+			e->supported ? "[ok] " : "[n/a]", perf_mem_events__name(j));
 	}
 
 	exit(0);
@@ -1085,12 +1085,12 @@ static int perf_c2c__record(int argc, const char **argv)
 
 		if (!perf_mem_events[j].supported) {
 			pr_err("failed: event '%s' not supported\n",
-			       perf_mem_events[j].name);
+			       perf_mem_events__name(j));
 			return -1;
 		}
 
 		rec_argv[i++] = "-e";
-		rec_argv[i++] = perf_mem_events[j].name;
+		rec_argv[i++] = perf_mem_events__name(j);
 	};
 
 	if (all_user)
