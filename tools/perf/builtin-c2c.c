@@ -1051,6 +1051,7 @@ static int perf_c2c__record(int argc, const char **argv)
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_BOOLEAN('u', "--all-user", &all_user, "collect only user level data"),
 	OPT_BOOLEAN('k', "--all-kernel", &all_kernel, "collect only kernel level data"),
+	OPT_UINTEGER('l', "ldlat", &perf_mem_events__loads_ldlat, "mem-loads latency"),
 	OPT_END()
 	};
 
