@@ -13,7 +13,7 @@
 #define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 
 struct perf_mem_event perf_mem_events[PERF_MEM_EVENTS__MAX] = {
-	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P",	"mem-loads"),
+	E("ldlat-loads",	"cpu/mem-loads,ldlat=40/P",	"mem-loads"),
 	E("ldlat-stores",	"cpu/mem-stores/P",		"mem-stores"),
 	E("stlb-miss-loads",	"cpu/mem-stlb-miss-loads/P",	"mem-stlb-miss-loads"),
 	E("stlb-miss-stores",	"cpu/mem-stlb-miss-stores/P",	"mem-stlb-miss-stores"),

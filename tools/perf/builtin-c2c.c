@@ -1109,7 +1109,6 @@ static int perf_c2c__record(int argc, const char **argv)
 	if (!event_set && !group) {
 		perf_mem_events[PERF_MEM_EVENTS__LOAD].record  = true;
 		perf_mem_events[PERF_MEM_EVENTS__STORE].record = true;
-		all_kernel = true;
 	}
 
 	if (perf_mem_events[PERF_MEM_EVENTS__LOAD].record)
@@ -1142,6 +1141,8 @@ static int perf_c2c__record(int argc, const char **argv)
 
 	if (verbose > 0) {
 		pr_debug("calling: record ");
+
+		j = 0;
 
 		while (rec_argv[j]) {
 			pr_debug("%s ", rec_argv[j]);
