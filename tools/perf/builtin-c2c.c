@@ -26,6 +26,7 @@ struct perf_c2c {
 	/* Detailed (cacheline) list sort and output entries */
 	char			*cl_sort;
 	char			*cl_output;
+	bool			only_hitms;
 };
 
 static struct perf_c2c c2c;
@@ -347,6 +348,7 @@ static struct perf_c2c c2c = {
 		.ordered_events	= true,
 	},
 	.max_stack = PERF_MAX_STACK_DEPTH,
+	.only_hitms = true,
 };
 
 static const char * const c2c_usage[] = {
@@ -381,7 +383,7 @@ static int perf_c2c__stdio_browse(struct hists *hists)
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
 		struct c2c_hists *c2c_hists = he->c2c_hists;
 
-		if (HAS_HITMS(he)) {
+		if (c2c.only_hitms && HAS_HITMS(he)) {
 			printf("\n#\n");
 			printf("# Cacheline: 0x%lx\n", he->mem_info->daddr.addr);
 			printf("# ==========\n");
@@ -410,7 +412,7 @@ static void resort_cl_cb(struct hist_entry *he)
 	if (c2c_hists)
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
 
-	if (!HAS_HITMS(he))
+	if (c2c.only_hitms && !HAS_HITMS(he))
 		he->filtered = (1 << HIST_FILTER__C2C_HITM);
 }
 
@@ -966,6 +968,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		.mode = PERF_DATA_MODE_READ,
 	};
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
+	bool all = false;
 	const struct option c2c_options[] = {
 	OPT_INCR('v', "verbose", &verbose,
 		 "be more verbose (show counter open errors, etc)"),
@@ -973,6 +976,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		   "the input file to process"),
 	OPT_BOOLEAN(0, "stdio", &c2c.use_stdio,
 		    "Use the stdio interface"),
+	OPT_BOOLEAN(0, "all", &all, "Display all info, HITMs line only by default"),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", NULL,
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     c2c_callchain_help, &c2c_parse_callchain_opt,
@@ -983,6 +987,9 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	argc = parse_options(argc, argv, c2c_options, report_c2c_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (all)
+		c2c.only_hitms = false;
 
 	/*
 	 * The use_browser variable is -1 by default,
