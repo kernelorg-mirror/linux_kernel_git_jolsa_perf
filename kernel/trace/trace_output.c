@@ -554,8 +554,7 @@ int trace_print_lat_context(struct trace_iterator *iter)
 	struct trace_seq *s = &iter->seq;
 	u64 next_ts;
 	struct trace_entry *entry = iter->ent,
-			   *next_entry = trace_find_next_entry(iter, NULL,
-							       &next_ts);
+			   *next_entry = trace_find_next_entry(iter, &next_ts);
 	unsigned long verbose = (tr->trace_flags & TRACE_ITER_VERBOSE);
 
 	/* Restore the original ent_size */
