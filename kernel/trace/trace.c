@@ -3835,82 +3835,6 @@ static const struct file_operations tracing_readme_fops = {
 	.llseek		= generic_file_llseek,
 };
 
-static void *saved_cmdlines_next(struct seq_file *m, void *v, loff_t *pos)
-{
-	unsigned int *ptr = v;
-
-	if (*pos || m->count)
-		ptr++;
-
-	(*pos)++;
-
-	for (; ptr < &savedcmd->map_cmdline_to_pid[savedcmd->cmdline_num];
-	     ptr++) {
-		if (*ptr == -1 || *ptr == NO_CMDLINE_MAP)
-			continue;
-
-		return ptr;
-	}
-
-	return NULL;
-}
-
-static void *saved_cmdlines_start(struct seq_file *m, loff_t *pos)
-{
-	void *v;
-	loff_t l = 0;
-
-	preempt_disable();
-	arch_spin_lock(&trace_cmdline_lock);
-
-	v = &savedcmd->map_cmdline_to_pid[0];
-	while (l <= *pos) {
-		v = saved_cmdlines_next(m, v, &l);
-		if (!v)
-			return NULL;
-	}
-
-	return v;
-}
-
-static void saved_cmdlines_stop(struct seq_file *m, void *v)
-{
-	arch_spin_unlock(&trace_cmdline_lock);
-	preempt_enable();
-}
-
-static int saved_cmdlines_show(struct seq_file *m, void *v)
-{
-	char buf[TASK_COMM_LEN];
-	unsigned int *pid = v;
-
-	__trace_find_cmdline(-1, *pid, buf);
-	seq_printf(m, "%d %s\n", *pid, buf);
-	return 0;
-}
-
-static const struct seq_operations tracing_saved_cmdlines_seq_ops = {
-	.start		= saved_cmdlines_start,
-	.next		= saved_cmdlines_next,
-	.stop		= saved_cmdlines_stop,
-	.show		= saved_cmdlines_show,
-};
-
-static int tracing_saved_cmdlines_open(struct inode *inode, struct file *filp)
-{
-	if (tracing_disabled)
-		return -ENODEV;
-
-	return seq_open(filp, &tracing_saved_cmdlines_seq_ops);
-}
-
-static const struct file_operations tracing_saved_cmdlines_fops = {
-	.open		= tracing_saved_cmdlines_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
-};
-
 static ssize_t
 tracing_saved_cmdlines_size_read(struct file *filp, char __user *ubuf,
 				 size_t cnt, loff_t *ppos)
@@ -6967,9 +6891,6 @@ static __init int tracer_init_tracefs(void)
 
 	trace_create_file("README", 0444, d_tracer,
 			NULL, &tracing_readme_fops);
-
-	trace_create_file("saved_cmdlines", 0444, d_tracer,
-			NULL, &tracing_saved_cmdlines_fops);
 
 	trace_create_file("saved_cmdlines_size", 0644, d_tracer,
 			  NULL, &tracing_saved_cmdlines_size_fops);
