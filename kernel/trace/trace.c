@@ -1352,7 +1352,6 @@ void tracing_reset_all_online_cpus(void)
 
 #define SAVED_CMDLINES_DEFAULT 128
 #define NO_CMDLINE_MAP UINT_MAX
-static arch_spinlock_t trace_cmdline_lock = __ARCH_SPIN_LOCK_UNLOCKED;
 struct saved_cmdlines_buffer {
 	unsigned map_pid_to_cmdline[PID_MAX_DEFAULT+1];
 	unsigned *map_cmdline_to_pid;
@@ -1360,7 +1359,7 @@ struct saved_cmdlines_buffer {
 	int cmdline_idx;
 	char *saved_cmdlines;
 };
-static struct saved_cmdlines_buffer *savedcmd;
+static struct saved_cmdlines_buffer* __percpu savedcmd;
 
 /* temporary disable recording */
 static atomic_t trace_record_cmdline_disabled __read_mostly;
@@ -1399,22 +1398,39 @@ static int allocate_cmdlines_buffer(unsigned int val,
 	return 0;
 }
 
-static int trace_create_savedcmd(void)
+static void free_savedcmd_buffer(struct saved_cmdlines_buffer *sbuf)
 {
-	int ret;
+	kfree(sbuf->saved_cmdlines);
+	kfree(sbuf->map_cmdline_to_pid);
+}
 
-	savedcmd = kmalloc(sizeof(*savedcmd), GFP_KERNEL);
-	if (!savedcmd)
-		return -ENOMEM;
+static struct saved_cmdlines_buffer* __percpu
+trace_create_savedcmd(unsigned int val)
+{
+	struct saved_cmdlines_buffer* __percpu s;
+	int cpu, cpumax;
 
-	ret = allocate_cmdlines_buffer(SAVED_CMDLINES_DEFAULT, savedcmd);
-	if (ret < 0) {
-		kfree(savedcmd);
-		savedcmd = NULL;
-		return -ENOMEM;
+	s = alloc_percpu(struct saved_cmdlines_buffer);
+	if (!s)
+		return NULL;
+
+	for_each_possible_cpu(cpu) {
+		struct saved_cmdlines_buffer *sbuf = per_cpu_ptr(s, cpu);
+
+		if (allocate_cmdlines_buffer(val, sbuf))
+			goto out;
 	}
 
-	return 0;
+	return s;
+
+out:
+	cpumax = cpu;
+
+	for (cpu = 0; cpu < cpumax; cpu++)
+		free_savedcmd_buffer(per_cpu_ptr(s, cpu));
+
+	free_percpu(s);
+	return NULL;
 }
 
 int is_tracing_stopped(void)
@@ -1555,23 +1571,20 @@ void trace_stop_cmdline_recording(void);
 
 static int trace_save_cmdline(struct task_struct *tsk)
 {
+	struct saved_cmdlines_buffer *sbuf;
+	unsigned long flags;
 	unsigned pid, idx;
 
 	if (!tsk->pid || unlikely(tsk->pid > PID_MAX_DEFAULT))
 		return 0;
 
-	/*
-	 * It's not the end of the world if we don't get
-	 * the lock, but we also don't want to spin
-	 * nor do we want to disable interrupts,
-	 * so if we miss here, then better luck next time.
-	 */
-	if (!arch_spin_trylock(&trace_cmdline_lock))
-		return 0;
+	local_irq_save(flags);
 
-	idx = savedcmd->map_pid_to_cmdline[tsk->pid];
+	sbuf = per_cpu_ptr(savedcmd, task_cpu(tsk));
+
+	idx = sbuf->map_pid_to_cmdline[tsk->pid];
 	if (idx == NO_CMDLINE_MAP) {
-		idx = (savedcmd->cmdline_idx + 1) % savedcmd->cmdline_num;
+		idx = (sbuf->cmdline_idx + 1) % sbuf->cmdline_num;
 
 		/*
 		 * Check whether the cmdline buffer at idx has a pid
@@ -1579,20 +1592,19 @@ static int trace_save_cmdline(struct task_struct *tsk)
 		 * need to clear the map_pid_to_cmdline. Otherwise we
 		 * would read the new comm for the old pid.
 		 */
-		pid = savedcmd->map_cmdline_to_pid[idx];
+		pid = sbuf->map_cmdline_to_pid[idx];
 		if (pid != NO_CMDLINE_MAP)
-			savedcmd->map_pid_to_cmdline[pid] = NO_CMDLINE_MAP;
+			sbuf->map_pid_to_cmdline[pid] = NO_CMDLINE_MAP;
 
-		savedcmd->map_cmdline_to_pid[idx] = tsk->pid;
-		savedcmd->map_pid_to_cmdline[tsk->pid] = idx;
+		sbuf->map_cmdline_to_pid[idx] = tsk->pid;
+		sbuf->map_pid_to_cmdline[tsk->pid] = idx;
 
-		savedcmd->cmdline_idx = idx;
+		sbuf->cmdline_idx = idx;
 	}
 
 	set_cmdline(idx, tsk->comm);
 
-	arch_spin_unlock(&trace_cmdline_lock);
-
+	local_irq_restore(flags);
 	return 1;
 }
 
@@ -1625,11 +1637,7 @@ static void __trace_find_cmdline(int cpu, int pid, char comm[])
 void trace_find_cmdline(int cpu, int pid, char comm[])
 {
 	preempt_disable();
-	arch_spin_lock(&trace_cmdline_lock);
-
 	__trace_find_cmdline(cpu, pid, comm);
-
-	arch_spin_unlock(&trace_cmdline_lock);
 	preempt_enable();
 }
 
@@ -3842,39 +3850,32 @@ tracing_saved_cmdlines_size_read(struct file *filp, char __user *ubuf,
 	char buf[64];
 	int r;
 
-	arch_spin_lock(&trace_cmdline_lock);
 	r = scnprintf(buf, sizeof(buf), "%u\n", savedcmd->cmdline_num);
-	arch_spin_unlock(&trace_cmdline_lock);
-
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
 }
 
-static void free_saved_cmdlines_buffer(struct saved_cmdlines_buffer *s)
+static void trace_free_savecmd(struct saved_cmdlines_buffer __percpu *s)
 {
-	kfree(s->saved_cmdlines);
-	kfree(s->map_cmdline_to_pid);
-	kfree(s);
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		free_savedcmd_buffer(per_cpu_ptr(s, cpu));
+
+	free_percpu(s);
 }
 
 static int tracing_resize_saved_cmdlines(unsigned int val)
 {
-	struct saved_cmdlines_buffer *s, *savedcmd_temp;
+	struct saved_cmdlines_buffer __percpu *s, *savedcmd_temp;
 
-	s = kmalloc(sizeof(*s), GFP_KERNEL);
+	s = trace_create_savedcmd(val);
 	if (!s)
 		return -ENOMEM;
 
-	if (allocate_cmdlines_buffer(val, s) < 0) {
-		kfree(s);
-		return -ENOMEM;
-	}
-
-	arch_spin_lock(&trace_cmdline_lock);
 	savedcmd_temp = savedcmd;
 	savedcmd = s;
-	arch_spin_unlock(&trace_cmdline_lock);
-	free_saved_cmdlines_buffer(savedcmd_temp);
 
+	trace_free_savecmd(savedcmd_temp);
 	return 0;
 }
 
@@ -7153,7 +7154,8 @@ __init static int tracer_alloc_buffers(void)
 	if (!temp_buffer)
 		goto out_free_cpumask;
 
-	if (trace_create_savedcmd() < 0)
+	savedcmd = trace_create_savedcmd(SAVED_CMDLINES_DEFAULT);
+	if (!savedcmd)
 		goto out_free_temp_buffer;
 
 	/* TODO: make the number of buffers hot pluggable with CPUS */
@@ -7209,7 +7211,7 @@ __init static int tracer_alloc_buffers(void)
 	return 0;
 
 out_free_savedcmd:
-	free_saved_cmdlines_buffer(savedcmd);
+	trace_free_savecmd(savedcmd);
 out_free_temp_buffer:
 	ring_buffer_free(temp_buffer);
 out_free_cpumask:
