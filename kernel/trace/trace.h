@@ -653,7 +653,7 @@ static inline void __trace_stack(struct trace_array *tr, unsigned long flags,
 
 extern cycle_t ftrace_now(int cpu);
 
-extern void trace_find_cmdline(int pid, char comm[]);
+extern void trace_find_cmdline(int cpu, int pid, char comm[]);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 extern unsigned long ftrace_update_tot_cnt;

@@ -493,7 +493,7 @@ static void print_graph_cpu(struct trace_seq *s, int cpu)
 
 #define TRACE_GRAPH_PROCINFO_LENGTH	14
 
-static void print_graph_proc(struct trace_seq *s, pid_t pid)
+static void print_graph_proc(struct trace_seq *s, int cpu, pid_t pid)
 {
 	char comm[TASK_COMM_LEN];
 	/* sign + log10(MAX_INT) + '\0' */
@@ -502,7 +502,7 @@ static void print_graph_proc(struct trace_seq *s, pid_t pid)
 	int len;
 	int i;
 
-	trace_find_cmdline(pid, comm);
+	trace_find_cmdline(cpu, pid, comm);
 	comm[7] = '\0';
 	sprintf(pid_str, "%d", pid);
 
@@ -560,9 +560,9 @@ verif_pid(struct trace_seq *s, pid_t pid, int cpu, struct fgraph_data *data)
  */
 	trace_seq_puts(s, " ------------------------------------------\n");
 	print_graph_cpu(s, cpu);
-	print_graph_proc(s, prev_pid);
+	print_graph_proc(s, cpu, prev_pid);
 	trace_seq_puts(s, " => ");
-	print_graph_proc(s, pid);
+	print_graph_proc(s, cpu, pid);
 	trace_seq_puts(s, "\n ------------------------------------------\n\n");
 }
 
@@ -671,7 +671,7 @@ print_graph_irq(struct trace_iterator *iter, unsigned long addr,
 
 		/* Proc */
 		if (flags & TRACE_GRAPH_PRINT_PROC) {
-			print_graph_proc(s, pid);
+			print_graph_proc(s, cpu, pid);
 			trace_seq_puts(s, " | ");
 		}
 
@@ -874,7 +874,7 @@ print_graph_prologue(struct trace_iterator *iter, struct trace_seq *s,
 
 	/* Proc */
 	if (flags & TRACE_GRAPH_PRINT_PROC) {
-		print_graph_proc(s, ent->pid);
+		print_graph_proc(s, cpu, ent->pid);
 		trace_seq_puts(s, " | ");
 	}
 

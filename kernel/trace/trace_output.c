@@ -436,7 +436,7 @@ lat_print_generic(struct trace_seq *s, struct trace_entry *entry, int cpu)
 {
 	char comm[TASK_COMM_LEN];
 
-	trace_find_cmdline(entry->pid, comm);
+	trace_find_cmdline(cpu, entry->pid, comm);
 
 	trace_seq_printf(s, "%8.8s-%-5d %3d",
 			 comm, entry->pid, cpu);
@@ -527,7 +527,7 @@ int trace_print_context(struct trace_iterator *iter)
 	unsigned long secs, usec_rem;
 	char comm[TASK_COMM_LEN];
 
-	trace_find_cmdline(entry->pid, comm);
+	trace_find_cmdline(iter->cpu, entry->pid, comm);
 
 	trace_seq_printf(s, "%16s-%-5d [%03d] ",
 			       comm, entry->pid, iter->cpu);
@@ -566,7 +566,7 @@ int trace_print_lat_context(struct trace_iterator *iter)
 	if (verbose) {
 		char comm[TASK_COMM_LEN];
 
-		trace_find_cmdline(entry->pid, comm);
+		trace_find_cmdline(iter->cpu, entry->pid, comm);
 
 		trace_seq_printf(
 			s, "%16s %5d %3d %d %08x %08lx ",
@@ -857,7 +857,7 @@ static enum print_line_t trace_ctxwake_print(struct trace_iterator *iter,
 
 	T = task_state_char(field->next_state);
 	S = task_state_char(field->prev_state);
-	trace_find_cmdline(field->next_pid, comm);
+	trace_find_cmdline(iter->cpu, field->next_pid, comm);
 	trace_seq_printf(&iter->seq,
 			 " %5d:%3d:%c %s [%03d] %5d:%3d:%c %s\n",
 			 field->prev_pid,

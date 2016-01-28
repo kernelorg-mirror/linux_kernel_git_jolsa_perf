@@ -1193,11 +1193,12 @@ static void blk_log_dump_pdu(struct trace_seq *s, const struct trace_entry *ent)
 	trace_seq_puts(s, ") ");
 }
 
-static void blk_log_generic(struct trace_seq *s, const struct trace_entry *ent)
+static void blk_log_generic(struct trace_seq *s, const struct trace_entry *ent,
+			    int cpu)
 {
 	char cmd[TASK_COMM_LEN];
 
-	trace_find_cmdline(ent->pid, cmd);
+	trace_find_cmdline(cpu, ent->pid, cmd);
 
 	if (t_action(ent) & BLK_TC_ACT(BLK_TC_PC)) {
 		trace_seq_printf(s, "%u ", t_bytes(ent));
@@ -1212,7 +1213,7 @@ static void blk_log_generic(struct trace_seq *s, const struct trace_entry *ent)
 	}
 }
 
-static void blk_log_with_error(struct trace_seq *s,
+static void blk_log_with_error(int cpu, struct trace_seq *s,
 			      const struct trace_entry *ent)
 {
 	if (t_action(ent) & BLK_TC_ACT(BLK_TC_PC)) {
@@ -1240,29 +1241,32 @@ static void blk_log_remap(struct trace_seq *s, const struct trace_entry *ent)
 			 (unsigned long long)r.sector_from);
 }
 
-static void blk_log_plug(struct trace_seq *s, const struct trace_entry *ent)
+static void blk_log_plug(struct trace_seq *s, const struct trace_entry *ent,
+			 int cpu)
 {
 	char cmd[TASK_COMM_LEN];
 
-	trace_find_cmdline(ent->pid, cmd);
+	trace_find_cmdline(cpu, ent->pid, cmd);
 
 	trace_seq_printf(s, "[%s]\n", cmd);
 }
 
-static void blk_log_unplug(struct trace_seq *s, const struct trace_entry *ent)
+static void blk_log_unplug(struct trace_seq *s, const struct trace_entry *ent,
+			   int cpu)
 {
 	char cmd[TASK_COMM_LEN];
 
-	trace_find_cmdline(ent->pid, cmd);
+	trace_find_cmdline(cpu, ent->pid, cmd);
 
 	trace_seq_printf(s, "[%s] %llu\n", cmd, get_pdu_int(ent));
 }
 
-static void blk_log_split(struct trace_seq *s, const struct trace_entry *ent)
+static void blk_log_split(struct trace_seq *s, const struct trace_entry *ent,
+			  int cpu)
 {
 	char cmd[TASK_COMM_LEN];
 
-	trace_find_cmdline(ent->pid, cmd);
+	trace_find_cmdline(cpu, ent->pid, cmd);
 
 	trace_seq_printf(s, "%llu / %llu [%s]\n", t_sector(ent),
 			 get_pdu_int(ent), cmd);
@@ -1312,7 +1316,7 @@ static void blk_tracer_reset(struct trace_array *tr)
 
 static const struct {
 	const char *act[2];
-	void	   (*print)(struct trace_seq *s, const struct trace_entry *ent);
+	void	   (*print)(struct trace_seq *s, const struct trace_entry *ent, int cpu);
 } what2act[] = {
 	[__BLK_TA_QUEUE]	= {{  "Q", "queue" },	   blk_log_generic },
 	[__BLK_TA_BACKMERGE]	= {{  "M", "backmerge" },  blk_log_generic },
@@ -1355,7 +1359,7 @@ static enum print_line_t print_one_line(struct trace_iterator *iter,
 		trace_seq_printf(s, "Unknown action %x\n", what);
 	else {
 		log_action(iter, what2act[what].act[long_act]);
-		what2act[what].print(s, iter->ent);
+		what2act[what].print(s, iter->ent, iter->cpu);
 	}
 
 	return trace_handle_return(s);
