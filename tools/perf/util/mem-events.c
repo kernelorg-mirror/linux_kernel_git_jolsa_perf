@@ -10,10 +10,12 @@
 #include "debug.h"
 #include "symbol.h"
 
+unsigned int perf_mem_events__loads_ldlat = 30;
+
 #define E(t, n, s) { .tag = t, .name = n, .sysfs_name = s }
 
 struct perf_mem_event perf_mem_events[PERF_MEM_EVENTS__MAX] = {
-	E("ldlat-loads",	"cpu/mem-loads,ldlat=30/P",	"mem-loads"),
+	E("ldlat-loads",	"cpu/mem-loads,ldlat=%u/P",	"mem-loads"),
 	E("ldlat-stores",	"cpu/mem-stores/P",		"mem-stores"),
 	E("stlb-miss-loads",	"cpu/mem-stlb-miss-loads/P",	"mem-stlb-miss-loads"),
 	E("stlb-miss-stores",	"cpu/mem-stlb-miss-stores/P",	"mem-stlb-miss-stores"),
@@ -39,8 +41,21 @@ struct perf_mem_event perf_mem_events[PERF_MEM_EVENTS__MAX] = {
 
 #undef E
 
+static char mem_loads_name[100];
+static bool mem_loads_name__init;
+
 char *perf_mem_events__name(int i)
 {
+	if (i == PERF_MEM_EVENTS__LOAD) {
+		if (!mem_loads_name__init) {
+			mem_loads_name__init = true;
+			scnprintf(mem_loads_name, sizeof(mem_loads_name),
+				  perf_mem_events[i].name,
+				  perf_mem_events__loads_ldlat);
+		}
+		return mem_loads_name;
+	}
+
 	return (char *)perf_mem_events[i].name;
 }
 
