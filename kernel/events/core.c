@@ -2829,7 +2829,6 @@ ctx_sched_in(struct perf_event_context *ctx,
 	     struct task_struct *task)
 {
 	int is_active = ctx->is_active;
-	u64 now;
 
 	lockdep_assert_held(&ctx->lock);
 
@@ -2848,8 +2847,7 @@ ctx_sched_in(struct perf_event_context *ctx,
 
 	if (is_active & EVENT_TIME) {
 		/* start ctx time */
-		now = perf_clock();
-		ctx->timestamp = now;
+		ctx->timestamp = perf_clock();
 		perf_cgroup_set_timestamp(task, ctx);
 	}
 
