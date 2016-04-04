@@ -4,3 +4,10 @@ endif
 HAVE_KVM_STAT_SUPPORT := 1
 PERF_HAVE_ARCH_REGS_QUERY_REGISTER_OFFSET := 1
 PERF_HAVE_JITDUMP := 1
+
+###
+# Syscall table generation
+#
+#
+archheaders:
+	$(Q)$(MAKE) $(build)=arch/x86/entry/syscalls
