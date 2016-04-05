@@ -8,6 +8,14 @@ PERF_HAVE_JITDUMP := 1
 ###
 # Syscall table generation
 #
-#
-archheaders:
-	$(Q)$(MAKE) $(build)=arch/x86/entry/syscalls
+header := $(OUTPUT)arch/x86/include/generated/asm/syscalls_64.h
+sys    := $(srctree)/tools/perf/arch/x86/entry/syscalls
+systbl := $(sys)/syscalltbl.sh
+
+$(header): $(sys)/syscall_64.tbl $(systbl)
+	$(SHELL) '$(systbl)' $(sys)/syscall_64.tbl 'x86_64' > $@
+
+clean::
+	rm -f $(header)
+
+archheaders: $(header)
