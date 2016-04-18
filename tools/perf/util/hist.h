@@ -211,8 +211,18 @@ struct perf_hpp_header {
 	const char *text;
 };
 
+enum {
+	PERF_HPP_HEADER_3	= 0,
+	PERF_HPP_HEADER_2	= 1,
+	PERF_HPP_HEADER_1	= 2,
+	PERF_HPP_HEADER_MAX	= 3,
+};
+
+#define perf_hpp_header_N(fmt, n)		\
+	(fmt)->phh[PERF_HPP_HEADER_ ## n]
+
 struct perf_hpp_fmt {
-	struct perf_hpp_header phh;
+	struct perf_hpp_header phh[PERF_HPP_HEADER_MAX];
 	int (*header)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		      struct perf_evsel *evsel);
 	int (*width)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,

@@ -240,7 +240,7 @@ enum sort_type {
  */
 
 struct sort_entry {
-	struct perf_hpp_header phh;
+	struct perf_hpp_header phh[PERF_HPP_HEADER_MAX];
 
 	int64_t (*se_cmp)(struct hist_entry *, struct hist_entry *);
 	int64_t (*se_collapse)(struct hist_entry *, struct hist_entry *);
