@@ -222,8 +222,8 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 	if (symbol_conf.event_group)
 		len = max(len, evsel->nr_members * fmt->len);
 
-	if (len < (int)strlen(fmt->phh.text))
-		len = strlen(fmt->phh.text);
+	if (len < (int)strlen(perf_hpp_header_N(fmt, 1).text))
+		len = strlen(perf_hpp_header_N(fmt, 1).text);
 
 	return len;
 }
@@ -232,7 +232,7 @@ static int hpp__header_fn(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 			  struct perf_evsel *evsel)
 {
 	int len = hpp__width_fn(fmt, hpp, evsel);
-	return scnprintf(hpp->buf, hpp->size, "%*s", len, fmt->phh.text);
+	return scnprintf(hpp->buf, hpp->size, "%*s", len, perf_hpp_header_N(fmt, 1).text);
 }
 
 static int hpp_color_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
@@ -385,9 +385,12 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 	return a->idx == b->idx;
 }
 
+#define HEADER(__h)				\
+	.phh[PERF_HPP_HEADER_1].text = __h
+
 #define HPP__COLOR_PRINT_FNS(_name, _fn, _idx)		\
 	{						\
-		.phh.text = _name,		\
+		HEADER(_name),				\
 		.header	= hpp__header_fn,		\
 		.width	= hpp__width_fn,		\
 		.color	= hpp__color_ ## _fn,		\
@@ -401,7 +404,7 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HPP__COLOR_ACC_PRINT_FNS(_name, _fn, _idx)	\
 	{						\
-		.phh.text = _name,		\
+		HEADER(_name),				\
 		.header	= hpp__header_fn,		\
 		.width	= hpp__width_fn,		\
 		.color	= hpp__color_ ## _fn,		\
@@ -415,8 +418,8 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HPP__PRINT_FNS(_name, _fn, _idx)		\
 	{						\
+		HEADER(_name),				\
 		.header	= hpp__header_fn,		\
-		.phh.text = _name,		\
 		.width	= hpp__width_fn,		\
 		.entry	= hpp__entry_ ## _fn,		\
 		.cmp	= hpp__nop_cmp,			\
@@ -484,7 +487,7 @@ void perf_hpp__init(void)
 
 	if (symbol_conf.cumulate_callchain) {
 		hpp_dimension__add_output(PERF_HPP__OVERHEAD_ACC);
-		perf_hpp__format[PERF_HPP__OVERHEAD].phh.text = "Self";
+		perf_hpp_header_N(&perf_hpp__format[PERF_HPP__OVERHEAD], 1).text = "Self";
 	}
 
 	hpp_dimension__add_output(PERF_HPP__OVERHEAD);
@@ -540,7 +543,7 @@ void perf_hpp__cancel_cumulate(void)
 		}
 
 		if (ovh->equal(ovh, fmt))
-			fmt->phh.text = "Overhead";
+			perf_hpp_header_N(fmt, 1).text = "Overhead";
 	}
 }
 
