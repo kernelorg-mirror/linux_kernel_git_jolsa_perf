@@ -207,8 +207,12 @@ struct perf_hpp {
 	void *ptr;
 };
 
+struct perf_hpp_header {
+	const char *text;
+};
+
 struct perf_hpp_fmt {
-	const char *name;
+	struct perf_hpp_header phh;
 	int (*header)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		      struct perf_evsel *evsel);
 	int (*width)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
