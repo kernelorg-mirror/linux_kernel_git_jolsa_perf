@@ -222,8 +222,8 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 	if (symbol_conf.event_group)
 		len = max(len, evsel->nr_members * fmt->len);
 
-	if (len < (int)strlen(fmt->name))
-		len = strlen(fmt->name);
+	if (len < (int)strlen(fmt->phh.text))
+		len = strlen(fmt->phh.text);
 
 	return len;
 }
@@ -232,7 +232,7 @@ static int hpp__header_fn(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 			  struct perf_evsel *evsel)
 {
 	int len = hpp__width_fn(fmt, hpp, evsel);
-	return scnprintf(hpp->buf, hpp->size, "%*s", len, fmt->name);
+	return scnprintf(hpp->buf, hpp->size, "%*s", len, fmt->phh.text);
 }
 
 static int hpp_color_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
@@ -387,7 +387,7 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HPP__COLOR_PRINT_FNS(_name, _fn, _idx)		\
 	{						\
-		.name   = _name,			\
+		.phh.text = _name,		\
 		.header	= hpp__header_fn,		\
 		.width	= hpp__width_fn,		\
 		.color	= hpp__color_ ## _fn,		\
@@ -401,7 +401,7 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HPP__COLOR_ACC_PRINT_FNS(_name, _fn, _idx)	\
 	{						\
-		.name   = _name,			\
+		.phh.text = _name,		\
 		.header	= hpp__header_fn,		\
 		.width	= hpp__width_fn,		\
 		.color	= hpp__color_ ## _fn,		\
@@ -415,8 +415,8 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HPP__PRINT_FNS(_name, _fn, _idx)		\
 	{						\
-		.name   = _name,			\
 		.header	= hpp__header_fn,		\
+		.phh.text = _name,		\
 		.width	= hpp__width_fn,		\
 		.entry	= hpp__entry_ ## _fn,		\
 		.cmp	= hpp__nop_cmp,			\
@@ -484,7 +484,7 @@ void perf_hpp__init(void)
 
 	if (symbol_conf.cumulate_callchain) {
 		hpp_dimension__add_output(PERF_HPP__OVERHEAD_ACC);
-		perf_hpp__format[PERF_HPP__OVERHEAD].name = "Self";
+		perf_hpp__format[PERF_HPP__OVERHEAD].phh.text = "Self";
 	}
 
 	hpp_dimension__add_output(PERF_HPP__OVERHEAD);
@@ -540,7 +540,7 @@ void perf_hpp__cancel_cumulate(void)
 		}
 
 		if (ovh->equal(ovh, fmt))
-			fmt->name = "Overhead";
+			fmt->phh.text = "Overhead";
 	}
 }
 

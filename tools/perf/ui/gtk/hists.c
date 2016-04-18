@@ -329,7 +329,7 @@ static void perf_gtk__show_hists(GtkWidget *window, struct hists *hists,
 			sym_col = col_idx;
 
 		gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view),
-							    -1, fmt->name,
+							    -1, fmt->phh.text,
 							    renderer, "markup",
 							    col_idx++, NULL);
 	}
@@ -527,7 +527,7 @@ static void perf_gtk__show_hierarchy(GtkWidget *window, struct hists *hists,
 				    struct perf_hpp_list_node, list);
 	perf_hpp_list__for_each_format(&fmt_node->hpp, fmt) {
 		gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view),
-							    -1, fmt->name,
+							    -1, fmt->phh.text,
 							    renderer, "markup",
 							    col_idx++, NULL);
 	}

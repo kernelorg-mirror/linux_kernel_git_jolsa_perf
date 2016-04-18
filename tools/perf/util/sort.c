@@ -1400,7 +1400,7 @@ void perf_hpp__reset_sort_width(struct perf_hpp_fmt *fmt, struct hists *hists)
 		return;
 
 	hse = container_of(fmt, struct hpp_sort_entry, hpp);
-	hists__new_col_len(hists, hse->se->se_width_idx, strlen(fmt->name));
+	hists__new_col_len(hists, hse->se->se_width_idx, strlen(fmt->phh.text));
 }
 
 static int __sort__hpp_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
@@ -1414,7 +1414,7 @@ static int __sort__hpp_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	if (!len)
 		len = hists__col_len(evsel__hists(evsel), hse->se->se_width_idx);
 
-	return scnprintf(hpp->buf, hpp->size, "%-*.*s", len, len, fmt->name);
+	return scnprintf(hpp->buf, hpp->size, "%-*.*s", len, len, fmt->phh.text);
 }
 
 static int __sort__hpp_width(struct perf_hpp_fmt *fmt,
@@ -1537,7 +1537,7 @@ __sort_dimension__alloc_hpp(struct sort_dimension *sd, int level)
 	}
 
 	hse->se = sd->entry;
-	hse->hpp.name = sd->entry->se_header;
+	hse->hpp.phh.text = sd->entry->se_header;
 	hse->hpp.header = __sort__hpp_header;
 	hse->hpp.width = __sort__hpp_width;
 	hse->hpp.entry = __sort__hpp_entry;
@@ -1884,7 +1884,7 @@ __alloc_dynamic_entry(struct perf_evsel *evsel, struct format_field *field,
 	hde->field = field;
 	hde->dynamic_len = 0;
 
-	hde->hpp.name = field->name;
+	hde->hpp.phh.text = field->name;
 	hde->hpp.header = __sort__hde_header;
 	hde->hpp.width  = __sort__hde_width;
 	hde->hpp.entry  = __sort__hde_entry;
