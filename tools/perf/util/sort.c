@@ -1413,17 +1413,22 @@ void perf_hpp__reset_sort_width(struct perf_hpp_fmt *fmt, struct hists *hists)
 }
 
 static int __sort__hpp_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			      struct hists *hists, int line)
+			      struct hists *hists, int line, bool *defined)
 {
 	struct hpp_sort_entry *hse;
 	size_t len = fmt->user_len;
+	const char *text = perf_hpp_header_n(fmt, line).text;
 
 	hse = container_of(fmt, struct hpp_sort_entry, hpp);
 
 	if (!len)
 		len = hists__col_len(hists, hse->se->se_width_idx);
 
-	return scnprintf(hpp->buf, hpp->size, "%-*.*s", len, len, perf_hpp_header_n(fmt, line).text);
+	*defined = text != NULL;
+	if (!*defined)
+		text = "";
+
+	return scnprintf(hpp->buf, hpp->size, "%-*.*s", len, len, text);
 }
 
 static int __sort__hpp_width(struct perf_hpp_fmt *fmt,
@@ -1718,7 +1723,7 @@ static void update_dynamic_len(struct hpp_dynamic_entry *hde,
 }
 
 static int __sort__hde_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			      struct hists *hists __maybe_unused, int line __maybe_unused)
+			      struct hists *hists __maybe_unused, int line __maybe_unused, bool *defined)
 {
 	struct hpp_dynamic_entry *hde;
 	size_t len = fmt->user_len;
@@ -1728,6 +1733,7 @@ static int __sort__hde_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	if (!len)
 		len = hde_width(hde);
 
+	*defined = true;
 	return scnprintf(hpp->buf, hpp->size, "%*.*s", len, len, hde->field->name);
 }
 

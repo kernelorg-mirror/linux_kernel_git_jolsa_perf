@@ -548,7 +548,9 @@ static int print_hierarchy_header(struct hists *hists, struct perf_hpp *hpp,
 				    struct perf_hpp_list_node, list);
 
 	perf_hpp_list__for_each_format(&fmt_node->hpp, fmt) {
-		fmt->header(fmt, hpp, hists, PERF_HPP_HEADER_1);
+		bool defined;
+
+		fmt->header(fmt, hpp, hists, PERF_HPP_HEADER_1, &defined);
 		fprintf(fp, "%s%s", hpp->buf, sep ?: "  ");
 	}
 
@@ -561,6 +563,8 @@ static int print_hierarchy_header(struct hists *hists, struct perf_hpp *hpp,
 
 		first_col = true;
 		perf_hpp_list__for_each_format(&fmt_node->hpp, fmt) {
+			bool defined;
+
 			if (perf_hpp__should_skip(fmt, hists))
 				continue;
 
@@ -568,7 +572,7 @@ static int print_hierarchy_header(struct hists *hists, struct perf_hpp *hpp,
 				header_width += fprintf(fp, "+");
 			first_col = false;
 
-			fmt->header(fmt, hpp, hists, PERF_HPP_HEADER_1);
+			fmt->header(fmt, hpp, hists, PERF_HPP_HEADER_1, &defined);
 
 			header_width += fprintf(fp, "%s", trim(hpp->buf));
 		}
@@ -665,6 +669,8 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 	}
 
 	hists__for_each_format(hists, fmt) {
+		bool defined;
+
 		if (perf_hpp__should_skip(fmt, hists))
 			continue;
 
@@ -673,7 +679,7 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		else
 			first = false;
 
-		fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1);
+		fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1, &defined);
 		fprintf(fp, "%s", bf);
 	}
 

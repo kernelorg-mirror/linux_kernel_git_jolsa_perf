@@ -230,10 +230,16 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 }
 
 static int hpp__header_fn(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			  struct hists *hists, int line)
+			  struct hists *hists, int line, bool *defined)
 {
 	int len = hpp__width_fn(fmt, hpp, hists);
-	return scnprintf(hpp->buf, hpp->size, "%*s", len, perf_hpp_header_n(fmt, line).text);
+	const char *text = perf_hpp_header_n(fmt, line).text;
+
+	*defined = text != NULL;
+	if (!*defined)
+		text = "";
+
+	return scnprintf(hpp->buf, hpp->size, "%*s", len, text);
 }
 
 static int hpp_color_scnprintf(struct perf_hpp *hpp, const char *fmt, ...)
