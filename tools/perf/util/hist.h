@@ -224,7 +224,7 @@ enum {
 struct perf_hpp_fmt {
 	struct perf_hpp_header phh[PERF_HPP_HEADER_MAX];
 	int (*header)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-		      struct perf_evsel *evsel);
+		      struct hists* hists);
 	int (*width)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		     struct perf_evsel *evsel);
 	int (*color)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
