@@ -221,10 +221,13 @@ enum {
 #define perf_hpp_header_N(fmt, n)		\
 	(fmt)->phh[PERF_HPP_HEADER_ ## n]
 
+#define perf_hpp_header_n(fmt, n)		\
+	(fmt)->phh[n]
+
 struct perf_hpp_fmt {
 	struct perf_hpp_header phh[PERF_HPP_HEADER_MAX];
 	int (*header)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-		      struct hists* hists);
+		      struct hists* hists, int line);
 	int (*width)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		     struct hists *hists);
 	int (*color)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
