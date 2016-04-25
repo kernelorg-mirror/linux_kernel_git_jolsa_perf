@@ -542,6 +542,8 @@ static void perf_gtk__show_hierarchy(GtkWidget *window, struct hists *hists,
 
 		first_col = true;
 		perf_hpp_list__for_each_format(&fmt_node->hpp ,fmt) {
+			bool defined;
+
 			if (perf_hpp__should_skip(fmt, hists))
 				continue;
 
@@ -549,7 +551,7 @@ static void perf_gtk__show_hierarchy(GtkWidget *window, struct hists *hists,
 				strcat(buf, "+");
 			first_col = false;
 
-			fmt->header(fmt, &hpp, hists, PERF_HPP_HEADER_1);
+			fmt->header(fmt, &hpp, hists, PERF_HPP_HEADER_1, &defined);
 			strcat(buf, ltrim(rtrim(hpp.buf)));
 		}
 	}
