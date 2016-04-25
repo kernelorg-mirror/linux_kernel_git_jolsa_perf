@@ -394,10 +394,27 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 
 #define HEADER(__h)				\
 	.phh[PERF_HPP_HEADER_1].text = __h
+#define HEADER2(__h)				\
+	.phh[PERF_HPP_HEADER_2].text = __h
 
 #define HPP__COLOR_PRINT_FNS(_name, _fn, _idx)		\
 	{						\
 		HEADER(_name),				\
+		.header	= hpp__header_fn,		\
+		.width	= hpp__width_fn,		\
+		.color	= hpp__color_ ## _fn,		\
+		.entry	= hpp__entry_ ## _fn,		\
+		.cmp	= hpp__nop_cmp,			\
+		.collapse = hpp__nop_cmp,		\
+		.sort	= hpp__sort_ ## _fn,		\
+		.idx	= PERF_HPP__ ## _idx,		\
+		.equal	= hpp__equal,			\
+	}
+
+#define HPP__COLOR_PRINT_FNS_2(_name2, _name, _fn, _idx)\
+	{						\
+		HEADER(_name),				\
+		HEADER2(_name2),			\
 		.header	= hpp__header_fn,		\
 		.width	= hpp__width_fn,		\
 		.color	= hpp__color_ ## _fn,		\
@@ -440,8 +457,8 @@ struct perf_hpp_fmt perf_hpp__format[] = {
 	HPP__COLOR_PRINT_FNS("Overhead", overhead, OVERHEAD),
 	HPP__COLOR_PRINT_FNS("sys", overhead_sys, OVERHEAD_SYS),
 	HPP__COLOR_PRINT_FNS("usr", overhead_us, OVERHEAD_US),
-	HPP__COLOR_PRINT_FNS("guest sys", overhead_guest_sys, OVERHEAD_GUEST_SYS),
-	HPP__COLOR_PRINT_FNS("guest usr", overhead_guest_us, OVERHEAD_GUEST_US),
+	HPP__COLOR_PRINT_FNS_2("guest", "sys", overhead_guest_sys, OVERHEAD_GUEST_SYS),
+	HPP__COLOR_PRINT_FNS_2("guest", "usr", overhead_guest_us, OVERHEAD_GUEST_US),
 	HPP__COLOR_ACC_PRINT_FNS("Children", overhead_acc, OVERHEAD_ACC),
 	HPP__PRINT_FNS("Samples", samples, SAMPLES),
 	HPP__PRINT_FNS("Period", period, PERIOD)
