@@ -1529,10 +1529,12 @@ static int hists_browser__scnprintf_headers(struct hist_browser *browser, char *
 	}
 
 	hists__for_each_format(browser->hists, fmt) {
+		bool defined;
+
 		if (perf_hpp__should_skip(fmt, hists)  || column++ < browser->b.horiz_scroll)
 			continue;
 
-		ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1);
+		ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1, &defined);
 		if (advance_hpp_check(&dummy_hpp, ret))
 			break;
 
@@ -1566,10 +1568,12 @@ static int hists_browser__scnprintf_hierarchy_headers(struct hist_browser *brows
 	fmt_node = list_first_entry(&hists->hpp_formats,
 				    struct perf_hpp_list_node, list);
 	perf_hpp_list__for_each_format(&fmt_node->hpp, fmt) {
+		bool defined;
+
 		if (column++ < browser->b.horiz_scroll)
 			continue;
 
-		ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1);
+		ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1, &defined);
 		if (advance_hpp_check(&dummy_hpp, ret))
 			break;
 
@@ -1595,6 +1599,7 @@ static int hists_browser__scnprintf_hierarchy_headers(struct hist_browser *brows
 		first_col = true;
 		perf_hpp_list__for_each_format(&fmt_node->hpp, fmt) {
 			char *start;
+			bool defined;
 
 			if (perf_hpp__should_skip(fmt, hists))
 				continue;
@@ -1606,7 +1611,7 @@ static int hists_browser__scnprintf_hierarchy_headers(struct hist_browser *brows
 			}
 			first_col = false;
 
-			ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1);
+			ret = fmt->header(fmt, &dummy_hpp, hists, PERF_HPP_HEADER_1, &defined);
 			dummy_hpp.buf[ret] = '\0';
 
 			start = trim(dummy_hpp.buf);
