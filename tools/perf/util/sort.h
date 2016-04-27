@@ -68,7 +68,7 @@ struct hist_entry_diff {
 };
 
 struct hist_entry_ops {
-	void*	(*new)(size_t size);
+	void*	(*new)(size_t);
 	void	(*free)(void *);
 };
 
