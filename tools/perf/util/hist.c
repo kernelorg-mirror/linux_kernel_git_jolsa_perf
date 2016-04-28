@@ -349,12 +349,14 @@ static int hist_entry__init(struct hist_entry *he,
 			    struct hist_entry *template,
 			    bool sample_self)
 {
+	struct hist_entry_ops *ops = template->ops;
+
 	*he = *template;
 
 	if (symbol_conf.cumulate_callchain) {
 		he->stat_acc = malloc(sizeof(he->stat));
 		if (he->stat_acc == NULL) {
-			free(he);
+			ops->free(he);
 			return -ENOMEM;
 		}
 		memcpy(he->stat_acc, &he->stat, sizeof(he->stat));
@@ -374,7 +376,7 @@ static int hist_entry__init(struct hist_entry *he,
 		if (he->branch_info == NULL) {
 			map__zput(he->ms.map);
 			free(he->stat_acc);
-			free(he);
+			ops->free(he);
 			return -ENOMEM;
 		}
 
@@ -408,7 +410,7 @@ static int hist_entry__init(struct hist_entry *he,
 				map__put(he->mem_info->daddr.map);
 			}
 			free(he->stat_acc);
-			free(he);
+			ops->free(he);
 			return -ENOMEM;
 		}
 	}
@@ -421,17 +423,28 @@ static int hist_entry__init(struct hist_entry *he,
 	return 0;
 }
 
+static struct hist_entry_ops default_ops = {
+	.new	= zalloc,
+	.free	= free,
+};
+
 static struct hist_entry *hist_entry__new(struct hist_entry *template,
 					  bool sample_self)
 {
+	struct hist_entry_ops *ops = template->ops;
 	size_t callchain_size = 0;
 	struct hist_entry *he;
 	int err = 0;
 
+	if (!ops) {
+		ops = template->ops = &default_ops;
+		callchain_size = sizeof(*he);
+	}
+
 	if (symbol_conf.use_callchain)
 		callchain_size = sizeof(struct callchain_root);
 
-	he = zalloc(sizeof(*he) + callchain_size);
+	he = ops->new(callchain_size);
 	if (he)
 		err = hist_entry__init(he, template, sample_self);
 
@@ -1044,6 +1057,8 @@ hist_entry__collapse(struct hist_entry *left, struct hist_entry *right)
 
 void hist_entry__delete(struct hist_entry *he)
 {
+	struct hist_entry_ops *ops = he->ops;
+
 	thread__zput(he->thread);
 	map__zput(he->ms.map);
 
@@ -1066,7 +1081,7 @@ void hist_entry__delete(struct hist_entry *he)
 	free_callchain(he->callchain);
 	free(he->trace_output);
 	free(he->raw_data);
-	free(he);
+	ops->free(he);
 }
 
 /*
