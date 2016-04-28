@@ -67,6 +67,11 @@ struct hist_entry_diff {
 	};
 };
 
+struct hist_entry_ops {
+	void*	(*new)(size_t);
+	void	(*free)(void *);
+};
+
 /**
  * struct hist_entry - histogram entry
  *
@@ -125,6 +130,7 @@ struct hist_entry {
 	void			*trace_output;
 	struct perf_hpp_list	*hpp_list;
 	struct hist_entry	*parent_he;
+	struct hist_entry_ops	*ops;
 	union {
 		/* this is for hierarchical entry structure */
 		struct {
