@@ -315,6 +315,25 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
 }
 
+static int offset_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = cl_offset(he->mem_info->daddr.al_addr);
+
+	return snprintf(hpp->buf, hpp->size, "%*" PRIu64, width, addr);
+}
+
+static int64_t
+offset_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	   struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__daddr_cmp(left, right);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -344,6 +363,17 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		.text = __h1,		\
 	}
 
+/* HEADER_CL_* macros are for cacheline browser */
+
+#define HEADER_CL_0(__h)	\
+	.header[1] = {		\
+		.text = __h,	\
+	}
+
+#define HEADER_CL_1(__h)	\
+	.header[0] = {		\
+		.text = __h,	\
+	}
 
 static struct c2c_dimension dim_dcacheline = {
 	HEADER_0("Cacheline"),
@@ -353,13 +383,25 @@ static struct c2c_dimension dim_dcacheline = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_offset = {
+	HEADER_CL_0("Off"),
+	.name		= "offset",
+	.cmp		= offset_cmp,
+	.entry		= offset_entry,
+	.width		= 5,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
 #undef HEADER_SPAN_1
 
+#undef HEADER_CL_0
+#undef HEADER_CL_1
+
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
+	&dim_offset,
 	NULL,
 };
 
