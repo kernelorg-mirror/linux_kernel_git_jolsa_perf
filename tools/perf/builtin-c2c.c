@@ -1,5 +1,6 @@
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <linux/stringify.h>
 #include "util.h"
 #include "debug.h"
 #include "builtin.h"
@@ -7,6 +8,7 @@
 #include "mem-events.h"
 #include "session.h"
 #include "hist.h"
+#include "sort.h"
 #include "tool.h"
 #include "data.h"
 
@@ -73,13 +75,65 @@ static int c2c_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
         return scnprintf(hpp->buf, hpp->size, "%*s", len, text);
 }
 
+static int64_t
+dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	       struct hist_entry *left, struct hist_entry *right)
+{
+	u64 l, r;
+
+	if (!left->mem_info)  return -1;
+	if (!right->mem_info) return 1;
+
+	/* al_addr does all the right addr - start + offset calculations */
+	l = cl_address(left->mem_info->daddr.addr);
+	r = cl_address(right->mem_info->daddr.addr);
+
+	if (l > r) return -1;
+	if (l < r) return 1;
+
+	return 0;
+}
+
+static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			    struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = cl_address(he->mem_info->daddr.addr);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*" PRIx64, width, addr);
+}
+
+enum {
+	DIM_DCACHELINE,
+};
+
+#define HEADER(__h)				\
+	.phh[PERF_HPP_HEADER_1].text = __h
+
+static struct c2c_dimension dim_dcacheline = {
+	HEADER("Cacheline"),
+	.name		= "dcacheline",
+	.cmp		= dcacheline_cmp,
+	.entry		= dcacheline_entry,
+	.id		= DIM_DCACHELINE,
+};
+
+#undef HEADER
+
 static struct c2c_dimension *dimensions[] = {
+	&dim_dcacheline,
 	NULL,
 };
 
 static void set_dimension(struct c2c_dimension *dim)
 {
 	switch (dim->id) {
+	case DIM_DCACHELINE:
+		dim->width = 20;
+		break;
 	default:
 		pr_err("internal dimension error\n");
 		break;
