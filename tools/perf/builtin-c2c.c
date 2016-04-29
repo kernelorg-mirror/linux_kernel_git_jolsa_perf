@@ -1,5 +1,6 @@
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <linux/stringify.h>
 #include "util.h"
 #include "debug.h"
 #include "builtin.h"
@@ -7,6 +8,7 @@
 #include "mem-events.h"
 #include "session.h"
 #include "hist.h"
+#include "sort.h"
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
@@ -269,7 +271,90 @@ static int c2c_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return scnprintf(hpp->buf, hpp->size, "%*s", width, text);
 }
 
+static char* hex_str(u64 val)
+{
+	static char buf[20];
+
+	snprintf(buf, 20, "0x%" PRIx64, val);
+	return buf;
+}
+
+static int64_t
+dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	       struct hist_entry *left, struct hist_entry *right)
+{
+	u64 l, r;
+
+	if (!left->mem_info)  return -1;
+	if (!right->mem_info) return 1;
+
+	/* al_addr does all the right addr - start + offset calculations */
+	l = cl_address(left->mem_info->daddr.al_addr);
+	r = cl_address(right->mem_info->daddr.al_addr);
+
+	if (l > r) return -1;
+	if (l < r) return 1;
+
+	return 0;
+}
+
+static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			    struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = cl_address(he->mem_info->daddr.al_addr);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, hex_str(addr));
+}
+
+/* HEADER_* macros are for main browser */
+
+#define HEADER_0(__h)	\
+	.header[1] = {		\
+		.text = __h,	\
+	}
+
+#define HEADER_1(__h0, __h1)		\
+	.header[0] = {	\
+		.text = __h0,		\
+	},				\
+	.header[1] = {	\
+		.text = __h1,		\
+	}
+
+#define HEADER_SPAN(__h0, __h1, __s)	\
+	.header[0] = {			\
+		.text = __h0,		\
+		.span = __s,		\
+	},				\
+	.header[1] = {			\
+		.text = __h1,		\
+	}
+
+#define HEADER_SPAN_1(__h1)		\
+	.header[1] = {			\
+		.text = __h1,		\
+	}
+
+
+static struct c2c_dimension dim_dcacheline = {
+	HEADER_0("Cacheline"),
+	.name		= "dcacheline",
+	.cmp		= dcacheline_cmp,
+	.entry		= dcacheline_entry,
+	.width		= 15,
+};
+
+#undef HEADER_0
+#undef HEADER_1
+#undef HEADER_SPAN
+#undef HEADER_SPAN_1
+
 static struct c2c_dimension *dimensions[] = {
+	&dim_dcacheline,
 	NULL,
 };
 
