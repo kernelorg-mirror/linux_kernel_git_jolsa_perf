@@ -300,8 +300,21 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
 }
 
+static int offset_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = cl_offset(he->mem_info->daddr.addr);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*" PRIx64, width, addr);
+}
+
 enum {
 	DIM_DCACHELINE,
+	DIM_OFFSET,
 };
 
 #define HEADER(__h)			\
@@ -325,11 +338,20 @@ static struct c2c_dimension dim_dcacheline = {
 	.id		= DIM_DCACHELINE,
 };
 
+static struct c2c_dimension dim_offset = {
+	HEADER("Off"),
+	.name		= "offset",
+	.cmp		= dcacheline_cmp,
+	.entry		= offset_entry,
+	.id		= DIM_OFFSET,
+};
+
 #undef HEADER
 #undef HEADER2
 
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
+	&dim_offset,
 	NULL,
 };
 
@@ -338,6 +360,9 @@ static void set_dimension(struct c2c_dimension *dim)
 	switch (dim->id) {
 	case DIM_DCACHELINE:
 		dim->width = 20;
+		break;
+	case DIM_OFFSET:
+		dim->width = 5;
 		break;
 	default:
 		pr_err("internal dimension error\n");
