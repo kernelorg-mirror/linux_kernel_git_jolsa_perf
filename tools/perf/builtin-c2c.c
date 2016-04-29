@@ -9,6 +9,7 @@
 #include "hist.h"
 #include "tool.h"
 #include "data.h"
+#include "sort.h"
 
 struct c2c_hists {
 	struct hists		hists;
@@ -178,8 +179,10 @@ static int c2c_hists__init_output(struct c2c_hists *hists, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
 
-	if (!c2c_fmt)
-		return -1;
+	if (!c2c_fmt) {
+		reset_dimensions();
+		return output_field_add(&hists->list, name);
+	}
 
 	perf_hpp_list__column_register(&hists->list, &c2c_fmt->fmt);
 	return 0;
@@ -189,8 +192,10 @@ static int c2c_hists__init_sort(struct c2c_hists *hists, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
 
-	if (!c2c_fmt)
-		return -1;
+	if (!c2c_fmt) {
+		reset_dimensions();
+		return sort_dimension__add(&hists->list, name, NULL, 0);
+	}
 
 	perf_hpp_list__register_sort_field(&hists->list, &c2c_fmt->fmt);
 	return 0;
