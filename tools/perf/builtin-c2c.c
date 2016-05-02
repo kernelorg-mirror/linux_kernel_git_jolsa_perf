@@ -15,11 +15,13 @@
 struct c2c_hists {
 	struct hists		hists;
 	struct perf_hpp_list	list;
+	struct c2c_stats	stats;
 };
 
 struct c2c_hist_entry {
 	struct c2c_hists	*hists;
 	struct hist_entry	he;
+	struct c2c_stats	stats;
 };
 
 struct perf_c2c {
@@ -57,10 +59,10 @@ static int c2c_hists__init(struct c2c_hists *hists,
 			   const char *output_,
 			   const char *sort_);
 
-static struct hists*
-he__get_hists(struct hist_entry *he,
-	      const char *output,
-	      const char *sort)
+static struct c2c_hists*
+he__get_c2c_hists(struct hist_entry *he,
+		  const char *output,
+		  const char *sort)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *hists;
@@ -68,7 +70,7 @@ he__get_hists(struct hist_entry *he,
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	if (c2c_he->hists)
-		return &c2c_he->hists->hists;
+		return c2c_he->hists;
 
 	hists = c2c_he->hists = zalloc(sizeof(*hists));
 	if (!hists)
@@ -78,7 +80,7 @@ he__get_hists(struct hist_entry *he,
 	if (ret)
 		free(hists);
 
-	return &hists->hists;
+	return hists;
 }
 
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
@@ -88,6 +90,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				struct machine *machine)
 {
 	struct hists *hists = &c2c.hists.hists;
+	struct c2c_hist_entry *c2c_he;
 	struct hist_entry *he;
 	struct addr_location al;
 	struct mem_info *mi, *mi_dup;
@@ -113,43 +116,57 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (he == NULL)
 		goto free_mi_dup;
 
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_decode_stats(&c2c_he->stats, he);
+	c2c_decode_stats(&c2c.hists.stats, he);
+
 	hists__inc_nr_samples(hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
 
 	if (!ret) {
+		struct c2c_hists *c2c_hists;
+
 		mi = mi_dup;
 
 		mi_dup = memdup(mi, sizeof(*mi));
 		if (!mi_dup)
 			goto free_mi;
 
-		hists = he__get_hists(he, "offset","offset");
-		if (!hists)
+		c2c_hists = he__get_c2c_hists(he, "offset","offset");
+		if (!c2c_hists)
 			goto free_mi_dup;
 
-		he = hists__add_entry_ops(hists, &c2c_entry_ops,
+		he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 					  &al, NULL, NULL, mi,
 					  sample, true);
 		if (he == NULL)
 			goto free_mi_dup;
 
-		hists__inc_nr_samples(hists, he->filtered);
+		c2c_he = container_of(he, struct c2c_hist_entry, he);
+		c2c_decode_stats(&c2c_he->stats, he);
+		c2c_decode_stats(&c2c_hists->stats, he);
+
+		hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 		ret = hist_entry__append_callchain(he, sample);
 
 		if (!ret) {
 			mi = mi_dup;
 
-			hists = he__get_hists(he, "cpu,symbol,dso,comm","cpu,symbol,dso,comm");
-			if (!hists)
+			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm","cpu,symbol,dso,comm");
+			if (!c2c_hists)
 				goto free_mi;
 
-			he = hists__add_entry_ops(hists, &c2c_entry_ops,
+			he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 						  &al, NULL, NULL, mi,
 						  sample, true);
 			if (he == NULL)
 				goto free_mi;
 
-			hists__inc_nr_samples(hists, he->filtered);
+			c2c_he = container_of(he, struct c2c_hist_entry, he);
+			c2c_decode_stats(&c2c_he->stats, he);
+			c2c_decode_stats(&c2c_hists->stats, he);
+
+			hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 			ret = hist_entry__append_callchain(he, sample);
 		}
 	}
