@@ -56,6 +56,7 @@ struct perf_c2c {
 
 	bool			 show_src;
 	bool			 use_stdio;
+	bool			 stats_only;
 };
 
 static struct perf_c2c c2c;
@@ -1988,6 +1989,51 @@ static int setup_nodes(struct perf_session *session)
 	return 0;
 }
 
+static void print_c2c__display_stats(void)
+{
+	int llc_misses;
+	struct c2c_stats *stats = &c2c.hists.stats;
+
+	llc_misses = stats->lcl_dram +
+		     stats->rmt_dram +
+		     stats->rmt_hit +
+		     stats->rmt_hitm;
+
+	printf("=================================================\n");
+	printf("            Trace Event Information              \n");
+	printf("=================================================\n");
+	printf("  Total records                     : %10d\n", stats->nr_entries);
+	printf("  Locked Load/Store Operations      : %10d\n", stats->locks);
+	printf("  Load Operations                   : %10d\n", stats->load);
+	printf("  Loads - uncacheable               : %10d\n", stats->ld_uncache);
+	printf("  Loads - IO                        : %10d\n", stats->ld_io);
+	printf("  Loads - Miss                      : %10d\n", stats->ld_miss);
+	printf("  Loads - no mapping                : %10d\n", stats->ld_noadrs);
+	printf("  Load Fill Buffer Hit              : %10d\n", stats->ld_fbhit);
+	printf("  Load L1D hit                      : %10d\n", stats->ld_l1hit);
+	printf("  Load L2D hit                      : %10d\n", stats->ld_l2hit);
+	printf("  Load LLC hit                      : %10d\n", stats->ld_llchit + stats->lcl_hitm);
+	printf("  Load Local HITM                   : %10d\n", stats->lcl_hitm);
+	printf("  Load Remote HITM                  : %10d\n", stats->rmt_hitm);
+	printf("  Load Remote HIT                   : %10d\n", stats->rmt_hit);
+	printf("  Load Local DRAM                   : %10d\n", stats->lcl_dram);
+	printf("  Load Remote DRAM                  : %10d\n", stats->rmt_dram);
+	printf("  Load MESI State Exclusive         : %10d\n", stats->ld_excl);
+	printf("  Load MESI State Shared            : %10d\n", stats->ld_shared);
+	printf("  Load LLC Misses                   : %10d\n", llc_misses);
+	printf("  LLC Misses to Local DRAM          : %10.1f%%\n", ((double)stats->lcl_dram/(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote DRAM         : %10.1f%%\n", ((double)stats->rmt_dram/(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote cache (HIT)  : %10.1f%%\n", ((double)stats->rmt_hit /(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote cache (HITM) : %10.1f%%\n", ((double)stats->rmt_hitm/(double)llc_misses) * 100.);
+	printf("  Store Operations                  : %10d\n", stats->store);
+	printf("  Store - uncacheable               : %10d\n", stats->st_uncache);
+	printf("  Store - no mapping                : %10d\n", stats->st_noadrs);
+	printf("  Store L1D Hit                     : %10d\n", stats->st_l1hit);
+	printf("  Store L1D Miss                    : %10d\n", stats->st_l1miss);
+	printf("  No Page Map Rejects               : %10d\n", stats->nomap);
+	printf("  Unable to parse data source       : %10d\n", stats->noparse);
+}
+
 static void print_cacheline(struct c2c_hists *c2c_hists,
 			    struct hist_entry *he_cl,
 			    struct perf_hpp_list *hpp_list,
@@ -2050,6 +2096,11 @@ static void print_pareto(FILE *out)
 static void perf_c2c__hists_fprintf(FILE *out)
 {
 	setup_pager();
+
+	print_c2c__display_stats();
+
+	if (c2c.stats_only)
+		return;
 
 	fprintf(out, "\n");
 	fprintf(out, "=================================================\n");
@@ -2245,6 +2296,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		 "show extra node info in report (repeat for more info)"),
 	OPT_BOOLEAN(0, "stdio", &c2c.use_stdio,
 		    "Use the stdio interface"),
+	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
+		    "Use the stdio interface"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2253,6 +2306,9 @@ static int perf_c2c__report(int argc, const char **argv)
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc)
 		usage_with_options(report_c2c_usage, c2c_options);
+
+	if (c2c.stats_only)
+		c2c.use_stdio = true;
 
 	if (c2c.use_stdio)
 		use_browser = 0;
