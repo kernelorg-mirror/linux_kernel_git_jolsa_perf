@@ -839,12 +839,13 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	print_c2c__display_stats();
 
-	if (0) {
 	hists__output_resort_cb(&c2c.hists.hists, NULL, resort_cl_cb);
+	perf_c2c__hists_browse(&c2c.hists.hists);
+
+	if (0) {
 
 	//hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
 
-	perf_c2c__hists_browse(&c2c.hists.hists);
 	}
 
 out_session:
