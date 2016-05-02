@@ -2743,7 +2743,7 @@ static int setup_output_list(struct perf_hpp_list *list, char *str)
 	return ret;
 }
 
-static void reset_dimensions(void)
+void reset_dimensions(void)
 {
 	unsigned int i;
 
