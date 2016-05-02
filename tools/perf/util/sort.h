@@ -270,4 +270,5 @@ int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 			struct perf_evlist *evlist,
 			int level);
 int output_field_add(struct perf_hpp_list *list, char *tok);
+void reset_dimensions(void);
 #endif	/* __PERF_SORT_H */
