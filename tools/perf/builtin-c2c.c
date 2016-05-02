@@ -53,6 +53,34 @@ static struct hist_entry_ops c2c_entry_ops = {
 	.free	= c2c_he_free,
 };
 
+static int c2c_hists__init(struct c2c_hists *hists,
+			   const char *output_,
+			   const char *sort_);
+
+static struct hists*
+he__get_hists(struct hist_entry *he,
+	      const char *output,
+	      const char *sort)
+{
+	struct c2c_hist_entry *c2c_he;
+	struct c2c_hists *hists;
+	int ret;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	if (c2c_he->hists)
+		return &c2c_he->hists->hists;
+
+	hists = c2c_he->hists = zalloc(sizeof(*hists));
+	if (!hists)
+		return NULL;
+
+	ret = c2c_hists__init(hists, output, sort);
+	if (ret)
+		free(hists);
+
+	return &hists->hists;
+}
+
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -62,7 +90,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	struct hists *hists = &c2c.hists.hists;
 	struct hist_entry *he;
 	struct addr_location al;
-	struct mem_info *mi;
+	struct mem_info *mi, *mi_dup;
 	int ret;
 
 	if (machine__resolve(machine, &al, sample) < 0) {
@@ -75,19 +103,67 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (mi == NULL)
 		return -ENOMEM;
 
+	mi_dup = memdup(mi, sizeof(*mi));
+	if (!mi_dup)
+		goto free_mi;
+
 	he = hists__add_entry_ops(hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
 				  sample, true);
-	if (he == NULL) {
-		free(mi);
-		return -ENOMEM;
-	}
+	if (he == NULL)
+		goto free_mi_dup;
 
 	hists__inc_nr_samples(hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
 
+	if (!ret) {
+		mi = mi_dup;
+
+		mi_dup = memdup(mi, sizeof(*mi));
+		if (!mi_dup)
+			goto free_mi;
+
+		hists = he__get_hists(he, "offset","offset");
+		if (!hists)
+			goto free_mi_dup;
+
+		he = hists__add_entry_ops(hists, &c2c_entry_ops,
+					  &al, NULL, NULL, mi,
+					  sample, true);
+		if (he == NULL)
+			goto free_mi_dup;
+
+		hists__inc_nr_samples(hists, he->filtered);
+		ret = hist_entry__append_callchain(he, sample);
+
+		if (!ret) {
+			mi = mi_dup;
+
+			hists = he__get_hists(he, "cpu,symbol,dso,comm","cpu,symbol,dso,comm");
+			if (!hists)
+				goto free_mi;
+
+			he = hists__add_entry_ops(hists, &c2c_entry_ops,
+						  &al, NULL, NULL, mi,
+						  sample, true);
+			if (he == NULL)
+				goto free_mi;
+
+			hists__inc_nr_samples(hists, he->filtered);
+			ret = hist_entry__append_callchain(he, sample);
+		}
+	}
+
+out:
 	addr_location__put(&al);
 	return ret;
+
+free_mi_dup:
+	free(mi_dup);
+free_mi:
+	free(mi);
+	ret = -ENOMEM;
+	goto out;
 }
 
 static struct perf_c2c c2c = {
@@ -392,6 +468,30 @@ static int c2c_hists__init(struct c2c_hists *hists,
 	return ret;
 }
 
+static void resort_offset_cb(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	struct c2c_hists *c2c_hists;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_hists = c2c_he->hists;
+
+	if (c2c_hists)
+		hists__output_resort(&c2c_hists->hists, NULL);
+}
+
+static void resort_cl_cb(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	struct c2c_hists *c2c_hists;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_hists = c2c_he->hists;
+
+	if (c2c_hists)
+		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -450,7 +550,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	}
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
-	hists__output_resort(&c2c.hists.hists, NULL);
+	hists__output_resort_cb(&c2c.hists.hists, NULL, resort_cl_cb);
 
 out_session:
 	perf_session__delete(session);
