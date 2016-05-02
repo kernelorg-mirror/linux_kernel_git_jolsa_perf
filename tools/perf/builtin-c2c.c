@@ -28,6 +28,7 @@ struct c2c_hist_entry {
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
+	bool			stats_only;
 };
 
 static struct perf_c2c c2c;
@@ -510,9 +511,60 @@ static void resort_cl_cb(struct hist_entry *he)
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
 }
 
+static void print_c2c__display_stats(void)
+{
+	int llc_misses;
+	struct c2c_stats *stats = &c2c.hists.stats;
+
+	llc_misses = stats->t.lcl_dram +
+		     stats->t.rmt_dram +
+		     stats->t.rmt_hit +
+		     stats->t.rmt_hitm;
+
+	printf("=================================================\n");
+	printf("            Trace Event Information              \n");
+	printf("=================================================\n");
+	printf("  Total records                     : %10d\n", stats->nr_entries);
+	printf("  Locked Load/Store Operations      : %10d\n", stats->t.locks);
+	printf("  Load Operations                   : %10d\n", stats->t.load);
+	printf("  Loads - uncacheable               : %10d\n", stats->t.ld_uncache);
+	printf("  Loads - IO                        : %10d\n", stats->t.ld_io);
+	printf("  Loads - Miss                      : %10d\n", stats->t.ld_miss);
+	printf("  Loads - no mapping                : %10d\n", stats->t.ld_noadrs);
+	printf("  Load Fill Buffer Hit              : %10d\n", stats->t.ld_fbhit);
+	printf("  Load L1D hit                      : %10d\n", stats->t.ld_l1hit);
+	printf("  Load L2D hit                      : %10d\n", stats->t.ld_l2hit);
+	printf("  Load LLC hit                      : %10d\n", stats->t.ld_llchit + stats->t.lcl_hitm);
+	printf("  Load Local HITM                   : %10d\n", stats->t.lcl_hitm);
+	printf("  Load Remote HITM                  : %10d\n", stats->t.rmt_hitm);
+	printf("  Load Remote HIT                   : %10d\n", stats->t.rmt_hit);
+	printf("  Load Local DRAM                   : %10d\n", stats->t.lcl_dram);
+	printf("  Load Remote DRAM                  : %10d\n", stats->t.rmt_dram);
+	printf("  Load MESI State Exclusive         : %10d\n", stats->t.ld_excl);
+	printf("  Load MESI State Shared            : %10d\n", stats->t.ld_shared);
+	printf("  Load LLC Misses                   : %10d\n", llc_misses);
+	printf("  LLC Misses to Local DRAM          : %10.1f%%\n", ((double)stats->t.lcl_dram/(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote DRAM         : %10.1f%%\n", ((double)stats->t.rmt_dram/(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote cache (HIT)  : %10.1f%%\n", ((double)stats->t.rmt_hit /(double)llc_misses) * 100.);
+	printf("  LLC Misses to Remote cache (HITM) : %10.1f%%\n", ((double)stats->t.rmt_hitm/(double)llc_misses) * 100.);
+	printf("  Store Operations                  : %10d\n", stats->t.store);
+	printf("  Store - uncacheable               : %10d\n", stats->t.st_uncache);
+	printf("  Store - no mapping                : %10d\n", stats->t.st_noadrs);
+	printf("  Store L1D Hit                     : %10d\n", stats->t.st_l1hit);
+	printf("  Store L1D Miss                    : %10d\n", stats->t.st_l1miss);
+	printf("  No Page Map Rejects               : %10d\n", stats->t.nomap);
+	printf("  Unable to parse data source       : %10d\n", stats->t.noparse);
+}
+
+
 static void perf_c2c__hists_fprintf(FILE *out)
 {
 	struct rb_node *nd;
+
+	print_c2c__display_stats();
+
+	if (c2c.stats_only)
+		return;
 
 	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
 	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
@@ -781,6 +833,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		   "the input file to process"),
 	OPT_BOOLEAN(0, "stdio", &use_stdio,
 		    "Use the stdio interface"),
+	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
+		    "Use the stdio interface"),
 	OPT_END()
 	};
 	int err = 0;
@@ -789,6 +843,9 @@ static int perf_c2c__report(int argc, const char **argv)
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc)
 		usage_with_options(report_c2c_usage, c2c_options);
+
+	if (c2c.stats_only)
+		use_stdio = true;
 
 	if (use_stdio)
 		use_browser = 0;
