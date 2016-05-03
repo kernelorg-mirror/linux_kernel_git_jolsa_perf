@@ -328,7 +328,7 @@ static int offset_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 }
 
 static int64_t
-offset_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+daddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	   struct hist_entry *left, struct hist_entry *right)
 {
 	u64 l, r;
@@ -346,9 +346,22 @@ offset_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return 0;
 }
 
+static int daddr_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		       struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = he->mem_info->daddr.al_addr;
+
+	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
+	DIM_DADDR,
 };
 
 /* HEADER_* macros are for main browser */
@@ -403,9 +416,17 @@ static struct c2c_dimension dim_dcacheline = {
 static struct c2c_dimension dim_offset = {
 	HEADER_CL_0("Off"),
 	.name		= "offset",
-	.cmp		= offset_cmp,
+	.cmp		= daddr_cmp,
 	.entry		= offset_entry,
 	.id		= DIM_OFFSET,
+};
+
+static struct c2c_dimension dim_daddr = {
+	HEADER_CL_0("Data address"),
+	.name		= "daddr",
+	.cmp		= daddr_cmp,
+	.entry		= daddr_entry,
+	.id		= DIM_DADDR,
 };
 
 #undef HEADER_0
@@ -419,6 +440,7 @@ static struct c2c_dimension dim_offset = {
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_offset,
+	&dim_daddr,
 	NULL,
 };
 
@@ -430,6 +452,9 @@ static void set_dimension(struct c2c_dimension *dim)
 		break;
 	case DIM_OFFSET:
 		dim->width = 5;
+		break;
+	case DIM_DADDR:
+		dim->width = 20;
 		break;
 	default:
 		pr_err("internal dimension error\n");
