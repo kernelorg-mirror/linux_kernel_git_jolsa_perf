@@ -326,6 +326,26 @@ offset_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return (int64_t)(r - l);
 }
 
+static int
+iaddr_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	    struct hist_entry *he)
+{
+	uint64_t addr = 0;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	if (he->mem_info)
+		addr = he->mem_info->iaddr.addr;
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, hex_str(addr));
+}
+
+static int64_t
+iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	  struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__iaddr_cmp(left, right);
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -377,6 +397,14 @@ static struct c2c_dimension dim_offset = {
 	.width		= 18,
 };
 
+static struct c2c_dimension dim_iaddr = {
+	.header		= HEADER_LOW("Code address"),
+	.name		= "iaddr",
+	.cmp		= iaddr_cmp,
+	.entry		= iaddr_entry,
+	.width		= 18,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -385,6 +413,7 @@ static struct c2c_dimension dim_offset = {
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_offset,
+	&dim_iaddr,
 	NULL,
 };
 
