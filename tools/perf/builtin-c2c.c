@@ -493,6 +493,31 @@ static int resort_cl_cb(struct hist_entry *he)
 	return 0;
 }
 
+static void perf_c2c__hists_fprintf(FILE *out)
+{
+	struct rb_node *nd;
+
+	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
+	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
+
+	fprintf(out, "\nShared Data Cache Line Table\n\n");
+
+	nd = rb_first(&c2c.hists.hists.entries);
+
+	do {
+		struct c2c_hist_entry *c2c_he;
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+
+		c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+		fprintf(out, "\nCacheline: \n\n");
+
+		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout);
+
+		nd = rb_next(nd);
+	} while (nd);
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -557,6 +582,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_cl_cb);
 
 	ui_progress__finish();
+
+	perf_c2c__hists_fprintf(stdout);
 
 out_session:
 	perf_session__delete(session);
