@@ -511,6 +511,64 @@ static int resort_cl_cb(struct hist_entry *he)
 	return 0;
 }
 
+static void print_offsets(struct c2c_hists *c2c_hists, FILE *out)
+{
+	struct rb_node *nd;
+
+	nd = rb_first(&c2c_hists->hists.entries);
+
+	for (; nd; nd = rb_next(nd)) {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+		struct c2c_hist_entry *c2c_he;
+
+		if (he->filtered)
+			continue;
+
+		c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+		fprintf(out, "\nCacheline: 0x%lx, offset 0x%lx\n\n",
+			cl_address(he->mem_info->daddr.al_addr),
+			cl_offset(he->mem_info->daddr.al_addr));
+
+		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, true);
+	}
+}
+
+static void print_cachelines(FILE *out)
+{
+	struct rb_node *nd;
+
+	nd = rb_first(&c2c.hists.hists.entries);
+
+	for (; nd; nd = rb_next(nd)) {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+		struct c2c_hist_entry *c2c_he;
+
+		if (he->filtered)
+			continue;
+
+		c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+		fprintf(out, "\nCacheline: 0x%lx\n\n",
+			cl_address(he->mem_info->daddr.al_addr));
+
+		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, false);
+
+		print_offsets(c2c_he->hists, out);
+	};
+}
+
+static void perf_c2c__hists_fprintf(FILE *out)
+{
+	setup_pager();
+
+	fprintf(out, "\nShared Data Cache Line Table\n\n");
+	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout, false);
+
+	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
+	print_cachelines(out);
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -573,6 +631,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_cl_cb);
 
 	ui_progress__finish();
+
+	perf_c2c__hists_fprintf(stdout);
 
 out_session:
 	perf_session__delete(session);
