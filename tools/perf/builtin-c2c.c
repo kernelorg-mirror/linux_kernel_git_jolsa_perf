@@ -13,6 +13,7 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include <asm/bug.h>
 
 struct c2c_hists {
 	struct hists		hists;
@@ -2078,6 +2079,76 @@ static int resort_cl_cb(struct hist_entry *he)
 	return 0;
 }
 
+static void print_cacheline(struct c2c_hists *c2c_hists,
+			    struct hist_entry *he_cl,
+			    struct perf_hpp_list *hpp_list,
+			    FILE *out)
+{
+	char bf[1000];
+	struct perf_hpp hpp = {
+		.buf            = bf,
+		.size           = 1000,
+	};
+	static bool once;
+
+	if (!once) {
+		hists__fprintf_headers(&c2c_hists->hists, out);
+		once = true;
+	} else {
+		fprintf(out, "\n");
+	}
+
+	fprintf(out, "  --------------------------------------------------------\n");
+	hist_entry__snprintf(he_cl, &hpp, hpp_list);
+	fprintf(out, "%s\n", bf);
+	fprintf(out, "  --------------------------------------------------------\n");
+
+	hists__fprintf(&c2c_hists->hists, false, 0, 0, 0, out, true);
+}
+
+static void print_pareto(FILE *out)
+{
+	struct perf_hpp_list hpp_list;
+	struct rb_node *nd;
+	int ret;
+
+	perf_hpp_list__init(&hpp_list);
+	ret = hpp_list__parse(&hpp_list,
+				"cl_rmt_hitm,"
+				"cl_lcl_hitm,"
+				"cl_stores_l1hit,"
+				"cl_stores_l1miss,"
+				"dcacheline",
+				NULL);
+
+	if (WARN_ONCE(ret, "failed to setup sort entries\n"))
+		return;
+
+	nd = rb_first(&c2c.hists.hists.entries);
+
+	for (; nd; nd = rb_next(nd)) {
+		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+		struct c2c_hist_entry *c2c_he;
+
+		if (he->filtered)
+			continue;
+
+		c2c_he = container_of(he, struct c2c_hist_entry, he);
+		print_cacheline(c2c_he->hists, he, &hpp_list, out);
+	}
+}
+
+static void perf_c2c__hists_fprintf(FILE *out)
+{
+	setup_pager();
+
+	fprintf(out, "\nShared Data Cache Line Table\n\n");
+	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout, false);
+
+	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
+	print_pareto(out);
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2168,6 +2239,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_cl_cb);
 
 	ui_progress__finish();
+
+	perf_c2c__hists_fprintf(stdout);
 
 out_session:
 	perf_session__delete(session);
