@@ -852,6 +852,70 @@ percent_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return per_left - per_right;
 }
 
+static double percent_ldmiss(struct c2c_hist_entry *c2c_he)
+{
+	struct c2c_hists *hists;
+	struct c2c_stats *stats;
+	struct c2c_stats *total;
+	int tot, st;
+	double p;
+
+	hists = container_of(c2c_he->he.hists, struct c2c_hists, hists);
+	stats = &c2c_he->stats;
+	total = &hists->stats;
+
+	st  = stats->rmt_hitm;
+        tot = total->lcl_dram +
+              total->rmt_dram +
+              total->rmt_hit +
+              total->rmt_hitm;
+
+	p = tot ? (double) st / tot : 0;
+
+	return 100 * p;
+}
+
+static int
+percent_ldmiss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		     struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+	double per;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	per = percent_ldmiss(c2c_he);
+
+	snprintf(buf, 10, "%.2F%%", per);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+percent_ldmiss_color(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		     struct hist_entry *he)
+{
+	return percent_color(fmt, hpp, he, percent_ldmiss);
+}
+
+static int64_t
+percent_ldmiss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		   struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+	double per_left;
+	double per_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	per_left  = percent_ldmiss(c2c_left);
+	per_right = percent_ldmiss(c2c_right);
+
+	return per_left - per_right;
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -1069,6 +1133,15 @@ static struct c2c_dimension dim_percent_hitm = {
 	.width		= 7,
 };
 
+static struct c2c_dimension dim_percent_ldmiss = {
+	.header		= HEADER_BOTH("%All","Ld Miss"),
+	.name		= "percent_ldmiss",
+	.cmp		= percent_ldmiss_cmp,
+	.entry		= percent_ldmiss_entry,
+	.color		= percent_ldmiss_color,
+	.width		= 7,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -1098,6 +1171,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_tot_recs,
 	&dim_tot_loads,
 	&dim_percent_hitm,
+	&dim_percent_ldmiss,
 	NULL,
 };
 
