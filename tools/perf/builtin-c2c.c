@@ -636,6 +636,56 @@ ld_l2hit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return c2c_left->stats.ld_l2hit - c2c_right->stats.ld_l2hit;
 }
 
+static int
+ld_llchit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, c2c_he->stats.ld_llchit);
+}
+
+static int
+ld_rmthit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, c2c_he->stats.rmt_hit);
+}
+
+static int64_t
+ld_llchit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.ld_llchit - c2c_right->stats.ld_llchit;
+}
+
+static int64_t
+ld_rmthit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.rmt_hit - c2c_right->stats.rmt_hit;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -831,6 +881,22 @@ static struct c2c_dimension dim_ld_l2hit = {
 	.width		= 7,
 };
 
+static struct c2c_dimension dim_ld_llchit = {
+	HEADER_SPAN("-- LLC Load Hit --", "Llc", 1),
+	.name		= "ld_lclhit",
+	.cmp		= ld_llchit_cmp,
+	.entry		= ld_llchit_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_ld_rmthit = {
+	HEADER_SPAN_1("Rmt"),
+	.name		= "ld_rmthit",
+	.cmp		= ld_rmthit_cmp,
+	.entry		= ld_rmthit_entry,
+	.width		= 8,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -859,6 +925,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_ld_fbhit,
 	&dim_ld_l1hit,
 	&dim_ld_l2hit,
+	&dim_ld_llchit,
+	&dim_ld_rmthit,
 	NULL,
 };
 
