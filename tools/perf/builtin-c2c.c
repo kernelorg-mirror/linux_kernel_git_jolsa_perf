@@ -501,6 +501,81 @@ stores_l1miss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return c2c_left->stats.st_l1miss - c2c_right->stats.st_l1miss;
 }
 
+static int
+ld_fbhit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, c2c_he->stats.ld_fbhit);
+}
+
+static int
+ld_l1hit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, c2c_he->stats.ld_l1hit);
+}
+
+static int
+ld_l2hit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, c2c_he->stats.ld_l2hit);
+}
+
+static int64_t
+ld_fbhit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.ld_fbhit - c2c_right->stats.ld_fbhit;
+}
+
+static int64_t
+ld_l1hit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.ld_l1hit - c2c_right->stats.ld_l1hit;
+}
+
+static int64_t
+ld_l2hit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.ld_l2hit - c2c_right->stats.ld_l2hit;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -672,6 +747,30 @@ static struct c2c_dimension dim_cl_stores_l1miss = {
 	.width		= 7,
 };
 
+static struct c2c_dimension dim_ld_fbhit = {
+	HEADER_SPAN("----- Core Load Hit -----", "FB", 2),
+	.name		= "ld_fbhit",
+	.cmp		= ld_fbhit_cmp,
+	.entry		= ld_fbhit_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_ld_l1hit = {
+	HEADER_SPAN_1("L1"),
+	.name		= "ld_l1hit",
+	.cmp		= ld_l1hit_cmp,
+	.entry		= ld_l1hit_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_ld_l2hit = {
+	HEADER_SPAN_1("L2"),
+	.name		= "ld_l2hit",
+	.cmp		= ld_l2hit_cmp,
+	.entry		= ld_l2hit_entry,
+	.width		= 7,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -697,6 +796,9 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_stores_l1miss,
 	&dim_cl_stores_l1hit,
 	&dim_cl_stores_l1miss,
+	&dim_ld_fbhit,
+	&dim_ld_l1hit,
+	&dim_ld_l2hit,
 	NULL,
 };
 
