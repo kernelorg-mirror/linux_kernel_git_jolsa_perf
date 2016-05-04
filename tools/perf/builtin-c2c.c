@@ -746,6 +746,61 @@ percent_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return per_left - per_right;
 }
 
+static double percent_ldmiss(struct c2c_hist_entry *c2c_he)
+{
+	struct c2c_hists *hists;
+	struct c2c_stats *stats;
+	struct c2c_stats *total;
+	int tot, st;
+	double p;
+
+	hists = container_of(c2c_he->he.hists, struct c2c_hists, hists);
+	stats = &c2c_he->stats;
+	total = &hists->stats;
+
+	st  = stats->t.rmt_hitm;
+        tot = total->t.lcl_dram +
+              total->t.rmt_dram +
+              total->t.rmt_hit +
+              total->t.rmt_hitm;
+
+	p = tot ? (double) st / tot : 0;
+
+	return 100 * p;
+}
+
+static int
+percent_ldmiss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		     struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	per = percent_hitm(c2c_he);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*F", width, per);
+}
+
+static int64_t
+percent_ldmiss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		   struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+	double per_left;
+	double per_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	per_left  = percent_ldmiss(c2c_left);
+	per_right = percent_ldmiss(c2c_right);
+
+	return per_left - per_right;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -764,6 +819,7 @@ enum {
 	DIM_LD_RMT_HIT,
 	DIM_TOT_RECS,
 	DIM_PERCENT_HITM,
+	DIM_PERCENT_LDMISS,
 };
 
 #define HEADER(__h)				\
@@ -905,6 +961,14 @@ static struct c2c_dimension dim_percent_hitm = {
 	.id		= DIM_PERCENT_HITM,
 };
 
+static struct c2c_dimension dim_percent_ldmiss = {
+	HEADER("%AllLdMiss"),
+	.name		= "percent_ldmiss",
+	.cmp		= percent_ldmiss_cmp,
+	.entry		= percent_ldmiss_entry,
+	.id		= DIM_PERCENT_LDMISS,
+};
+
 #undef HEADER
 
 static struct c2c_dimension *dimensions[] = {
@@ -925,6 +989,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_ld_rmthit,
 	&dim_tot_recs,
 	&dim_percent_hitm,
+	&dim_percent_ldmiss,
 	NULL,
 };
 
