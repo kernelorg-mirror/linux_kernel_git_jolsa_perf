@@ -801,6 +801,121 @@ percent_ldmiss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return per_left - per_right;
 }
 
+static struct c2c_stats *he_stats(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	return &c2c_he->stats;
+}
+
+static struct c2c_stats *total_stats(struct hist_entry *he)
+{
+	struct c2c_hists *hists;
+
+	hists = container_of(he->hists, struct c2c_hists, hists);
+	return &hists->stats;
+}
+
+static double percent(int st, int tot)
+{
+	return tot ? 100. * (double) st / (double) tot : 0;
+}
+
+#define PERCENT(__h, __f) percent(he_stats(__h)->t.__f, total_stats(__h)->t.__f)
+
+static int
+percent_rmt_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per = PERCENT(he, rmt_hitm);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*F", width, per);
+}
+
+static int64_t
+percent_rmt_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		     struct hist_entry *left, struct hist_entry *right)
+{
+	double per_left;
+	double per_right;
+
+	per_left  = PERCENT(left, lcl_hitm);
+	per_right = PERCENT(right, lcl_hitm);
+
+	return per_left - per_right;
+}
+
+static int
+percent_lcl_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per = PERCENT(he, lcl_hitm);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*F", width, per);
+}
+
+static int64_t
+percent_lcl_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		     struct hist_entry *left, struct hist_entry *right)
+{
+	double per_left;
+	double per_right;
+
+	per_left  = PERCENT(left, lcl_hitm);
+	per_right = PERCENT(right, lcl_hitm);
+
+	return per_left - per_right;
+}
+
+static int
+percent_stores_l1hit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			   struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per = PERCENT(he, st_l1hit);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*F", width, per);
+}
+
+static int64_t
+percent_stores_l1hit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+			struct hist_entry *left, struct hist_entry *right)
+{
+	double per_left;
+	double per_right;
+
+	per_left  = PERCENT(left, st_l1hit);
+	per_right = PERCENT(right, st_l1hit);
+
+	return per_left - per_right;
+}
+
+static int
+percent_stores_l1miss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+			   struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per = PERCENT(he, st_l1miss);
+
+	return snprintf(hpp->buf, hpp->size, "0x%-*F", width, per);
+}
+
+static int64_t
+percent_stores_l1miss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+			  struct hist_entry *left, struct hist_entry *right)
+{
+	double per_left;
+	double per_right;
+
+	per_left  = PERCENT(left, st_l1miss);
+	per_right = PERCENT(right, st_l1miss);
+
+	return per_left - per_right;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -820,6 +935,10 @@ enum {
 	DIM_TOT_RECS,
 	DIM_PERCENT_HITM,
 	DIM_PERCENT_LDMISS,
+	DIM_PERCENT_LCL_HITM,
+	DIM_PERCENT_RMT_HITM,
+	DIM_PERCENT_STORES_L1HIT,
+	DIM_PERCENT_STORES_L1MISS,
 };
 
 #define HEADER(__h)				\
@@ -969,6 +1088,38 @@ static struct c2c_dimension dim_percent_ldmiss = {
 	.id		= DIM_PERCENT_LDMISS,
 };
 
+static struct c2c_dimension dim_percent_rmt_hitm = {
+	HEADER("%RmtHitm"),
+	.name		= "percent_rmt_hitm",
+	.cmp		= percent_rmt_hitm_cmp,
+	.entry		= percent_rmt_hitm_entry,
+	.id		= DIM_PERCENT_RMT_HITM,
+};
+
+static struct c2c_dimension dim_percent_lcl_hitm = {
+	HEADER("%LclHitm"),
+	.name		= "percent_lcl_hitm",
+	.cmp		= percent_lcl_hitm_cmp,
+	.entry		= percent_lcl_hitm_entry,
+	.id		= DIM_PERCENT_LCL_HITM,
+};
+
+static struct c2c_dimension dim_percent_stores_l1hit = {
+	HEADER("%StL1Hit"),
+	.name		= "percent_stores_l1hit",
+	.cmp		= percent_stores_l1hit_cmp,
+	.entry		= percent_stores_l1hit_entry,
+	.id		= DIM_PERCENT_STORES_L1HIT,
+};
+
+static struct c2c_dimension dim_percent_stores_l1miss = {
+	HEADER("%StL1Miss"),
+	.name		= "percent_stores_l1miss",
+	.cmp		= percent_stores_l1miss_cmp,
+	.entry		= percent_stores_l1miss_entry,
+	.id		= DIM_PERCENT_STORES_L1MISS,
+};
+
 #undef HEADER
 
 static struct c2c_dimension *dimensions[] = {
@@ -990,6 +1141,10 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_tot_recs,
 	&dim_percent_hitm,
 	&dim_percent_ldmiss,
+	&dim_percent_rmt_hitm,
+	&dim_percent_lcl_hitm,
+	&dim_percent_stores_l1hit,
+	&dim_percent_stores_l1miss,
 	NULL,
 };
 
