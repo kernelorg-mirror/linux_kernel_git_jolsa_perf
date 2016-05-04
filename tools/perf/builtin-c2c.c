@@ -709,6 +709,58 @@ tot_recs_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return tot_recs_left - tot_recs_right;
 }
 
+static double percent_hitm(struct c2c_hist_entry *c2c_he)
+{
+	struct c2c_hists *hists;
+	struct c2c_stats *stats;
+	struct c2c_stats *total;
+	int tot, st;
+	double p;
+
+	hists = container_of(c2c_he->he.hists, struct c2c_hists, hists);
+	stats = &c2c_he->stats;
+	total = &hists->stats;
+
+	st  = stats->t.lcl_hitm + stats->t.rmt_hitm;
+	tot = total->t.lcl_hitm + total->t.rmt_hitm;
+
+	p = tot ? (double) st / tot : 0;
+
+	return 100 * p;
+}
+
+static int
+percent_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	double per;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	per = percent_hitm(c2c_he);
+
+	return snprintf(hpp->buf, hpp->size, "%*F", width, per);
+}
+
+static int64_t
+percent_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+		 struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+	double per_left;
+	double per_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	per_left  = percent_hitm(c2c_left);
+	per_right = percent_hitm(c2c_right);
+
+	return per_left - per_right;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -726,6 +778,7 @@ enum {
 	DIM_LD_LLC_HIT,
 	DIM_LD_RMT_HIT,
 	DIM_TOT_RECS,
+	DIM_PERCENT_HITM,
 };
 
 #define HEADER(__h)			\
@@ -869,6 +922,14 @@ static struct c2c_dimension dim_tot_recs = {
 	.id		= DIM_TOT_RECS,
 };
 
+static struct c2c_dimension dim_percent_hitm = {
+	HEADER("%HITM"),
+	.name		= "percent_hitm",
+	.cmp		= percent_hitm_cmp,
+	.entry		= percent_hitm_entry,
+	.id		= DIM_PERCENT_HITM,
+};
+
 #undef HEADER
 #undef HEADER2
 
@@ -889,6 +950,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_ld_llchit,
 	&dim_ld_rmthit,
 	&dim_tot_recs,
+	&dim_percent_hitm,
 	NULL,
 };
 
@@ -919,6 +981,7 @@ static void set_dimension(struct c2c_dimension *dim)
 	case DIM_LD_LLC_HIT:
 	case DIM_LD_RMT_HIT:
 	case DIM_TOT_RECS:
+	case DIM_PERCENT_HITM:
 		dim->width = 13;
 		break;
 	default:
