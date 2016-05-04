@@ -371,11 +371,97 @@ iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return 0;
 }
 
+static int
+tot_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	unsigned int tot_hitm;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	tot_hitm = c2c_he->stats.t.lcl_hitm + c2c_he->stats.t.rmt_hitm;
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, tot_hitm);
+}
+
+static int
+lcl_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width,
+			c2c_he->stats.t.lcl_hitm);
+}
+
+static int
+rmt_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width,
+			c2c_he->stats.t.rmt_hitm);
+}
+
+static int64_t
+tot_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+	unsigned int tot_hitm_left;
+	unsigned int tot_hitm_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	tot_hitm_left  = c2c_left->stats.t.lcl_hitm + c2c_left->stats.t.rmt_hitm;
+	tot_hitm_right = c2c_right->stats.t.lcl_hitm + c2c_right->stats.t.rmt_hitm;
+	return tot_hitm_left - tot_hitm_right;
+}
+
+static int64_t
+lcl_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.t.lcl_hitm - c2c_right->stats.t.lcl_hitm;
+}
+
+static int64_t
+rmt_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.t.rmt_hitm - c2c_right->stats.t.rmt_hitm;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
 	DIM_DADDR,
 	DIM_IADDR,
+	DIM_TOT_HITM,
+	DIM_LCL_HITM,
+	DIM_RMT_HITM,
 };
 
 #define HEADER(__h)			\
@@ -423,6 +509,30 @@ static struct c2c_dimension dim_iaddr = {
 	.id		= DIM_IADDR,
 };
 
+static struct c2c_dimension dim_tot_hitm = {
+	HEADER2(Tot, HITM),
+	.name		= "tot_hitm",
+	.cmp		= tot_hitm_cmp,
+	.entry		= tot_hitm_entry,
+	.id		= DIM_TOT_HITM,
+};
+
+static struct c2c_dimension dim_lcl_hitm = {
+	HEADER2(Lcl, HITM),
+	.name		= "lcl_hitm",
+	.cmp		= lcl_hitm_cmp,
+	.entry		= lcl_hitm_entry,
+	.id		= DIM_LCL_HITM,
+};
+
+static struct c2c_dimension dim_rmt_hitm = {
+	HEADER2(Rmt, HITM),
+	.name		= "rmt_hitm",
+	.cmp		= rmt_hitm_cmp,
+	.entry		= rmt_hitm_entry,
+	.id		= DIM_RMT_HITM,
+};
+
 #undef HEADER
 #undef HEADER2
 
@@ -431,6 +541,9 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_offset,
 	&dim_daddr,
 	&dim_iaddr,
+	&dim_tot_hitm,
+	&dim_lcl_hitm,
+	&dim_rmt_hitm,
 	NULL,
 };
 
@@ -448,6 +561,11 @@ static void set_dimension(struct c2c_dimension *dim)
 		break;
 	case DIM_IADDR:
 		dim->width = 20;
+		break;
+	case DIM_TOT_HITM:
+	case DIM_LCL_HITM:
+	case DIM_RMT_HITM:
+		dim->width = 13;
 		break;
 	default:
 		pr_err("internal dimension error\n");
