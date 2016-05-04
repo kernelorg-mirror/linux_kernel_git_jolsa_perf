@@ -1690,7 +1690,9 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	set_dimensions();
 
-	err = c2c_hists__init(&c2c.hists, "dcacheline,offset", "dcacheline");
+	err = c2c_hists__init(&c2c.hists,
+			"dcacheline,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
+			"dcacheline");
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
 		goto out;
