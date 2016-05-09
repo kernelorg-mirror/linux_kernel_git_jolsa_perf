@@ -969,6 +969,15 @@ enum {
 		.text = # __h1,		\
 	}
 
+#define HEADER2S(__h2, __s2, __h1)	\
+	.phh[PERF_HPP_HEADER_2] = {	\
+		.text = # __h2,		\
+		.span = __s2,		\
+	},				\
+	.phh[PERF_HPP_HEADER_1] = {	\
+		.text = # __h1,		\
+	}
+
 static struct c2c_dimension dim_dcacheline = {
 	HEADER("Cacheline"),
 	.name		= "dcacheline",
@@ -1034,7 +1043,7 @@ static struct c2c_dimension dim_stores = {
 };
 
 static struct c2c_dimension dim_stores_l1hit = {
-	HEADER2(Stores, L1Hit),
+	HEADER2S(Stores, 1, L1Hit),
 	.name		= "stores_l1hit",
 	.cmp		= stores_l1hit_cmp,
 	.entry		= stores_l1hit_entry,
