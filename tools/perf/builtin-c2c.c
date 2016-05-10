@@ -37,6 +37,8 @@ struct c2c_hist_entry {
 
 static char const *coalesce_default = "pid,tid,iaddr,symbol,dso,comm";
 
+#define HAS_HITMS(__h) (__h->stats.lcl_hitm || __h->stats.rmt_hitm)
+
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
@@ -52,6 +54,10 @@ struct perf_c2c {
 
 	bool			 use_stdio;
 	bool			 stats_only;
+
+	/* HITM shared clines stats */
+	struct c2c_stats	hitm_stats;
+	int			shared_clines;
 };
 
 static struct perf_c2c c2c;
@@ -2060,6 +2066,11 @@ static int resort_cl_cb(struct hist_entry *he)
 
 	calc_width(he);
 
+	if (HAS_HITMS(c2c_he)) {
+		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
+		c2c.shared_clines++;
+	}
+
 	if (display && c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
 			"percent_rmt_hitm,"
@@ -2192,6 +2203,26 @@ static void print_c2c__display_stats(void)
 	printf("  Unable to parse data source       : %10d\n", stats->noparse);
 }
 
+static void print_shared_cacheline_info(void)
+{
+	struct c2c_stats *stats = &c2c.hitm_stats;
+	int hitm_cnt = stats->lcl_hitm + stats->rmt_hitm;
+
+	printf("=================================================\n");
+	printf("    Global Shared Cache Line Event Information   \n");
+	printf("=================================================\n");
+	printf("  Total Shared Cache Lines          : %10d\n", c2c.shared_clines);
+	printf("  Load HITs on shared lines         : %10d\n", stats->load);
+	printf("  Fill Buffer Hits on shared lines  : %10d\n", stats->ld_fbhit);
+	printf("  L1D hits on shared lines          : %10d\n", stats->ld_l1hit);
+	printf("  L2D hits on shared lines          : %10d\n", stats->ld_l2hit);
+	printf("  LLC hits on shared lines          : %10d\n", stats->ld_llchit + stats->lcl_hitm);
+	printf("  Locked Access on shared lines     : %10d\n", stats->locks);
+	printf("  Store HITs on shared lines        : %10d\n", stats->store);
+	printf("  Store L1D hits on shared lines    : %10d\n", stats->st_l1hit);
+	printf("  Total Merged records              : %10d\n", hitm_cnt + stats->store);
+}
+
 static void print_cacheline(struct c2c_hists *c2c_hists,
 			    struct hist_entry *he_cl,
 			    struct perf_hpp_list *hpp_list,
@@ -2256,6 +2287,8 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	setup_pager();
 
 	print_c2c__display_stats();
+	fprintf(out, "\n");
+	print_shared_cacheline_info();
 
 	if (c2c.stats_only)
 		return;
