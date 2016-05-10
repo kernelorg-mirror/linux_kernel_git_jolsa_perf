@@ -222,6 +222,7 @@ struct perf_hpp {
 
 struct perf_hpp_header {
 	const char *text;
+	int span;
 };
 
 enum {
@@ -240,7 +241,7 @@ enum {
 struct perf_hpp_fmt {
 	struct perf_hpp_header phh[PERF_HPP_HEADER_MAX];
 	int (*header)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-		      struct hists* hists, int line, bool *defined);
+		      struct hists* hists, int line, bool *defined, int *span);
 	int (*width)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 		     struct hists *hists);
 	int (*color)(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,

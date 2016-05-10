@@ -94,7 +94,10 @@ static int hist_entry__thread_filter(struct hist_entry *he, int type, const void
 	return th && he->thread != th;
 }
 
-#define HEADER(__h) .phh[PERF_HPP_HEADER_1].text = __h
+#define HEADER(__h)				\
+	.phh[PERF_HPP_HEADER_1] = {		\
+		.text = __h,			\
+	}
 
 struct sort_entry sort_thread = {
 	HEADER("  Pid:Command"),
@@ -1406,7 +1409,7 @@ void perf_hpp__reset_sort_width(struct perf_hpp_fmt *fmt, struct hists *hists)
 }
 
 static int __sort__hpp_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			      struct hists *hists, int line, bool *defined)
+			      struct hists *hists, int line, bool *defined, int *span __maybe_unused)
 {
 	struct hpp_sort_entry *hse;
 	size_t len = fmt->user_len;
@@ -1716,7 +1719,7 @@ static void update_dynamic_len(struct hpp_dynamic_entry *hde,
 }
 
 static int __sort__hde_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			      struct hists *hists __maybe_unused, int line __maybe_unused, bool *defined)
+			      struct hists *hists __maybe_unused, int line __maybe_unused, bool *defined, int *span __maybe_unused)
 {
 	struct hpp_dynamic_entry *hde;
 	size_t len = fmt->user_len;
