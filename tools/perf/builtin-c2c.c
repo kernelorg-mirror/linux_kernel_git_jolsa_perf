@@ -75,7 +75,6 @@ static int c2c_hists__init(struct c2c_hists *hists,
 
 static struct c2c_hists*
 he__get_c2c_hists(struct hist_entry *he,
-		  const char *output,
 		  const char *sort)
 {
 	struct c2c_hist_entry *c2c_he;
@@ -90,7 +89,7 @@ he__get_c2c_hists(struct hist_entry *he,
 	if (!hists)
 		return NULL;
 
-	ret = c2c_hists__init(hists, output, sort);
+	ret = c2c_hists__init(hists, NULL, sort);
 	if (ret)
 		free(hists);
 
@@ -146,7 +145,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!mi_dup)
 			goto free_mi;
 
-		c2c_hists = he__get_c2c_hists(he, "offset","offset");
+		c2c_hists = he__get_c2c_hists(he, "offset");
 		if (!c2c_hists)
 			goto free_mi_dup;
 
@@ -166,7 +165,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!ret) {
 			mi = mi_dup;
 
-			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm","cpu,symbol,dso,comm");
+			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm");
 			if (!c2c_hists)
 				goto free_mi;
 
@@ -412,7 +411,7 @@ rmt_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 
 	return snprintf(hpp->buf, hpp->size, "%*u", width,
-			c2c_he->stats.t.lcl_hitm);
+			c2c_he->stats.t.rmt_hitm);
 }
 
 static int64_t
@@ -1330,6 +1329,9 @@ static int c2c_hists__init_sort(struct c2c_hists *hists, char *name)
 		char *tmp, *tok;						\
 		ret = 0;							\
 										\
+		if (!_list)							\
+			break;							\
+										\
 		for (tok = strtok_r((char *)_list, ", ", &tmp);			\
 				tok; tok = strtok_r(NULL, ", ", &tmp)) {	\
 			ret = _fn(hists, tok);					\
@@ -1349,18 +1351,13 @@ static int __c2c_hists__init(struct c2c_hists *hists)
 	return __hists__init(&hists->hists, &hists->list);
 }
 
-static int c2c_hists__init(struct c2c_hists *hists,
-			   const char *output_,
-			   const char *sort_)
+static int c2c_hists__init_list(struct c2c_hists *hists,
+				const char *output_,
+				const char *sort_)
 {
-	char *output = strdup(output_);
-	char *sort   = strdup(sort_);
+	char *output = output_ ? strdup(output_) : NULL;
+	char *sort   = sort_   ? strdup(sort_) : NULL;
 	int ret;
-
-	if (!output || !sort)
-		return -EINVAL;
-
-	__c2c_hists__init(hists);
 
 	PARSE_LIST(output, c2c_hists__init_output);
 	PARSE_LIST(sort,   c2c_hists__init_sort);
@@ -1375,6 +1372,22 @@ static int c2c_hists__init(struct c2c_hists *hists,
 	return ret;
 }
 
+static int c2c_hists__init(struct c2c_hists *hists,
+			   const char *output,
+			   const char *sort)
+{
+	__c2c_hists__init(hists);
+	return c2c_hists__init_list(hists, output, sort);
+}
+
+static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
+			     const char *output,
+			     const char *sort)
+{
+	perf_hpp__reset_output_field(&c2c_hists->list);
+	return c2c_hists__init_list(c2c_hists, output, sort);
+}
+
 static int resort_offset_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
@@ -1384,6 +1397,10 @@ static int resort_offset_cb(struct hist_entry *he)
 	c2c_hists = c2c_he->hists;
 
 	if (c2c_hists) {
+//		c2c_hists__reinit(c2c_hists,
+//			"cpu,symbol,dso,comm",
+//			"cpu,symbol,dso,comm");
+
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort(&c2c_hists->hists, NULL);
 	}
@@ -1405,6 +1422,11 @@ static int resort_cl_cb(struct hist_entry *he)
 	}
 
 	if (c2c_hists) {
+		c2c_hists__reinit(c2c_hists,
+			"offset,rmt_hitm,lcl_hitm",
+//			"offset,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
+			"rmt_hitm,lcl_hitm");
+
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
 	}
@@ -1783,9 +1805,7 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	set_dimensions();
 
-	err = c2c_hists__init(&c2c.hists,
-			"dcacheline,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
-			"dcacheline");
+	err = c2c_hists__init(&c2c.hists, NULL, "dcacheline");
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
 		goto out;
@@ -1812,6 +1832,10 @@ static int perf_c2c__report(int argc, const char **argv)
                 pr_err("failed to process sample\n");
 		goto out_session;
 	}
+
+	c2c_hists__reinit(&c2c.hists,
+			"dcacheline,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
+			"rmt_hitm,lcl_hitm");
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
 	hists__output_resort_cb(&c2c.hists.hists, NULL, resort_cl_cb);
