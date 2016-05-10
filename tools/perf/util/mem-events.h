@@ -70,5 +70,6 @@ struct c2c_stats {
 struct hist_entry;
 int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
 		     u64 weight);
+void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add);
 
 #endif /* __PERF_MEM_EVENTS_H */
