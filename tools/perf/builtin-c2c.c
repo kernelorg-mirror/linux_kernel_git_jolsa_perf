@@ -1520,6 +1520,10 @@ static int resort_cl_cb(struct hist_entry *he)
 	}
 
 	if (c2c_hists) {
+		c2c_hists__reinit(c2c_hists,
+			"offset,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
+			"offset");
+
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort(&c2c_hists->hists, NULL);
 	}
@@ -1896,6 +1900,10 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_err("failed to process sample\n");
 		goto out_session;
 	}
+
+	c2c_hists__reinit(&c2c.hists,
+			"dcacheline,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
+			"rmt_hitm,lcl_hitm");
 
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
