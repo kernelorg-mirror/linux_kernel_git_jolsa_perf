@@ -230,7 +230,7 @@ static int hpp__width_fn(struct perf_hpp_fmt *fmt,
 }
 
 static int hpp__header_fn(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
-			  struct hists *hists, int line, bool *defined)
+			  struct hists *hists, int line, bool *defined, int *span __maybe_unused)
 {
 	int len = hpp__width_fn(fmt, hpp, hists);
 	const char *text = perf_hpp_header_n(fmt, line).text;
@@ -392,8 +392,10 @@ static bool hpp__equal(struct perf_hpp_fmt *a, struct perf_hpp_fmt *b)
 	return a->idx == b->idx;
 }
 
-#define HEADER(__h)				\
-	.phh[PERF_HPP_HEADER_1].text = __h
+#define HEADER(__h)			\
+	.phh[PERF_HPP_HEADER_1] = {	\
+		.text = __h,		\
+	}
 
 #define HPP__COLOR_PRINT_FNS(_name, _fn, _idx)		\
 	{						\
