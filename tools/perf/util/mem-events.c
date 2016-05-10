@@ -388,3 +388,20 @@ int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *he)
 #undef P
 	return err;
 }
+
+void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add)
+{
+	stats->load		+= add->load;
+	stats->ld_fbhit		+= add->ld_fbhit;
+	stats->ld_l1hit		+= add->ld_l1hit;
+	stats->ld_l2hit		+= add->ld_l2hit;
+	stats->ld_llchit	+= add->ld_llchit;
+	stats->locks		+= add->locks;
+	stats->lcl_dram		+= add->lcl_dram;
+	stats->rmt_dram		+= add->rmt_dram;
+	stats->lcl_hitm		+= add->lcl_hitm;
+	stats->rmt_hitm		+= add->rmt_hitm;
+	stats->rmt_hit		+= add->rmt_hit;
+	stats->store		+= add->store;
+	stats->st_l1hit		+= add->st_l1hit;
+}
