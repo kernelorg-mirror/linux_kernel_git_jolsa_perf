@@ -506,6 +506,7 @@ static void perf_gtk__show_hierarchy(GtkWidget *window, struct hists *hists,
 		.buf		= s,
 		.size		= sizeof(s),
 	};
+	int span = 0;
 
 	hists__for_each_format(hists, fmt) {
 		if (perf_hpp__is_sort_entry(fmt) ||
@@ -549,7 +550,7 @@ static void perf_gtk__show_hierarchy(GtkWidget *window, struct hists *hists,
 				strcat(buf, "+");
 			first_col = false;
 
-			fmt->header(fmt, &hpp, hists, 0);
+			fmt->header(fmt, &hpp, hists, 0, &span);
 			strcat(buf, ltrim(rtrim(hpp.buf)));
 		}
 	}
