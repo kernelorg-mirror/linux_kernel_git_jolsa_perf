@@ -387,3 +387,21 @@ int c2c_decode_stats(struct c2c_stats *stats, struct hist_entry *entry)
 
 	return err;
 }
+
+void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add)
+{
+	stats->t.load		+= add->t.load;
+	stats->t.ld_fbhit	+= add->t.ld_fbhit;
+	stats->t.ld_l1hit	+= add->t.ld_l1hit;
+	stats->t.ld_l2hit	+= add->t.ld_l2hit;
+	stats->t.ld_llchit	+= add->t.ld_llchit;
+	stats->t.locks		+= add->t.locks;
+	stats->t.lcl_dram	+= add->t.lcl_dram;
+	stats->t.rmt_dram	+= add->t.rmt_dram;
+	stats->t.lcl_hitm	+= add->t.lcl_hitm;
+	stats->t.rmt_hitm	+= add->t.rmt_hitm;
+	stats->t.rmt_hit	+= add->t.rmt_hit;
+	stats->t.store		+= add->t.store;
+	stats->t.st_l1hit	+= add->t.st_l1hit;
+	stats->total_period	+= add->total_period;
+}
