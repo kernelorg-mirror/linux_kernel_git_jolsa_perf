@@ -12,6 +12,7 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include "evlist.h"
 #include "ui/browsers/hists.h"
 
 struct c2c_hists {
@@ -117,6 +118,11 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 			 event->header.type);
 		return -1;
 	}
+
+	ret = sample__resolve_callchain(sample, &callchain_cursor, NULL,
+                                        evsel, &al, sysctl_perf_event_max_stack);
+	if (ret)
+		return ret;
 
 	mi = sample__resolve_mem(sample, &al);
 	if (mi == NULL)
@@ -1758,6 +1764,48 @@ out:
 	return 0;
 }
 
+#define CALLCHAIN_DEFAULT_OPT  "graph,0.5,caller,function,percent"
+
+const char callchain_help[] = "Display call graph (stack chain/backtrace):\n\n"
+				CALLCHAIN_REPORT_HELP
+				"\n\t\t\t\tDefault: " CALLCHAIN_DEFAULT_OPT;
+
+static int
+parse_callchain_opt(const struct option *opt, const char *arg, int unset)
+{
+	struct callchain_param *callchain = opt->value;
+
+	callchain->enabled = !unset;
+	/*
+	 * --no-call-graph
+	 */
+	if (unset) {
+		symbol_conf.use_callchain = false;
+		callchain->mode = CHAIN_NONE;
+		return 0;
+	}
+
+	return parse_callchain_report_opt(arg);
+}
+
+static int setup_callchain(struct perf_evlist *evlist)
+{
+	u64 sample_type = perf_evlist__combined_sample_type(evlist);
+
+	if (!(sample_type & PERF_SAMPLE_CALLCHAIN) ||
+	    callchain_param.enabled)
+		return 0;
+
+	symbol_conf.use_callchain = true;
+	if (callchain_register_param(&callchain_param) < 0) {
+		ui__error("Can't register callchain params.\n");
+		return -EINVAL;
+	}
+
+	callchain_param.min_percent = 0;
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -1766,6 +1814,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		.mode = PERF_DATA_MODE_READ,
 	};
 	bool use_stdio = false;
+	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const struct option c2c_options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
@@ -1777,6 +1826,10 @@ static int perf_c2c__report(int argc, const char **argv)
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
 		    "Use the stdio interface"),
+	OPT_CALLBACK_DEFAULT('g', "call-graph", &callchain_param,
+			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
+			     callchain_help, &parse_callchain_opt,
+			     callchain_default_opt),
 	OPT_END()
 	};
 	int err = 0;
@@ -1814,6 +1867,10 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_debug("No memory for session\n");
 		goto out;
 	}
+
+	err = setup_callchain(session->evlist);
+	if (err)
+		goto out_session;
 
 	if (symbol__init(&session->header.env) < 0) {
 		goto out_session;
