@@ -1330,6 +1330,8 @@ struct sched_entity {
 	struct sched_statistics statistics;
 #endif
 
+	u64			nr_failed_migrations;
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	int			depth;
 	struct sched_entity	*parent;

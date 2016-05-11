@@ -711,6 +711,8 @@ struct rq {
 	/* Must be inspected within a rcu lock section */
 	struct cpuidle_state *idle_state;
 #endif
+
+	struct pid *kick_out;
 };
 
 static inline int cpu_of(struct rq *rq)

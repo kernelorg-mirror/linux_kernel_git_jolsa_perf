@@ -6032,6 +6032,122 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 }
 #endif
 
+static void update_kick_out(struct task_struct *p)
+{
+	struct rq *rq = task_rq(p);
+
+	lockdep_assert_held(&rq->lock);
+
+	if (p->nr_cpus_allowed == 1)
+		return;
+
+	p->se.nr_failed_migrations++;
+
+	if (rq->kick_out) {
+		struct task_struct *kick = get_pid_task(rq->kick_out, PIDTYPE_PID);
+
+		if (!kick ||
+		    kick->se.nr_failed_migrations < p->se.nr_failed_migrations) {
+			put_pid(rq->kick_out);
+			rq->kick_out = NULL;
+		}
+		if (kick)
+			put_task_struct(kick);
+	}
+
+	if (!rq->kick_out)
+		rq->kick_out = get_task_pid(p, PIDTYPE_PID);
+}
+
+static void reset_kick_out(struct task_struct *p)
+{
+	struct rq *rq = task_rq(p);
+	struct pid *pid;
+
+	lockdep_assert_held(&rq->lock);
+
+	p->se.nr_failed_migrations = 0;
+
+	if (!rq->kick_out)
+		return;
+
+	pid = get_task_pid(p, PIDTYPE_PID);
+	if (pid) {
+		if (pid == rq->kick_out) {
+			put_pid(rq->kick_out);
+			rq->kick_out = NULL;
+		}
+		put_pid(pid);
+	}
+}
+
+static void __detach_task(struct task_struct *p,
+			  struct rq *src_rq, int dst_cpu)
+{
+	lockdep_assert_held(&src_rq->lock);
+
+	p->on_rq = TASK_ON_RQ_MIGRATING;
+	deactivate_task(src_rq, p, 0);
+	set_task_cpu(p, dst_cpu);
+}
+
+static void attach_task(struct rq *rq, struct task_struct *p);
+
+static int get_allowed_idle(struct task_struct *p)
+{
+	int cpu;
+
+	for_each_cpu(cpu, tsk_cpus_allowed(p)) {
+		if (idle_cpu(cpu))
+			return cpu;
+	}
+
+	return -1;
+}
+
+noinline static void process_kick_out(struct rq *rq)
+{
+	struct task_struct *kick = NULL;
+	unsigned long flags;
+	int idle_cpu = -1;
+
+	raw_spin_lock_irqsave(&rq->lock, flags);
+
+	if (!rq->kick_out)
+		goto unlock;
+
+	kick = get_pid_task(rq->kick_out, PIDTYPE_PID);
+	if (!kick)
+		goto free;
+
+	idle_cpu = get_allowed_idle(kick);
+
+	if (idle_cpu >= 0)
+		__detach_task(kick, rq, idle_cpu);
+
+free:
+	if (rq->kick_out) {
+		put_pid(rq->kick_out);
+		rq->kick_out = NULL;
+	}
+
+unlock:
+	raw_spin_unlock(&rq->lock);
+
+	if (idle_cpu >= 0) {
+		struct rq *dst_rq = cpu_rq(idle_cpu);
+
+		raw_spin_lock(&dst_rq->lock);
+		attach_task(dst_rq, kick);
+		raw_spin_unlock(&dst_rq->lock);
+	}
+
+	local_irq_restore(flags);
+
+	if (kick)
+		put_task_struct(kick);
+}
+
 /*
  * can_migrate_task - may task p from runqueue rq be migrated to this_cpu?
  */
@@ -6056,6 +6172,8 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 		int cpu;
 
 		schedstat_inc(p, se.statistics.nr_failed_migrations_affine);
+
+		update_kick_out(p);
 
 		env->flags |= LBF_SOME_PINNED;
 
@@ -6118,11 +6236,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
  */
 static void detach_task(struct task_struct *p, struct lb_env *env)
 {
-	lockdep_assert_held(&env->src_rq->lock);
-
-	p->on_rq = TASK_ON_RQ_MIGRATING;
-	deactivate_task(env->src_rq, p, 0);
-	set_task_cpu(p, env->dst_cpu);
+	__detach_task(p, env->src_rq, env->dst_cpu);
 }
 
 /*
@@ -6207,6 +6321,8 @@ static int detach_tasks(struct lb_env *env)
 
 		if ((load / 2) > env->imbalance)
 			goto next;
+
+		reset_kick_out(p);
 
 		detach_task(p, env);
 		list_add(&p->se.group_node, &env->tasks);
@@ -8036,6 +8152,7 @@ out:
 		rq->max_idle_balance_cost =
 			max((u64)sysctl_sched_migration_cost, max_cost);
 	}
+	process_kick_out(rq);
 	rcu_read_unlock();
 
 	/*
