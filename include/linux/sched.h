@@ -1326,6 +1326,8 @@ struct sched_entity {
 
 	u64			nr_migrations;
 
+	u64                     nr_kickme;
+
 #ifdef CONFIG_SCHEDSTATS
 	struct sched_statistics statistics;
 #endif

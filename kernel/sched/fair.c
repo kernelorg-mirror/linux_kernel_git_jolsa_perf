@@ -5942,6 +5942,8 @@ struct lb_env {
 
 	enum fbq_type		fbq_type;
 	struct list_head	tasks;
+
+	struct task_struct	**kick;
 };
 
 /*
@@ -6032,6 +6034,104 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 }
 #endif
 
+static void update_kick(struct task_struct *p, struct lb_env *env)
+{
+	struct task_struct *kick;
+
+	if (!env->kick || p->nr_cpus_allowed == 1)
+		return;
+
+	kick = *env->kick;
+	p->se.nr_kickme++;
+
+	if (kick && (kick->se.nr_kickme < p->se.nr_kickme)) {
+		put_task_struct(kick);
+		kick = NULL;
+	}
+
+	if (!kick) {
+		get_task_struct(p);
+		*env->kick = p;
+	}
+}
+
+static void reset_kick(struct task_struct *p, struct lb_env *env)
+{
+	struct task_struct *kick = *env->kick;
+
+	if (!env->kick)
+		return;
+
+	kick = *env->kick;
+	p->se.nr_kickme = 0;
+
+	if (kick == p) {
+		put_task_struct(kick);
+		*env->kick = NULL;
+	}
+}
+
+static void __detach_task(struct task_struct *p,
+			  struct rq *src_rq, int dst_cpu)
+{
+	lockdep_assert_held(&src_rq->lock);
+
+	p->on_rq = TASK_ON_RQ_MIGRATING;
+	deactivate_task(src_rq, p, 0);
+	set_task_cpu(p, dst_cpu);
+}
+
+static void attach_task(struct rq *rq, struct task_struct *p);
+
+static int get_allowed_idle(struct task_struct *p)
+{
+	int cpu;
+
+	for_each_cpu(cpu, tsk_cpus_allowed(p)) {
+		if (cpu == task_cpu(p))
+			continue;
+
+		if (idle_cpu(cpu))
+			return cpu;
+	}
+
+	return -1;
+}
+
+static void process_kick(struct task_struct *kick)
+{
+	unsigned long flags;
+	struct rq *rq;
+	int cpu;
+
+	if (!kick)
+		return;
+
+	rq = task_rq(kick);
+
+	raw_spin_lock_irqsave(&rq->lock, flags);
+
+	cpu = get_allowed_idle(kick);
+	if (cpu >= 0) {
+		__detach_task(kick, rq, cpu);
+		kick->se.nr_kickme = 0;
+	}
+
+	raw_spin_unlock(&rq->lock);
+
+	if (cpu >= 0) {
+		struct rq *dst_rq = cpu_rq(cpu);
+
+		raw_spin_lock(&dst_rq->lock);
+		attach_task(dst_rq, kick);
+		raw_spin_unlock(&dst_rq->lock);
+	}
+
+	local_irq_restore(flags);
+
+	put_task_struct(kick);
+}
+
 /*
  * can_migrate_task - may task p from runqueue rq be migrated to this_cpu?
  */
@@ -6056,6 +6156,8 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 		int cpu;
 
 		schedstat_inc(p, se.statistics.nr_failed_migrations_affine);
+
+		update_kick(p, env);
 
 		env->flags |= LBF_SOME_PINNED;
 
@@ -6207,6 +6309,8 @@ static int detach_tasks(struct lb_env *env)
 
 		if ((load / 2) > env->imbalance)
 			goto next;
+
+		reset_kick(p, env);
 
 		detach_task(p, env);
 		list_add(&p->se.group_node, &env->tasks);
@@ -7352,7 +7456,7 @@ static int should_we_balance(struct lb_env *env)
  */
 static int load_balance(int this_cpu, struct rq *this_rq,
 			struct sched_domain *sd, enum cpu_idle_type idle,
-			int *continue_balancing)
+			int *continue_balancing, struct task_struct **kick)
 {
 	int ld_moved, cur_ld_moved, active_balance = 0;
 	struct sched_domain *sd_parent = sd->parent;
@@ -7371,6 +7475,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 		.cpus		= cpus,
 		.fbq_type	= all,
 		.tasks		= LIST_HEAD_INIT(env.tasks),
+		.kick		= kick,
 	};
 
 	/*
@@ -7687,7 +7792,7 @@ static int idle_balance(struct rq *this_rq)
 
 			pulled_task = load_balance(this_cpu, this_rq,
 						   sd, CPU_NEWLY_IDLE,
-						   &continue_balancing);
+						   &continue_balancing, NULL);
 
 			domain_cost = sched_clock_cpu(this_cpu) - t0;
 			if (domain_cost > sd->max_newidle_lb_cost)
@@ -7969,6 +8074,7 @@ static void rebalance_domains(struct rq *rq, enum cpu_idle_type idle)
 	int update_next_balance = 0;
 	int need_serialize, need_decay = 0;
 	u64 max_cost = 0;
+	struct task_struct *kick = NULL;
 
 	update_blocked_averages(cpu);
 
@@ -8009,7 +8115,7 @@ static void rebalance_domains(struct rq *rq, enum cpu_idle_type idle)
 		}
 
 		if (time_after_eq(jiffies, sd->last_balance + interval)) {
-			if (load_balance(cpu, rq, sd, idle, &continue_balancing)) {
+			if (load_balance(cpu, rq, sd, idle, &continue_balancing, &kick)) {
 				/*
 				 * The LBF_DST_PINNED logic could have changed
 				 * env->dst_cpu, so we can't know our idle
@@ -8036,6 +8142,7 @@ out:
 		rq->max_idle_balance_cost =
 			max((u64)sysctl_sched_migration_cost, max_cost);
 	}
+	process_kick(kick);
 	rcu_read_unlock();
 
 	/*
