@@ -1902,8 +1902,24 @@ static int perf_c2c__report(int argc, const char **argv)
 	}
 
 	c2c_hists__reinit(&c2c.hists,
-			"dcacheline,daddr,iaddr,tot_hitm,rmt_hitm,lcl_hitm,stores,stores_l1hit,stores_l1miss,ld_fbhit,ld_l1hit,ld_l2hit,ld_lclhit,ld_rmthit",
-			"rmt_hitm,lcl_hitm");
+			"dcacheline,"
+			"tot_recs,"
+			"percent_ldmiss,"
+			"percent_hitm,"
+			"tot_loads,"
+			"ld_fbhit,"
+			"ld_l1hit,"
+			"ld_l2hit,"
+			"tot_hitm,"
+			"lcl_hitm,"
+			"rmt_hitm,"
+			"ld_lclhit,ld_rmthit,"
+			"ld_llcmiss,"
+			"stores,"
+			"stores_l1hit,"
+			"stores_l1miss",
+			"rmt_hitm,lcl_hitm"
+			);
 
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
