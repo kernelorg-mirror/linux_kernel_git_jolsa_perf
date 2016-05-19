@@ -686,6 +686,43 @@ ld_rmthit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return c2c_left->stats.rmt_hit - c2c_right->stats.rmt_hit;
 }
 
+static uint64_t llc_miss(struct c2c_stats *stats)
+{
+	uint64_t llcmiss;
+
+	llcmiss = stats->lcl_dram +
+		  stats->rmt_dram +
+		  stats->rmt_hitm +
+		  stats->rmt_hit;
+
+	return llcmiss;
+}
+
+static int
+ld_llcmiss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		 struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*lu", width, llc_miss(&c2c_he->stats));
+}
+
+static int64_t
+ld_llcmiss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	       struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return llc_miss(&c2c_left->stats) - llc_miss(&c2c_right->stats);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -897,6 +934,14 @@ static struct c2c_dimension dim_ld_rmthit = {
 	.width		= 8,
 };
 
+static struct c2c_dimension dim_ld_llcmiss = {
+	HEADER_1("LLC", "Ld Miss"),
+	.name		= "ld_llcmiss",
+	.cmp		= ld_llcmiss_cmp,
+	.entry		= ld_llcmiss_entry,
+	.width		= 7,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -927,6 +972,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_ld_l2hit,
 	&dim_ld_llchit,
 	&dim_ld_rmthit,
+	&dim_ld_llcmiss,
 	NULL,
 };
 
