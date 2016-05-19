@@ -246,8 +246,8 @@ static int c2c_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
                 text = "";
 
 	if (*span) {
-		text = "-";
 		(*span)--;
+		return 0;
 	} else {
 		*span = perf_hpp_header_n(fmt, line).span;
 	}
@@ -1095,7 +1095,7 @@ static struct c2c_dimension dim_iaddr = {
 };
 
 static struct c2c_dimension dim_tot_hitm = {
-	HEADER2(Tot, HITM),
+	HEADER2S(----- LLC Load Hitm -----, 2, Total),
 	.name		= "tot_hitm",
 	.cmp		= tot_hitm_cmp,
 	.entry		= tot_hitm_entry,
@@ -1103,7 +1103,7 @@ static struct c2c_dimension dim_tot_hitm = {
 };
 
 static struct c2c_dimension dim_lcl_hitm = {
-	HEADER2(Lcl, HITM),
+	HEADER2(krava1, Lcl),
 	.name		= "lcl_hitm",
 	.cmp		= lcl_hitm_cmp,
 	.entry		= lcl_hitm_entry,
@@ -1111,7 +1111,7 @@ static struct c2c_dimension dim_lcl_hitm = {
 };
 
 static struct c2c_dimension dim_rmt_hitm = {
-	HEADER2(Rmt, HITM),
+	HEADER2(krava2, Rmt),
 	.name		= "rmt_hitm",
 	.cmp		= rmt_hitm_cmp,
 	.entry		= rmt_hitm_entry,
@@ -1119,7 +1119,7 @@ static struct c2c_dimension dim_rmt_hitm = {
 };
 
 static struct c2c_dimension dim_stores = {
-	HEADER("Stores"),
+	HEADER2S(---- Store Reference ----, 2, Total),
 	.name		= "stores",
 	.cmp		= stores_cmp,
 	.entry		= stores_entry,
@@ -1127,7 +1127,7 @@ static struct c2c_dimension dim_stores = {
 };
 
 static struct c2c_dimension dim_stores_l1hit = {
-	HEADER2S(Stores, 1, L1Hit),
+	HEADER2(krava3, L1Hit),
 	.name		= "stores_l1hit",
 	.cmp		= stores_l1hit_cmp,
 	.entry		= stores_l1hit_entry,
@@ -1135,7 +1135,7 @@ static struct c2c_dimension dim_stores_l1hit = {
 };
 
 static struct c2c_dimension dim_stores_l1miss = {
-	HEADER2(Stores, L1Miss),
+	HEADER2(krava4, L1Miss),
 	.name		= "stores_l1miss",
 	.cmp		= stores_l1miss_cmp,
 	.entry		= stores_l1miss_entry,
@@ -1143,7 +1143,7 @@ static struct c2c_dimension dim_stores_l1miss = {
 };
 
 static struct c2c_dimension dim_ld_fbhit = {
-	HEADER2(Load, FBHit),
+	HEADER2S(----- Core Load Hit -----, 2, FB),
 	.name		= "ld_fbhit",
 	.cmp		= ld_fbhit_cmp,
 	.entry		= ld_fbhit_entry,
@@ -1151,7 +1151,7 @@ static struct c2c_dimension dim_ld_fbhit = {
 };
 
 static struct c2c_dimension dim_ld_l1hit = {
-	HEADER2(Load, L1Hit),
+	HEADER2(Load, L1),
 	.name		= "ld_l1hit",
 	.cmp		= ld_l1hit_cmp,
 	.entry		= ld_l1hit_entry,
@@ -1159,7 +1159,7 @@ static struct c2c_dimension dim_ld_l1hit = {
 };
 
 static struct c2c_dimension dim_ld_l2hit = {
-	HEADER2(Load, L2Hit),
+	HEADER2(Load, L2),
 	.name		= "ld_l2hit",
 	.cmp		= ld_l2hit_cmp,
 	.entry		= ld_l2hit_entry,
@@ -1167,7 +1167,7 @@ static struct c2c_dimension dim_ld_l2hit = {
 };
 
 static struct c2c_dimension dim_ld_llchit = {
-	HEADER2(Load, LlcHit),
+	HEADER2S(-- LLC Load Hit --, 1, Llc),
 	.name		= "ld_lclhit",
 	.cmp		= ld_llchit_cmp,
 	.entry		= ld_llchit_entry,
@@ -1175,7 +1175,7 @@ static struct c2c_dimension dim_ld_llchit = {
 };
 
 static struct c2c_dimension dim_ld_rmthit = {
-	HEADER2(Load, RmtHit),
+	HEADER2(Load, Rmt),
 	.name		= "ld_rmthit",
 	.cmp		= ld_rmthit_cmp,
 	.entry		= ld_rmthit_entry,
@@ -1308,16 +1308,18 @@ static void set_dimension(struct c2c_dimension *dim)
 	case DIM_TOT_LOADS:
 	case DIM_PERCENT_HITM:
 	case DIM_PERCENT_LDMISS:
-		dim->width = 7;
-		break;
-	case DIM_TOT_HITM:
-	case DIM_LCL_HITM:
-	case DIM_RMT_HITM:
 	case DIM_STORES:
 	case DIM_STORES_L1HIT:
 	case DIM_STORES_L1MISS:
+	case DIM_TOT_HITM:
+	case DIM_LCL_HITM:
+	case DIM_RMT_HITM:
+		dim->width = 7;
+		break;
 	case DIM_LD_LLC_HIT:
 	case DIM_LD_RMT_HIT:
+		dim->width = 8;
+		break;
 	case DIM_PERCENT_LCL_HITM:
 	case DIM_PERCENT_RMT_HITM:
 	case DIM_PERCENT_STORES_L1HIT:
@@ -1726,7 +1728,8 @@ static int perf_c2c_browser__title(struct hist_browser *browser,
 				   char *bf, size_t size)
 {
 	scnprintf(bf, size,
-		  "%lu entries", browser->nr_non_filtered_entries);
+		  "Shared Data Cache Line Table "
+		  "(%lu entries)", browser->nr_non_filtered_entries);
 	return 0;
 }
 

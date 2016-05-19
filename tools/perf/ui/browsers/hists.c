@@ -1526,6 +1526,9 @@ static int hists_browser__scnprintf_headers(struct hist_browser *browser, char *
 		if (advance_hpp_check(&dummy_hpp, ret))
 			break;
 
+		if (span)
+			continue;
+
 		ret = scnprintf(dummy_hpp.buf, dummy_hpp.size, "  ");
 		if (advance_hpp_check(&dummy_hpp, ret))
 			break;
