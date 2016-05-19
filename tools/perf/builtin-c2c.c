@@ -638,6 +638,43 @@ ld_rmthit_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return c2c_left->stats.t.rmt_hit - c2c_right->stats.t.rmt_hit;
 }
 
+static uint64_t llc_miss(struct c2c_stats *stats)
+{
+	uint64_t llcmiss;
+
+	llcmiss = stats->t.lcl_dram +
+		  stats->t.rmt_dram +
+		  stats->t.rmt_hitm +
+		  stats->t.rmt_hit;
+
+	return llcmiss;
+}
+
+static int
+ld_llcmiss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		 struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*lu", width, llc_miss(&c2c_he->stats));
+}
+
+static int64_t
+ld_llcmiss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	       struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return llc_miss(&c2c_left->stats) - llc_miss(&c2c_right->stats);
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -654,6 +691,7 @@ enum {
 	DIM_LD_L2HIT,
 	DIM_LD_LLC_HIT,
 	DIM_LD_RMT_HIT,
+	DIM_LD_LLC_MISS,
 };
 
 #define HEADER(__h)			\
@@ -789,6 +827,14 @@ static struct c2c_dimension dim_ld_rmthit = {
 	.id		= DIM_LD_RMT_HIT,
 };
 
+static struct c2c_dimension dim_ld_llcmiss = {
+	HEADER2(LLC, Ld Miss),
+	.name		= "ld_llcmiss",
+	.cmp		= ld_llcmiss_cmp,
+	.entry		= ld_llcmiss_entry,
+	.id		= DIM_LD_LLC_MISS,
+};
+
 #undef HEADER
 #undef HEADER2
 
@@ -808,6 +854,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_ld_l2hit,
 	&dim_ld_llchit,
 	&dim_ld_rmthit,
+	&dim_ld_llcmiss,
 	NULL,
 };
 
@@ -829,6 +876,7 @@ static void set_dimension(struct c2c_dimension *dim)
 	case DIM_LD_FBHIT:
 	case DIM_LD_L1HIT:
 	case DIM_LD_L2HIT:
+	case DIM_LD_LLC_MISS:
 		dim->width = 7;
 		break;
 	case DIM_TOT_HITM:
