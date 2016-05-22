@@ -2297,6 +2297,7 @@ int __hists__init(struct hists *hists, struct perf_hpp_list *hpp_list)
 	hists->socket_filter = -1;
 	hists->hpp_list = hpp_list;
 	INIT_LIST_HEAD(&hists->hpp_formats);
+	hists->nr_header_lines = 1;
 	return 0;
 }
 
