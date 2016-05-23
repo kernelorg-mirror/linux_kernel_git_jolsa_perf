@@ -386,6 +386,89 @@ iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return sort__iaddr_cmp(left, right);
 }
 
+static int
+tot_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	unsigned int tot_hitm;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	tot_hitm = c2c_he->stats.lcl_hitm + c2c_he->stats.rmt_hitm;
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width, tot_hitm);
+}
+
+static int
+lcl_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width,
+			c2c_he->stats.lcl_hitm);
+}
+
+static int
+rmt_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	return snprintf(hpp->buf, hpp->size, "%*u", width,
+			c2c_he->stats.rmt_hitm);
+}
+
+static int64_t
+tot_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+	unsigned int tot_hitm_left;
+	unsigned int tot_hitm_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	tot_hitm_left  = c2c_left->stats.lcl_hitm + c2c_left->stats.rmt_hitm;
+	tot_hitm_right = c2c_right->stats.lcl_hitm + c2c_right->stats.rmt_hitm;
+	return tot_hitm_left - tot_hitm_right;
+}
+
+static int64_t
+lcl_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.lcl_hitm - c2c_right->stats.lcl_hitm;
+}
+
+static int64_t
+rmt_hitm_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.rmt_hitm - c2c_right->stats.rmt_hitm;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -427,6 +510,20 @@ iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 		.text = __h,	\
 	}
 
+#define HEADER_CL_SPAN(__h0, __h1, __s)	\
+	.header[0] = {			\
+		.text = __h0,		\
+		.span = __s,		\
+	},				\
+	.header[1] = {			\
+		.text = __h1,		\
+	}
+
+#define HEADER_CL_SPAN_1(__h1)		\
+	.header[1] = {			\
+		.text = __h1,		\
+	}
+
 /* HEADER_OFF_* macros are for cacheline browser */
 
 #define HEADER_OFF_0(__h)	\
@@ -463,6 +560,46 @@ static struct c2c_dimension dim_dsymbol = {
 	.se		= &sort_mem_daddr_sym,
 };
 
+static struct c2c_dimension dim_tot_hitm = {
+	HEADER_SPAN("----- LLC Load Hitm -----", "Total", 2),
+	.name		= "tot_hitm",
+	.cmp		= tot_hitm_cmp,
+	.entry		= tot_hitm_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_lcl_hitm = {
+	HEADER_SPAN_1("Lcl"),
+	.name		= "lcl_hitm",
+	.cmp		= lcl_hitm_cmp,
+	.entry		= lcl_hitm_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_rmt_hitm = {
+	HEADER_SPAN_1("Rmt"),
+	.name		= "rmt_hitm",
+	.cmp		= rmt_hitm_cmp,
+	.entry		= rmt_hitm_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_cl_rmt_hitm = {
+	HEADER_CL_SPAN("----- HITM -----", "Rmt", 1),
+	.name		= "cl_rmt_hitm",
+	.cmp		= rmt_hitm_cmp,
+	.entry		= rmt_hitm_entry,
+	.width		= 7,
+};
+
+static struct c2c_dimension dim_cl_lcl_hitm = {
+	HEADER_CL_SPAN_1("Lcl"),
+	.name		= "cl_lcl_hitm",
+	.cmp		= lcl_hitm_cmp,
+	.entry		= lcl_hitm_entry,
+	.width		= 7,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -478,6 +615,11 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_offset,
 	&dim_iaddr,
 	&dim_dsymbol,
+	&dim_tot_hitm,
+	&dim_lcl_hitm,
+	&dim_rmt_hitm,
+	&dim_cl_lcl_hitm,
+	&dim_cl_rmt_hitm,
 	NULL,
 };
 
