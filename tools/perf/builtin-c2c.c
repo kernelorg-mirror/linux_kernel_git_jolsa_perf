@@ -89,11 +89,13 @@ static struct hist_entry_ops c2c_entry_ops = {
 };
 
 static int c2c_hists__init(struct c2c_hists *hists,
-			   const char *sort);
+			   const char *sort,
+			   int nr_header_lines);
 
 static struct c2c_hists*
 he__get_c2c_hists(struct hist_entry *he,
-		  const char *sort)
+		  const char *sort,
+		  int nr_header_lines)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *hists;
@@ -107,7 +109,7 @@ he__get_c2c_hists(struct hist_entry *he,
 	if (!hists)
 		return NULL;
 
-	ret = c2c_hists__init(hists, sort);
+	ret = c2c_hists__init(hists, sort, nr_header_lines);
 	if (ret)
 		free(hists);
 
@@ -185,7 +187,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!mi_dup)
 			goto free_mi;
 
-		c2c_hists = he__get_c2c_hists(he, "offset");
+		c2c_hists = he__get_c2c_hists(he, "offset", 2);
 		if (!c2c_hists)
 			goto free_mi_dup;
 
@@ -1915,7 +1917,8 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 }
 
 static int c2c_hists__init(struct c2c_hists *hists,
-			   const char *sort)
+			   const char *sort,
+			   int nr_header_lines)
 {
 	__hists__init(&hists->hists, &hists->list);
 
@@ -1925,6 +1928,9 @@ static int c2c_hists__init(struct c2c_hists *hists,
 	 * as well.
 	 */
 	perf_hpp_list__init(&hists->list);
+
+	/* Overload number of header lines.*/
+	hists->list.nr_header_lines = nr_header_lines;
 
 	return hpp_list__parse(&hists->list, NULL, sort);
 }
@@ -2065,7 +2071,8 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	file.path = input_name;
 
-	err = c2c_hists__init(&c2c.hists, "dcacheline");
+
+	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
 		goto out;
