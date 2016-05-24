@@ -1114,6 +1114,38 @@ tid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return sort__thread_cmp(left, right);
 }
 
+static int64_t
+dso_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__dso_cmp(left, right);
+}
+
+static int
+symbol_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	     struct hist_entry *he)
+{
+	int width = hists__col_len(he->hists, HISTC_SYMBOL);
+
+	return hist_entry__sym_snprintf(he, hpp->buf, hpp->size, width);
+}
+
+static int64_t
+symbol_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	   struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__sym_cmp(left, right);
+}
+
+static int
+dso_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	int width = hists__col_len(he->hists, HISTC_DSO);
+
+	return hist_entry__dso_snprintf(he, hpp->buf, hpp->size, width);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1452,6 +1484,20 @@ static struct c2c_dimension dim_tid = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_symbol = {
+	HEADER_CL_0("Symbol"),
+	.name		= "symbol",
+	.cmp		= symbol_cmp,
+	.entry		= symbol_entry,
+};
+
+static struct c2c_dimension dim_dso = {
+	HEADER_CL_0("Shared Object"),
+	.name		= "dso",
+	.cmp		= dso_cmp,
+	.entry		= dso_entry,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1496,6 +1542,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dram_rmt,
 	&dim_pid,
 	&dim_tid,
+	&dim_symbol,
+	&dim_dso,
 	NULL,
 };
 
@@ -1503,7 +1551,7 @@ static void set_dimension(struct c2c_dimension *dim)
 {
 	switch (dim->id) {
 	default:
-		pr_err("internal dimension error\n");
+		pr_err("unknown dimension: %d\n", dim->id);
 		break;
 	};
 }
@@ -1593,11 +1641,16 @@ static int c2c_hists__init_output(struct c2c_hists *hists, char *name)
 static int c2c_hists__init_sort(struct c2c_hists *hists, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
+	struct c2c_dimension *dim;
 
 	if (!c2c_fmt) {
 		reset_dimensions();
 		return sort_dimension__add(&hists->list, name, NULL, 0);
 	}
+
+	dim = c2c_fmt->dim;
+	if (dim == &dim_dso)
+		hists->list.dso = 1;
 
 	perf_hpp_list__register_sort_field(&hists->list, &c2c_fmt->fmt);
 	return 0;
