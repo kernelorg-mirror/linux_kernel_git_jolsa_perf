@@ -1475,6 +1475,17 @@ static struct c2c_dimension dim_tid = {
 	.se		= &sort_thread,
 };
 
+static struct c2c_dimension dim_symbol = {
+	.name		= "symbol",
+	.se		= &sort_sym,
+};
+
+static struct c2c_dimension dim_dso = {
+	HEADER_1("Shared", "Object"),
+	.name		= "dso",
+	.se		= &sort_dso,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1518,6 +1529,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dram_rmt,
 	&dim_pid,
 	&dim_tid,
+	&dim_symbol,
+	&dim_dso,
 	NULL,
 };
 
@@ -1632,11 +1645,16 @@ static int c2c_hists__init_output(struct perf_hpp_list *hpp_list, char *name)
 static int c2c_hists__init_sort(struct perf_hpp_list *hpp_list, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
+	struct c2c_dimension *dim;
 
 	if (!c2c_fmt) {
 		reset_dimensions();
 		return sort_dimension__add(hpp_list, name, NULL, 0);
 	}
+
+	dim = c2c_fmt->dim;
+	if (dim == &dim_dso)
+		hpp_list->dso = 1;
 
 	perf_hpp_list__register_sort_field(hpp_list, &c2c_fmt->fmt);
 	return 0;
