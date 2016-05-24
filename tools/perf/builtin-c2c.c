@@ -45,6 +45,8 @@ struct c2c_hist_entry {
 	struct hist_entry	he;
 };
 
+static char const *coalesce_default = "pid,tid,iaddr";
+
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
@@ -64,6 +66,11 @@ struct perf_c2c {
 	int			shared_clines;
 
 	int			 display;
+
+	const char		*coalesce;
+	char			*cl_sort;
+	char			*cl_resort;
+	char			*cl_output;
 };
 
 enum {
@@ -236,7 +243,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!mi_dup)
 			goto free_mi;
 
-		c2c_hists = he__get_c2c_hists(he, "offset", 2);
+		c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, 2);
 		if (!c2c_hists)
 			goto free_mi_dup;
 
@@ -1994,22 +2001,7 @@ static int resort_cl_cb(struct hist_entry *he)
 	c2c_hists = c2c_he->hists;
 
 	if (display && c2c_hists) {
-		c2c_hists__reinit(c2c_hists,
-			"percent_rmt_hitm,"
-			"percent_lcl_hitm,"
-			"percent_stores_l1hit,"
-			"percent_stores_l1miss,"
-			"offset,"
-			"pid,"
-			"tid,"
-			"mean_rmt,"
-			"mean_lcl,"
-			"mean_load,"
-			"cpucnt,"
-			"symbol,"
-			"dso,"
-			"node",
-			"offset,rmt_hitm,lcl_hitm");
+		c2c_hists__reinit(c2c_hists, c2c.cl_output, c2c.cl_resort);
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort_cb(&c2c_hists->hists, NULL, filter_cb);
@@ -2261,6 +2253,7 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	fprintf(out, "=================================================\n");
 	fprintf(out, "      Shared Cache Line Distribution Pareto      \n");
 	fprintf(out, "=================================================\n");
+	fprintf(out, "# (cacheline data groupping: %s)\n", c2c.cl_sort);
 	fprintf(out, "#\n");
 
 	print_pareto(out);
@@ -2497,6 +2490,86 @@ static int setup_display(const char *str)
 	return 0;
 }
 
+#define for_each_token(__tok, __buf, __sep, __tmp)		\
+	for (__tok = strtok_r(__buf, __sep, &__tmp); __tok;	\
+	     __tok = strtok_r(NULL,  __sep, &__tmp))
+
+static int build_cl_output(char *cl_sort)
+{
+	char *tok, *tmp, *buf = strdup(cl_sort);
+	bool add_pid   = false;
+	bool add_tid   = false;
+	bool add_iaddr = false;
+	bool add_sym   = false;
+	bool add_dso   = false;
+	bool add_src   = false;
+
+	if (!buf)
+		return -ENOMEM;
+
+	for_each_token(tok, buf, ",", tmp) {
+		if (!strcmp(tok, "tid")) {
+			add_tid = true;
+		} else if (!strcmp(tok, "pid")) {
+			add_pid = true;
+		} else if (!strcmp(tok, "iaddr")) {
+			add_iaddr = true;
+			add_sym   = true;
+			add_dso   = true;
+			add_src   = true;
+		} else if (!strcmp(tok, "dso")) {
+			add_dso = true;
+		}
+	}
+
+	if (asprintf(&c2c.cl_output,
+		"%s%s%s%s%s%s%s%s%s",
+		"percent_rmt_hitm,"
+		"percent_lcl_hitm,"
+		"percent_stores_l1hit,"
+		"percent_stores_l1miss,"
+		"offset,",
+		add_pid   ? "pid," : "",
+		add_tid   ? "tid," : "",
+		add_iaddr ? "iaddr," : "",
+		"mean_rmt,"
+		"mean_lcl,"
+		"mean_load,"
+		"cpucnt,",
+		add_sym ? "symbol," : "",
+		add_dso ? "dso," : "",
+		add_src ? "cl_srcline," : "",
+		"node") < 0)
+		return -ENOMEM;
+
+	c2c.show_src = add_src;
+
+	free(buf);
+	return 0;
+}
+
+static int setup_coalesce(const char *coalesce)
+{
+	const char *c = coalesce ?: coalesce_default;
+
+	if (asprintf(&c2c.cl_sort, "offset,%s", c) < 0)
+                return -ENOMEM;
+
+	if (build_cl_output(c2c.cl_sort))
+		return -ENOMEM;
+
+	if (asprintf(&c2c.cl_resort, "offset,%s",
+		     c2c.display == DISPLAY_RMT?
+		     "rmt_hitm,lcl_hitm" :
+		     "lcl_hitm,rmt_hitm") < 0)
+		return -ENOMEM;
+
+	pr_debug("coalesce sort   fields: %s\n", c2c.cl_sort);
+	pr_debug("coalesce resort fields: %s\n", c2c.cl_resort);
+	pr_debug("coalesce output fields: %s\n", c2c.cl_output);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2506,6 +2579,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	};
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const char *display = NULL;
+	const char *coalesce = NULL;
 	const struct option c2c_options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
@@ -2524,6 +2598,8 @@ static int perf_c2c__report(int argc, const char **argv)
 			     callchain_help, &parse_callchain_opt,
 			     callchain_default_opt),
 	OPT_STRING('d', "display", &display, NULL, "lcl,rmt"),
+	OPT_STRING('c', "coalesce", &coalesce, "coalesce fields",
+		   "coalesce fields: pid,tid,iaddr,dso"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2551,6 +2627,12 @@ static int perf_c2c__report(int argc, const char **argv)
 	err = setup_display(display);
 	if (err)
 		goto out;
+
+	err = setup_coalesce(coalesce);
+	if (err) {
+		pr_debug("Failed to initialize hists\n");
+		goto out;
+	}
 
 	ui_quirks(c2c.use_stdio);
 
