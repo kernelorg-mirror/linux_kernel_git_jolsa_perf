@@ -1698,7 +1698,7 @@ static int resort_cl_cb(struct hist_entry *he)
 
 	if (c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
-			"offset,daddr",
+			"offset,cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,daddr",
 			"offset,rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
