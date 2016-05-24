@@ -1169,6 +1169,22 @@ dram_rmt_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return c2c_left->stats.rmt_dram - c2c_right->stats.rmt_dram;
 }
 
+static int
+pid_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	return snprintf(hpp->buf, hpp->size, "%*d", width, he->thread->pid_);
+}
+
+static int64_t
+pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return left->thread->pid_ - right->thread->pid_;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1488,6 +1504,14 @@ static struct c2c_dimension dim_dram_rmt = {
 	.width		= 8,
 };
 
+static struct c2c_dimension dim_pid = {
+	HEADER_CL_0("Pid"),
+	.name		= "pid",
+	.cmp		= pid_cmp,
+	.entry		= pid_entry,
+	.width		= 7,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1529,6 +1553,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_stores_l1miss,
 	&dim_dram_lcl,
 	&dim_dram_rmt,
+	&dim_pid,
 	NULL,
 };
 
