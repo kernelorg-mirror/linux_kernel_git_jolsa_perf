@@ -32,6 +32,8 @@ struct c2c_hist_entry {
 	struct hist_entry	he;
 };
 
+static char const *coalesce_default = "pid,tid,iaddr";
+
 #define HAS_HITMS(__h) (__h->stats.lcl_hitm || __h->stats.rmt_hitm)
 
 struct perf_c2c {
@@ -47,6 +49,9 @@ struct perf_c2c {
 	cpu_set_t		**nodes;
 	int			 nodes_cnt;
 	int			 cpus_cnt;
+
+	const char		*coalesce;
+	char			*offset_sort;
 };
 
 static struct perf_c2c c2c;
@@ -229,7 +234,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!ret) {
 			mi = mi_dup;
 
-			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm", 1);
+			c2c_hists = he__get_c2c_hists(he, c2c.offset_sort, 2);
 			if (!c2c_hists)
 				goto free_mi;
 
@@ -2440,6 +2445,17 @@ static int setup_callchain(struct perf_evlist *evlist)
 	return 0;
 }
 
+static int setup_coalesce(void)
+{
+	const char *c = c2c.coalesce ?: coalesce_default;
+
+	if (asprintf(&c2c.offset_sort, "dsymbol,%s", c) < 0)
+                return -ENOMEM;
+
+	pr_debug("coalesce sort fields: %s\n", c2c.offset_sort);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2463,6 +2479,8 @@ static int perf_c2c__report(int argc, const char **argv)
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
 			     callchain_default_opt),
+	OPT_STRING('c', "coalesce", &c2c.coalesce, "coalesce fields",
+		   "coalesce fields: pid, tid, iaddr"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2487,6 +2505,12 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	file.path = input_name;
 
+
+	err = setup_coalesce();
+	if (err) {
+		pr_debug("Failed to initialize hists\n");
+		goto out;
+	}
 
 	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
