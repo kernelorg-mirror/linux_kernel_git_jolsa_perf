@@ -75,11 +75,13 @@ static struct hist_entry_ops c2c_entry_ops = {
 };
 
 static int c2c_hists__init(struct c2c_hists *hists,
-			   const char *sort);
+			   const char *sort,
+			   int nr_header_lines);
 
 static struct c2c_hists*
 he__get_c2c_hists(struct hist_entry *he,
-		  const char *sort)
+		  const char *sort,
+		  int nr_header_lines)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *hists;
@@ -93,7 +95,7 @@ he__get_c2c_hists(struct hist_entry *he,
 	if (!hists)
 		return NULL;
 
-	ret = c2c_hists__init(hists, sort);
+	ret = c2c_hists__init(hists, sort, nr_header_lines);
 	if (ret)
 		free(hists);
 
@@ -154,7 +156,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!mi_dup)
 			goto free_mi;
 
-		c2c_hists = he__get_c2c_hists(he, "offset");
+		c2c_hists = he__get_c2c_hists(he, "offset", 2);
 		if (!c2c_hists)
 			goto free_mi_dup;
 
@@ -173,7 +175,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!ret) {
 			mi = mi_dup;
 
-			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm");
+			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm", 1);
 			if (!c2c_hists)
 				goto free_mi;
 
@@ -1636,9 +1638,14 @@ static int c2c_hists__init_list(struct c2c_hists *hists,
 }
 
 static int c2c_hists__init(struct c2c_hists *hists,
-			   const char *sort)
+			   const char *sort,
+			   int nr_header_lines)
 {
 	c2c_hists__init_hists(hists);
+
+	/* Overload number of header lines.*/
+	hists->hists.nr_header_lines = nr_header_lines;
+
 	/*
 	 * Initialize only with sort fields, we need to resort
 	 * later anyway, and that's where we add output fields
@@ -2113,7 +2120,7 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	set_dimensions();
 
-	err = c2c_hists__init(&c2c.hists, "dcacheline");
+	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
 		goto out;
