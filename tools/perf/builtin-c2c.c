@@ -33,6 +33,8 @@ struct c2c_hist_entry {
 	struct hist_entry	he;
 };
 
+static char const *coalesce_default = "pid,tid,iaddr,symbol,dso,comm";
+
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
@@ -42,6 +44,9 @@ struct perf_c2c {
 	int			 cpus_cnt;
 	int			*cpu2node;
 	int			 node_info;
+
+	const char		*coalesce;
+	char			*cl_sort;
 };
 
 static struct perf_c2c c2c;
@@ -225,7 +230,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!mi_dup)
 			goto free_mi;
 
-		c2c_hists = he__get_c2c_hists(he, "offset", 2);
+		c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, 2);
 		if (!c2c_hists)
 			goto free_mi_dup;
 
@@ -2056,6 +2061,17 @@ static int setup_callchain(struct perf_evlist *evlist)
 	return 0;
 }
 
+static int setup_coalesce(const char *coalesce)
+{
+	const char *c = coalesce ?: coalesce_default;
+
+	if (asprintf(&c2c.cl_sort, "offset,%s", c) < 0)
+                return -ENOMEM;
+
+	pr_debug("coalesce sort fields: %s\n", c2c.cl_sort);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2064,6 +2080,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		.mode = PERF_DATA_MODE_READ,
 	};
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
+	const char *coalesce = NULL;
 	const struct option c2c_options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
@@ -2077,6 +2094,8 @@ static int perf_c2c__report(int argc, const char **argv)
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
 			     callchain_default_opt),
+	OPT_STRING('c', "coalesce", &coalesce, "coalesce fields",
+		   "coalesce fields: pid,tid,iaddr,symbol,dso,comm"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2091,6 +2110,12 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	file.path = input_name;
 
+
+	err = setup_coalesce(coalesce);
+	if (err) {
+		pr_debug("Failed to initialize hists\n");
+		goto out;
+	}
 
 	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
