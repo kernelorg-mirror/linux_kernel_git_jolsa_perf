@@ -162,7 +162,7 @@ static int64_t _sort__dso_cmp(struct map *map_l, struct map *map_r)
 	return strcmp(dso_name_l, dso_name_r);
 }
 
-static int64_t
+int64_t
 sort__dso_cmp(struct hist_entry *left, struct hist_entry *right)
 {
 	return _sort__dso_cmp(right->ms.map, left->ms.map);
@@ -180,8 +180,8 @@ static int _hist_entry__dso_snprintf(struct map *map, char *bf,
 	return repsep_snprintf(bf, size, "%-*.*s", width, width, "[unknown]");
 }
 
-static int hist_entry__dso_snprintf(struct hist_entry *he, char *bf,
-				    size_t size, unsigned int width)
+int hist_entry__dso_snprintf(struct hist_entry *he, char *bf,
+			    size_t size, unsigned int width)
 {
 	return _hist_entry__dso_snprintf(he->ms.map, bf, size, width);
 }
@@ -287,8 +287,8 @@ static int _hist_entry__sym_snprintf(struct map *map, struct symbol *sym,
 	return ret;
 }
 
-static int hist_entry__sym_snprintf(struct hist_entry *he, char *bf,
-				    size_t size, unsigned int width)
+int hist_entry__sym_snprintf(struct hist_entry *he, char *bf,
+			    size_t size, unsigned int width)
 {
 	return _hist_entry__sym_snprintf(he->ms.map, he->ms.sym, he->ip,
 					 he->level, bf, size, width);

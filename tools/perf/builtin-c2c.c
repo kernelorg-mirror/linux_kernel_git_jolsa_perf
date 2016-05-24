@@ -334,7 +334,7 @@ static int offset_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	if (he->mem_info)
 		addr = cl_offset(he->mem_info->daddr.addr);
 
-	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
+	return snprintf(hpp->buf, hpp->size, "%*" PRIu64, width, addr);
 }
 
 static int64_t
@@ -1094,6 +1094,81 @@ tid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return left->thread->tid - right->thread->tid;
 }
 
+static int64_t cmp_null(const void *l, const void *r)
+{
+	if (!l && !r)
+		return 0;
+	else if (!l)
+		return -1;
+	else
+		return 1;
+}
+
+static int64_t _addr_cmp(u64 left_ip, u64 right_ip)
+{
+	return (int64_t)(right_ip - left_ip);
+}
+
+static int64_t sym_cmp(struct symbol *sym_l, struct symbol *sym_r)
+{
+	if (!sym_l || !sym_r)
+		return cmp_null(sym_l, sym_r);
+
+	if (sym_l == sym_r)
+		return 0;
+
+	if (sym_l->start != sym_r->start)
+		return (int64_t)(sym_r->start - sym_l->start);
+
+	return (int64_t)(sym_r->end - sym_l->end);
+}
+
+static int64_t
+dso_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__dso_cmp(left, right);
+}
+
+static int
+symbol_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	     struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	return hist_entry__sym_snprintf(he, hpp->buf, hpp->size, width);
+}
+
+static int64_t
+symbol_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	   struct hist_entry *left, struct hist_entry *right)
+{
+	int64_t ret;
+
+	if (!left->ms.sym && !right->ms.sym)
+		return _addr_cmp(left->ip, right->ip);
+
+	/*
+	 * comparing symbol address alone is not enough since it's a
+	 * relative address within a dso.
+	 */
+	if (!hists__has(left->hists, dso) || hists__has(right->hists, dso)) {
+		ret = dso_cmp(fmt, left, right);
+		if (ret != 0)
+			return ret;
+	}
+
+	return sym_cmp(left->ms.sym, right->ms.sym);
+}
+
+static int
+dso_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	return hist_entry__dso_snprintf(he, hpp->buf, hpp->size, width);
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -1121,6 +1196,8 @@ enum {
 	DIM_PERCENT_STORES_L1MISS,
 	DIM_PID,
 	DIM_TID,
+	DIM_SYMBOL,
+	DIM_DSO,
 };
 
 /* HEADER_* macros are for main browser */
@@ -1437,11 +1514,27 @@ static struct c2c_dimension dim_pid = {
 };
 
 static struct c2c_dimension dim_tid = {
-	HEADER_CL_0("Tid"),
+	HEADER_CL_0("Tid:Command       "),
 	.name		= "tid",
 	.cmp		= tid_cmp,
 	.entry		= tid_entry,
 	.id		= DIM_TID,
+};
+
+static struct c2c_dimension dim_symbol = {
+	HEADER_CL_0("Symbol"),
+	.name		= "symbol",
+	.cmp		= symbol_cmp,
+	.entry		= symbol_entry,
+	.id		= DIM_SYMBOL,
+};
+
+static struct c2c_dimension dim_dso = {
+	HEADER_CL_0("Shared Object"),
+	.name		= "dso",
+	.cmp		= dso_cmp,
+	.entry		= dso_entry,
+	.id		= DIM_DSO,
 };
 
 #undef HEADER_0
@@ -1486,6 +1579,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_stores_l1miss,
 	&dim_pid,
 	&dim_tid,
+	&dim_symbol,
+	&dim_dso,
 	NULL,
 };
 
@@ -1738,7 +1833,7 @@ static int resort_offset_cb(struct hist_entry *he)
 		c2c_hists__reinit(c2c_hists,
 			"percent_rmt_hitm,percent_lcl_hitm,"
 			"percent_stores_l1hit,percent_stores_l1miss,"
-			"daddr,pid,tid,iaddr,symbol,dso",
+			"pid,tid,iaddr,symbol,dso",
 			"rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
