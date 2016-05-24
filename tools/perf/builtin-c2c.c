@@ -1047,6 +1047,22 @@ percent_stores_l1miss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return per_left - per_right;
 }
 
+static int
+pid_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	return snprintf(hpp->buf, hpp->size, "%*d", width, he->thread->pid_);
+}
+
+static int64_t
+pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return left->thread->pid_ - right->thread->pid_;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -1072,6 +1088,7 @@ enum {
 	DIM_PERCENT_RMT_HITM,
 	DIM_PERCENT_STORES_L1HIT,
 	DIM_PERCENT_STORES_L1MISS,
+	DIM_PID,
 };
 
 /* HEADER_* macros are for main browser */
@@ -1379,6 +1396,14 @@ static struct c2c_dimension dim_percent_stores_l1miss = {
 	.id		= DIM_PERCENT_STORES_L1MISS,
 };
 
+static struct c2c_dimension dim_pid = {
+	HEADER_CL_0("Pid"),
+	.name		= "pid",
+	.cmp		= pid_cmp,
+	.entry		= pid_entry,
+	.id		= DIM_PID,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1419,6 +1444,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_lcl_hitm,
 	&dim_percent_stores_l1hit,
 	&dim_percent_stores_l1miss,
+	&dim_pid,
 	NULL,
 };
 
@@ -1453,6 +1479,7 @@ static void set_dimension(struct c2c_dimension *dim)
 	case DIM_STORES:
 	case DIM_STORES_L1HIT:
 	case DIM_STORES_L1MISS:
+	case DIM_PID:
 		dim->width = 7;
 		break;
 	case DIM_LD_LLC_HIT:
