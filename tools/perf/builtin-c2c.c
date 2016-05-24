@@ -31,6 +31,8 @@ struct c2c_hist_entry {
 	struct hist_entry	he;
 };
 
+static char const *coalesce_default = "pid,tid,iaddr";
+
 #define HAS_HITMS(__h) (__h->stats.t.lcl_hitm || __h->stats.t.rmt_hitm)
 
 struct perf_c2c {
@@ -41,6 +43,9 @@ struct perf_c2c {
 	/* HITM shared clines stats */
 	struct c2c_stats	hitm_stats;
 	int			shared_clines;
+
+	const char		*coalesce;
+	char			*offset_sort;
 };
 
 static struct perf_c2c c2c;
@@ -175,7 +180,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		if (!ret) {
 			mi = mi_dup;
 
-			c2c_hists = he__get_c2c_hists(he, "cpu,symbol,dso,comm", 1);
+			c2c_hists = he__get_c2c_hists(he, c2c.offset_sort, 2);
 			if (!c2c_hists)
 				goto free_mi;
 
@@ -961,8 +966,10 @@ percent_rmt_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 {
 	int width = c2c_width(fmt, hpp, he->hists);
 	double per = PERCENT(he, rmt_hitm);
+	char buf[10];
 
-	return snprintf(hpp->buf, hpp->size, "%*F", width, per);
+        snprintf(buf, 10, "%.2F%%", per);
+        return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
 static int64_t
@@ -984,8 +991,10 @@ percent_lcl_hitm_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 {
 	int width = c2c_width(fmt, hpp, he->hists);
 	double per = PERCENT(he, lcl_hitm);
+	char buf[10];
 
-	return snprintf(hpp->buf, hpp->size, "%*F", width, per);
+        snprintf(buf, 10, "%.2F%%", per);
+        return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
 static int64_t
@@ -1007,8 +1016,10 @@ percent_stores_l1hit_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 {
 	int width = c2c_width(fmt, hpp, he->hists);
 	double per = PERCENT(he, st_l1hit);
+	char buf[10];
 
-	return snprintf(hpp->buf, hpp->size, "%*F", width, per);
+        snprintf(buf, 10, "%.2F%%", per);
+        return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
 static int64_t
@@ -1030,8 +1041,10 @@ percent_stores_l1miss_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 {
 	int width = c2c_width(fmt, hpp, he->hists);
 	double per = PERCENT(he, st_l1miss);
+	char buf[10];
 
-	return snprintf(hpp->buf, hpp->size, "%*F", width, per);
+        snprintf(buf, 10, "%.2F%%", per);
+        return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
 static int64_t
@@ -1063,6 +1076,24 @@ pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return left->thread->pid_ - right->thread->pid_;
 }
 
+static int
+tid_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	const char *comm = thread__comm_str(he->thread);
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	return snprintf(hpp->buf, hpp->size, "%5d:%-*.*s", he->thread->tid,
+                               width, width, comm ?: "");
+}
+
+static int64_t
+tid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return left->thread->tid - right->thread->tid;
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -1089,6 +1120,7 @@ enum {
 	DIM_PERCENT_STORES_L1HIT,
 	DIM_PERCENT_STORES_L1MISS,
 	DIM_PID,
+	DIM_TID,
 };
 
 /* HEADER_* macros are for main browser */
@@ -1156,6 +1188,20 @@ enum {
 #define HEADER_OFF_1(__h)	\
 	.header[1] = {		\
 		.text = __h,	\
+	}
+
+#define HEADER_OFF_SPAN(__h0, __h1, __s)	\
+	.header[0] = {			\
+		.text = __h0,		\
+		.span = __s,		\
+	},				\
+	.header[1] = {			\
+		.text = __h1,		\
+	}
+
+#define HEADER_OFF_SPAN_1(__h1)		\
+	.header[1] = {			\
+		.text = __h1,		\
 	}
 
 static struct c2c_dimension dim_dcacheline = {
@@ -1351,7 +1397,7 @@ static struct c2c_dimension dim_percent_ldmiss = {
 };
 
 static struct c2c_dimension dim_percent_rmt_hitm = {
-	HEADER_CL_0("%RmtHitm"),
+	HEADER_OFF_SPAN("----- HITM -----", "Rmt", 1),
 	.name		= "percent_rmt_hitm",
 	.cmp		= percent_rmt_hitm_cmp,
 	.entry		= percent_rmt_hitm_entry,
@@ -1359,7 +1405,7 @@ static struct c2c_dimension dim_percent_rmt_hitm = {
 };
 
 static struct c2c_dimension dim_percent_lcl_hitm = {
-	HEADER_CL_0("%LclHitm"),
+	HEADER_OFF_SPAN_1("Lcl"),
 	.name		= "percent_lcl_hitm",
 	.cmp		= percent_lcl_hitm_cmp,
 	.entry		= percent_lcl_hitm_entry,
@@ -1367,7 +1413,7 @@ static struct c2c_dimension dim_percent_lcl_hitm = {
 };
 
 static struct c2c_dimension dim_percent_stores_l1hit = {
-	HEADER_CL_0("%StL1Hit"),
+	HEADER_OFF_SPAN("-- Store Refs --", "L1 Hit", 1),
 	.name		= "percent_stores_l1hit",
 	.cmp		= percent_stores_l1hit_cmp,
 	.entry		= percent_stores_l1hit_entry,
@@ -1375,7 +1421,7 @@ static struct c2c_dimension dim_percent_stores_l1hit = {
 };
 
 static struct c2c_dimension dim_percent_stores_l1miss = {
-	HEADER_CL_0("%StL1Miss"),
+	HEADER_OFF_SPAN_1("L1 Miss"),
 	.name		= "percent_stores_l1miss",
 	.cmp		= percent_stores_l1miss_cmp,
 	.entry		= percent_stores_l1miss_entry,
@@ -1388,6 +1434,14 @@ static struct c2c_dimension dim_pid = {
 	.cmp		= pid_cmp,
 	.entry		= pid_entry,
 	.id		= DIM_PID,
+};
+
+static struct c2c_dimension dim_tid = {
+	HEADER_CL_0("Tid"),
+	.name		= "tid",
+	.cmp		= tid_cmp,
+	.entry		= tid_entry,
+	.id		= DIM_TID,
 };
 
 #undef HEADER_0
@@ -1431,6 +1485,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_stores_l1hit,
 	&dim_percent_stores_l1miss,
 	&dim_pid,
+	&dim_tid,
 	NULL,
 };
 
@@ -1476,7 +1531,10 @@ static void set_dimension(struct c2c_dimension *dim)
 	case DIM_PERCENT_RMT_HITM:
 	case DIM_PERCENT_STORES_L1HIT:
 	case DIM_PERCENT_STORES_L1MISS:
-		dim->width = 13;
+		dim->width = 7;
+		break;
+	case DIM_TID:
+		dim->width = 20;
 		break;
 	default:
 		pr_err("internal dimension error\n");
@@ -1678,8 +1736,10 @@ static int resort_offset_cb(struct hist_entry *he)
 
 	if (c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
-			"cpu,symbol,dso,comm",
-			"cpu,symbol,dso,comm");
+			"percent_rmt_hitm,percent_lcl_hitm,"
+			"percent_stores_l1hit,percent_stores_l1miss,"
+			"daddr,pid,tid,iaddr,symbol,dso",
+			"rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort(&c2c_hists->hists, NULL);
@@ -2078,6 +2138,17 @@ static int setup_callchain(struct perf_evlist *evlist)
 	return 0;
 }
 
+static int setup_coalesce(void)
+{
+	const char *c = c2c.coalesce ?: coalesce_default;
+
+	if (asprintf(&c2c.offset_sort, "daddr,%s", c) < 0)
+                return -ENOMEM;
+
+	pr_debug("coalesce sort fields: %s\n", c2c.offset_sort);
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2102,6 +2173,8 @@ static int perf_c2c__report(int argc, const char **argv)
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
 			     callchain_default_opt),
+	OPT_STRING('c', "coalesce", &c2c.coalesce, "coalesce fields",
+		   "coalesce fields: pid, tid, iaddr"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2127,6 +2200,12 @@ static int perf_c2c__report(int argc, const char **argv)
 	file.path = input_name;
 
 	set_dimensions();
+
+	err = setup_coalesce();
+	if (err) {
+		pr_debug("Failed to initialize hists\n");
+		goto out;
+	}
 
 	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
