@@ -1098,6 +1098,22 @@ pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return left->thread->pid_ - right->thread->pid_;
 }
 
+static int
+tid_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	  struct hist_entry *he)
+{
+	int width = hists__col_len(he->hists, HISTC_THREAD);
+
+	return hist_entry__thread_snprintf(he, hpp->buf, hpp->size, width);
+}
+
+static int64_t
+tid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	struct hist_entry *left, struct hist_entry *right)
+{
+	return sort__thread_cmp(left, right);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1428,6 +1444,14 @@ static struct c2c_dimension dim_pid = {
 	.width		= 7,
 };
 
+static struct c2c_dimension dim_tid = {
+	HEADER_CL_0("    Tid:Command       "),
+	.name		= "tid",
+	.cmp		= tid_cmp,
+	.entry		= tid_entry,
+	.width		= 20,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1471,6 +1495,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dram_lcl,
 	&dim_dram_rmt,
 	&dim_pid,
+	&dim_tid,
 	NULL,
 };
 
