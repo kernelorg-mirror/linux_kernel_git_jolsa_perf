@@ -728,7 +728,7 @@ static int hists__fprintf_headers(struct hists *hists, FILE *fp)
 }
 
 size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
-		      int max_cols, float min_pcnt, FILE *fp, hists__resort_cb_t cb)
+		      int max_cols, float min_pcnt, FILE *fp, hists__output_cb_t cb)
 {
 	struct perf_hpp_fmt *fmt;
 	struct rb_node *nd;
@@ -777,7 +777,10 @@ size_t hists__fprintf(struct hists *hists, bool show_header, int max_rows,
 		ret += hist_entry__fprintf(h, max_cols, hists, line, linesz, fp);
 
 		if (cb)
-			cb(h);
+			cb(h, fp);
+
+		if (show_header && cb && (nd != rb_last(&hists->entries)))
+			nr_rows += hists__fprintf_headers(hists, fp);
 
 		if (max_rows && ++nr_rows >= max_rows)
 			break;

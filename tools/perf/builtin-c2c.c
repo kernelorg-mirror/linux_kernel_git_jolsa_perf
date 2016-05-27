@@ -1900,6 +1900,24 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 	return c2c_hists__init_list(c2c_hists, output, sort);
 }
 
+static int krava_cb(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	struct c2c_hists *c2c_hists;
+	double ld_dist;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_hists = container_of(he->hists, struct c2c_hists, hists);
+
+#define DISPLAY_LINE_LIMIT  0.0005
+
+	ld_dist  = ((double)c2c_he->stats.rmt_hitm / c2c_hists->stats.rmt_hitm);
+	if (ld_dist < DISPLAY_LINE_LIMIT)
+		he->filtered = HIST_FILTER__C2C;
+
+	return 0;
+}
+
 static int resort_offset_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
@@ -1916,7 +1934,8 @@ static int resort_offset_cb(struct hist_entry *he)
 			"rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
-		hists__output_resort(&c2c_hists->hists, NULL);
+		hists__output_resort_cb(&c2c_hists->hists, NULL, krava_cb);
+
 	}
 
 	return 0;
@@ -1928,7 +1947,6 @@ static int resort_cl_cb(struct hist_entry *he)
 	struct c2c_hists *c2c_hists;
 	double ld_dist;
 
-
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
 
@@ -1936,8 +1954,6 @@ static int resort_cl_cb(struct hist_entry *he)
 		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
 		c2c.shared_clines++;
 	}
-
-#define DISPLAY_LINE_LIMIT  0.0005
 
 	ld_dist  = ((double)c2c_he->stats.rmt_hitm / c2c.hists.stats.rmt_hitm);
 	if (ld_dist < DISPLAY_LINE_LIMIT)
@@ -2020,9 +2036,27 @@ static void print_shared_cacheline_info(void)
 	printf("  Total Merged records              : %10d\n", hitm_cnt + stats->store);
 }
 
+static int hists__output_cb(struct hist_entry *he, FILE *fp)
+{
+	struct c2c_hist_entry *c2c_he;
+
+	fprintf(fp, "\nCacheline: 0x%lx, offset %lu\n\n",
+		cl_address(he->mem_info->daddr.al_addr),
+		cl_offset(he->mem_info->daddr.al_addr));
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, fp, NULL);
+
+	fprintf(fp, "\nCacheline: 0x%lx\n\n", cl_address(he->mem_info->daddr.al_addr));
+
+	return 0;
+}
+
 static void perf_c2c__hists_fprintf(FILE *out)
 {
 	struct rb_node *nd;
+
+        setup_pager();
 
 	print_c2c__display_stats();
 	fprintf(out, "\n");
@@ -2034,7 +2068,6 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
 	symbol_conf.use_callchain = false;
 	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout, NULL);
-	symbol_conf.use_callchain = true;
 
 	fprintf(out, "\nShared Data Cache Line Table\n\n");
 
@@ -2046,9 +2079,11 @@ static void perf_c2c__hists_fprintf(FILE *out)
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 
-		fprintf(out, "\nCacheline: 0x%lx\n\n", cl_address(he->mem_info->daddr.al_addr));
+		if (!he->filtered) {
+			fprintf(out, "\nCacheline: 0x%lx\n\n", cl_address(he->mem_info->daddr.al_addr));
 
-		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, NULL);
+			hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, hists__output_cb);
+		}
 
 		nd = rb_next(nd);
 	} while (nd);
@@ -2435,8 +2470,6 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_err("failed to process sample\n");
 		goto out_session;
 	}
-
-        setup_pager();
 
 	c2c_hists__reinit(&c2c.hists,
 			"dcacheline,"
