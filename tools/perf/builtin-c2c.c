@@ -115,6 +115,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 {
 	struct c2c_hists *c2c_hists = &c2c.hists;
 	struct c2c_hist_entry *c2c_he;
+	struct c2c_stats stats = { };
 	struct hist_entry *he;
 	struct addr_location al;
 	struct mem_info *mi, *mi_dup;
@@ -139,6 +140,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (!mi_dup)
 		goto free_mi;
 
+	c2c_decode_stats(&stats, mi, sample->weight);
+
 	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
 				  sample, true);
@@ -146,8 +149,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		goto free_mi_dup;
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
-	c2c_decode_stats(&c2c_he->stats, he);
-	c2c_decode_stats(&c2c_hists->stats, he);
+	c2c_add_stats(&c2c_he->stats, &stats);
+	c2c_add_stats(&c2c_hists->stats, &stats);
 
 	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
@@ -170,7 +173,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 			goto free_mi_dup;
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
-		c2c_decode_stats(&c2c_he->stats, he);
+		c2c_add_stats(&c2c_he->stats, &stats);
+		c2c_add_stats(&c2c_hists->stats, &stats);
 
 		hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 		ret = hist_entry__append_callchain(he, sample);
@@ -189,7 +193,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				goto free_mi;
 
 			c2c_he = container_of(he, struct c2c_hist_entry, he);
-			c2c_decode_stats(&c2c_he->stats, he);
+			c2c_add_stats(&c2c_he->stats, &stats);
+			c2c_add_stats(&c2c_hists->stats, &stats);
 
 			hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 			ret = hist_entry__append_callchain(he, sample);
@@ -1059,6 +1064,54 @@ percent_stores_l1miss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 }
 
 static int
+dram_lcl_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	return snprintf(hpp->buf, hpp->size, "%*d", width, c2c_he->stats.lcl_dram);
+}
+
+static int64_t
+dram_lcl_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.lcl_dram - c2c_right->stats.lcl_dram;
+}
+
+static int
+dram_rmt_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	return snprintf(hpp->buf, hpp->size, "%*d", width, c2c_he->stats.rmt_dram);
+}
+
+static int64_t
+dram_rmt_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.rmt_dram - c2c_right->stats.rmt_dram;
+}
+
+static int
 pid_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	  struct hist_entry *he)
 {
@@ -1192,6 +1245,8 @@ enum {
 	DIM_PERCENT_RMT_HITM,
 	DIM_PERCENT_STORES_L1HIT,
 	DIM_PERCENT_STORES_L1MISS,
+	DIM_DRAM_LCL,
+	DIM_DRAM_RMT,
 	DIM_PID,
 	DIM_TID,
 	DIM_SYMBOL,
@@ -1503,6 +1558,22 @@ static struct c2c_dimension dim_percent_stores_l1miss = {
 	.id		= DIM_PERCENT_STORES_L1MISS,
 };
 
+static struct c2c_dimension dim_dram_lcl = {
+	HEADER_OFF_SPAN("--- Load Dram ----", "Lcl", 1),
+	.name		= "dram_lcl",
+	.cmp		= dram_lcl_cmp,
+	.entry		= dram_lcl_entry,
+	.id		= DIM_DRAM_LCL,
+};
+
+static struct c2c_dimension dim_dram_rmt = {
+	HEADER_OFF_SPAN("-- Load Dram --", "Rmt", 1),
+	.name		= "dram_rmt",
+	.cmp		= dram_rmt_cmp,
+	.entry		= dram_rmt_entry,
+	.id		= DIM_DRAM_RMT,
+};
+
 static struct c2c_dimension dim_pid = {
 	HEADER_CL_0("Pid"),
 	.name		= "pid",
@@ -1575,6 +1646,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_lcl_hitm,
 	&dim_percent_stores_l1hit,
 	&dim_percent_stores_l1miss,
+	&dim_dram_lcl,
+	&dim_dram_rmt,
 	&dim_pid,
 	&dim_tid,
 	&dim_symbol,
@@ -1621,6 +1694,8 @@ static void set_dimension(struct c2c_dimension *dim)
 		break;
 	case DIM_LD_LLC_HIT:
 	case DIM_LD_RMT_HIT:
+	case DIM_DRAM_LCL:
+	case DIM_DRAM_RMT:
 		dim->width = 8;
 		break;
 	case DIM_PERCENT_LCL_HITM:
@@ -2353,10 +2428,9 @@ static int perf_c2c__report(int argc, const char **argv)
 			"ld_fbhit,"
 			"ld_l1hit,"
 			"ld_l2hit,"
-			"tot_hitm,"
-			"lcl_hitm,"
-			"rmt_hitm,"
 			"ld_lclhit,ld_rmthit,"
+			"tot_hitm,lcl_hitm,rmt_hitm,"
+			"dram_lcl,dram_rmt,"
 			"ld_llcmiss,"
 			"stores,"
 			"stores_l1hit,"
