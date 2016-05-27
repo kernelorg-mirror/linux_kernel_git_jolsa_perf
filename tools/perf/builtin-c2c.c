@@ -2032,7 +2032,9 @@ static void perf_c2c__hists_fprintf(FILE *out)
 		return;
 
 	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
+	symbol_conf.use_callchain = false;
 	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
+	symbol_conf.use_callchain = true;
 
 	fprintf(out, "\nShared Data Cache Line Table\n\n");
 
@@ -2044,7 +2046,7 @@ static void perf_c2c__hists_fprintf(FILE *out)
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 
-		fprintf(out, "\nCacheline: \n\n");
+		fprintf(out, "\nCacheline: 0x%lx\n\n", cl_address(left->mem_info->daddr.al_addr);
 
 		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout);
 
@@ -2433,6 +2435,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_err("failed to process sample\n");
 		goto out_session;
 	}
+
+        setup_pager();
 
 	c2c_hists__reinit(&c2c.hists,
 			"dcacheline,"
