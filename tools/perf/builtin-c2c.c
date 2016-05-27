@@ -113,7 +113,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				struct perf_evsel *evsel __maybe_unused,
 				struct machine *machine)
 {
-	struct hists *hists = &c2c.hists.hists;
+	struct c2c_hists *c2c_hists = &c2c.hists;
 	struct c2c_hist_entry *c2c_he;
 	struct hist_entry *he;
 	struct addr_location al;
@@ -139,7 +139,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (!mi_dup)
 		goto free_mi;
 
-	he = hists__add_entry_ops(hists, &c2c_entry_ops,
+	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
 				  sample, true);
 	if (he == NULL)
@@ -147,14 +147,12 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_decode_stats(&c2c_he->stats, he);
-	c2c_decode_stats(&c2c.hists.stats, he);
+	c2c_decode_stats(&c2c_hists->stats, he);
 
-	hists__inc_nr_samples(hists, he->filtered);
+	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
 
 	if (!ret) {
-		struct c2c_hists *c2c_hists;
-
 		mi = mi_dup;
 
 		mi_dup = memdup(mi, sizeof(*mi));
