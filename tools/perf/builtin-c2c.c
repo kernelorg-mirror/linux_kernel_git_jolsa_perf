@@ -107,6 +107,13 @@ he__get_c2c_hists(struct hist_entry *he,
 	return hists;
 }
 
+static inline int valid_hitm_or_store(union perf_mem_data_src *dsrc)
+{
+#define P(a, b) PERF_MEM_##a##_##b
+	return ((dsrc->mem_snoop & P(SNOOP,HITM)) || (dsrc->mem_op & P(OP,STORE)));
+#undef P
+}
+
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -130,17 +137,18 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	ret = sample__resolve_callchain(sample, &callchain_cursor, NULL,
                                         evsel, &al, sysctl_perf_event_max_stack);
 	if (ret)
-		return ret;
+		goto out;
 
 	mi = sample__resolve_mem(sample, &al);
 	if (mi == NULL)
-		return -ENOMEM;
+		goto out;
+
+	c2c_decode_stats(&stats, mi, sample->weight);
+	c2c_add_stats(&c2c_hists->stats, &stats);
 
 	mi_dup = memdup(mi, sizeof(*mi));
 	if (!mi_dup)
 		goto free_mi;
-
-	c2c_decode_stats(&stats, mi, sample->weight);
 
 	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
@@ -150,7 +158,6 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_add_stats(&c2c_he->stats, &stats);
-	c2c_add_stats(&c2c_hists->stats, &stats);
 
 	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
@@ -1901,11 +1908,6 @@ static int resort_offset_cb(struct hist_entry *he)
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
 
-	if (HAS_HITMS(c2c_he)) {
-		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
-		c2c.shared_clines++;
-	}
-
 	if (c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
 			"percent_rmt_hitm,percent_lcl_hitm,"
@@ -1927,6 +1929,11 @@ static int resort_cl_cb(struct hist_entry *he)
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
+
+	if (HAS_HITMS(c2c_he)) {
+		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
+		c2c.shared_clines++;
+	}
 
 	if (c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
