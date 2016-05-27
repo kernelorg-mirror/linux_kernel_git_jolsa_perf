@@ -1926,6 +1926,8 @@ static int resort_cl_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *c2c_hists;
+	double ld_dist;
+
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
@@ -1935,7 +1937,13 @@ static int resort_cl_cb(struct hist_entry *he)
 		c2c.shared_clines++;
 	}
 
-	if (c2c_hists) {
+#define DISPLAY_LINE_LIMIT  0.0005
+
+	ld_dist  = ((double)c2c_he->stats.rmt_hitm / c2c.hists.stats.rmt_hitm);
+	if (ld_dist < DISPLAY_LINE_LIMIT)
+		he->filtered = HIST_FILTER__C2C;
+
+	if (!he->filtered && c2c_hists) {
 		c2c_hists__reinit(c2c_hists,
 			"offset,cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,daddr",
 			"offset,rmt_hitm,lcl_hitm");
