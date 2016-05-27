@@ -314,8 +314,8 @@ dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	if (!right->mem_info) return 1;
 
 	/* al_addr does all the right addr - start + offset calculations */
-	l = cl_address(left->mem_info->daddr.addr);
-	r = cl_address(right->mem_info->daddr.addr);
+	l = cl_address(left->mem_info->daddr.al_addr);
+	r = cl_address(right->mem_info->daddr.al_addr);
 
 	if (l > r) return -1;
 	if (l < r) return 1;
@@ -330,7 +330,7 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	int width = c2c_width(fmt, hpp, he->hists);
 
 	if (he->mem_info)
-		addr = cl_address(he->mem_info->daddr.addr);
+		addr = cl_address(he->mem_info->daddr.al_addr);
 
 	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
 }
@@ -342,7 +342,7 @@ static int offset_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	int width = c2c_width(fmt, hpp, he->hists);
 
 	if (he->mem_info)
-		addr = cl_offset(he->mem_info->daddr.addr);
+		addr = cl_offset(he->mem_info->daddr.al_addr);
 
 	return snprintf(hpp->buf, hpp->size, "%*" PRIu64, width, addr);
 }
@@ -357,8 +357,8 @@ daddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	if (!right->mem_info) return 1;
 
 	/* al_addr does all the right addr - start + offset calculations */
-	l = left->mem_info->daddr.addr;
-	r = right->mem_info->daddr.addr;
+	l = left->mem_info->daddr.al_addr;
+	r = right->mem_info->daddr.al_addr;
 
 	if (l > r) return -1;
 	if (l < r) return 1;
@@ -386,7 +386,7 @@ iaddr_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	int width = c2c_width(fmt, hpp, he->hists);
 
 	if (he->mem_info)
-		addr = he->mem_info->iaddr.addr;
+		addr = he->mem_info->iaddr.al_addr;
 
 	return snprintf(hpp->buf, hpp->size, "%*" PRIx64, width, addr);
 }
@@ -401,8 +401,8 @@ iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	if (!right->mem_info) return 1;
 
 	/* al_addr does all the right addr - start + offset calculations */
-	l = left->mem_info->iaddr.addr;
-	r = right->mem_info->iaddr.addr;
+	l = left->mem_info->iaddr.al_addr;
+	r = right->mem_info->iaddr.al_addr;
 
 	if (l > r) return -1;
 	if (l < r) return 1;
@@ -2086,7 +2086,7 @@ perf_c2c_offset_browser__title(struct hist_browser *browser,
 	he = cl_browser->he;
 
         if (he->mem_info)
-                addr = cl_offset(he->mem_info->daddr.addr);
+                addr = cl_offset(he->mem_info->daddr.al_addr);
 
 	scnprintf(bf, size,
 		  "Offset 0x%lu\n", addr);
@@ -2164,7 +2164,7 @@ perf_c2c_cacheline_browser__title(struct hist_browser *browser,
 	he = cl_browser->he;
 
         if (he->mem_info)
-                addr = cl_address(he->mem_info->daddr.addr);
+                addr = cl_address(he->mem_info->daddr.al_addr);
 
 	scnprintf(bf, size, "Cacheline 0x%lx", addr);
 	return 0;
