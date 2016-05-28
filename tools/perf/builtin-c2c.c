@@ -1078,6 +1078,54 @@ percent_stores_l1miss_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return per_left - per_right;
 }
 
+static int
+dram_lcl_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	return snprintf(hpp->buf, hpp->size, "%*d", width, c2c_he->stats.lcl_dram);
+}
+
+static int64_t
+dram_lcl_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.lcl_dram - c2c_right->stats.lcl_dram;
+}
+
+static int
+dram_rmt_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	return snprintf(hpp->buf, hpp->size, "%*d", width, c2c_he->stats.rmt_dram);
+}
+
+static int64_t
+dram_rmt_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	     struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left;
+	struct c2c_hist_entry *c2c_right;
+
+	c2c_left  = container_of(left, struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	return c2c_left->stats.rmt_dram - c2c_right->stats.rmt_dram;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1381,6 +1429,22 @@ static struct c2c_dimension dim_percent_stores_l1miss = {
 	.width		= 7,
 };
 
+static struct c2c_dimension dim_dram_lcl = {
+	HEADER_OFF_SPAN("--- Load Dram ----", "Lcl", 1),
+	.name		= "dram_lcl",
+	.cmp		= dram_lcl_cmp,
+	.entry		= dram_lcl_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_dram_rmt = {
+	HEADER_OFF_SPAN("-- Load Dram --", "Rmt", 1),
+	.name		= "dram_rmt",
+	.cmp		= dram_rmt_cmp,
+	.entry		= dram_rmt_entry,
+	.width		= 8,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1420,6 +1484,8 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_percent_lcl_hitm,
 	&dim_percent_stores_l1hit,
 	&dim_percent_stores_l1miss,
+	&dim_dram_lcl,
+	&dim_dram_rmt,
 	NULL,
 };
 
