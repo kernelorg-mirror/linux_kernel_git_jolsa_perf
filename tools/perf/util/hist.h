@@ -467,5 +467,12 @@ static inline struct rb_node *rb_hierarchy_next(struct rb_node *node)
 #define HIERARCHY_INDENT  3
 
 bool hist_entry__has_hierarchy_children(struct hist_entry *he, float limit);
+size_t hist_entry_callchain__fprintf(struct hist_entry *he,
+				     u64 total_samples, int left_margin,
+				     FILE *fp);
+int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp);
+int hists__fprintf_standard_headers(struct hists *hists,
+				struct perf_hpp *hpp,
+				FILE *fp);
 
 #endif	/* __PERF_HIST_H */
