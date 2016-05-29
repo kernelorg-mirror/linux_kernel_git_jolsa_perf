@@ -340,9 +340,9 @@ static size_t callchain__fprintf_folded(FILE *fp, struct rb_root *tree,
 	return ret;
 }
 
-static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
-					    u64 total_samples, int left_margin,
-					    FILE *fp)
+size_t hist_entry_callchain__fprintf(struct hist_entry *he,
+				     u64 total_samples, int left_margin,
+				     FILE *fp)
 {
 	u64 parent_samples = he->stat.period;
 
@@ -373,7 +373,7 @@ static size_t hist_entry_callchain__fprintf(struct hist_entry *he,
 	return 0;
 }
 
-static int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp)
+int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp)
 {
 	const char *sep = symbol_conf.field_sep;
 	struct perf_hpp_fmt *fmt;
@@ -638,7 +638,7 @@ hists__fprintf_hierarchy_headers(struct hists *hists,
 	return print_hierarchy_header(hists, hpp, symbol_conf.field_sep, fp);
 }
 
-static int
+int
 hists__fprintf_standard_headers(struct hists *hists,
 				struct perf_hpp *hpp,
 				FILE *fp)
