@@ -2034,12 +2034,16 @@ static void perf_c2c__hists_fprintf(FILE *out)
 {
 	struct rb_node *nd;
 
+	setup_pager();
+
 	print_c2c__display_stats();
 	fprintf(out, "\n");
 	print_shared_cacheline_info();
 
 	if (c2c.stats_only)
 		return;
+
+	symbol_conf.use_callchain = false;
 
 	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
 	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
@@ -2051,6 +2055,8 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	do {
 		struct c2c_hist_entry *c2c_he;
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
+		char buf[1000];
+		size_t size = 1000;
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 
