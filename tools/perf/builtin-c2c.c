@@ -46,6 +46,7 @@ struct perf_c2c {
 
 	const char		*coalesce;
 	char			*offset_sort;
+	bool			stdio;
 };
 
 static struct perf_c2c c2c;
@@ -1358,6 +1359,14 @@ static struct c2c_dimension dim_daddr = {
 	.id		= DIM_DADDR,
 };
 
+static struct c2c_dimension dim_daddr_offset = {
+	HEADER_CL_0("Data address"),
+	.name		= "daddr_offset",
+	.cmp		= daddr_cmp,
+	.entry		= offset_entry,
+	.id		= DIM_DADDR,
+};
+
 static struct c2c_dimension dim_iaddr = {
 	HEADER_OFF_0("Code address"),
 	.name		= "iaddr",
@@ -1621,6 +1630,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_offset,
 	&dim_daddr,
+	&dim_daddr_offset,
 	&dim_iaddr,
 	&dim_tot_hitm,
 	&dim_lcl_hitm,
@@ -1931,10 +1941,18 @@ static int resort_offset_cb(struct hist_entry *he)
 	}
 
 	if (c2c_hists) {
-		c2c_hists__reinit(c2c_hists,
-			"percent_rmt_hitm,percent_lcl_hitm,"
-			"percent_stores_l1hit,percent_stores_l1miss,"
-			"pid,tid,iaddr,symbol,dso",
+		const char *output;
+
+		if (c2c.stdio)
+			output = "percent_rmt_hitm,percent_lcl_hitm,"
+				 "percent_stores_l1hit,percent_stores_l1miss,"
+				 "daddr_offset,pid,tid,iaddr,symbol,dso";
+		else
+			output = "percent_rmt_hitm,percent_lcl_hitm,"
+				 "percent_stores_l1hit,percent_stores_l1miss,"
+				 "pid,tid,iaddr,symbol,dso";
+
+		c2c_hists__reinit(c2c_hists, output,
 			"rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
@@ -1954,8 +1972,14 @@ static int resort_cl_cb(struct hist_entry *he)
 	c2c_hists = c2c_he->hists;
 
 	if (display && c2c_hists) {
-		c2c_hists__reinit(c2c_hists,
-			"offset,cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,daddr",
+		const char *output;
+
+		if (c2c.stdio)
+			output = "cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,daddr";
+		else
+			output = "offset,cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,daddr";
+
+		c2c_hists__reinit(c2c_hists, output,
 			"offset,rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
@@ -2030,42 +2054,111 @@ static void print_shared_cacheline_info(void)
 	printf("  Total Merged records              : %10d\n", hitm_cnt + stats->store);
 }
 
+#define HPP(__n, __s)			\
+	char buf_ ## __n[__s];		\
+	struct perf_hpp __n = {		\
+		.buf	= buf_ ## __n,	\
+		.size	= __s,		\
+	}
+
+static void print_cl_pareto(FILE *out)
+{
+	struct rb_node *nd, *nd_1, *nd_2;
+	struct c2c_hists *c2c_hists = &c2c.hists;
+	struct hist_entry *he;
+	bool first = true;
+
+	nd = rb_first(&c2c_hists->hists.entries);
+
+	do {
+		struct c2c_hists *c2c_hists_1;
+		struct c2c_hist_entry *c2c_he;
+
+		/* cacheline */
+		he          = rb_entry(nd, struct hist_entry, rb_node);
+		c2c_he      = container_of(he, struct c2c_hist_entry, he);
+		c2c_hists_1 = c2c_he->hists;
+
+		if (he->filtered)
+			goto next_cl;
+
+		nd_1 = rb_first(&c2c_hists_1->hists.entries);
+
+		do {
+			struct c2c_hists *c2c_hists_2;
+			struct c2c_hist_entry *c2c_he_1;
+			HPP(hpp_2_header, 1000);
+			HPP(hpp_1_line, 1000);
+			unsigned int i, sz;
+
+			/* offset 1 */
+			he          = rb_entry(nd_1, struct hist_entry, rb_node);
+			c2c_he_1    = container_of(he, struct c2c_hist_entry, he);
+			c2c_hists_2 = c2c_he_1->hists;
+
+			if (first) {
+				hists__fprintf_standard_headers(&c2c_hists_2->hists, &hpp_2_header, out, true);
+				first = false;
+			}
+
+			hist_entry__snprintf(he, &hpp_1_line);
+
+			sz = 1000 - hpp_1_line.size;
+			fprintf(out, "  ");
+			for (i = 0; i < sz - 2; i++)
+				fprintf(out, "-");
+			fprintf(out, "\n");
+
+			fprintf(out, "%s\n", buf_hpp_1_line);
+
+			fprintf(out, "  ");
+			for (i = 0; i < sz - 2; i++)
+				fprintf(out, "-");
+			fprintf(out, "\n");
+
+			nd_2 = rb_first(&c2c_hists_2->hists.entries);
+
+			do {
+				HPP(hpp_2_line, 1000);
+
+				/* offset 2 */
+				he = rb_entry(nd_2, struct hist_entry, rb_node);
+
+				if (he->filtered) {
+					hist_entry__snprintf(he, &hpp_2_line);
+					fprintf(out, "%s\n", buf_hpp_2_line);
+					hist_entry_callchain__fprintf(he, 0, 0, out);
+				}
+
+				nd_2 = rb_next(nd_2);
+			} while (nd_2);
+
+			nd_1 = rb_next(nd_1);
+		} while (nd_1);
+
+next_cl:
+		nd = rb_next(nd);
+	} while (nd);
+}
+
 static void perf_c2c__hists_fprintf(FILE *out)
 {
-	struct rb_node *nd;
-
 	setup_pager();
 
 	print_c2c__display_stats();
+
 	fprintf(out, "\n");
+
 	print_shared_cacheline_info();
 
 	if (c2c.stats_only)
 		return;
 
-	symbol_conf.use_callchain = false;
+	fprintf(out, "\nShared Data Cache Line Table\n\n");
+	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout, false);
 
 	fprintf(out, "\nShared Cache Line Distribution Pareto\n\n");
-	hists__fprintf(&c2c.hists.hists, true, 0, 0, 0, stdout);
-
-	fprintf(out, "\nShared Data Cache Line Table\n\n");
-
-	nd = rb_first(&c2c.hists.hists.entries);
-
-	do {
-		struct c2c_hist_entry *c2c_he;
-		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
-		char buf[1000];
-		size_t size = 1000;
-
-		c2c_he = container_of(he, struct c2c_hist_entry, he);
-
-		fprintf(out, "\nCacheline: \n\n");
-
-		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout);
-
-		nd = rb_next(nd);
-	} while (nd);
+	print_cl_pareto(out);
 }
 
 static void c2c_browser__update_nr_entries(struct hist_browser *hb)
@@ -2367,7 +2460,6 @@ static int perf_c2c__report(int argc, const char **argv)
 	struct perf_data_file file = {
 		.mode = PERF_DATA_MODE_READ,
 	};
-	bool use_stdio = false;
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const struct option c2c_options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
@@ -2376,7 +2468,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
-	OPT_BOOLEAN(0, "stdio", &use_stdio,
+	OPT_BOOLEAN(0, "stdio", &c2c.stdio,
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
 		    "Use the stdio interface"),
@@ -2396,9 +2488,9 @@ static int perf_c2c__report(int argc, const char **argv)
 		usage_with_options(report_c2c_usage, c2c_options);
 
 	if (c2c.stats_only)
-		use_stdio = true;
+		c2c.stdio= true;
 
-	if (use_stdio)
+	if (c2c.stdio)
 		use_browser = 0;
 	else
 		use_browser = 1;
@@ -2476,7 +2568,7 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	ui_progress__finish();
 
-	if (use_stdio)
+	if (c2c.stdio)
 		perf_c2c__hists_fprintf(stdout);
 	else
 		perf_c2c__hists_browse(&c2c.hists.hists);

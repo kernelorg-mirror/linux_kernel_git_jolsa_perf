@@ -632,6 +632,8 @@ hists__fprintf_hierarchy_headers(struct hists *hists,
 	struct perf_hpp_list_node *fmt_node;
 	struct perf_hpp_fmt *fmt;
 
+	fprintf(fp, "# ");
+
 	list_for_each_entry(fmt_node, &hists->hpp_formats, list) {
 		perf_hpp_list__for_each_format(&fmt_node->hpp, fmt)
 			perf_hpp__reset_width(fmt, hists);
@@ -667,13 +669,15 @@ static void fprintf_line(struct hists *hists, struct perf_hpp *hpp,
 int
 hists__fprintf_standard_headers(struct hists *hists,
 				struct perf_hpp *hpp,
-				FILE *fp)
+				FILE *fp, bool display_dots)
 {
 	struct perf_hpp_fmt *fmt;
 	unsigned int width;
 	const char *sep = symbol_conf.field_sep;
 	bool first = true;
 	int line;
+
+	fprintf(fp, "# ");
 
 	for (line = 0; line < hists->nr_header_lines; line++) {
 		/* first # is displayed one level up */
@@ -683,7 +687,7 @@ hists__fprintf_standard_headers(struct hists *hists,
 		fprintf(fp, "\n");
 	}
 
-	if (sep)
+	if (sep || !display_dots)
 		return hists->nr_header_lines;
 
 	first = true;
@@ -719,12 +723,10 @@ static int hists__fprintf_headers(struct hists *hists, FILE *fp)
 		.size	= sizeof(bf),
 	};
 
-	fprintf(fp, "# ");
-
 	if (symbol_conf.report_hierarchy)
 		return hists__fprintf_hierarchy_headers(hists, &dummy_hpp, fp);
 	else
-		return hists__fprintf_standard_headers(hists, &dummy_hpp, fp);
+		return hists__fprintf_standard_headers(hists, &dummy_hpp, fp, true);
 
 }
 

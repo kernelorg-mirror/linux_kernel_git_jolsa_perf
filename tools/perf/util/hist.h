@@ -492,6 +492,6 @@ size_t hist_entry_callchain__fprintf(struct hist_entry *he,
 int hist_entry__snprintf(struct hist_entry *he, struct perf_hpp *hpp);
 int hists__fprintf_standard_headers(struct hists *hists,
 				struct perf_hpp *hpp,
-				FILE *fp);
+				FILE *fp, bool display_dots);
 
 #endif	/* __PERF_HIST_H */
