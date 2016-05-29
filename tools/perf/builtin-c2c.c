@@ -1995,6 +1995,34 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 	return hpp_list__parse(&c2c_hists->list, output, sort);
 }
 
+#define DISPLAY_LINE_LIMIT  0.0005
+
+static bool he__display(struct hist_entry *he)
+{
+	struct c2c_hists *c2c_hists;
+	struct c2c_hist_entry *c2c_he;
+	double ld_dist;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_hists = container_of(he->hists, struct c2c_hists, hists);
+
+	if (c2c_hists->stats.rmt_hitm) {
+		ld_dist = ((double)c2c_he->stats.rmt_hitm / c2c_hists->stats.rmt_hitm);
+		if (ld_dist < DISPLAY_LINE_LIMIT)
+			he->filtered = HIST_FILTER__C2C;
+	} else {
+		he->filtered = HIST_FILTER__C2C;
+	}
+
+	return he->filtered == 0;
+}
+
+static int filter_cb(struct hist_entry *he)
+{
+	he__display(he);
+	return 0;
+}
+
 static int resort_offset_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
@@ -2010,7 +2038,7 @@ static int resort_offset_cb(struct hist_entry *he)
 
 	if (c2c_hists) {
 		hists__collapse_resort(&c2c_hists->hists, NULL);
-		hists__output_resort(&c2c_hists->hists, NULL);
+		hists__output_resort_cb(&c2c_hists->hists, NULL, filter_cb);
 	}
 
 	return 0;
@@ -2020,11 +2048,12 @@ static int resort_cl_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *c2c_hists;
+	bool display = he__display(he);
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
 
-	if (c2c_hists) {
+	if (display && c2c_hists) {
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort_cb(&c2c_hists->hists, NULL, resort_offset_cb);
 	}
