@@ -22,6 +22,7 @@ struct c2c_hists {
 struct c2c_hist_entry {
 	struct c2c_hists	*hists;
 	struct c2c_stats	stats;
+	cpu_set_t		*cpuset;
 	/*
 	 * must be at the end,
 	 * because of its callchain dynamic entry
@@ -32,9 +33,50 @@ struct c2c_hist_entry {
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
+
+	cpu_set_t		**nodes;
+	int			 nodes_cnt;
+	int			 cpus_cnt;
 };
 
 static struct perf_c2c c2c;
+
+static int setup_nodes(struct perf_session *session)
+{
+	struct numa_node *n;
+	cpu_set_t **nodes;
+	int node, cpu;
+
+	c2c.nodes_cnt = session->header.env.numa_nodes_cnt;
+	c2c.cpus_cnt  = session->header.env.nr_cpus_online;
+
+	n = session->header.env.numa_nodes;
+	if (!n)
+		return -EINVAL;
+
+	nodes = zalloc(sizeof(cpu_set_t*) * c2c.nodes_cnt);
+	if (!nodes)
+		return -ENOMEM;
+
+	c2c.nodes = nodes;
+
+	/* TODO - alloc cpu_set_t and check boundaries */
+	for (node = 0; node < c2c.nodes_cnt; node++) {
+		struct cpu_map *map = n[node].map;
+		cpu_set_t *set;
+
+		set = CPU_ALLOC(c2c.cpus_cnt);
+		if (!set)
+			return -ENOMEM;
+
+		for (cpu = 0; cpu < map->nr; cpu++)
+			CPU_SET(map->map[cpu], set);
+
+		nodes[node] = set;
+	}
+
+	return 0;
+}
 
 static void* c2c_he_zalloc(size_t size)
 {
@@ -42,6 +84,10 @@ static void* c2c_he_zalloc(size_t size)
 
 	c2c_he = zalloc(size + sizeof(*c2c_he));
 	if (!c2c_he)
+		return NULL;
+
+	c2c_he->cpuset = CPU_ALLOC(c2c.cpus_cnt);
+	if (!c2c_he->cpuset)
 		return NULL;
 
 	return &c2c_he->he;
@@ -57,6 +103,7 @@ static void c2c_he_free(void *he)
 		free(c2c_he->hists);
 	}
 
+	CPU_FREE(c2c_he->cpuset);
 	free(c2c_he);
 }
 
@@ -131,6 +178,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	c2c_add_stats(&c2c_he->stats, &stats);
 	c2c_add_stats(&c2c_hists->stats, &stats);
 
+	CPU_SET(sample->cpu, c2c_he->cpuset);
+
 	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
 
@@ -154,6 +203,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 		c2c_add_stats(&c2c_he->stats, &stats);
 		c2c_add_stats(&c2c_hists->stats, &stats);
+
+		CPU_SET(sample->cpu, c2c_he->cpuset);
 
 		hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 		ret = hist_entry__append_callchain(he, sample);
@@ -1155,6 +1206,85 @@ pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return left->thread->pid_ - right->thread->pid_;
 }
 
+static int64_t
+node_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	 struct hist_entry *left __maybe_unused,
+	 struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+static int node__snprintf(char *buf, size_t size,
+			 int node, cpu_set_t *set)
+{
+	bool first = true;
+	int ret, cpu;
+	int start = -1;
+
+	ret = snprintf(buf, size, "%d{", node);
+
+	for (cpu = 0; cpu < c2c.cpus_cnt; cpu++) {
+		if (!CPU_ISSET(cpu, set) && start != -1) {
+			if (cpu - 1 == start)
+				ret += snprintf(buf + ret, size - ret, "%s%d", first ? "" : ",", start);
+			else
+				ret += snprintf(buf + ret, size - ret, "%s%d-%d", first ? "" : ",", start, cpu - 1);
+			start = -1;
+			first = false;
+			continue;
+		}
+
+		if (start == -1)
+			start = cpu;
+	}
+
+	if (start == -1) {
+		if (cpu - 1 == start)
+			ret += snprintf(buf + ret, size - ret, "%s%d", first ? "" : ",", start);
+		else
+			ret += snprintf(buf + ret, size - ret, "%s%d-%d", first ? "" : ",", start, cpu - 1);
+	}
+
+	ret += snprintf(buf + ret, size - ret, "}");
+	return ret;
+}
+
+static int
+node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	bool first = true;
+	int node;
+	int ret = 0;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	for (node = 0; node < c2c.nodes_cnt; node++) {
+		cpu_set_t set;
+
+		CPU_ZERO(&set);
+		CPU_AND(&set, c2c_he->cpuset, c2c.nodes[node]);
+
+		if (!CPU_COUNT(&set))
+			continue;
+
+		if (!first) {
+			ret = snprintf(hpp->buf, hpp->size, ",");
+			advance_hpp(hpp, ret);
+		}
+
+		if (0)
+			ret = node__snprintf(hpp->buf, hpp->size, node, &set);
+
+		ret = snprintf(hpp->buf, hpp->size, "%d", node);
+		advance_hpp(hpp, ret);
+		first = false;
+	}
+
+	return ret;
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1498,6 +1628,14 @@ static struct c2c_dimension dim_dso = {
 	.se		= &sort_dso,
 };
 
+static struct c2c_dimension dim_node = {
+	HEADER_CL_0("Node"),
+	.name		= "node",
+	.cmp		= node_cmp,
+	.entry		= node_entry,
+	.width		= 20,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1543,6 +1681,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_tid,
 	&dim_symbol,
 	&dim_dso,
+	&dim_node,
 	NULL,
 };
 
@@ -1806,6 +1945,12 @@ static int perf_c2c__report(int argc, const char **argv)
 	session = perf_session__new(&file, 0, &c2c.tool);
 	if (session == NULL) {
 		pr_debug("No memory for session\n");
+		goto out;
+	}
+
+	err = setup_nodes(session);
+	if (err) {
+		pr_err("Failed setup nodes\n");
 		goto out;
 	}
 
