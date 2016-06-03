@@ -290,7 +290,7 @@ int perf_script__meminfo_scnprintf(char *out, size_t sz, struct mem_info *mem_in
 }
 
 int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
-		     u64 weight)
+		     u64 weight, int cpu)
 {
 	union perf_mem_data_src *data_src = &mi->data_src;
 	u64 daddr  = mi->daddr.addr;
@@ -303,6 +303,7 @@ int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
 #define P(a, b) PERF_MEM_##a##_##b
 
 	stats->nr_entries++;
+	CPU_SET(cpu, &stats->cpuset);
 
 	if (lock & P(LOCK, LOCKED)) stats->locks++;
 
@@ -421,4 +422,6 @@ void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add)
 		update_stats(&stats->stats, stats->stats.mean);
 
 	stats->nr_entries	+= add->nr_entries;
+
+	CPU_OR(&stats->cpuset, &stats->cpuset, &add->cpuset);
 }

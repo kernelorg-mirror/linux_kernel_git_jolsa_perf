@@ -140,7 +140,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	if (!mi_dup)
 		goto free_mi;
 
-	c2c_decode_stats(&stats, mi, sample->weight);
+	c2c_decode_stats(&stats, mi, sample->weight, sample->cpu);
 
 	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
@@ -1220,6 +1220,20 @@ dso_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return hist_entry__dso_snprintf(he, hpp->buf, hpp->size, width);
 }
 
+static int64_t
+node_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	 struct hist_entry *left __maybe_unused,
+	 struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+static int
+node_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+}
+
 enum {
 	DIM_DCACHELINE,
 	DIM_OFFSET,
@@ -1251,6 +1265,7 @@ enum {
 	DIM_TID,
 	DIM_SYMBOL,
 	DIM_DSO,
+	DIM_NODE,
 };
 
 /* HEADER_* macros are for main browser */
@@ -1606,6 +1621,14 @@ static struct c2c_dimension dim_dso = {
 	.id		= DIM_DSO,
 };
 
+static struct c2c_dimension dim_node = {
+	HEADER_CL_0("Node"),
+	.name		= "node",
+	.cmp		= node_cmp,
+	.entry		= node_entry,
+	.id		= DIM_NODE,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1652,6 +1675,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_tid,
 	&dim_symbol,
 	&dim_dso,
+	&dim_node,
 	NULL,
 };
 
@@ -1706,6 +1730,7 @@ static void set_dimension(struct c2c_dimension *dim)
 		break;
 	case DIM_SYMBOL:
 	case DIM_DSO:
+	case DIM_NODE:
 		dim->width = 20;
 		break;
 	default:

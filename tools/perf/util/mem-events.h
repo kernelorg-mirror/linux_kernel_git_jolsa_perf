@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sched.h>
 #include <linux/types.h>
 #include "stat.h"
 
@@ -57,8 +58,9 @@ int perf_mem__lck_scnprintf(char *out, size_t sz, struct mem_info *mem_info);
 int perf_script__meminfo_scnprintf(char *bf, size_t size, struct mem_info *mem_info);
 
 struct c2c_stats {
-	int		nr_entries;
-	struct stats	stats;
+	int		 nr_entries;
+	struct stats	 stats;
+	cpu_set_t	 cpuset;
 
 	int	locks;               /* count of 'lock' transactions */
 	int	store;               /* count of all stores in trace */
@@ -88,7 +90,7 @@ struct c2c_stats {
 
 struct hist_entry;
 int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
-		     u64 weight);
+		     u64 weight, int cpu);
 void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add);
 
 #endif /* __PERF_MEM_EVENTS_H */
