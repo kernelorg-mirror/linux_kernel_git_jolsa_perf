@@ -1,6 +1,7 @@
 #include <linux/compiler.h>
 #include <linux/kernel.h>
 #include <linux/stringify.h>
+#include <asm/bug.h>
 #include "util.h"
 #include "debug.h"
 #include "builtin.h"
@@ -22,6 +23,8 @@ struct c2c_hists {
 struct c2c_hist_entry {
 	struct c2c_hists	*hists;
 	struct c2c_stats	stats;
+	unsigned long		*cpuset;
+	struct c2c_stats	*node_stats;
 	/*
 	 * must be at the end,
 	 * because of its callchain dynamic entry
@@ -32,6 +35,12 @@ struct c2c_hist_entry {
 struct perf_c2c {
 	struct perf_tool	tool;
 	struct c2c_hists	hists;
+
+	unsigned long		**nodes;
+	int			 nodes_cnt;
+	int			 cpus_cnt;
+	int			*cpu2node;
+	int			 node_info;
 };
 
 static struct perf_c2c c2c;
@@ -42,6 +51,16 @@ static void* c2c_he_zalloc(size_t size)
 
 	c2c_he = zalloc(size + sizeof(*c2c_he));
 	if (!c2c_he)
+		return NULL;
+
+	c2c_he->cpuset = bitmap_alloc(c2c.cpus_cnt);
+	if (!c2c_he->cpuset)
+		return NULL;
+
+	bitmap_zero(c2c_he->cpuset, c2c.cpus_cnt);
+
+	c2c_he->node_stats = zalloc(c2c.nodes_cnt * sizeof(*c2c_he->node_stats));
+	if (!c2c_he->node_stats)
 		return NULL;
 
 	return &c2c_he->he;
@@ -57,6 +76,8 @@ static void c2c_he_free(void *he)
 		free(c2c_he->hists);
 	}
 
+	free(c2c_he->cpuset);
+	free(c2c_he->node_stats);
 	free(c2c_he);
 }
 
@@ -89,6 +110,16 @@ he__get_c2c_hists(struct hist_entry *he,
 		free(hists);
 
 	return hists;
+}
+
+static void c2c_he__set_cpu(struct c2c_hist_entry *c2c_he,
+			    struct perf_sample *sample)
+{
+	if (WARN_ONCE(sample->cpu == (unsigned int) -1,
+		      "WARNING: no sample cpu value"))
+		return;
+
+	set_bit(sample->cpu, c2c_he->cpuset);
 }
 
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
@@ -131,10 +162,21 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 	c2c_add_stats(&c2c_he->stats, &stats);
 	c2c_add_stats(&c2c_hists->stats, &stats);
 
+	c2c_he__set_cpu(c2c_he, sample);
+
 	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
 
 	if (!ret) {
+		/*
+		 * There's already warning about missing
+		 * sample's cpu value. Let's account all
+		 * to node 0 in the case without any other
+		 * warning.
+		 */
+		int cpu = sample->cpu == (unsigned int) -1 ? 0 : sample->cpu;
+		int node = c2c.cpu2node[cpu];
+
 		mi = mi_dup;
 
 		mi_dup = memdup(mi, sizeof(*mi));
@@ -154,6 +196,9 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 		c2c_add_stats(&c2c_he->stats, &stats);
 		c2c_add_stats(&c2c_hists->stats, &stats);
+		c2c_add_stats(&c2c_he->node_stats[node], &stats);
+
+		c2c_he__set_cpu(c2c_he, sample);
 
 		hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 		ret = hist_entry__append_callchain(he, sample);
@@ -1145,6 +1190,93 @@ pid_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return left->thread->pid_ - right->thread->pid_;
 }
 
+static int64_t
+empty_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
+	  struct hist_entry *left __maybe_unused,
+	  struct hist_entry *right __maybe_unused)
+{
+	return 0;
+}
+
+static int
+node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	bool first = true;
+	int node;
+	int ret = 0;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	for (node = 0; node < c2c.nodes_cnt; node++) {
+		DECLARE_BITMAP(set, c2c.cpus_cnt);
+
+		bitmap_zero(set, c2c.cpus_cnt);
+		bitmap_and(set, c2c_he->cpuset, c2c.nodes[node], c2c.cpus_cnt);
+
+		if (!bitmap_weight(set, c2c.cpus_cnt)) {
+			if (c2c.node_info == 1) {
+				ret = scnprintf(hpp->buf, hpp->size, "%21s", " ");
+				advance_hpp(hpp, ret);
+			}
+			continue;
+		}
+
+		if (!first) {
+			ret = scnprintf(hpp->buf, hpp->size, " ");
+			advance_hpp(hpp, ret);
+		}
+
+		switch (c2c.node_info) {
+		case 0:
+			ret = scnprintf(hpp->buf, hpp->size, "%2d", node);
+			advance_hpp(hpp, ret);
+			break;
+		case 1:
+		{
+			int num = bitmap_weight(c2c_he->cpuset, c2c.cpus_cnt);
+			struct c2c_stats *stats = &c2c_he->node_stats[node];
+
+			ret = scnprintf(hpp->buf, hpp->size, "%2d{%2d ", node, num);
+			advance_hpp(hpp, ret);
+
+
+			if (c2c_he->stats.rmt_hitm > 0)
+				ret = scnprintf(hpp->buf, hpp->size, "%5.1f%% ", 100. * ((double)stats->rmt_hitm / (double) c2c_he->stats.rmt_hitm));
+			else
+				ret = scnprintf(hpp->buf, hpp->size, "%6s ", "n/a");
+
+			advance_hpp(hpp, ret);
+
+			if (c2c_he->stats.store > 0)
+				ret = scnprintf(hpp->buf, hpp->size, "%5.1f%%}", 100. * ((double)stats->store / (double)c2c_he->stats.store));
+			else
+				ret = scnprintf(hpp->buf, hpp->size, "%6s}", "n/a");
+
+			advance_hpp(hpp, ret);
+			break;
+		}
+		case 2:
+			ret = scnprintf(hpp->buf, hpp->size, "%2d{", node);
+			advance_hpp(hpp, ret);
+
+			ret = bitmap_snprintf(set, c2c.cpus_cnt, hpp->buf, hpp->size);
+			advance_hpp(hpp, ret);
+
+			ret = scnprintf(hpp->buf, hpp->size, "}");
+			advance_hpp(hpp, ret);
+			break;
+		default:
+			break;
+		}
+
+		first = false;
+	}
+
+	return 0;
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -1448,6 +1580,17 @@ static struct c2c_dimension dim_dso = {
 	.se		= &sort_dso,
 };
 
+static struct c2c_header header_node_0 = HEADER_LOW("Node");
+static struct c2c_header header_node_1 = HEADER_LOW("Node{cpus %hitms %stores}");
+static struct c2c_header header_node_2 = HEADER_LOW("Node{cpu list}");
+
+static struct c2c_dimension dim_node = {
+	.name		= "node",
+	.cmp		= empty_cmp,
+	.entry		= node_entry,
+	.width		= 4,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -1488,6 +1631,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_tid,
 	&dim_symbol,
 	&dim_dso,
+	&dim_node,
 	NULL,
 };
 
@@ -1714,6 +1858,79 @@ static int resort_cl_cb(struct hist_entry *he)
 	return 0;
 }
 
+static void setup_nodes_header(void)
+{
+	switch (c2c.node_info) {
+	case 0:
+	default:
+		dim_node.header = header_node_0;
+		break;
+	case 1:
+		dim_node.header = header_node_1;
+		break;
+	case 2:
+		dim_node.header = header_node_2;
+		break;
+	}
+}
+
+static int setup_nodes(struct perf_session *session)
+{
+	struct numa_node *n;
+	unsigned long **nodes;
+	int node, cpu;
+	int *cpu2node;
+
+	c2c.nodes_cnt = session->header.env.nr_numa_nodes;
+	c2c.cpus_cnt  = session->header.env.nr_cpus_online;
+
+	n = session->header.env.numa_nodes;
+	if (!n)
+		return -EINVAL;
+
+	nodes = zalloc(sizeof(unsigned long*) * c2c.nodes_cnt);
+	if (!nodes)
+		return -ENOMEM;
+
+	c2c.nodes = nodes;
+
+	cpu2node = zalloc(sizeof(int) * c2c.cpus_cnt);
+	if (!cpu2node)
+		return -ENOMEM;
+
+	for (cpu = 0; cpu < c2c.cpus_cnt; cpu++)
+		cpu2node[cpu] = -1;
+
+	c2c.cpu2node = cpu2node;
+
+	/* TODO - alloc cpu_set_t and check boundaries */
+	for (node = 0; node < c2c.nodes_cnt; node++) {
+		struct cpu_map *map = n[node].map;
+		unsigned long *set;
+
+		set = bitmap_alloc(c2c.cpus_cnt);
+		if (!set)
+			return -ENOMEM;
+
+		bitmap_zero(set, c2c.cpus_cnt);
+
+		for (cpu = 0; cpu < map->nr; cpu++) {
+			set_bit(map->map[cpu], set);
+
+			if (WARN_ONCE(cpu2node[map->map[cpu]] != -1, "node/cpu topology bug"))
+				return -EINVAL;
+
+			cpu2node[map->map[cpu]] = node;
+		}
+
+		nodes[node] = set;
+	}
+
+	setup_nodes_header();
+	return 0;
+}
+
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -1728,6 +1945,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		 "be more verbose (show counter open errors, etc)"),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
+	OPT_INCR('N', "node-info", &c2c.node_info,
+		 "show extra node info in report (repeat for more info)"),
 	OPT_END()
 	};
 	int err = 0;
@@ -1751,6 +1970,12 @@ static int perf_c2c__report(int argc, const char **argv)
 	session = perf_session__new(&file, 0, &c2c.tool);
 	if (session == NULL) {
 		pr_debug("No memory for session\n");
+		goto out;
+	}
+
+	err = setup_nodes(session);
+	if (err) {
+		pr_err("Failed setup nodes\n");
 		goto out;
 	}
 
