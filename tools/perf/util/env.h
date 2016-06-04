@@ -2,6 +2,7 @@
 #define __PERF_ENV_H
 
 #include <linux/types.h>
+#include "cpumap.h"
 
 struct cpu_topology_map {
 	int	socket_id;
@@ -16,6 +17,13 @@ struct cpu_cache_level {
 	char	*type;
 	char	*size;
 	char	*map;
+};
+
+struct numa_node {
+	u32		 node;
+	u64		 mem_total;
+	u64		 mem_free;
+	struct cpu_map	*map;
 };
 
 struct perf_env {
@@ -33,18 +41,18 @@ struct perf_env {
 	int			nr_cmdline;
 	int			nr_sibling_cores;
 	int			nr_sibling_threads;
-	int			nr_numa_nodes;
 	int			nr_pmu_mappings;
 	int			nr_groups;
 	char			*cmdline;
 	const char		**cmdline_argv;
 	char			*sibling_cores;
 	char			*sibling_threads;
-	char			*numa_nodes;
 	char			*pmu_mappings;
 	struct cpu_topology_map	*cpu;
 	struct cpu_cache_level	*caches;
 	int			 caches_cnt;
+	struct numa_node	*numa_nodes;
+	int			 numa_nodes_cnt;
 };
 
 extern struct perf_env perf_env;
