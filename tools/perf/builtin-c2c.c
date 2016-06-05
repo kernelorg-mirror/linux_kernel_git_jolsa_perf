@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/stringify.h>
 #include <asm/bug.h>
+#include <slang.h>
 #include "util.h"
 #include "debug.h"
 #include "builtin.h"
@@ -20,11 +21,20 @@ struct c2c_hists {
 	struct c2c_stats	stats;
 };
 
+struct compute_stats {
+	struct stats		 lcl_hitm;
+	struct stats		 rmt_hitm;
+	struct stats		 load;
+};
+
 struct c2c_hist_entry {
 	struct c2c_hists	*hists;
 	struct c2c_stats	 stats;
 	unsigned long		*cpuset;
 	struct c2c_stats	*node_stats;
+
+	struct compute_stats	 cstats;
+
 	/*
 	 * must be at the end,
 	 * because of its callchain dynamic entry
@@ -62,6 +72,10 @@ static void* c2c_he_zalloc(size_t size)
 	c2c_he->node_stats = zalloc(c2c.nodes_cnt * sizeof(*c2c_he->node_stats));
 	if (!c2c_he->node_stats)
 		return NULL;
+
+	init_stats(&c2c_he->cstats.lcl_hitm);
+	init_stats(&c2c_he->cstats.rmt_hitm);
+	init_stats(&c2c_he->cstats.load);
 
 	return &c2c_he->he;
 }
@@ -120,6 +134,20 @@ static void c2c_he__set_cpu(struct c2c_hist_entry *c2c_he,
 		return;
 
 	set_bit(sample->cpu, c2c_he->cpuset);
+}
+
+static void compute_stats(struct c2c_hist_entry *c2c_he,
+			  struct c2c_stats *stats,
+			  u64 weight)
+{
+	struct compute_stats *cstats = &c2c_he->cstats;
+
+	if (stats->rmt_hitm)
+		update_stats(&cstats->rmt_hitm, weight);
+	else if (stats->lcl_hitm)
+		update_stats(&cstats->lcl_hitm, weight);
+	else if (stats->load)
+		update_stats(&cstats->load, weight);
 }
 
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
@@ -197,6 +225,8 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		c2c_add_stats(&c2c_he->stats, &stats);
 		c2c_add_stats(&c2c_hists->stats, &stats);
 		c2c_add_stats(&c2c_he->node_stats[node], &stats);
+
+		compute_stats(c2c_he, &stats, sample->weight);
 
 		c2c_he__set_cpu(c2c_he, sample);
 
@@ -1277,6 +1307,81 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 	return 0;
 }
 
+static int
+mean_rmt_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+	double mean;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	mean = avg_stats(&c2c_he->cstats.rmt_hitm);
+	snprintf(buf, 10, "%6.0f", mean);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+mean_lcl_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	       struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+	double mean;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	mean = avg_stats(&c2c_he->cstats.lcl_hitm);
+	snprintf(buf, 10, "%6.0f", mean);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+mean_load_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	        struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+	double mean;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	mean = avg_stats(&c2c_he->cstats.load);
+	snprintf(buf, 10, "%6.0f", mean);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+median_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he __maybe_unused)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+
+	snprintf(buf, 10, "%6d", 0);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+stddev_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he __maybe_unused;
+	int width = c2c_width(fmt, hpp, he->hists);
+	double std;
+	char buf[10];
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	std = 0;
+
+	snprintf(buf, 10, "%5.1f", std);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -1591,6 +1696,46 @@ static struct c2c_dimension dim_node = {
 	.width		= 4,
 };
 
+static struct c2c_dimension dim_median = {
+	.header		= HEADER_SPAN("-------------------- cycles --------------------", "median", 4),
+	.name		= "median",
+	.cmp		= empty_cmp,
+	.entry		= median_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_mean_rmt = {
+	.header		= HEADER_SPAN_LOW("rmt hitm"),
+	.name		= "mean_rmt",
+	.cmp		= empty_cmp,
+	.entry		= mean_rmt_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_mean_lcl = {
+	.header		= HEADER_SPAN_LOW("lcl hitm"),
+	.name		= "mean_lcl",
+	.cmp		= empty_cmp,
+	.entry		= mean_lcl_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_mean_load = {
+	.header		= HEADER_SPAN_LOW("load"),
+	.name		= "mean_load",
+	.cmp		= empty_cmp,
+	.entry		= mean_load_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_stddev = {
+	.header		= HEADER_SPAN_LOW("CV"),
+	.name		= "stddev",
+	.cmp		= empty_cmp,
+	.entry		= stddev_entry,
+	.width		= 8,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -1632,6 +1777,11 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_symbol,
 	&dim_dso,
 	&dim_node,
+	&dim_median,
+	&dim_mean_rmt,
+	&dim_mean_lcl,
+	&dim_mean_load,
+	&dim_stddev,
 	NULL,
 };
 
