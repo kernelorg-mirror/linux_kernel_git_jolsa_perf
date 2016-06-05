@@ -1278,6 +1278,39 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 	return ret;
 }
 
+static int
+mean_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	double mean;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	mean = avg_stats(&c2c_he->stats.stats);
+
+	return snprintf(hpp->buf, hpp->size, "%8.0f", mean);
+}
+
+static int
+median_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he __maybe_unused)
+{
+	return snprintf(hpp->buf, hpp->size, "%d", 0);
+}
+
+static int
+stddev_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	double std;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	std = stddev_stats(&c2c_he->stats.stats);
+
+	return snprintf(hpp->buf, hpp->size, "%7.1f", std);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1638,6 +1671,30 @@ static struct c2c_dimension dim_node = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_median = {
+	HEADER_OFF_SPAN("---- cycles ----", "median", 1),
+	.name		= "median",
+	.cmp		= node_cmp,
+	.entry		= median_entry,
+	.width		= 10,
+};
+
+static struct c2c_dimension dim_mean = {
+	HEADER_OFF_SPAN_1("mean"),
+	.name		= "mean",
+	.cmp		= node_cmp,
+	.entry		= mean_entry,
+	.width		= 10,
+};
+
+static struct c2c_dimension dim_stddev = {
+	HEADER_OFF_0("CV"),
+	.name		= "stddev",
+	.cmp		= node_cmp,
+	.entry		= stddev_entry,
+	.width		= 10,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1685,6 +1742,9 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_symbol,
 	&dim_dso,
 	&dim_node,
+	&dim_median,
+	&dim_mean,
+	&dim_stddev,
 	NULL,
 };
 
