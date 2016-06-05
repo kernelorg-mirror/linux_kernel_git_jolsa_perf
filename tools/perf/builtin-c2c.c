@@ -1317,6 +1317,49 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 	return ret;
 }
 
+static int
+mean_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+	double mean;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	mean = avg_stats(&c2c_he->stats.stats);
+	snprintf(buf, 10, "%6.0f", mean);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+median_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he __maybe_unused)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+
+	snprintf(buf, 10, "%6d", 0);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+stddev_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	   struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	double std;
+	char buf[10];
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	std = stddev_stats(&c2c_he->stats.stats);
+
+	snprintf(buf, 10, "%5.1f", std);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1668,6 +1711,30 @@ static struct c2c_dimension dim_node = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_median = {
+	HEADER_OFF_SPAN("----- cycles -----", "median", 1),
+	.name		= "median",
+	.cmp		= node_cmp,
+	.entry		= median_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_mean = {
+	HEADER_OFF_SPAN_1("mean"),
+	.name		= "mean",
+	.cmp		= node_cmp,
+	.entry		= mean_entry,
+	.width		= 8,
+};
+
+static struct c2c_dimension dim_stddev = {
+	HEADER_OFF_0("CV"),
+	.name		= "stddev",
+	.cmp		= node_cmp,
+	.entry		= stddev_entry,
+	.width		= 8,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1714,6 +1781,9 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_symbol,
 	&dim_dso,
 	&dim_node,
+	&dim_median,
+	&dim_mean,
+	&dim_stddev,
 	NULL,
 };
 
