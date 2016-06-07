@@ -2097,8 +2097,18 @@ static inline int valid_hitm_or_store(struct hist_entry *he)
 	return c2c_he->stats.lcl_hitm || c2c_he->stats.rmt_hitm || c2c_he->stats.store;
 }
 
+static void calc_width(struct hist_entry *he)
+{
+	struct c2c_hists *c2c_hists;
+
+	c2c_hists = container_of(he->hists, struct c2c_hists, hists);
+	hists__calc_col_len(&c2c_hists->hists, he);
+}
+
 static int filter_cb(struct hist_entry *he)
 {
+	calc_width(he);
+
 	if (!valid_hitm_or_store(he))
 		he->filtered = HIST_FILTER__C2C;
 
@@ -2113,6 +2123,8 @@ static int resort_cl_cb(struct hist_entry *he)
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
+
+	calc_width(he);
 
 	if (display && c2c_hists) {
 		c2c_hists__reinit(c2c_hists, c2c.cl_output,
