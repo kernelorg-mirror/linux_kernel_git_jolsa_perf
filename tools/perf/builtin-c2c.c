@@ -2658,6 +2658,8 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	setup_browser(false);
 
+	symbol_conf.display_raw_addr = true;
+
 	if (!input_name || !strlen(input_name))
 		input_name = "perf.data";
 
