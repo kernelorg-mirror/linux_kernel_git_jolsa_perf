@@ -2460,6 +2460,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	else
 		use_browser = 1;
 
+	symbol_conf.display_raw_addr = true;
+
 	setup_browser(false);
 
 	if (!input_name || !strlen(input_name))
