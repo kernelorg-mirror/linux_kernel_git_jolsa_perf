@@ -366,6 +366,14 @@ iaddr_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	return sort__iaddr_cmp(left, right);
 }
 
+static int dsymbol_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+		       struct hist_entry *he)
+{
+	int width = hists__col_len(he->hists, HISTC_MEM_DADDR_SYMBOL);
+
+	return hist_entry__daddr_snprintf(he, hpp->buf, hpp->size, width);
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -446,6 +454,13 @@ static struct c2c_dimension dim_iaddr = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_dsymbol = {
+	HEADER_CL_0("Data symbol"),
+	.name		= "dsymbol",
+	.cmp		= daddr_cmp,
+	.entry		= dsymbol_entry,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -461,6 +476,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_offset,
 	&dim_daddr,
 	&dim_iaddr,
+	&dim_dsymbol,
 	NULL,
 };
 
