@@ -79,7 +79,7 @@ int hist_entry__thread_snprintf(struct hist_entry *he, char *bf,
 {
 	const char *comm = thread__comm_str(he->thread);
 
-	width = max(7U, width) - 6;
+	width = max(7U, width) - 8;
 	return repsep_snprintf(bf, size, "%5d:%-*.*s", he->thread->tid,
 			       width, width, comm ?: "");
 }
