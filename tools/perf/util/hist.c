@@ -68,11 +68,13 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 	 */
 	if (h->ms.sym) {
 		symlen = h->ms.sym->namelen + 4;
-		if (verbose)
+		if (verbose || symbol_conf.display_raw_addr)
 			symlen += BITS_PER_LONG / 4 + 2 + 3;
 		hists__new_col_len(hists, HISTC_SYMBOL, symlen);
 	} else {
 		symlen = unresolved_col_width + 4 + 2;
+		if (verbose || symbol_conf.display_raw_addr)
+			symlen += BITS_PER_LONG / 4 + 2 + 3;
 		hists__new_col_len(hists, HISTC_SYMBOL, symlen);
 		hists__set_unres_dso_col_len(hists, HISTC_DSO);
 	}
@@ -130,12 +132,16 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 		if (h->mem_info->daddr.sym) {
 			symlen = (int)h->mem_info->daddr.sym->namelen + 4
 			       + unresolved_col_width + 2;
+			if (verbose || symbol_conf.display_raw_addr)
+				symlen += BITS_PER_LONG / 4 + 2 + 3;
 			hists__new_col_len(hists, HISTC_MEM_DADDR_SYMBOL,
 					   symlen);
 			hists__new_col_len(hists, HISTC_MEM_DCACHELINE,
 					   symlen + 1);
 		} else {
 			symlen = unresolved_col_width + 4 + 2;
+			if (verbose || symbol_conf.display_raw_addr)
+				symlen += BITS_PER_LONG / 4 + 2 + 3;
 			hists__new_col_len(hists, HISTC_MEM_DADDR_SYMBOL,
 					   symlen);
 			hists__new_col_len(hists, HISTC_MEM_DCACHELINE,
@@ -163,6 +169,8 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 		}
 	} else {
 		symlen = unresolved_col_width + 4 + 2;
+		if (verbose || symbol_conf.display_raw_addr)
+			symlen += BITS_PER_LONG / 4 + 2 + 3;
 		hists__new_col_len(hists, HISTC_MEM_DADDR_SYMBOL, symlen);
 		hists__new_col_len(hists, HISTC_MEM_IADDR_SYMBOL, symlen);
 		hists__set_unres_dso_col_len(hists, HISTC_MEM_DADDR_DSO);
