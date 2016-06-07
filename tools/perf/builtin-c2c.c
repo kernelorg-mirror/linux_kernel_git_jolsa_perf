@@ -405,6 +405,11 @@ static struct c2c_dimension dim_iaddr = {
 	.width		= 20,
 };
 
+static struct c2c_dimension dim_dsymbol = {
+	.name		= "dsymbol",
+	.se		= &sort_mem_daddr_sym,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -414,6 +419,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_offset,
 	&dim_iaddr,
+	&dim_dsymbol,
 	NULL,
 };
 
