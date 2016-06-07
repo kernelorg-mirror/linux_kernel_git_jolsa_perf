@@ -2017,9 +2017,18 @@ static bool he__display(struct hist_entry *he)
 	return he->filtered == 0;
 }
 
+static void calc_width(struct hist_entry *he)
+{
+	struct c2c_hists *c2c_hists;
+
+	c2c_hists = container_of(he->hists, struct c2c_hists, hists);
+	hists__calc_col_len(&c2c_hists->hists, he);
+}
+
 static int filter_cb(struct hist_entry *he)
 {
 	he__display(he);
+	calc_width(he);
 	return 0;
 }
 
@@ -2030,6 +2039,8 @@ static int resort_offset_cb(struct hist_entry *he)
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
+
+	calc_width(he);
 
 	if (HAS_HITMS(c2c_he)) {
 		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
