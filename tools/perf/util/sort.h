@@ -273,4 +273,24 @@ int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 			int level);
 int output_field_add(struct perf_hpp_list *list, char *tok);
 void reset_dimensions(void);
+
+int hist_entry__thread_snprintf(struct hist_entry *he, char *bf,
+				       size_t size, unsigned int width);
+int64_t
+sort__sym_cmp(struct hist_entry *left, struct hist_entry *right);
+
+int64_t
+sort__thread_cmp(struct hist_entry *left, struct hist_entry *right);
+
+int hist_entry__iaddr_snprintf(struct hist_entry *he, char *bf,
+			size_t size, unsigned int width);
+
+int64_t
+sort__iaddr_cmp(struct hist_entry *left, struct hist_entry *right);
+
+int64_t
+sort__daddr_cmp(struct hist_entry *left, struct hist_entry *right);
+
+int hist_entry__daddr_snprintf(struct hist_entry *he, char *bf,
+				    size_t size, unsigned int width);
 #endif	/* __PERF_SORT_H */
