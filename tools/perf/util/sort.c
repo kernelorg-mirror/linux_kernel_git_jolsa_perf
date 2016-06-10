@@ -863,7 +863,7 @@ struct sort_entry sort_cycles = {
 };
 
 /* --sort daddr_sym */
-static int64_t
+int64_t
 sort__daddr_cmp(struct hist_entry *left, struct hist_entry *right)
 {
 	uint64_t l = 0, r = 0;
@@ -892,7 +892,7 @@ static int hist_entry__daddr_snprintf(struct hist_entry *he, char *bf,
 					 width);
 }
 
-static int64_t
+int64_t
 sort__iaddr_cmp(struct hist_entry *left, struct hist_entry *right)
 {
 	uint64_t l = 0, r = 0;
