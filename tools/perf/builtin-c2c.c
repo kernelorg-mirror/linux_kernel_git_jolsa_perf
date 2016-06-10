@@ -1997,7 +1997,19 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 
 #define DISPLAY_LINE_LIMIT  0.0005
 
-static bool he__display(struct hist_entry *he)
+static bool he__display_off(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	if (!c2c_he->stats.rmt_hitm && !c2c_he->stats.store)
+		he->filtered = HIST_FILTER__C2C;
+
+	return he->filtered == 0;
+}
+
+static bool he__display_cl(struct hist_entry *he)
 {
 	struct c2c_hists *c2c_hists;
 	struct c2c_hist_entry *c2c_he;
@@ -2027,7 +2039,9 @@ static void calc_width(struct hist_entry *he)
 
 static int filter_cb(struct hist_entry *he)
 {
-	he__display(he);
+	if (0)
+		he__display_off(he);
+
 	calc_width(he);
 	return 0;
 }
@@ -2065,7 +2079,7 @@ static int resort_cl_cb(struct hist_entry *he)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *c2c_hists;
-	bool display = he__display(he);
+	bool display = he__display_cl(he);
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
