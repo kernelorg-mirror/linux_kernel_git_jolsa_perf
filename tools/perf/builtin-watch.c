@@ -225,13 +225,13 @@ static void display_items(struct watch_items *items, int from, int to)
 		if (first)
 			printf("%*s", width, " ");
 		else
-			printf("%*s", width, item0->line[j].name);
+			printf("%-*s", width, item0->line[j].name);
 
 		for (i = from; i < to; i++) {
 			struct watch_item *item = &items->item[i];
 
 			if (first) {
-				printf("%*s", width, item->name);
+				color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width, item->name);
 			} else {
 				struct watch_line *line = &item->line[j];
 
@@ -259,6 +259,10 @@ static int vrows;
 
 static void update_rows(bool inc)
 {
+	int ret __maybe_unused;
+
+	ret = system("clear");
+
 	if (inc) {
 		if ((rows_from + vrows) < rows)
 			rows_from++;
@@ -292,9 +296,12 @@ static void display_watch(struct watch_data *watch)
 	}
 }
 
+#define gotoxy(x,y) printf("\033[%d;%dH", (x), (y))
+
 static void clear_screen(void)
 {
-	int ret __maybe_unused = system("clear");
+//	int ret __maybe_unused = system("clear");
+	gotoxy(0, 0);
 }
 
 static void sig_winch(int sig __maybe_unused,
@@ -313,6 +320,7 @@ int cmd_watch(int argc, const char **argv,
 		.sa_flags	= SA_SIGINFO,
 	};
 	struct termios old;
+	int ret __maybe_unused;
 
 	/* No command specified. */
 	if (argc < 2)
@@ -330,6 +338,7 @@ int cmd_watch(int argc, const char **argv,
 	get_term_dimensions(&ws);
 	sigaction(SIGWINCH, &act, NULL);
 
+	ret = system("clear");
 	set_term_quiet_input(&old);
 
 	while (1) {
