@@ -1,18 +1,22 @@
 #include <linux/compiler.h>
+#include <linux/kernel.h>
+#include <sys/ioctl.h>
 #include <subcmd/parse-options.h>
 #include <sys/stat.h>
 #include <api/fs/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include "builtin.h"
 #include "perf.h"
 #include "color.h"
+#include "util.h"
+#include "ui/util.h"
+#include "ui/keysyms.h"
 
 static const struct option watch_options[] = {
 	OPT_END()
 };
-
-static const char * const watch_data[] = { NULL };
 
 static const char *watch_usage[] = {
 	"perf watch [<options>] <data>",
@@ -34,6 +38,7 @@ struct watch_item {
 struct watch_items {
 	struct watch_item *item;
 	int		   cnt;
+	size_t		   width;
 };
 
 struct watch_data;
@@ -48,6 +53,8 @@ struct watch_data {
 	char			*buf;
 };
 
+static struct winsize ws;
+
 static struct watch_item* new_item(struct watch_items *items)
 {
 	struct watch_item *item;
@@ -55,7 +62,7 @@ static struct watch_item* new_item(struct watch_items *items)
 
 	items->cnt++;
 
-	if (items->item) 
+	if (items->item)
 		size *= items->cnt;
 
 	items->item = realloc(items->item, size);
@@ -74,7 +81,7 @@ static struct watch_line* new_line(struct watch_item *item)
 
 	item->cnt++;
 
-	if (item->line) 
+	if (item->line)
 		size *= item->cnt;
 
 	item->line = realloc(item->line, size);
@@ -86,7 +93,7 @@ static struct watch_line* new_line(struct watch_item *item)
 	return line;
 }
 
-static int add_line(struct watch_item *item, char *str)
+static int add_line(struct watch_items *items, struct watch_item *item, char *str)
 {
 	struct watch_line *line;
 	char *name, *data;
@@ -101,6 +108,9 @@ static int add_line(struct watch_item *item, char *str)
 
 	line->name = rtrim(name);
 	line->data = data;
+
+	items->width = max(items->width, strlen(line->name));
+	items->width = max(items->width, strlen(line->data));
 	return 0;
 }
 
@@ -127,7 +137,7 @@ static void compare_lines(struct watch_line *new,
 		new->color = old->color - 1;
 
 	if (!equal)
-		new->color = 5;
+		new->color = 3;
 }
 
 static void compare_items(struct watch_items *new,
@@ -174,7 +184,7 @@ static int watch_read(struct watch_data *data)
 		} else if (!strncmp("  .", tok, 3)) {
 			if (!item)
 				continue;
-			if (add_line(item, tok))
+			if (add_line(&data->items, item, tok))
 				return -ENOMEM;
 
 			if (old_items.item)
@@ -206,30 +216,35 @@ static struct watch_data *find_watch(const char *name)
 	return NULL;
 }
 
-static int display_watch(struct watch_data *watch)
+static void display_items(struct watch_items *items, int from, int to)
 {
-	struct watch_item *item0 = &watch->items.item[0];
+	struct watch_item *item0 = &items->item[0];
+	int width = (int) items->width;
 	bool first = true;
 	int i, j;
 
 	for (j = 0; j < item0->cnt; j++) {
 		if (first)
-			printf("%30s", " ");
+			printf("%*s", width, " ");
 		else
-			printf("%30s", item0->line[j].name);
+			printf("%*s", width, item0->line[j].name);
 
-		for (i = 0; i < watch->items.cnt; i++) {
-			struct watch_item *item = &watch->items.item[i];
+		for (i = from; i < to; i++) {
+			struct watch_item *item = &items->item[i];
 
 			if (first) {
-				printf("%30s", item->name);
+				printf("%*s", width, item->name);
 			} else {
 				struct watch_line *line = &item->line[j];
 
-				if (line->color)
-					color_fprintf(stdout, PERF_COLOR_GREEN, "%30s", line->data);
-				else
-					printf("%30s", line->data);
+				if (line->color) {
+					const char *color = line->color == 3 ?
+							    PERF_COLOR_RED : PERF_COLOR_GREEN;
+
+					color_fprintf(stdout, color, "%*s", width, line->data);
+				} else {
+					printf("%*s", width, line->data);
+				}
 			}
 
 		}
@@ -237,8 +252,27 @@ static int display_watch(struct watch_data *watch)
 
 		first = false;
 	}
+}
 
-	return 0;
+static void display_watch(struct watch_data *watch)
+{
+	int rows, cols, vrows, items, lines, i;
+
+	items = watch->items.cnt;
+	lines = watch->items.item[0].cnt + 1;
+
+	cols  = min(items, ws.ws_col / (int) watch->items.width - 1);
+	rows  = items / cols;
+	rows += items % cols ? 1 : 0;
+
+	vrows = ws.ws_row / lines;
+
+	for (i = 0; i < vrows; i++) {
+		int from = i * cols;
+		int to   = min(from + cols, items);
+
+		display_items(&watch->items, from, to);
+	}
 }
 
 static void clear_screen(void)
@@ -246,16 +280,28 @@ static void clear_screen(void)
 	int ret __maybe_unused = system("clear");
 }
 
+static void sig_winch(int sig __maybe_unused,
+		      siginfo_t *info __maybe_unused,
+		      void *arg __maybe_unused)
+{
+	get_term_dimensions(&ws);
+}
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
 	struct watch_data *watch;
+	struct sigaction act = {
+		.sa_sigaction	= sig_winch,
+		.sa_flags	= SA_SIGINFO,
+	};
+	struct termios old;
 
 	/* No command specified. */
 	if (argc < 2)
 		return -1;
 
-	argc = parse_options_subcommand(argc, argv, watch_options, watch_data, watch_usage,
+	argc = parse_options_subcommand(argc, argv, watch_options, NULL, watch_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc < 1)
 		return -1;
@@ -264,11 +310,28 @@ int cmd_watch(int argc, const char **argv,
 	if (!watch)
 		return -1;
 
+	get_term_dimensions(&ws);
+	sigaction(SIGWINCH, &act, NULL);
+
+	set_term_quiet_input(&old);
+
 	while (1) {
+		int k;
+
 		clear_screen();
+		get_term_dimensions(&ws);
 		watch->read(watch);
 		display_watch(watch);
-		sleep(1);
+
+		k = ui__getch(1);
+		fprintf(stderr, "%d\n", k);
+		switch (k) {
+		case 60:
+			break;
+		case 62:
+		default:
+			break;
+		}
 	}
 
 	return 0;
