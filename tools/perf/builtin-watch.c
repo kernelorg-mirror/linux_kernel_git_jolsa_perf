@@ -37,7 +37,8 @@ struct watch_item {
 struct watch_items {
 	struct watch_item *item;
 	int		   cnt;
-	size_t		   width;
+	size_t		   width_name;
+	size_t		   width_data;
 };
 
 struct watch_data;
@@ -115,8 +116,8 @@ static int add_line(struct watch_items *items, struct watch_item *item, char *st
 	line->name = rtrim(name);
 	line->data = data;
 
-	items->width = max(items->width, strlen(line->name));
-	items->width = max(items->width, strlen(line->data));
+	items->width_name = max(items->width_name, strlen(line->name));
+	items->width_data = max(items->width_data, strlen(line->data));
 	return 0;
 }
 
@@ -207,6 +208,8 @@ static int watch_sched_read(struct watch_data *data)
 
 	data->items.item = NULL;
 	data->items.cnt  = 0;
+	data->items.width_data = 0;
+	data->items.width_name = 0;
 
 	for (tok = strtok_r(buf, "\n", &tmp); tok;
 	     tok = strtok_r(NULL, "\n", &tmp)) {
@@ -216,6 +219,7 @@ static int watch_sched_read(struct watch_data *data)
 			if (!item)
 				return -ENOMEM;
 			item->name = rtrim(tok);
+			data->items.width_data = max(data->items.width_data, strlen(item->name));
 		} else if (!strncmp("  .", tok, 3)) {
 			if (!item)
 				continue;
@@ -273,8 +277,8 @@ static int read_task(struct watch_item *item, int tid,
 		line->name = rtrim(tok);
 		line->data = ltrim(rtrim(val));
 
-		new_items->width = max(new_items->width, strlen(line->name));
-		new_items->width = max(new_items->width, strlen(line->data));
+		new_items->width_name = max(new_items->width_name, strlen(line->name));
+		new_items->width_data = max(new_items->width_data, strlen(line->data));
 
 		if (old_items->item)
 			compare_items(new_items, old_items);
@@ -304,6 +308,8 @@ static int watch_task_read(struct watch_data *watch)
 
 	watch->items.item = NULL;
 	watch->items.cnt  = 0;
+	watch->items.width_data = 0;
+	watch->items.width_name = 0;
 
 	for (i = 0; i < m->nr; i++) {
 		item = new_item(&watch->items);
@@ -311,6 +317,7 @@ static int watch_task_read(struct watch_data *watch)
 			return -ENOMEM;
 
 		item->name = strdup(task_name(&m->map[i]));
+		watch->items.width_data = max(watch->items.width_data, strlen(item->name));
 
 		if (read_task(item, m->map[i].pid, &watch->items, &old_items))
 			return -EINVAL;
@@ -364,21 +371,22 @@ static struct watch_data *find_watch(const char *name)
 static void display_items(struct watch_items *items, int from, int to)
 {
 	struct watch_item *item0 = &items->item[0];
-	int width = (int) items->width;
+	int width_name = (int) items->width_name;
+	int width_data = (int) items->width_data;
 	bool first = true;
 	int i, j;
 
 	for (j = 0; j < item0->cnt; j++) {
 		if (first)
-			printf("%*s", width, " ");
+			printf("%-*s", width_name, " ");
 		else
-			printf("%-*s", width, item0->line[j].name);
+			printf("%-*s", width_name, item0->line[j].name);
 
 		for (i = from; i < to; i++) {
 			struct watch_item *item = &items->item[i];
 
 			if (first) {
-				color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width, item->name);
+				color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width_data, item->name);
 			} else {
 				struct watch_line *line = &item->line[j];
 
@@ -386,9 +394,9 @@ static void display_items(struct watch_items *items, int from, int to)
 					const char *color = line->color == 3 ?
 							    PERF_COLOR_RED : PERF_COLOR_GREEN;
 
-					color_fprintf(stdout, color, "%*s", width, line->data);
+					color_fprintf(stdout, color, "%*s", width_data, line->data);
 				} else {
-					printf("%*s", width, line->data);
+					printf("%*s", width_data, line->data);
 				}
 			}
 
@@ -423,10 +431,14 @@ static void display_watch(struct watch_data *watch)
 {
 	int cols, items, lines, i;
 
+	/* for readability */
+	watch->items.width_data++;
+	watch->items.width_name++;
+
 	items = watch->items.cnt;
 	lines = watch->items.item[0].cnt + 1;
 
-	cols  = min(items, ws.ws_col / (int) watch->items.width - 1);
+	cols  = min(items, (int) (ws.ws_col - watch->items.width_name) / (int) watch->items.width_data);
 	rows  = items / cols;
 	rows += items % cols ? 1 : 0;
 
