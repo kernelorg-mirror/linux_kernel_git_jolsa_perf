@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <search.h>
 #include "builtin.h"
 #include "perf.h"
 #include "color.h"
@@ -39,6 +40,9 @@ struct watch_items {
 	int		   cnt;
 	size_t		   width_name;
 	size_t		   width_data;
+
+	bool		    has_fields;
+	struct hsearch_data fields;
 };
 
 struct watch_data;
@@ -61,6 +65,17 @@ struct watch_data {
 		} task;
 	};
 };
+
+static int is_allowed(struct watch_items *items, char *name)
+{
+	ENTRY e, *ep;
+
+	if (!items->has_fields)
+		return 1;
+
+	e.key = name;
+	return hsearch_r(e, FIND, &ep, &items->fields);
+}
 
 static struct watch_item* new_item(struct watch_items *items)
 {
@@ -100,20 +115,25 @@ static struct watch_line* new_line(struct watch_item *item)
 	return line;
 }
 
-static int add_line(struct watch_items *items, struct watch_item *item, char *str)
+static int add_line(struct watch_items *items, struct watch_item *item, char *str, int *skip)
 {
 	struct watch_line *line;
 	char *name, *data;
+
+	data = index(str, ':');
+	*data++ = 0x0;
+	name = rtrim(ltrim(str));
+
+	if (!is_allowed(items, name)) {
+		*skip = 1;
+		return 0;
+	}
 
 	line = new_line(item);
 	if (!line)
 		return -ENOMEM;
 
-	name = rtrim(str);
-	data = index(str, ':');
-	*data++ = 0x0;
-
-	line->name = rtrim(name);
+	line->name = name;
 	line->data = data;
 
 	items->width_name = max(items->width_name, strlen(line->name));
@@ -213,6 +233,7 @@ static int watch_sched_read(struct watch_data *data)
 
 	for (tok = strtok_r(buf, "\n", &tmp); tok;
 	     tok = strtok_r(NULL, "\n", &tmp)) {
+		int skip = 0;
 
 		if (is_sched_item(data, tok)) {
 			item = new_item(&data->items);
@@ -223,8 +244,11 @@ static int watch_sched_read(struct watch_data *data)
 		} else if (!strncmp("  .", tok, 3)) {
 			if (!item)
 				continue;
-			if (add_line(&data->items, item, tok))
+			if (add_line(&data->items, item, tok, &skip))
 				return -ENOMEM;
+
+			if (skip)
+				continue;
 
 			if (old_items.item)
 				compare_items(&data->items, &old_items);
@@ -256,6 +280,7 @@ static int read_task(struct watch_item *item, int tid,
 	for (tok = strtok_r(buf, "\n", &tmp); tok;
 	     tok = strtok_r(NULL, "\n", &tmp)) {
 		struct watch_line *line;
+		char *name;
 		char *val;
 
 		if (!start) {
@@ -269,12 +294,16 @@ static int read_task(struct watch_item *item, int tid,
 		if (!val)
 			continue;
 
+		*val++ = 0x0;
+		name = rtrim(tok);
+		if (!is_allowed(new_items, name))
+			continue;
+
 		line = new_line(item);
 		if (!line)
 			return -ENOMEM;
 
-		*val++ = 0x0;
-		line->name = rtrim(tok);
+		line->name = name;
 		line->data = ltrim(rtrim(val));
 
 		new_items->width_name = max(new_items->width_name, strlen(line->name));
@@ -373,37 +402,36 @@ static void display_items(struct watch_items *items, int from, int to)
 	struct watch_item *item0 = &items->item[0];
 	int width_name = (int) items->width_name;
 	int width_data = (int) items->width_data;
-	bool first = true;
 	int i, j;
 
+	/* header */
+	printf("%-*s", width_name, " ");
+
+	for (i = from; i < to; i++) {
+		struct watch_item *item = &items->item[i];
+		color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width_data, item->name);
+	}
+
+	printf("\n");
+
 	for (j = 0; j < item0->cnt; j++) {
-		if (first)
-			printf("%-*s", width_name, " ");
-		else
-			printf("%-*s", width_name, item0->line[j].name);
+		printf("%-*s", width_name, item0->line[j].name);
 
 		for (i = from; i < to; i++) {
 			struct watch_item *item = &items->item[i];
+			struct watch_line *line = &item->line[j];
 
-			if (first) {
-				color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width_data, item->name);
+			if (line->color) {
+				const char *color = line->color == 3 ?
+						    PERF_COLOR_RED : PERF_COLOR_GREEN;
+
+				color_fprintf(stdout, color, "%*s", width_data, line->data);
 			} else {
-				struct watch_line *line = &item->line[j];
-
-				if (line->color) {
-					const char *color = line->color == 3 ?
-							    PERF_COLOR_RED : PERF_COLOR_GREEN;
-
-					color_fprintf(stdout, color, "%*s", width_data, line->data);
-				} else {
-					printf("%*s", width_data, line->data);
-				}
+				printf("%*s", width_data, line->data);
 			}
 
 		}
 		printf("\n");
-
-		first = false;
 	}
 }
 
@@ -475,15 +503,57 @@ static const char *watch_usage[] = {
 	NULL
 };
 
+#define MAX_FIELDS 50
+static int setup_fields(struct watch_data *watch, const char *field)
+{
+	char *tok, *tmp = NULL;
+	ENTRY e, *ep;
+	char *buf = strdup(field);
+	struct stat st;
+	const char *sep = ",";
+
+	if (!buf)
+		return -1;
+
+	if (!stat(field, &st)) {
+		char *bufh;
+		size_t size;
+
+		if (filename__read_str(buf, &bufh, &size))
+			return -1;
+
+		buf = bufh;
+		sep = "\n";
+	}
+
+	if (!hcreate_r(MAX_FIELDS, &watch->items.fields))
+		return -1;
+
+	for (tok = strtok_r(buf, sep, &tmp); tok;
+	     tok = strtok_r(NULL, sep, &tmp)) {
+		e.key  = tok;
+		e.data = NULL;
+
+		if (!hsearch_r(e, ENTER, &ep, &watch->items.fields))
+			return -1;
+	}
+
+	watch->items.has_fields = true;
+	return 0;
+}
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
 	struct watch_data *watch;
 	const char *pid = NULL;
+	const char *field = NULL;
 	const struct option watch_options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
-		OPT_STRING('p', "pid", &pid, "file", "pids"), OPT_END()
+		OPT_STRING('p', "pid", &pid, "pid", "pids"),
+		OPT_STRING('f', "field", &field, "field", "fields"),
+		OPT_END()
 	};
 	struct sigaction act = {
 		.sa_sigaction	= sig_winch,
@@ -512,6 +582,9 @@ int cmd_watch(int argc, const char **argv,
 		if (!watch->task.pid)
 			return -1;
 	}
+
+	if (field && setup_fields(watch, field))
+		return -1;
 
 	get_term_dimensions(&ws);
 	sigaction(SIGWINCH, &act, NULL);
