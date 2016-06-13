@@ -13,15 +13,8 @@
 #include "util.h"
 #include "ui/util.h"
 #include "ui/keysyms.h"
-
-static const struct option watch_options[] = {
-	OPT_END()
-};
-
-static const char *watch_usage[] = {
-	"perf watch [<options>] <data>",
-	NULL
-};
+#include "thread_map.h"
+#include "debug.h"
 
 struct watch_line {
 	char *name;
@@ -33,6 +26,12 @@ struct watch_item {
 	char			*name;
 	struct watch_line	*line;
 	int			 cnt;
+
+	union {
+		struct {
+			char *buf;
+		} task;
+	};
 };
 
 struct watch_items {
@@ -50,11 +49,16 @@ struct watch_data {
 	watch_read_fn_t		 read;
 
 	struct watch_items	 items;
-	char			*buf;
 
 	union {
-		int		 type;
-	} priv;
+		struct {
+			int	 type;
+			char	*buf;
+		} rq;
+		struct {
+			struct thread_map *pid;
+		} task;
+	};
 };
 
 static struct watch_item* new_item(struct watch_items *items)
@@ -167,7 +171,7 @@ static int is_sched_item(struct watch_data *data, char *tok)
 	size_t len;
 	int is_root;
 
-	if (data->priv.type == SCHED_RQ && (!strncmp("cpu#", tok, 4)))
+	if (data->rq.type == SCHED_RQ && (!strncmp("cpu#", tok, 4)))
 		return 1;
 
 	if (strncmp("cfs_rq[", tok, 7))
@@ -176,10 +180,10 @@ static int is_sched_item(struct watch_data *data, char *tok)
 	len     = strlen(tok);
 	is_root = !strncmp("]:/", tok + len - 3, 3);
 
-	if ((data->priv.type == SCHED_CFS) && !is_root)
+	if ((data->rq.type == SCHED_CFS) && !is_root)
 		return 1;
 
-	if ((data->priv.type == SCHED_CFS_ROOT) && is_root)
+	if ((data->rq.type == SCHED_CFS_ROOT) && is_root)
 		return 1;
 
 	return 0;
@@ -225,7 +229,94 @@ static int watch_sched_read(struct watch_data *data)
 	}
 
 	free_items(&old_items);
+	free(data->rq.buf);
+	data->rq.buf = buf;
+	return 0;
+}
 
+static int read_task(struct watch_item *item, int tid,
+		     struct watch_items *new_items,
+		     struct watch_items *old_items)
+{
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	char *buf;
+	size_t size;
+	int start = 0;
+
+	scnprintf(path, PATH_MAX, "%s/%d/sched", procfs__mountpoint(), tid);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	for (tok = strtok_r(buf, "\n", &tmp); tok;
+	     tok = strtok_r(NULL, "\n", &tmp)) {
+		struct watch_line *line;
+		char *val;
+
+		if (!start) {
+			if (*tok != '-')
+				continue;
+			start = 1;
+			continue;
+		}
+
+		val = index(tok, ':');
+		if (!val)
+			continue;
+
+		line = new_line(item);
+		if (!line)
+			return -ENOMEM;
+
+		*val++ = 0x0;
+		line->name = rtrim(tok);
+		line->data = ltrim(rtrim(val));
+
+		new_items->width = max(new_items->width, strlen(line->name));
+		new_items->width = max(new_items->width, strlen(line->data));
+
+		if (old_items->item)
+			compare_items(new_items, old_items);
+	}
+
+	free(item->task.buf);
+	item->task.buf = buf;
+	return 0;
+}
+
+static char *task_name(struct thread_map_data *m)
+{
+	static char buf[50];
+
+	scnprintf(buf, 50, "%s-%d", m->comm ? rtrim(m->comm) : "pid", m->pid);
+	return buf;
+}
+
+static int watch_task_read(struct watch_data *watch)
+{
+	struct thread_map *m = watch->task.pid;
+	struct watch_items old_items;
+	struct watch_item *item;
+	int i;
+
+	old_items = watch->items;
+
+	watch->items.item = NULL;
+	watch->items.cnt  = 0;
+
+	for (i = 0; i < m->nr; i++) {
+		item = new_item(&watch->items);
+		if (!item)
+			return -ENOMEM;
+
+		item->name = strdup(task_name(&m->map[i]));
+
+		if (read_task(item, m->map[i].pid, &watch->items, &old_items))
+			return -EINVAL;
+	}
+
+	free_items(&old_items);
 	return 0;
 }
 
@@ -233,20 +324,29 @@ static struct watch_data data[] = {
 	{
 		.name 		= "rq",
 		.read		= watch_sched_read,
-		.priv.type	= SCHED_RQ,
+		.rq.type	= SCHED_RQ,
 	},
 	{
 		.name		= "cfs",
 		.read		= watch_sched_read,
-		.priv.type	= SCHED_CFS,
+		.rq.type	= SCHED_CFS,
 	},
 	{
 		.name		= "cfs_root",
 		.read		= watch_sched_read,
-		.priv.type	= SCHED_CFS_ROOT
+		.rq.type	= SCHED_CFS_ROOT
+	},
+	{
+		.name		= "task",
+		.read		= watch_task_read,
 	},
 	{ NULL },
 };
+
+static int is_task_watch(struct watch_data *watch)
+{
+	return watch->read == watch_task_read;
+}
 
 static struct watch_data *find_watch(const char *name)
 {
@@ -358,10 +458,21 @@ static void sig_winch(int sig __maybe_unused,
 	get_term_dimensions(&ws);
 }
 
+static const char *watch_usage[] = {
+	"perf watch [<options>] <data>",
+	NULL
+};
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
 	struct watch_data *watch;
+	const char *pid = NULL;
+	const struct option watch_options[] = {
+		OPT_INCR('v', "verbose", &verbose,
+			 "be more verbose (show counter open errors, etc)"),
+		OPT_STRING('p', "pid", &pid, "file", "pids"), OPT_END()
+	};
 	struct sigaction act = {
 		.sa_sigaction	= sig_winch,
 		.sa_flags	= SA_SIGINFO,
@@ -381,6 +492,14 @@ int cmd_watch(int argc, const char **argv,
 	watch = find_watch(argv[0]);
 	if (!watch)
 		return -1;
+
+	if (pid) {
+		if (!is_task_watch(watch))
+			return -1;
+		watch->task.pid = thread_map__new_str(pid, NULL, 0);
+		if (!watch->task.pid)
+			return -1;
+	}
 
 	get_term_dimensions(&ws);
 	sigaction(SIGWINCH, &act, NULL);
