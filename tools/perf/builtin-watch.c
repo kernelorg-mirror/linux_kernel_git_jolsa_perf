@@ -2,6 +2,7 @@
 #include <subcmd/parse-options.h>
 #include <sys/ioctl.h>
 #include <api/fs/fs.h>
+#include <search.h>
 #include "builtin.h"
 #include "perf.h"
 #include "debug.h"
@@ -31,6 +32,8 @@ struct watch_items {
 	int			 cnt;
 	size_t			 width_name;
 	size_t			 width_data;
+	bool			 has_fields;
+	struct hsearch_data	 fields;
 };
 
 struct watch;
@@ -62,6 +65,17 @@ struct watch {
 #define for_each_token(__buf, __sep, __tmp)		\
 	for (tok = strtok_r(__buf, __sep, &__tmp); tok;	\
 	     tok = strtok_r(NULL,  __sep, &__tmp))
+
+static int is_allowed(struct watch_items *items, char *name)
+{
+	ENTRY e, *ep;
+
+	if (!items->has_fields)
+		return 1;
+
+	e.key = name;
+	return hsearch_r(e, FIND, &ep, &items->fields);
+}
 
 static struct watch_item* new_item(struct watch_items *items)
 {
@@ -101,7 +115,7 @@ static struct watch_line* new_line(struct watch_item *item)
 	return line;
 }
 
-static int add_line(struct watch_items *items, struct watch_item *item, char *str)
+static int add_line(struct watch_items *items, struct watch_item *item, char *str, int *skip)
 {
 	struct watch_line *line;
 	char *name, *data;
@@ -109,6 +123,11 @@ static int add_line(struct watch_items *items, struct watch_item *item, char *st
 	data = index(str, ':');
 	*data++ = 0x0;
 	name = trim(str);
+
+	if (!is_allowed(items, name)) {
+		*skip = 1;
+		return 0;
+	}
 
 	line = new_line(item);
 	if (!line)
@@ -213,6 +232,8 @@ static int sched_watch_read(struct watch *w)
 	w->items.width_name = 0;
 
 	for_each_token(buf, "\n", tmp) {
+		int skip = 0;
+
 		if (is_sched_item(w, tok)) {
 			item = new_item(&w->items);
 			if (!item)
@@ -222,8 +243,11 @@ static int sched_watch_read(struct watch *w)
 		} else if (!strncmp("  .", tok, 3)) {
 			if (!item)
 				continue;
-			if (add_line(&w->items, item, tok))
+			if (add_line(&w->items, item, tok, &skip))
 				return -ENOMEM;
+
+			if (skip)
+				continue;
 
 			if (old_items.item)
 				compare_items(&w->items, &old_items);
@@ -278,6 +302,9 @@ static int read_task_sched(struct watch_item *item, int tid,
 
 		*val++ = 0x0;
 		name = rtrim(tok);
+
+		if (!is_allowed(new_items, name))
+			continue;
 
 		line = new_line(item);
 		if (!line)
@@ -353,6 +380,9 @@ static int read_task_status(struct watch_item *item, int tid,
 
 		*val++ = 0x0;
 		name = rtrim(tok);
+
+		if (!is_allowed(new_items, name))
+			continue;
 
 		line = new_line(item);
 		if (!line)
@@ -548,14 +578,54 @@ static void display_watch(struct watch *w)
 	__display_watch(w);
 }
 
+#define MAX_FIELDS 50
+static int setup_fields(struct watch *w, const char *field)
+{
+	char *tok, *tmp = NULL;
+	ENTRY e, *ep;
+	char *buf = strdup(field);
+	struct stat st;
+	const char *sep = ",";
+
+	if (!buf)
+		return -1;
+
+	if (!stat(field, &st)) {
+		char *bufh;
+		size_t size;
+
+		if (filename__read_str(buf, &bufh, &size))
+			return -1;
+
+		buf = bufh;
+		sep = "\n";
+	}
+
+	if (!hcreate_r(MAX_FIELDS, &w->items.fields))
+		return -1;
+
+	for_each_token(buf, sep, tmp) {
+		e.key  = tok;
+		e.data = NULL;
+
+		if (!hsearch_r(e, ENTER, &ep, &w->items.fields))
+			return -1;
+	}
+
+	w->items.has_fields = true;
+	return 0;
+}
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
 	const char *pid = NULL;
+	const char *field = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
 		OPT_STRING('p', "pid", &pid, "pid", "pids"),
+		OPT_STRING('f', "field", &field, "field", "fields"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -592,6 +662,11 @@ int cmd_watch(int argc, const char **argv,
 			return -1;
 	} else if (is_task_watch(w)) {
 		pr_err("failed: no task specified (use -p option)\n");
+		return -1;
+	}
+
+	if (field && setup_fields(w, field)) {
+		pr_err("failed: initialize fields\n");
 		return -1;
 	}
 
