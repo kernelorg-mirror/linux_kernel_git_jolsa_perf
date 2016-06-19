@@ -9,6 +9,7 @@
 #include "perf.h"
 #include "debug.h"
 #include "color.h"
+#include "thread_map.h"
 
 struct watch;
 
@@ -32,6 +33,12 @@ struct watch_item {
 	int			 cnt_iter;
 
 	struct watch		*watch;
+
+	union {
+		struct {
+			char *buf;
+		} task;
+	};
 };
 
 struct watch_items {
@@ -76,10 +83,15 @@ struct watch_plot {
 	struct plot_item	 pi[MAX_FIELDS];
 };
 
+enum {
+	WATCH_TASK = 1 << 0,
+};
+
 struct watch {
 	const char		*name;
 	const char		*help;
 	watch_read_fn_t		 read;
+	u64			 flags;
 
 	struct watch_items	 items;
 	struct watch_plot	 plot;
@@ -89,6 +101,9 @@ struct watch {
 			int	 type;
 			char	*buf;
 		} rq;
+		struct {
+			struct thread_map *pid;
+		} task;
 	};
 };
 
@@ -500,6 +515,91 @@ static int sched_watch_read(struct watch *w)
 	return 0;
 }
 
+static char *task_name(struct thread_map_data *m)
+{
+	static char buf[50];
+
+	scnprintf(buf, 50, "%s-%d", m->comm ? rtrim(m->comm) : "pid", m->pid);
+	return buf;
+}
+
+static int read_task_sched(struct watch_item *item, int tid,
+			   struct watch_items *items)
+{
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	char *buf;
+	size_t size;
+	int start = 0;
+
+	scnprintf(path, PATH_MAX, "%s/%d/sched", procfs__mountpoint(), tid);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	for_each_token(tok, buf, "\n", tmp) {
+		struct watch_line *line;
+		char *name;
+		char *val;
+		int skip = 0;
+
+		if (!start) {
+			if (*tok != '-')
+				continue;
+			start = 1;
+			continue;
+		}
+
+		val = index(tok, ':');
+		if (!val)
+			continue;
+
+		*val++ = 0x0;
+		name = rtrim(tok);
+
+		line = new_line(item, name, trim(val), &skip);
+		if (!line) {
+			if (skip)
+				continue;
+			return -ENOMEM;
+		}
+
+		items_width(items, line);
+	}
+
+	free(item->task.buf);
+	item->task.buf = buf;
+	return 0;
+}
+
+typedef int (read_task_fn_t)(struct watch_item*, int,
+			     struct watch_items*);
+
+static int read_task(struct watch *w, read_task_fn_t fn)
+{
+	struct thread_map *m = w->task.pid;
+	struct watch_item *item;
+	int i;
+
+	zero_items(&w->items);
+
+	for (i = 0; i < m->nr; i++) {
+		item = new_item(w, task_name(&m->map[i]));
+		if (!item)
+			return -ENOMEM;
+
+		if (fn(item, m->map[i].pid, &w->items))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int task_sched_watch_read(struct watch *w)
+{
+	return read_task(w, read_task_sched);
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
@@ -541,6 +641,12 @@ static struct watch watch[] = {
 		},
 		.help		= "DL  runqueues [/proc/sched_debug]",
 	},
+	{
+		.name		= "sched",
+		.read		= task_sched_watch_read,
+		.flags		= WATCH_TASK,
+		.help		= "task sched    [/proc/pid/sched]",
+	},
 	{ NULL },
 };
 
@@ -554,6 +660,11 @@ static void watch_help(void)
 		fprintf(stderr, "%11s - %s\n", w->name, w->help);
 		w++;
 	}
+}
+
+static int is_task_watch(struct watch *w)
+{
+	return w->flags & WATCH_TASK;
 }
 
 static struct watch *find_watch(const char *name)
@@ -874,12 +985,14 @@ int cmd_watch(int argc, const char **argv,
 	const char *field = NULL;
 	const char *plot = NULL;
 	const char *zero = NULL;
+	const char *pid = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
 		OPT_STRING('f', "field", &field, "field", "fields"),
 		OPT_STRING(0, "plot", &plot, "field", "fields"),
 		OPT_STRING(0, "zero", &zero, "field", "fields"),
+		OPT_STRING('p', "pid", &pid, "pid", "pids"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -923,6 +1036,18 @@ int cmd_watch(int argc, const char **argv,
 
 	if (zero && setup_zero(w, zero)) {
 		pr_err("failed: initialize zeros\n");
+		return -1;
+	}
+
+	if (pid) {
+		if (!is_task_watch(w))
+			return -1;
+
+		w->task.pid = thread_map__new_str(pid, NULL, 0);
+		if (!w->task.pid)
+			return -1;
+	} else if (is_task_watch(w)) {
+		pr_err("failed: no task specified (use -p option)\n");
 		return -1;
 	}
 
