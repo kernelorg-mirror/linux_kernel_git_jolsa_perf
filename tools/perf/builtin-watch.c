@@ -6,6 +6,7 @@
 #include "perf.h"
 #include "debug.h"
 #include "color.h"
+#include "thread_map.h"
 
 struct watch_line {
 	char			*name;
@@ -17,6 +18,12 @@ struct watch_item {
 	char			*name;
 	struct watch_line	*line;
 	int			 cnt;
+
+	union {
+		struct {
+			char *buf;
+		} task;
+	};
 };
 
 struct watch_items {
@@ -40,6 +47,9 @@ struct watch {
 			int	 type;
 			char	*buf;
 		} rq;
+		struct {
+			struct thread_map *pid;
+		} task;
 	};
 };
 
@@ -221,6 +231,97 @@ static int sched_watch_read(struct watch *w)
 	return 0;
 }
 
+static int read_task(struct watch_item *item, int tid,
+		     struct watch_items *new_items,
+		     struct watch_items *old_items)
+{
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	char *buf;
+	size_t size;
+	int start = 0;
+
+	scnprintf(path, PATH_MAX, "%s/%d/sched", procfs__mountpoint(), tid);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	for_each_token(buf, "\n", tmp) {
+		struct watch_line *line;
+		char *name;
+		char *val;
+
+		if (!start) {
+			if (*tok != '-')
+				continue;
+			start = 1;
+			continue;
+		}
+
+		val = index(tok, ':');
+		if (!val)
+			continue;
+
+		*val++ = 0x0;
+		name = rtrim(tok);
+
+		line = new_line(item);
+		if (!line)
+			return -ENOMEM;
+
+		line->name = name;
+		line->data = trim(val);
+
+		new_items->width_name = max(new_items->width_name, strlen(line->name));
+		new_items->width_data = max(new_items->width_data, strlen(line->data));
+
+		if (old_items->item)
+			compare_items(new_items, old_items);
+	}
+
+	free(item->task.buf);
+	item->task.buf = buf;
+	return 0;
+}
+
+static char *task_name(struct thread_map_data *m)
+{
+	static char buf[50];
+
+	scnprintf(buf, 50, "%s-%d", m->comm ? rtrim(m->comm) : "pid", m->pid);
+	return buf;
+}
+
+static int task_watch_read(struct watch *w)
+{
+	struct thread_map *m = w->task.pid;
+	struct watch_items old_items;
+	struct watch_item *item;
+	int i;
+
+	old_items = w->items;
+
+	w->items.item = NULL;
+	w->items.cnt  = 0;
+	w->items.width_data = 0;
+	w->items.width_name = 0;
+
+	for (i = 0; i < m->nr; i++) {
+		item = new_item(&w->items);
+		if (!item)
+			return -ENOMEM;
+
+		item->name = strdup(task_name(&m->map[i]));
+		w->items.width_data = max(w->items.width_data, strlen(item->name));
+
+		if (read_task(item, m->map[i].pid, &w->items, &old_items))
+			return -EINVAL;
+	}
+
+	free_items(&old_items);
+	return 0;
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
@@ -237,8 +338,17 @@ static struct watch watch[] = {
 		.read		= sched_watch_read,
 		.rq.type	= SCHED_CFS_ROOT
 	},
+	{
+		.name		= "task",
+		.read		= task_watch_read,
+	},
 	{ NULL },
 };
+
+static int is_task_watch(struct watch *w)
+{
+	return w->read == task_watch_read;
+}
 
 static struct watch *find_watch(const char *name)
 {
@@ -353,9 +463,11 @@ static void display_watch(struct watch *w)
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
+	const char *pid = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
+		OPT_STRING('p', "pid", &pid, "pid", "pids"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -382,6 +494,14 @@ int cmd_watch(int argc, const char **argv,
 					PARSE_OPT_KEEP_UNKNOWN);
 	if (argc < 1)
 		return -1;
+
+	if (pid) {
+		if (!is_task_watch(w))
+			return -1;
+		w->task.pid = thread_map__new_str(pid, NULL, 0);
+		if (!w->task.pid)
+			return -1;
+	}
 
 	ret = system("clear");
 	set_term_quiet_input(&old);
