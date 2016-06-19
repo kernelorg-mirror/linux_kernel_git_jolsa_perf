@@ -1,6 +1,8 @@
 #include <linux/compiler.h>
 #include <subcmd/parse-options.h>
 #include <sys/ioctl.h>
+#include <search.h>
+#include <api/fs/fs.h>
 #include "builtin.h"
 #include "perf.h"
 #include "debug.h"
@@ -9,6 +11,7 @@
 struct watch;
 
 #define MAX_LINES 100
+#define MAX_FIELDS 50
 
 struct watch_line {
 	char			*name;
@@ -36,6 +39,8 @@ struct watch_items {
 
 	size_t			 width_name;
 	size_t			 width_data;
+	bool			 has_fields;
+	struct hsearch_data	 fields;
 };
 
 typedef int (*watch_read_fn_t)(struct watch *);
@@ -51,6 +56,37 @@ struct watch {
 #define for_each_token(__tok, __buf, __sep, __tmp)		\
 	for (__tok = strtok_r(__buf, __sep, &__tmp); __tok;	\
 	     __tok = strtok_r(NULL,  __sep, &__tmp))
+
+static int is_allowed(struct watch_items *items, char *name)
+{
+	ENTRY e, *ep;
+
+	if (!items->has_fields)
+		return 1;
+
+	e.key = name;
+	return hsearch_r(e, FIND, &ep, &items->fields);
+}
+
+static int create_htable(struct hsearch_data *table, size_t size,
+			 char *buf, const char *sep)
+{
+	ENTRY e, *ep;
+	char *tok, *tmp = NULL;
+
+	if (!hcreate_r(size, table))
+		return -1;
+
+	for_each_token(tok, buf, sep, tmp) {
+		e.key  = tok;
+		e.data = NULL;
+
+		if (!hsearch_r(e, ENTER, &ep, table))
+			return -1;
+	}
+
+	return 0;
+}
 
 __maybe_unused
 static void items_width(struct watch_items *items,
@@ -114,12 +150,19 @@ static struct watch_item* new_item(struct watch *w, char *name)
 
 __maybe_unused
 static struct watch_line* new_line(struct watch_item *item,
-				   char *name, char *data)
+				   char *name, char *data,
+				   int *skip)
 {
+	struct watch *w = item->watch;
 	struct watch_line *line;
 
 	if (item->cnt_iter == MAX_LINES)
 		return NULL;
+
+	if (!is_allowed(&w->items, name)) {
+		*skip = 1;
+		return NULL;
+	}
 
 	if (strlen(data) > MAX_DATALEN) {
 		data[MAX_DATALEN] = 0x0;
@@ -338,12 +381,41 @@ static void display_watch(struct watch *w)
 	__display_watch(w);
 }
 
+static int setup_fields(struct watch *w, const char *field)
+{
+	char *buf = strdup(field);
+	struct stat st;
+	const char *sep = ",";
+
+	if (!buf)
+		return -1;
+
+	if (!stat(field, &st)) {
+		char *bufh;
+		size_t size;
+
+		if (filename__read_str(buf, &bufh, &size))
+			return -1;
+
+		buf = bufh;
+		sep = "\n";
+	}
+
+	if (create_htable(&w->items.fields, MAX_FIELDS, buf, sep))
+		return -1;
+
+	w->items.has_fields = true;
+	return 0;
+}
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
+	const char *field = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
+		OPT_STRING('f', "field", &field, "field", "fields"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -374,6 +446,11 @@ int cmd_watch(int argc, const char **argv,
 					PARSE_OPT_KEEP_UNKNOWN);
 	if (argc < 1)
 		usage_with_options(usage, options);
+
+	if (field && setup_fields(w, field)) {
+		pr_err("failed: initialize fields\n");
+		return -1;
+	}
 
 	ret = system("clear");
 	set_term_quiet_input(&old);
