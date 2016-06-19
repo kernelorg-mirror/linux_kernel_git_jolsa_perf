@@ -1,6 +1,7 @@
 #include <linux/compiler.h>
 #include <subcmd/parse-options.h>
 #include <sys/ioctl.h>
+#include <api/fs/fs.h>
 #include "builtin.h"
 #include "perf.h"
 #include "debug.h"
@@ -33,9 +34,209 @@ struct watch {
 	watch_read_fn_t		 read;
 
 	struct watch_items	 items;
+
+	union {
+		struct {
+			int	 type;
+			char	*buf;
+		} rq;
+	};
 };
 
+#define for_each_token(__buf, __sep, __tmp)		\
+	for (tok = strtok_r(__buf, __sep, &__tmp); tok;	\
+	     tok = strtok_r(NULL,  __sep, &__tmp))
+
+static struct watch_item* new_item(struct watch_items *items)
+{
+	struct watch_item *item;
+	size_t size = sizeof(*item);
+
+	items->cnt++;
+
+	if (items->item)
+		size *= items->cnt;
+
+	items->item = realloc(items->item, size);
+	if (!items->item)
+		return NULL;
+
+	item = &items->item[items->cnt - 1];
+	memset(item, 0, sizeof(*item));
+	return item;
+}
+
+static struct watch_line* new_line(struct watch_item *item)
+{
+	struct watch_line *line;
+	size_t size = sizeof(*line);
+
+	item->cnt++;
+
+	if (item->line)
+		size *= item->cnt;
+
+	item->line = realloc(item->line, size);
+	if (!item->line)
+		return NULL;
+
+	line = &item->line[item->cnt - 1];
+	memset(line, 0, sizeof(*line));
+	return line;
+}
+
+static int add_line(struct watch_items *items, struct watch_item *item, char *str)
+{
+	struct watch_line *line;
+	char *name, *data;
+
+	data = index(str, ':');
+	*data++ = 0x0;
+	name = trim(str);
+
+	line = new_line(item);
+	if (!line)
+		return -ENOMEM;
+
+	line->name = name;
+	line->data = data;
+
+	items->width_name = max(items->width_name, strlen(line->name));
+	items->width_data = max(items->width_data, strlen(line->data));
+	return 0;
+}
+
+static void free_items(struct watch_items *items)
+{
+	int i;
+
+	for (i = 0; i < items->cnt; i++)
+		free(items->item[i].line);
+
+	free(items->item);
+}
+
+static void compare_lines(struct watch_line *new,
+			  struct watch_line *old)
+{
+	int equal = 0;
+
+	if (!strcmp(new->name, old->name) &&
+	    !strcmp(new->data, old->data))
+		equal = 1;
+
+	if (equal && old->color)
+		new->color = old->color - 1;
+
+	if (!equal)
+		new->color = 3;
+}
+
+static void compare_items(struct watch_items *new,
+			  struct watch_items *old)
+{
+	struct watch_item *item_new, *item_old;
+	int i, l;
+
+	i = new->cnt - 1;
+	item_new = &new->item[i];
+	item_old = &old->item[i];
+
+	l = item_new->cnt - 1;
+	compare_lines(&item_new->line[l], &item_old->line[l]);
+}
+
+enum {
+	SCHED_RQ,
+	SCHED_CFS,
+	SCHED_CFS_ROOT,
+};
+
+static int is_sched_item(struct watch *w, char *tok)
+{
+	size_t len;
+	int is_root;
+
+	if (w->rq.type == SCHED_RQ && (!strncmp("cpu#", tok, 4)))
+		return 1;
+
+	if (strncmp("cfs_rq[", tok, 7))
+		return 0;
+
+	len     = strlen(tok);
+	is_root = !strncmp("]:/", tok + len - 3, 3);
+
+	if ((w->rq.type == SCHED_CFS) && !is_root)
+		return 1;
+
+	if ((w->rq.type == SCHED_CFS_ROOT) && is_root)
+		return 1;
+
+	return 0;
+}
+
+static int sched_watch_read(struct watch *w)
+{
+	struct watch_items old_items;
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	struct watch_item *item = NULL;
+	char *buf;
+	size_t size;
+
+	scnprintf(path, PATH_MAX, "%s/sched_debug", procfs__mountpoint());
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	old_items = w->items;
+
+	w->items.item = NULL;
+	w->items.cnt  = 0;
+	w->items.width_data = 0;
+	w->items.width_name = 0;
+
+	for_each_token(buf, "\n", tmp) {
+		if (is_sched_item(w, tok)) {
+			item = new_item(&w->items);
+			if (!item)
+				return -ENOMEM;
+			item->name = rtrim(tok);
+			w->items.width_data = max(w->items.width_data, strlen(item->name));
+		} else if (!strncmp("  .", tok, 3)) {
+			if (!item)
+				continue;
+			if (add_line(&w->items, item, tok))
+				return -ENOMEM;
+
+			if (old_items.item)
+				compare_items(&w->items, &old_items);
+		} else
+			item = NULL;
+	}
+
+	free_items(&old_items);
+	free(w->rq.buf);
+	w->rq.buf = buf;
+	return 0;
+}
+
 static struct watch watch[] = {
+	{
+		.name 		= "rq",
+		.read		= sched_watch_read,
+		.rq.type	= SCHED_RQ,
+	},
+	{
+		.name		= "cfs",
+		.read		= sched_watch_read,
+		.rq.type	= SCHED_CFS,
+	},
+	{
+		.name		= "cfs_root",
+		.read		= sched_watch_read,
+		.rq.type	= SCHED_CFS_ROOT
+	},
 	{ NULL },
 };
 
