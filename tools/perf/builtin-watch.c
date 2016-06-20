@@ -579,6 +579,48 @@ static int read_task_sched(struct watch_item *item, int tid,
 	return 0;
 }
 
+static int read_task_status(struct watch_item *item, int tid,
+			    struct watch_items *items)
+{
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	char *buf;
+	size_t size;
+
+	scnprintf(path, PATH_MAX, "%s/%d/status", procfs__mountpoint(), tid);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	for_each_token(tok, buf, "\n", tmp) {
+		struct watch_line *line;
+		char *name;
+		char *val;
+		int skip = 0;
+
+		val = index(tok, ':');
+		if (!val)
+			continue;
+
+		*val++ = 0x0;
+		name = rtrim(tok);
+
+		line = new_line(item, name, trim(val), &skip);
+		if (!line) {
+			if (skip)
+				continue;
+			return -ENOMEM;
+		}
+
+		items_width(items, line);
+	}
+
+	free(item->task.buf);
+	item->task.buf = buf;
+	return 0;
+}
+
+
 typedef int (read_task_fn_t)(struct watch_item*, int,
 			     struct watch_items*);
 
@@ -605,6 +647,11 @@ static int read_task(struct watch *w, read_task_fn_t fn)
 static int task_sched_watch_read(struct watch *w)
 {
 	return read_task(w, read_task_sched);
+}
+
+static int task_status_watch_read(struct watch *w)
+{
+	return read_task(w, read_task_status);
 }
 
 static struct watch watch[] = {
@@ -653,6 +700,12 @@ static struct watch watch[] = {
 		.read		= task_sched_watch_read,
 		.flags		= WATCH_TASK,
 		.help		= "task sched    [/proc/pid/sched]",
+	},
+	{
+		.name		= "status",
+		.read		= task_status_watch_read,
+		.flags		= WATCH_TASK,
+		.help		= "task status   [/proc/pid/status]",
 	},
 	{ NULL },
 };
