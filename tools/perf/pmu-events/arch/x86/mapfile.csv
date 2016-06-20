@@ -1,2 +1,4 @@
 Family-model,Version,Filename,EventType
 GenuineIntel-6-2E,V1,NehalemEX_core,core
+GenuineIntel-6-3D,V14,Broadwell_core,core
+GenuineIntel-6-47,V14,Broadwell_core,core
