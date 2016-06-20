@@ -328,6 +328,81 @@ static int task_sched_watch_read(struct watch *w)
 	return 0;
 }
 
+static int read_task_status(struct watch_item *item, int tid,
+			    struct watch_items *new_items,
+			    struct watch_items *old_items)
+{
+	char *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	char *buf;
+	size_t size;
+
+	scnprintf(path, PATH_MAX, "%s/%d/status", procfs__mountpoint(), tid);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	for_each_token(buf, "\n", tmp) {
+		struct watch_line *line;
+		char *name;
+		char *val;
+
+		val = index(tok, ':');
+		if (!val)
+			continue;
+
+		*val++ = 0x0;
+		name = rtrim(tok);
+
+		line = new_line(item);
+		if (!line)
+			return -ENOMEM;
+
+		line->name = name;
+		line->data = trim(val);
+
+		new_items->width_name = max(new_items->width_name, strlen(line->name));
+		new_items->width_data = max(new_items->width_data, strlen(line->data));
+
+		if (old_items->item)
+			compare_items(new_items, old_items);
+	}
+
+	free(item->task.buf);
+	item->task.buf = buf;
+	return 0;
+}
+
+static int task_status_watch_read(struct watch *w)
+{
+	struct thread_map *m = w->task.pid;
+	struct watch_items old_items;
+	struct watch_item *item;
+	int i;
+
+	old_items = w->items;
+
+	w->items.item = NULL;
+	w->items.cnt  = 0;
+	w->items.width_data = 0;
+	w->items.width_name = 0;
+
+	for (i = 0; i < m->nr; i++) {
+		item = new_item(&w->items);
+		if (!item)
+			return -ENOMEM;
+
+		item->name = strdup(task_name(&m->map[i]));
+		w->items.width_data = max(w->items.width_data, strlen(item->name));
+
+		if (read_task_status(item, m->map[i].pid, &w->items, &old_items))
+			return -EINVAL;
+	}
+
+	free_items(&old_items);
+	return 0;
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
@@ -347,6 +422,11 @@ static struct watch watch[] = {
 	{
 		.name		= "sched",
 		.read		= task_sched_watch_read,
+		.flags		= WATCH_TASK,
+	},
+	{
+		.name		= "status",
+		.read		= task_status_watch_read,
 		.flags		= WATCH_TASK,
 	},
 	{ NULL },
