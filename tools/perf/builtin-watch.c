@@ -59,7 +59,8 @@ struct watch {
 		} task;
 	};
 
-	u64			 flags;
+	u64			  flags;
+	const char		 *help;
 };
 
 #define for_each_token(__buf, __sep, __tmp)		\
@@ -77,26 +78,41 @@ static int is_allowed(struct watch_items *items, char *name)
 	return hsearch_r(e, FIND, &ep, &items->fields);
 }
 
-static struct watch_item* new_item(struct watch_items *items)
+static void items_width(struct watch_items *items,
+			struct watch_line *line)
+{
+	items->width_name = max(items->width_name, strlen(line->name));
+	items->width_data = max(items->width_data, strlen(line->data));
+}
+
+static struct watch_item* new_item(struct watch_items *items,
+				   char *name)
 {
 	struct watch_item *item;
 	size_t size = sizeof(*item);
+
+	if (!name)
+		return NULL;
 
 	items->cnt++;
 
 	if (items->item)
 		size *= items->cnt;
 
-	items->item = realloc(items->item, size);
-	if (!items->item)
+	items->item = item = realloc(items->item, size);
+	if (!item)
 		return NULL;
 
-	item = &items->item[items->cnt - 1];
+	item += items->cnt - 1;
 	memset(item, 0, sizeof(*item));
+
+	item->name = strdup(name);
+	items->width_data = max(items->width_data, strlen(name));
 	return item;
 }
 
-static struct watch_line* new_line(struct watch_item *item)
+static struct watch_line* new_line(struct watch_item *item,
+				   char *name, char *data)
 {
 	struct watch_line *line;
 	size_t size = sizeof(*line);
@@ -106,12 +122,15 @@ static struct watch_line* new_line(struct watch_item *item)
 	if (item->line)
 		size *= item->cnt;
 
-	item->line = realloc(item->line, size);
-	if (!item->line)
+	item->line = line = realloc(item->line, size);
+	if (!line)
 		return NULL;
 
-	line = &item->line[item->cnt - 1];
-	memset(line, 0, sizeof(*line));
+	line += item->cnt - 1;
+	line->name  = name;
+	line->data  = data;
+	line->color = 0;
+
 	return line;
 }
 
@@ -129,24 +148,30 @@ static int add_line(struct watch_items *items, struct watch_item *item, char *st
 		return 0;
 	}
 
-	line = new_line(item);
+	line = new_line(item, name, data);
 	if (!line)
 		return -ENOMEM;
 
-	line->name = name;
-	line->data = data;
-
-	items->width_name = max(items->width_name, strlen(line->name));
-	items->width_data = max(items->width_data, strlen(line->data));
+	items_width(items, line);
 	return 0;
+}
+
+static void zero_items(struct watch_items *items)
+{
+	items->item = NULL;
+	items->cnt  = 0;
+	items->width_data = 0;
+	items->width_name = 0;
 }
 
 static void free_items(struct watch_items *items)
 {
 	int i;
 
-	for (i = 0; i < items->cnt; i++)
+	for (i = 0; i < items->cnt; i++) {
+		free(items->item[i].name);
 		free(items->item[i].line);
+	}
 
 	free(items->item);
 }
@@ -185,6 +210,8 @@ enum {
 	SCHED_RQ,
 	SCHED_CFS,
 	SCHED_CFS_ROOT,
+	SCHED_RT,
+	SCHED_DL,
 };
 
 static int is_sched_item(struct watch *w, char *tok)
@@ -195,17 +222,24 @@ static int is_sched_item(struct watch *w, char *tok)
 	if (w->rq.type == SCHED_RQ && (!strncmp("cpu#", tok, 4)))
 		return 1;
 
-	if (strncmp("cfs_rq[", tok, 7))
+	if (!strncmp("cfs_rq[", tok, 7)) {
+		len     = strlen(tok);
+		is_root = !strncmp("]:/", tok + len - 3, 3);
+
+		if ((w->rq.type == SCHED_CFS) && !is_root)
+			return 1;
+
+		if ((w->rq.type == SCHED_CFS_ROOT) && is_root)
+			return 1;
+
 		return 0;
+	}
 
-	len     = strlen(tok);
-	is_root = !strncmp("]:/", tok + len - 3, 3);
+	if (!strncmp("rt_rq[", tok, 6))
+		return w->rq.type == SCHED_RT;
 
-	if ((w->rq.type == SCHED_CFS) && !is_root)
-		return 1;
-
-	if ((w->rq.type == SCHED_CFS_ROOT) && is_root)
-		return 1;
+	if (!strncmp("dl_rq[", tok, 6))
+		return w->rq.type == SCHED_DL;
 
 	return 0;
 }
@@ -213,10 +247,9 @@ static int is_sched_item(struct watch *w, char *tok)
 static int sched_watch_read(struct watch *w)
 {
 	struct watch_items old_items;
-	char *tok, *tmp = NULL;
-	char path[PATH_MAX];
 	struct watch_item *item = NULL;
-	char *buf;
+	char *buf, *tok, *tmp = NULL;
+	char path[PATH_MAX];
 	size_t size;
 
 	scnprintf(path, PATH_MAX, "%s/sched_debug", procfs__mountpoint());
@@ -225,34 +258,27 @@ static int sched_watch_read(struct watch *w)
 		return -1;
 
 	old_items = w->items;
-
-	w->items.item = NULL;
-	w->items.cnt  = 0;
-	w->items.width_data = 0;
-	w->items.width_name = 0;
+	zero_items(&w->items);
 
 	for_each_token(buf, "\n", tmp) {
 		int skip = 0;
 
 		if (is_sched_item(w, tok)) {
-			item = new_item(&w->items);
+			item = new_item(&w->items, rtrim(tok));
 			if (!item)
 				return -ENOMEM;
-			item->name = rtrim(tok);
-			w->items.width_data = max(w->items.width_data, strlen(item->name));
 		} else if (!strncmp("  .", tok, 3)) {
 			if (!item)
 				continue;
 			if (add_line(&w->items, item, tok, &skip))
 				return -ENOMEM;
-
 			if (skip)
 				continue;
-
 			if (old_items.item)
 				compare_items(&w->items, &old_items);
-		} else
+		} else {
 			item = NULL;
+		}
 	}
 
 	free_items(&old_items);
@@ -306,15 +332,11 @@ static int read_task_sched(struct watch_item *item, int tid,
 		if (!is_allowed(new_items, name))
 			continue;
 
-		line = new_line(item);
+		line = new_line(item, name, trim(val));
 		if (!line)
 			return -ENOMEM;
 
-		line->name = name;
-		line->data = trim(val);
-
-		new_items->width_name = max(new_items->width_name, strlen(line->name));
-		new_items->width_data = max(new_items->width_data, strlen(line->data));
+		items_width(new_items, line);
 
 		if (old_items->item)
 			compare_items(new_items, old_items);
@@ -322,36 +344,6 @@ static int read_task_sched(struct watch_item *item, int tid,
 
 	free(item->task.buf);
 	item->task.buf = buf;
-	return 0;
-}
-
-static int task_sched_watch_read(struct watch *w)
-{
-	struct thread_map *m = w->task.pid;
-	struct watch_items old_items;
-	struct watch_item *item;
-	int i;
-
-	old_items = w->items;
-
-	w->items.item = NULL;
-	w->items.cnt  = 0;
-	w->items.width_data = 0;
-	w->items.width_name = 0;
-
-	for (i = 0; i < m->nr; i++) {
-		item = new_item(&w->items);
-		if (!item)
-			return -ENOMEM;
-
-		item->name = strdup(task_name(&m->map[i]));
-		w->items.width_data = max(w->items.width_data, strlen(item->name));
-
-		if (read_task_sched(item, m->map[i].pid, &w->items, &old_items))
-			return -EINVAL;
-	}
-
-	free_items(&old_items);
 	return 0;
 }
 
@@ -384,15 +376,11 @@ static int read_task_status(struct watch_item *item, int tid,
 		if (!is_allowed(new_items, name))
 			continue;
 
-		line = new_line(item);
+		line = new_line(item, name, trim(val));
 		if (!line)
 			return -ENOMEM;
 
-		line->name = name;
-		line->data = trim(val);
-
-		new_items->width_name = max(new_items->width_name, strlen(line->name));
-		new_items->width_data = max(new_items->width_data, strlen(line->data));
+		items_width(new_items, line);
 
 		if (old_items->item)
 			compare_items(new_items, old_items);
@@ -403,7 +391,11 @@ static int read_task_status(struct watch_item *item, int tid,
 	return 0;
 }
 
-static int task_status_watch_read(struct watch *w)
+typedef int (read_task_fn_t)(struct watch_item*, int,
+			     struct watch_items*,
+			     struct watch_items*);
+
+static int read_task(struct watch *w, read_task_fn_t fn)
 {
 	struct thread_map *m = w->task.pid;
 	struct watch_items old_items;
@@ -411,21 +403,14 @@ static int task_status_watch_read(struct watch *w)
 	int i;
 
 	old_items = w->items;
-
-	w->items.item = NULL;
-	w->items.cnt  = 0;
-	w->items.width_data = 0;
-	w->items.width_name = 0;
+	zero_items(&w->items);
 
 	for (i = 0; i < m->nr; i++) {
-		item = new_item(&w->items);
+		item = new_item(&w->items, task_name(&m->map[i]));
 		if (!item)
 			return -ENOMEM;
 
-		item->name = strdup(task_name(&m->map[i]));
-		w->items.width_data = max(w->items.width_data, strlen(item->name));
-
-		if (read_task_status(item, m->map[i].pid, &w->items, &old_items))
+		if (fn(item, m->map[i].pid, &w->items, &old_items))
 			return -EINVAL;
 	}
 
@@ -433,34 +418,73 @@ static int task_status_watch_read(struct watch *w)
 	return 0;
 }
 
+static int task_status_watch_read(struct watch *w)
+{
+	return read_task(w, read_task_status);
+}
+
+static int task_sched_watch_read(struct watch *w)
+{
+	return read_task(w, read_task_sched);
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
 		.read		= sched_watch_read,
 		.rq.type	= SCHED_RQ,
+		.help		= "CPU runqueues [/proc/sched_debug]",
 	},
 	{
 		.name		= "cfs",
 		.read		= sched_watch_read,
 		.rq.type	= SCHED_CFS,
+		.help		= "CFS groups    [/proc/sched_debug]",
 	},
 	{
 		.name		= "cfs_root",
 		.read		= sched_watch_read,
-		.rq.type	= SCHED_CFS_ROOT
+		.rq.type	= SCHED_CFS_ROOT,
+		.help		= "CFS roots     [/proc/sched_debug]",
+	},
+	{
+		.name		= "rt",
+		.read		= sched_watch_read,
+		.rq.type	= SCHED_RT,
+		.help		= "RT  runqueues [/proc/sched_debug]",
+	},
+	{
+		.name		= "dl",
+		.read		= sched_watch_read,
+		.rq.type	= SCHED_DL,
+		.help		= "DL  runqueues [/proc/sched_debug]",
 	},
 	{
 		.name		= "sched",
 		.read		= task_sched_watch_read,
 		.flags		= WATCH_TASK,
+		.help		= "task sched    [/proc/pid/sched]",
 	},
 	{
 		.name		= "status",
 		.read		= task_status_watch_read,
 		.flags		= WATCH_TASK,
+		.help		= "task status   [/proc/pid/sched]",
 	},
 	{ NULL },
 };
+
+static void watch_help(void)
+{
+	struct watch *w = &watch[0];
+
+	fprintf(stderr, "\nAvailable commands:\n");
+
+	while (w->name) {
+		fprintf(stderr, "%11s - %s\n", w->name, w->help);
+		w++;
+	}
+}
 
 static int is_task_watch(struct watch *w)
 {
@@ -479,7 +503,6 @@ static struct watch *find_watch(const char *name)
 
 	return NULL;
 }
-
 
 static struct winsize ws;
 static int rows_from;
@@ -513,6 +536,7 @@ static void display_items(struct watch_items *items, int from, int to)
 
 	for (i = from; i < to; i++) {
 		struct watch_item *item = &items->item[i];
+
 		color_fprintf(stdout, PERF_COLOR_YELLOW, "%*s", width_data, item->name);
 	}
 
@@ -533,8 +557,8 @@ static void display_items(struct watch_items *items, int from, int to)
 			} else {
 				printf("%*s", width_data, line->data);
 			}
-
 		}
+
 		printf("\n");
 	}
 }
@@ -629,29 +653,33 @@ int cmd_watch(int argc, const char **argv,
 		OPT_END()
 	};
 	const char *usage[] = {
-		"perf watch <name> [<options>]",
+		"perf watch <command> [<options>]",
 		NULL
 	};
 	struct termios old;
+	bool quit = false;
 	const char *name;
 	struct watch *w;
 	int ret;
 
-	if (argc < 2)
+	if (argc < 2) {
+		watch_help();
 		usage_with_options(usage, options);
+	}
 
 	name = argv[1];
 
 	w = find_watch(name);
 	if (!w) {
-		pr_err("failed: watch '%s' unsupported\n", name);
-		return -1;
+		pr_err("failed: '%s' unsupported\n", name);
+		watch_help();
+		usage_with_options(usage, options);
 	}
 
 	argc = parse_options_subcommand(argc, argv, options, NULL, usage,
 					PARSE_OPT_KEEP_UNKNOWN);
 	if (argc < 1)
-		return -1;
+		usage_with_options(usage, options);
 
 	if (pid) {
 		if (!is_task_watch(w))
@@ -673,7 +701,7 @@ int cmd_watch(int argc, const char **argv,
 	ret = system("clear");
 	set_term_quiet_input(&old);
 
-	while (1) {
+	while (!quit) {
 		int c;
 
 		ret = w->read(w);
@@ -686,6 +714,9 @@ int cmd_watch(int argc, const char **argv,
 
 		c = ui__getch(1);
 		switch (c) {
+		case 'q':
+			quit = true;
+			break;
 		case 60:
 			update_rows(false);
 			break;
@@ -696,5 +727,6 @@ int cmd_watch(int argc, const char **argv,
 		}
 	}
 
+	tcsetattr(0, TCSAFLUSH, &old);
 	return 0;
 }
