@@ -1454,7 +1454,7 @@ static struct c2c_dimension dim_dcacheline = {
 	.name		= "dcacheline",
 	.cmp		= dcacheline_cmp,
 	.entry		= dcacheline_entry,
-	.width		= 20,
+	.width		= 15,
 };
 
 static struct c2c_dimension dim_offset = {
@@ -1462,7 +1462,7 @@ static struct c2c_dimension dim_offset = {
 	.name		= "offset",
 	.cmp		= offset_cmp,
 	.entry		= offset_entry,
-	.width		= 5,
+	.width		= 15,
 };
 
 static struct c2c_dimension dim_iaddr = {
@@ -2003,7 +2003,7 @@ static bool he__display_off(struct hist_entry *he)
 
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 
-	if (!c2c_he->stats.rmt_hitm && !c2c_he->stats.store)
+	if (!c2c_he->stats.rmt_hitm && !c2c_he->stats.store && !c2c_he->stats.lcl_hitm)
 		he->filtered = HIST_FILTER__C2C;
 
 	return he->filtered == 0;
@@ -2039,8 +2039,7 @@ static void calc_width(struct hist_entry *he)
 
 static int filter_cb(struct hist_entry *he)
 {
-	if (0)
-		he__display_off(he);
+	he__display_off(he);
 
 	calc_width(he);
 	return 0;
@@ -2065,7 +2064,7 @@ static int resort_offset_cb(struct hist_entry *he)
 		c2c_hists__reinit(c2c_hists,
 			"percent_rmt_hitm,percent_lcl_hitm,"
 			"percent_stores_l1hit,percent_stores_l1miss,"
-			"pid,tid,median,mean,stddev,symbol,dso",
+			"offset,pid,tid,median,mean,stddev,symbol,dso",
 			"rmt_hitm,lcl_hitm");
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
@@ -2161,9 +2160,11 @@ static void print_shared_cacheline_info(void)
 	printf("  Total Merged records              : %10d\n", hitm_cnt + stats->store);
 }
 
-static void print_offsets(struct c2c_hists *c2c_hists, FILE *out)
+static void print_offsets(struct c2c_hists *c2c_hists, struct hist_entry *he_cl,
+			  struct perf_hpp_list *list, FILE *out)
 {
 	struct rb_node *nd;
+	bool first = true;
 
 	nd = rb_first(&c2c_hists->hists.entries);
 
@@ -2176,19 +2177,42 @@ static void print_offsets(struct c2c_hists *c2c_hists, FILE *out)
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
 
-		fprintf(out, "\nCacheline: 0x%lx, offset 0x%lx\n\n",
-			cl_address(he->mem_info->daddr.al_addr),
-			cl_offset(he->mem_info->daddr.al_addr));
+		if (first) {
+			char bf[1000];
+			struct perf_hpp hpp = {
+				.buf            = bf,
+				.size           = 1000,
+			};
+			static bool once;
 
-		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, true);
+			if (!once) {
+				hists__fprintf_headers(&c2c_he->hists->hists, out);
+				once = true;
+			} else {
+				fprintf(out, "\n");
+			}
+
+			fprintf(out, "  ---------------------------------------------------\n");
+			hist_entry__snprintf(he_cl, &hpp, list);
+			fprintf(out, "%s\n", bf);
+			fprintf(out, "  ---------------------------------------------------\n");
+
+			first = false;
+		}
+
+		hists__fprintf(&c2c_he->hists->hists, false, 0, 0, 0, out, true);
 	}
 }
 
 static void print_cachelines(FILE *out)
 {
+	struct perf_hpp_list hpp_list;
 	struct rb_node *nd;
 
 	nd = rb_first(&c2c.hists.hists.entries);
+
+	perf_hpp_list__init(&hpp_list);
+	hpp_list__parse(&hpp_list, "cl_rmt_hitm,cl_lcl_hitm,cl_stores_l1hit,cl_stores_l1miss,dcacheline", NULL);
 
 	for (; nd; nd = rb_next(nd)) {
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
@@ -2198,13 +2222,7 @@ static void print_cachelines(FILE *out)
 			continue;
 
 		c2c_he = container_of(he, struct c2c_hist_entry, he);
-
-		fprintf(out, "\nCacheline: 0x%lx\n\n",
-			cl_address(he->mem_info->daddr.al_addr));
-
-		hists__fprintf(&c2c_he->hists->hists, true, 0, 0, 0, stdout, false);
-
-		print_offsets(c2c_he->hists, out);
+		print_offsets(c2c_he->hists, he, &hpp_list, out);
 	};
 }
 
