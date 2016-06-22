@@ -354,6 +354,9 @@ static int __open_dso(struct dso *dso, struct machine *machine)
 	if (!name)
 		return -ENOMEM;
 
+	if (!is_regular_file(name))
+		return -EINVAL;
+
 	if (machine)
 		root_dir = machine->root_dir;
 
