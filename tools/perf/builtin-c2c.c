@@ -58,6 +58,8 @@ struct perf_c2c {
 	/* HITM shared clines stats */
 	struct c2c_stats	hitm_stats;
 	int			shared_clines;
+
+	int			 display;
 };
 
 static struct perf_c2c c2c;
@@ -190,7 +192,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 {
 	struct c2c_hists *c2c_hists = &c2c.hists;
 	struct c2c_hist_entry *c2c_he;
-	struct c2c_stats stats = { };
+	struct c2c_stats stats = { 0 };
 	struct hist_entry *he;
 	struct addr_location al;
 	struct mem_info *mi, *mi_dup;
@@ -2020,6 +2022,12 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 
 #define DISPLAY_LINE_LIMIT  0.0005
 
+enum {
+	DISPLAY_LCL,
+	DISPLAY_RMT,
+	DISPLAY_ALL,
+};
+
 static bool he__display(struct hist_entry *he)
 {
 	struct c2c_hists *c2c_hists;
@@ -2029,13 +2037,29 @@ static bool he__display(struct hist_entry *he)
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = container_of(he->hists, struct c2c_hists, hists);
 
-	if (c2c_hists->stats.rmt_hitm) {
-		ld_dist = ((double)c2c_he->stats.rmt_hitm / c2c_hists->stats.rmt_hitm);
-		if (ld_dist < DISPLAY_LINE_LIMIT)
+	switch (c2c.display) {
+	case DISPLAY_LCL:
+		if (c2c_hists->stats.lcl_hitm) {
+			ld_dist = ((double)c2c_he->stats.lcl_hitm / c2c_hists->stats.lcl_hitm);
+			if (ld_dist < DISPLAY_LINE_LIMIT)
+				he->filtered = HIST_FILTER__C2C;
+		} else {
 			he->filtered = HIST_FILTER__C2C;
-	} else {
-		he->filtered = HIST_FILTER__C2C;
-	}
+		}
+		break;
+	case DISPLAY_RMT:
+		if (c2c_hists->stats.rmt_hitm) {
+			ld_dist = ((double)c2c_he->stats.rmt_hitm / c2c_hists->stats.rmt_hitm);
+			if (ld_dist < DISPLAY_LINE_LIMIT)
+				he->filtered = HIST_FILTER__C2C;
+		} else {
+			he->filtered = HIST_FILTER__C2C;
+		}
+		break;
+	case DISPLAY_ALL:
+	default:
+		break;
+	};
 
 	return he->filtered == 0;
 }
@@ -2457,6 +2481,24 @@ static void ui_quirks(bool stdio)
 		dim_offset.width = 5;
 }
 
+static int setup_display(const char *str)
+{
+	const char *display = str ?: "rmt";
+
+	if (!strcmp(display, "rmt"))
+		c2c.display = DISPLAY_RMT;
+	else if (!strcmp(display, "lcl"))
+		c2c.display = DISPLAY_LCL;
+	else if (!strcmp(display, "all"))
+		c2c.display = DISPLAY_ALL;
+	else {
+		pr_err("failed: unknown display type: %s\n", str);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int perf_c2c__report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -2466,6 +2508,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	};
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const char *coalesce = NULL;
+	const char *display = NULL;
 	const struct option c2c_options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
@@ -2485,6 +2528,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
 		    "Use the stdio interface"),
+	OPT_STRING(0, "display", &display, NULL, "lcl,rmt,all"),
 	OPT_END()
 	};
 	int err = 0;
@@ -2519,6 +2563,10 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_debug("Failed to initialize hists\n");
 		goto out;
 	}
+
+	err = setup_display(display);
+	if (err)
+		goto out;
 
 	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
