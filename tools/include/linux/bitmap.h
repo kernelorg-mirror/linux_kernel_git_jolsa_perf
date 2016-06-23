@@ -65,4 +65,13 @@ static inline int test_and_set_bit(int nr, unsigned long *addr)
 	return (old & mask) != 0;
 }
 
+/**
+ * bitmap_alloc - Allocate bitmap
+ * @nr: Bit to set
+ */
+static inline unsigned long *bitmap_alloc(int nbits)
+{
+	return malloc(BITS_TO_LONGS(nbits) * sizeof(unsigned long));
+}
+
 #endif /* _PERF_BITOPS_H */
