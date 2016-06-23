@@ -1235,8 +1235,8 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 			break;
 		case 1:
 		{
-			int num = bitmap_weight(c2c_he->cpuset, c2c.cpus_cnt);
 			struct c2c_stats *stats = &c2c_he->node_stats[node];
+			int num = bitmap_weight(c2c_he->cpuset, c2c.cpus_cnt);
 
 			ret = scnprintf(hpp->buf, hpp->size, "%2d{%2d ", node, num);
 			advance_hpp(hpp, ret);
@@ -1317,6 +1317,20 @@ stddev_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 	std = stddev_stats(&c2c_he->stats.stats);
 
 	snprintf(buf, 10, "%5.1f", std);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+cpucnt_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	     struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	snprintf(buf, 10, "%d", bitmap_weight(c2c_he->cpuset, c2c.cpus_cnt));
 	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
@@ -1658,6 +1672,14 @@ static struct c2c_dimension dim_stddev = {
 	.width		= 8,
 };
 
+static struct c2c_dimension dim_cpucnt = {
+	.header		= HEADER_BOTH("cpu", "cnt"),
+	.name		= "cpucnt",
+	.cmp		= empty_cmp,
+	.entry		= cpucnt_entry,
+	.width		= 8,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -1702,6 +1724,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_median,
 	&dim_mean,
 	&dim_stddev,
+	&dim_cpucnt,
 	NULL,
 };
 
