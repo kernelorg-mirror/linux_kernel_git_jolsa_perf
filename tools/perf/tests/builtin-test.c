@@ -218,6 +218,10 @@ static struct test generic_tests[] = {
 		.func = test__cpu_map_print,
 	},
 	{
+		.desc = "Test bitmap print",
+		.func = test__bitmap_print,
+	},
+	{
 		.func = NULL,
 	},
 };
