@@ -360,10 +360,8 @@ static int hist_entry__init(struct hist_entry *he,
 
 	if (symbol_conf.cumulate_callchain) {
 		he->stat_acc = malloc(sizeof(he->stat));
-		if (he->stat_acc == NULL) {
-			free(he);
+		if (he->stat_acc == NULL)
 			return -ENOMEM;
-		}
 		memcpy(he->stat_acc, &he->stat, sizeof(he->stat));
 		if (!sample_self)
 			memset(&he->stat, 0, sizeof(he->stat));
@@ -381,7 +379,6 @@ static int hist_entry__init(struct hist_entry *he,
 		if (he->branch_info == NULL) {
 			map__zput(he->ms.map);
 			free(he->stat_acc);
-			free(he);
 			return -ENOMEM;
 		}
 
@@ -415,7 +412,6 @@ static int hist_entry__init(struct hist_entry *he,
 				map__put(he->mem_info->daddr.map);
 			}
 			free(he->stat_acc);
-			free(he);
 			return -ENOMEM;
 		}
 	}
@@ -439,10 +435,13 @@ static struct hist_entry *hist_entry__new(struct hist_entry *template,
 		callchain_size = sizeof(struct callchain_root);
 
 	he = zalloc(sizeof(*he) + callchain_size);
-	if (he)
+	if (he) {
 		err = hist_entry__init(he, template, sample_self);
+		if (err)
+			zfree(&he);
+	}
 
-	return err ? NULL : he;
+	return he;
 }
 
 static u8 symbol__parent_filter(const struct symbol *parent)
