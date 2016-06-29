@@ -974,6 +974,8 @@ static PyObject *pyrf_evlist__read_on_cpu(struct pyrf_evlist *pevlist,
 		if (err)
 			return PyErr_Format(PyExc_OSError,
 					    "perf: can't parse sample, err=%d", err);
+
+fprintf(stderr, "KRAVA %d, %p\n", is_tracepoint(pevent), pevent->sample.raw_data);
 		return pyevent;
 	}
 
@@ -1225,6 +1227,9 @@ PyMODINIT_FUNC initperf(void)
 
 	Py_INCREF(&pyrf_evsel__type);
 	PyModule_AddObject(module, "evsel", (PyObject*)&pyrf_evsel__type);
+
+	Py_INCREF(&pyrf_sample_event__type);
+	PyModule_AddObject(module, "sample_event", (PyObject*)&pyrf_sample_event__type);
 
 	Py_INCREF(&pyrf_thread_map__type);
 	PyModule_AddObject(module, "thread_map", (PyObject*)&pyrf_thread_map__type);

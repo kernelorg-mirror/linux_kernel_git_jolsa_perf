@@ -1819,7 +1819,9 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	}
 
 	if (type & PERF_SAMPLE_RAW) {
+fprintf(stderr, "KOZA1\n");
 		OVERFLOW_CHECK_u64(array);
+fprintf(stderr, "KOZA2 %d\n", swapped);
 		u.val64 = *array;
 		if (WARN_ONCE(swapped,
 			      "Endianness of raw data not corrected!\n")) {
@@ -1831,7 +1833,9 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		data->raw_size = u.val32[0];
 		array = (void *)array + sizeof(u32);
 
+fprintf(stderr, "KOZA3 raw_size %d, max_size %d\n", data->raw_size, max_size);
 		OVERFLOW_CHECK(array, data->raw_size, max_size);
+fprintf(stderr, "KOZA4\n");
 		data->raw_data = (void *)array;
 		array = (void *)array + data->raw_size;
 	}
