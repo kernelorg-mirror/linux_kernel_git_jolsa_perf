@@ -48,6 +48,7 @@ PyMODINIT_FUNC initperf(void);
 
 struct pyrf_event {
 	PyObject_HEAD
+	struct perf_evsel *evsel;
 	struct perf_sample sample;
 	union perf_event   event;
 };
@@ -865,13 +866,20 @@ static PyObject *pyrf_evlist__read_on_cpu(struct pyrf_evlist *pevlist,
 	if (event != NULL) {
 		PyObject *pyevent = pyrf_event__new(event);
 		struct pyrf_event *pevent = (struct pyrf_event *)pyevent;
+		struct perf_evsel *evsel;
 
 		perf_evlist__mmap_consume(evlist, cpu);
 
 		if (pyevent == NULL)
 			return PyErr_NoMemory();
 
-		err = perf_evlist__parse_sample(evlist, event, &pevent->sample);
+		evsel = perf_evlist__event2evsel(evlist, event);
+		if (!evsel)
+			return Py_None;
+
+		pevent->evsel = evsel;
+
+		err = perf_evsel__parse_sample(evsel, event, &pevent->sample);
 		if (err)
 			return PyErr_Format(PyExc_OSError,
 					    "perf: can't parse sample, err=%d", err);
