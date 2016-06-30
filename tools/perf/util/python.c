@@ -299,7 +299,7 @@ static int is_printable_array(char *p, unsigned int len)
 {
 	unsigned int i;
 
-	for (i = 0; i < len && p[i]; i++)
+	for (i = 0; i < len; i++)
 		if (!isprint(p[i]) && !isspace(p[i]))
 		    return 0;
 	return 1;
