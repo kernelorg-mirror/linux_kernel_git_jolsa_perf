@@ -46,6 +46,10 @@ struct perf_c2c {
 
 	bool			 use_stdio;
 	bool			 stats_only;
+
+	/* HITM shared clines stats */
+	struct c2c_stats	hitm_stats;
+	int			shared_clines;
 };
 
 static struct perf_c2c c2c;
@@ -2069,6 +2073,39 @@ static int resort_cl_cb(struct hist_entry *he)
 	return 0;
 }
 
+#define HAS_HITMS(__h) ((__h)->stats.lcl_hitm || (__h)->stats.rmt_hitm)
+
+static int resort_hitm_cb(struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	if (HAS_HITMS(c2c_he)) {
+		c2c.shared_clines++;
+		c2c_add_stats(&c2c.hitm_stats, &c2c_he->stats);
+	}
+
+	return 0;
+}
+
+static int hists__iterate_cb(struct hists *hists, hists__resort_cb_t cb)
+{
+	struct rb_node *next = rb_first(&hists->entries);
+	int ret = 0;
+
+	while (next) {
+		struct hist_entry *he;
+
+		he = rb_entry(next, struct hist_entry, rb_node);
+		ret = cb(he);
+		if (ret)
+			break;
+		next = rb_next(&he->rb_node);
+	}
+
+	return ret;
+}
+
 static void print_c2c__display_stats(void)
 {
 	int llc_misses;
@@ -2112,6 +2149,26 @@ static void print_c2c__display_stats(void)
 	printf("  Store L1D Miss                    : %10d\n", stats->st_l1miss);
 	printf("  No Page Map Rejects               : %10d\n", stats->nomap);
 	printf("  Unable to parse data source       : %10d\n", stats->noparse);
+}
+
+static void print_shared_cacheline_info(void)
+{
+	struct c2c_stats *stats = &c2c.hitm_stats;
+	int hitm_cnt = stats->lcl_hitm + stats->rmt_hitm;
+
+	printf("=================================================\n");
+	printf("    Global Shared Cache Line Event Information   \n");
+	printf("=================================================\n");
+	printf("  Total Shared Cache Lines          : %10d\n", c2c.shared_clines);
+	printf("  Load HITs on shared lines         : %10d\n", stats->load);
+	printf("  Fill Buffer Hits on shared lines  : %10d\n", stats->ld_fbhit);
+	printf("  L1D hits on shared lines          : %10d\n", stats->ld_l1hit);
+	printf("  L2D hits on shared lines          : %10d\n", stats->ld_l2hit);
+	printf("  LLC hits on shared lines          : %10d\n", stats->ld_llchit + stats->lcl_hitm);
+	printf("  Locked Access on shared lines     : %10d\n", stats->locks);
+	printf("  Store HITs on shared lines        : %10d\n", stats->store);
+	printf("  Store L1D hits on shared lines    : %10d\n", stats->st_l1hit);
+	printf("  Total Merged records              : %10d\n", hitm_cnt + stats->store);
 }
 
 static void print_cacheline(struct c2c_hists *c2c_hists,
@@ -2178,6 +2235,8 @@ static void perf_c2c__hists_fprintf(FILE *out)
 	setup_pager();
 
 	print_c2c__display_stats();
+	fprintf(out, "\n");
+	print_shared_cacheline_info();
 
 	if (c2c.stats_only)
 		return;
@@ -2449,7 +2508,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
-	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_cl_cb);
+	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_hitm_cb);
+	hists__iterate_cb(&c2c.hists.hists, resort_cl_cb);
 
 	ui_progress__finish();
 
