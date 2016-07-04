@@ -691,7 +691,7 @@ bool is_regular_file(const char *file)
 	if (stat(file, &st))
 		return false;
 
-	return S_ISREG(st.st_mode);
+	return S_ISREG(st.st_mode) || S_ISLNK(st.st_mode);
 }
 
 int fetch_current_timestamp(char *buf, size_t sz)
