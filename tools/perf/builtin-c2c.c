@@ -29,6 +29,7 @@ struct c2c_hist_entry {
 	struct c2c_stats	stats;
 	unsigned long		*cpuset;
 	struct c2c_stats	*node_stats;
+	unsigned int		 cacheline_idx;
 	/*
 	 * must be at the end,
 	 * because of its callchain dynamic entry
@@ -1449,6 +1450,29 @@ cpucnt_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
+static int
+cl_idx_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+	     struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+
+	snprintf(buf, 10, "%u", c2c_he->cacheline_idx);
+	return snprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
+static int
+cl_idx_empty_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
+		   struct hist_entry *he)
+{
+	int width = c2c_width(fmt, hpp, he->hists);
+
+	return snprintf(hpp->buf, hpp->size, "%*s", width, "");
+}
+
 /* HEADER_* macros are for main browser */
 
 #define HEADER_0(__h)	\
@@ -1835,6 +1859,30 @@ static struct c2c_dimension dim_cpucnt = {
 	.width		= 8,
 };
 
+static struct c2c_dimension dim_dcacheline_idx = {
+	HEADER_OFF_0("Index"),
+	.name		= "cl_idx",
+	.cmp		= empty_cmp,
+	.entry		= cl_idx_entry,
+	.width		= 5,
+};
+
+static struct c2c_dimension dim_dcacheline_num = {
+	HEADER_OFF_0("Num"),
+	.name		= "cl_num",
+	.cmp		= empty_cmp,
+	.entry		= cl_idx_entry,
+	.width		= 5,
+};
+
+static struct c2c_dimension dim_dcacheline_num_empty = {
+	HEADER_OFF_0("Num"),
+	.name		= "cl_num_empty",
+	.cmp		= empty_cmp,
+	.entry		= cl_idx_empty_entry,
+	.width		= 5,
+};
+
 #undef HEADER_0
 #undef HEADER_1
 #undef HEADER_SPAN
@@ -1885,6 +1933,9 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_mean,
 	&dim_stddev,
 	&dim_cpucnt,
+	&dim_dcacheline_idx,
+	&dim_dcacheline_num,
+	&dim_dcacheline_num_empty,
 	NULL,
 };
 
@@ -2174,6 +2225,10 @@ static int resort_cl_cb(struct hist_entry *he)
 	calc_width(he);
 
 	if (display && c2c_hists) {
+		static unsigned int idx;
+
+		c2c_he->cacheline_idx = idx++;
+
 		c2c_hists__reinit(c2c_hists, c2c.cl_output,
 				  "offset,rmt_hitm,lcl_hitm");
 
@@ -2301,10 +2356,10 @@ static void print_cacheline(struct c2c_hists *c2c_hists,
 		fprintf(out, "\n");
 	}
 
-	fprintf(out, "  --------------------------------------------------------\n");
+	fprintf(out, "  ---------------------------------------------------------------\n");
 	hist_entry__snprintf(he_cl, &hpp, hpp_list);
 	fprintf(out, "%s\n", bf);
-	fprintf(out, "  --------------------------------------------------------\n");
+	fprintf(out, "  ---------------------------------------------------------------\n");
 
 	hists__fprintf(&c2c_hists->hists, false, 0, 0, 0, out, true);
 }
@@ -2317,6 +2372,7 @@ static void print_pareto(FILE *out)
 
 	perf_hpp_list__init(&hpp_list);
 	ret = hpp_list__parse(&hpp_list,
+				"cl_num,"
 				"cl_rmt_hitm,"
 				"cl_lcl_hitm,"
 				"cl_stores_l1hit,"
@@ -2618,7 +2674,8 @@ static int build_cl_output(char *cl_sort)
 	}
 
 	if (asprintf(&c2c.cl_output,
-		"%s%s%s%s%s%s%s%s",
+		"%s%s%s%s%s%s%s%s%s",
+		c2c.use_stdio ? "cl_num_empty," : "",
 		"percent_rmt_hitm,"
 		"percent_lcl_hitm,"
 		"percent_stores_l1hit,"
@@ -2766,6 +2823,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	}
 
 	c2c_hists__reinit(&c2c.hists,
+			"cl_idx,"
 			"dcacheline,"
 			"tot_recs,"
 			"percent_ldmiss,"
