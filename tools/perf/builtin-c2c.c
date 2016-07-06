@@ -1,6 +1,7 @@
 #include <linux/compiler.h>
 #include <linux/kernel.h>
 #include <linux/stringify.h>
+#include <sys/mman.h>
 #include "util.h"
 #include "debug.h"
 #include "builtin.h"
@@ -284,10 +285,56 @@ dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	       struct hist_entry *left, struct hist_entry *right)
 {
 	u64 l, r;
+	struct map *l_map, *r_map;
 
 	if (!left->mem_info)  return -1;
 	if (!right->mem_info) return 1;
 
+	/* group event types together */
+	if (left->cpumode > right->cpumode) return -1;
+	if (left->cpumode < right->cpumode) return 1;
+
+	l_map = left->mem_info->daddr.map;
+	r_map = right->mem_info->daddr.map;
+
+	/* if both are NULL, jump to sort on al_addr instead */
+	if (!l_map && !r_map)
+		goto addr;
+
+	if (!l_map) return -1;
+	if (!r_map) return 1;
+
+	if (l_map->maj > r_map->maj) return -1;
+	if (l_map->maj < r_map->maj) return 1;
+
+	if (l_map->min > r_map->min) return -1;
+	if (l_map->min < r_map->min) return 1;
+
+	if (l_map->ino > r_map->ino) return -1;
+	if (l_map->ino < r_map->ino) return 1;
+
+	if (l_map->ino_generation > r_map->ino_generation) return -1;
+	if (l_map->ino_generation < r_map->ino_generation) return 1;
+
+	/*
+	 * Addresses with no major/minor numbers are assumed to be
+	 * anonymous in userspace.  Sort those on pid then address.
+	 *
+	 * The kernel and non-zero major/minor mapped areas are
+	 * assumed to be unity mapped.  Sort those on address.
+	 */
+
+	if ((left->cpumode != PERF_RECORD_MISC_KERNEL) &&
+	    (!(l_map->flags & MAP_SHARED)) &&
+	    !l_map->maj && !l_map->min && !l_map->ino &&
+	    !l_map->ino_generation) {
+		/* userspace anonymous */
+
+		if (left->thread->pid_ > right->thread->pid_) return -1;
+		if (left->thread->pid_ < right->thread->pid_) return 1;
+	}
+
+addr:
 	/* al_addr does all the right addr - start + offset calculations */
 	l = cl_address(left->mem_info->daddr.al_addr);
 	r = cl_address(right->mem_info->daddr.al_addr);
@@ -305,7 +352,7 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	int width = c2c_width(fmt, hpp, he->hists);
 
 	if (he->mem_info)
-		addr = cl_address(he->mem_info->daddr.al_addr);
+		addr = cl_address(he->mem_info->daddr.addr);
 
 	return snprintf(hpp->buf, hpp->size, "%*s", width, hex_str(addr));
 }
