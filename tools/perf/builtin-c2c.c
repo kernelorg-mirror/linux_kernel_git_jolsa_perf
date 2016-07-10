@@ -51,6 +51,7 @@ struct perf_c2c {
 	bool			 show_src;
 	bool			 use_stdio;
 	bool			 stats_only;
+	bool			 symbol_full;
 
 	/* HITM shared clines stats */
 	struct c2c_stats	hitm_stats;
@@ -349,6 +350,20 @@ struct c2c_fmt {
 	struct c2c_dimension	*dim;
 };
 
+#define SYMBOL_WIDTH 30
+
+static struct c2c_dimension dim_symbol;
+
+static int symbol_width(struct hists *hists)
+{
+	int width = hists__col_len(hists, dim_symbol.se->se_width_idx);
+
+	if (!c2c.symbol_full)
+		width = MIN(width, SYMBOL_WIDTH);
+
+	return width;
+}
+
 static int c2c_width(struct perf_hpp_fmt *fmt,
 		     struct perf_hpp *hpp __maybe_unused,
 		     struct hists *hists __maybe_unused)
@@ -358,6 +373,9 @@ static int c2c_width(struct perf_hpp_fmt *fmt,
 
 	c2c_fmt = container_of(fmt, struct c2c_fmt, fmt);
 	dim = c2c_fmt->dim;
+
+	if (dim == &dim_symbol)
+		return symbol_width(hists);
 
 	return dim->se ? hists__col_len(hists, dim->se->se_width_idx) :
 			 c2c_fmt->dim->width;
@@ -1941,8 +1959,12 @@ static int c2c_se_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	struct c2c_dimension *dim = c2c_fmt->dim;
 	size_t len = fmt->user_len;
 
-	if (!len)
+	if (!len) {
 		len = hists__col_len(he->hists, dim->se->se_width_idx);
+
+		if (dim == &dim_symbol)
+			len = symbol_width(he->hists);
+	}
 
 	return dim->se->se_snprintf(he, hpp->buf, hpp->size, len);
 }
@@ -2448,6 +2470,9 @@ static int perf_c2c__browse_cacheline(struct hist_entry *he)
 	struct hist_browser *browser;
 	int key = -1;
 
+	/* Display compact version first. */
+	c2c.symbol_full = false;
+
 	c2c_he = container_of(he, struct c2c_hist_entry, he);
 	c2c_hists = c2c_he->hists;
 
@@ -2467,6 +2492,9 @@ static int perf_c2c__browse_cacheline(struct hist_entry *he)
 		key = hist_browser__run(browser, "help");
 
 		switch (key) {
+		case 's':
+			c2c.symbol_full = !c2c.symbol_full;
+			break;
 		case 'q':
 			goto out;
 		default:
@@ -2708,6 +2736,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		    "Use the stdio interface"),
 	OPT_BOOLEAN(0, "stats", &c2c.stats_only,
 		    "Use the stdio interface"),
+	OPT_BOOLEAN(0, "full-symbols", &c2c.symbol_full,
+		    "Display full lenght of symbols"),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", &callchain_param,
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
