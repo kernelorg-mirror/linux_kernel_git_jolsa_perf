@@ -51,6 +51,8 @@ struct perf_c2c {
 	int			 cpus_cnt;
 	int			*cpu2node;
 	int			 node_info;
+
+	bool			 show_src;
 };
 
 static struct perf_c2c c2c;
@@ -1758,6 +1760,11 @@ static struct c2c_dimension dim_cpucnt = {
 	.width		= 8,
 };
 
+static struct c2c_dimension dim_srcline = {
+	.name		= "cl_srcline",
+	.se		= &sort_srcline,
+};
+
 #undef HEADER_LOW
 #undef HEADER_BOTH
 #undef HEADER_SPAN
@@ -1805,6 +1812,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_mean_load,
 	&dim_stddev,
 	&dim_cpucnt,
+	&dim_srcline,
 	NULL,
 };
 
@@ -2012,6 +2020,9 @@ static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 
 static int filter_cb(struct hist_entry *he __maybe_unused)
 {
+	if (c2c.show_src && !he->srcline)
+		he->srcline = hist_entry__get_srcline(he);
+
 	return 0;
 }
 
