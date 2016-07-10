@@ -2495,6 +2495,9 @@ static int perf_c2c__browse_cacheline(struct hist_entry *he)
 		case 's':
 			c2c.symbol_full = !c2c.symbol_full;
 			break;
+		case 'n':
+			c2c.node_info = (c2c.node_info + 1) % 3;
+			break;
 		case 'q':
 			goto out;
 		default:
