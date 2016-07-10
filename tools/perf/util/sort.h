@@ -40,6 +40,7 @@ extern struct sort_entry sort_dso_from;
 extern struct sort_entry sort_dso_to;
 extern struct sort_entry sort_sym_from;
 extern struct sort_entry sort_sym_to;
+extern struct sort_entry sort_srcline;
 extern enum sort_type sort__first_dimension;
 extern const char default_mem_sort_order[];
 
@@ -279,4 +280,5 @@ int64_t
 sort__daddr_cmp(struct hist_entry *left, struct hist_entry *right);
 int64_t
 sort__dcacheline_cmp(struct hist_entry *left, struct hist_entry *right);
+char *hist_entry__get_srcline(struct hist_entry *he);
 #endif	/* __PERF_SORT_H */
