@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <asm/bug.h>
 #include <search.h>
 #include <api/fs/fs.h>
 #include <sys/types.h>
@@ -111,6 +112,9 @@ struct watch {
 		struct {
 			struct thread_map *pid;
 		} task;
+		struct {
+			char	*buf;
+		} interrupt;
 	};
 };
 
@@ -654,6 +658,93 @@ static int task_status_watch_read(struct watch *w)
 	return read_task(w, read_task_status);
 }
 
+static int interrupts(struct watch *w)
+{
+	struct watch_item *item = NULL;
+	char *buf, *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	size_t size;
+	int first_line = 1;
+	int count = 0;
+	char **val = NULL;
+
+	scnprintf(path, PATH_MAX, "%s/interrupts", procfs__mountpoint());
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	buf[size] = 0x0;
+
+	zero_items(&w->items);
+
+	for_each_token(tok, buf, "\n", tmp) {
+		int i = 0, first_col = 1;
+		char *name = NULL;
+		char *tok1, *tmp1 = NULL;
+
+		if (first_line) {
+			for_each_token(tok1, tok, " ", tmp1) {
+				item = new_item(w, rtrim(tok1));
+				if (!item)
+					return -ENOMEM;
+				count++;
+			}
+
+			first_line = 0;
+			continue;
+		}
+
+		if (!val) {
+			val = zalloc(sizeof(*val) * count);
+			if (!val)
+				return -ENOMEM;
+		}
+
+		memset(val, 0x0, sizeof(*val) * count);
+
+		for_each_token(tok1, tok, " ", tmp1) {
+			if (first_col) {
+				name = trim(tok1);
+				first_col = 0;
+				continue;
+			}
+
+			if (i < count) {
+				val[i] = trim(tok1);
+				i++;
+				continue;
+			}
+			break;
+		}
+
+		/* get rid of ':' */
+		name[strlen(name) - 1] = 0x0;
+
+		for (i = 0; i < count; i++) {
+			struct watch_line *line;
+			int skip = 0;
+
+			if (!val[i])
+				val[i] = (char *) "";
+
+			line = new_line(&w->items.item[i], name, val[i], &skip);
+			if (!line) {
+				if (skip)
+					break;
+
+				return -ENOMEM;
+			}
+
+			items_width(&w->items, line);
+		}
+	}
+
+	free(val);
+	free(w->interrupt.buf);
+	w->interrupt.buf = buf;
+	return 0;
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
@@ -706,6 +797,11 @@ static struct watch watch[] = {
 		.read		= task_status_watch_read,
 		.flags		= WATCH_TASK,
 		.help		= "task status   [/proc/pid/status]",
+	},
+	{
+		.name		= "int",
+		.read		= interrupts,
+		.help		= "interrupts    [/proc/interrupts]",
 	},
 	{ NULL },
 };
