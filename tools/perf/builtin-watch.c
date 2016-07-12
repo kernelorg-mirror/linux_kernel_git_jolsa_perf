@@ -11,6 +11,8 @@
 
 struct watch;
 
+#define MAX_LINES 100
+
 struct watch_line {
 	char			*name;
 	int			 idx;
@@ -25,6 +27,7 @@ struct watch_item {
 
 	struct watch_line	*line;
 	int			 cnt;
+	int			 cnt_iter;
 
 	struct watch		*watch;
 };
@@ -32,6 +35,8 @@ struct watch_item {
 struct watch_items {
 	struct watch_item	*item;
 	int			 cnt;
+	int			 cnt_iter;
+
 	size_t			 width_name;
 	size_t			 width_data;
 };
@@ -45,6 +50,152 @@ struct watch {
 
 	struct watch_items	 items;
 };
+
+#define for_each_token(__tok, __buf, __sep, __tmp)		\
+	for (__tok = strtok_r(__buf, __sep, &__tmp); __tok;	\
+	     __tok = strtok_r(NULL,  __sep, &__tmp))
+
+__maybe_unused
+static void items_width(struct watch_items *items,
+			struct watch_line *line)
+{
+	items->width_name = max(items->width_name, strlen(line->name));
+	items->width_data = max(items->width_data, strlen(line->data));
+}
+
+__maybe_unused
+static struct watch_item* new_item(struct watch *w, char *name)
+{
+	struct watch_items *items = &w->items;
+	struct watch_item *item;
+	size_t size = sizeof(*item);
+	bool allocated = false;
+
+	if (!name)
+		return NULL;
+
+	if (items->cnt_iter == items->cnt) {
+		items->cnt++;
+
+		if (items->item)
+			size *= items->cnt;
+
+		items->item = item = realloc(items->item, size);
+		if (!item)
+			return NULL;
+
+		allocated = true;
+	}
+
+	item = &items->item[items->cnt_iter++];
+
+	if (allocated) {
+		/* New item.. */
+		memset(item, 0, sizeof(*item));
+		item->name  = strdup(name);
+		item->idx   = items->cnt_iter - 1;
+		item->watch = w;
+
+		item->line = zalloc(sizeof(struct watch_line) * MAX_LINES);
+		if (!item->line)
+			return NULL;
+
+	} else {
+		/* Old item.. restart line iteration. */
+		item->cnt_iter = 0;
+
+		/* Item possition/name changed, fail for now. */
+		if (strcmp(name, item->name))
+			return NULL;
+	}
+
+	items->width_data = max(items->width_data, strlen(item->name));
+	return item;
+}
+
+#define MAX_DATALEN 30
+
+__maybe_unused
+static struct watch_line* new_line(struct watch_item *item,
+				   char *name, char *data)
+{
+	struct watch_line *line;
+
+	if (item->cnt_iter == MAX_LINES)
+		return NULL;
+
+	if (strlen(data) > MAX_DATALEN) {
+		data[MAX_DATALEN] = 0x0;
+		data[MAX_DATALEN - 1] = '.';
+		data[MAX_DATALEN - 2] = '.';
+		data[MAX_DATALEN - 3] = '.';
+	}
+
+	line = &item->line[item->cnt_iter];
+
+	if (item->cnt_iter == item->cnt) {
+		/* New line. */
+		line->name  = strdup(name);
+		line->color = 0;
+		line->idx   = item->cnt;
+		item->cnt++;
+	} else {
+		/* Old line. */
+		int equal = 0;
+
+		/* Line possition/name changed, fail for now. */
+		if (strcmp(line->name, name))
+			return NULL;
+
+		if (!strcmp(line->data, data))
+			equal = 1;
+
+		if (equal && line->color)
+			line->color -= 1;
+
+		if (!equal)
+			line->color = 3;
+	}
+
+	line->data = data;
+
+	item->cnt_iter++;
+	return line;
+}
+
+__maybe_unused
+static void zero_items(struct watch_items *items)
+{
+	items->cnt_iter   = 0;
+	items->width_data = 0;
+	items->width_name = 0;
+}
+
+static void free_item(struct watch_item *item)
+{
+	int i;
+
+	for (i = 0; i < MAX_LINES; i++)
+		free(item->line[i].name);
+
+	free(item->line);
+	free(item->name);
+}
+
+static void free_items(struct watch_items *items)
+{
+	int i;
+
+	for (i = 0; i < items->cnt; i++)
+		free_item(&items->item[i]);
+
+	free(items->item);
+}
+
+static void free_watch(struct watch *w)
+{
+	free_items(&w->items);
+}
 
 static struct watch watch[] = {
 	{ NULL },
@@ -265,5 +416,6 @@ int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 	}
 
 	tcsetattr(0, TCSAFLUSH, &old);
+	free_watch(w);
 	return ret;
 }
