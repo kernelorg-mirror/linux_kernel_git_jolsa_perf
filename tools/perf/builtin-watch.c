@@ -83,6 +83,13 @@ struct watch {
 
 	struct watch_items	 items;
 	struct watch_plot	 plot;
+
+	union {
+		struct {
+			int	 type;
+			char	*buf;
+		} rq;
+	};
 };
 
 #define for_each_token(__tok, __buf, __sep, __tmp)		\
@@ -145,7 +152,6 @@ static void plot_line(struct watch_plot *plot,
 	pi->line[pi->cnt++].line = line->idx;
 }
 
-__maybe_unused
 static void items_width(struct watch_items *items,
 			struct watch_line *line)
 {
@@ -153,7 +159,6 @@ static void items_width(struct watch_items *items,
 	items->width_data = max(items->width_data, strlen(line->data));
 }
 
-__maybe_unused
 static struct watch_item* new_item(struct watch *w, char *name)
 {
 	struct watch_items *items = &w->items;
@@ -283,7 +288,6 @@ static int zero_line(struct watch_item *item, struct watch_line *line,
 
 #define MAX_DATALEN 30
 
-__maybe_unused
 static struct watch_line* new_line(struct watch_item *item,
 				   char *name, char *data,
 				   int *skip)
@@ -352,7 +356,6 @@ static struct watch_line* new_line(struct watch_item *item,
 	return line;
 }
 
-__maybe_unused
 static void zero_items(struct watch_items *items)
 {
 	items->cnt_iter   = 0;
@@ -386,7 +389,158 @@ static void free_watch(struct watch *w)
 	free_items(&w->items);
 }
 
+enum {
+	SCHED_RQ,
+	SCHED_CFS,
+	SCHED_CFS_ROOT,
+	SCHED_RT,
+	SCHED_DL,
+};
+
+static int add_sched_line(struct watch_items *items,
+			  struct watch_item *item, char *str,
+			  int *skip)
+{
+	struct watch_line *line;
+	char *name, *data;
+
+	data = index(str, ':');
+	*data++ = 0x0;
+	name = trim(str);
+
+	line = new_line(item, name, data, skip);
+	if (!line)
+		return -ENOMEM;
+
+	items_width(items, line);
+	return 0;
+}
+
+static struct watch_item *add_sched_item(struct watch *w, char *name)
+{
+	if (w->rq.type == SCHED_RQ) {
+		/*
+		 * Change 'cpu#0, 2594.054 MHz' into 'cpu#0'.
+		 */
+		char *c = strchr(name, ',');
+
+		if (c)
+			*c = 0;
+	}
+
+	return new_item(w, name);
+}
+
+static int is_sched_item(struct watch *w, char *tok)
+{
+	size_t len;
+	int is_root;
+
+	if (w->rq.type == SCHED_RQ && (!strncmp("cpu#", tok, 4)))
+		return 1;
+
+	if (!strncmp("cfs_rq[", tok, 7)) {
+		len     = strlen(tok);
+		is_root = !strncmp("]:/", tok + len - 3, 3);
+
+		if ((w->rq.type == SCHED_CFS) && !is_root)
+			return 1;
+
+		if ((w->rq.type == SCHED_CFS_ROOT) && is_root)
+			return 1;
+
+		return 0;
+	}
+
+	if (!strncmp("rt_rq[", tok, 6))
+		return w->rq.type == SCHED_RT;
+
+	if (!strncmp("dl_rq[", tok, 6))
+		return w->rq.type == SCHED_DL;
+
+	return 0;
+}
+
+static int sched_watch_read(struct watch *w)
+{
+	struct watch_item *item = NULL;
+	char *buf, *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	size_t size;
+
+	scnprintf(path, PATH_MAX, "%s/sched_debug", procfs__mountpoint());
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	zero_items(&w->items);
+
+	for_each_token(tok, buf, "\n", tmp) {
+		int skip = 0;
+
+		if (is_sched_item(w, tok)) {
+			item = add_sched_item(w, rtrim(tok));
+			if (!item)
+				return -ENOMEM;
+		} else if (!strncmp("  .", tok, 3)) {
+			if (!item)
+				continue;
+			if (add_sched_line(&w->items, item, tok, &skip)) {
+				if (skip)
+					continue;
+				return -ENOMEM;
+			}
+		} else {
+			item = NULL;
+		}
+	}
+
+	free(w->rq.buf);
+	w->rq.buf = buf;
+	return 0;
+}
+
 static struct watch watch[] = {
+	{
+		.name 		= "rq",
+		.read		= sched_watch_read,
+		.rq		= {
+			.type	= SCHED_RQ,
+		},
+		.help		= "CPU runqueues [/proc/sched_debug]",
+	},
+	{
+		.name		= "cfs",
+		.read		= sched_watch_read,
+		.rq		= {
+			.type	= SCHED_CFS,
+		},
+		.help		= "CFS groups    [/proc/sched_debug]",
+	},
+	{
+		.name		= "cfs_root",
+		.read		= sched_watch_read,
+		.rq		= {
+			.type	= SCHED_CFS_ROOT,
+		},
+		.help		= "CFS roots     [/proc/sched_debug]",
+	},
+	{
+		.name		= "rt",
+		.read		= sched_watch_read,
+		.rq		= {
+			.type	= SCHED_RT,
+		},
+		.help		= "RT  runqueues [/proc/sched_debug]",
+	},
+	{
+		.name		= "dl",
+		.read		= sched_watch_read,
+		.rq		= {
+			.type	= SCHED_DL,
+		},
+		.help		= "DL  runqueues [/proc/sched_debug]",
+	},
 	{ NULL },
 };
 
