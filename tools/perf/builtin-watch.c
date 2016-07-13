@@ -1,4 +1,6 @@
 #include <linux/compiler.h>
+#include <linux/types.h>
+#include <time.h>
 #include <subcmd/parse-options.h>
 #include <sys/ioctl.h>
 #include <search.h>
@@ -45,12 +47,38 @@ struct watch_items {
 
 typedef int (*watch_read_fn_t)(struct watch *);
 
+struct plot_line {
+	FILE			*file;
+	int			 line;
+};
+
+struct plot_item {
+	FILE			*file;
+	int			 item;
+
+	struct plot_line	 line[MAX_LINES];
+	int			 cnt;
+};
+
+struct watch_plot {
+	bool			 enabled;
+	char			*file;
+	int			 yx;
+
+	struct hsearch_data	 items;
+	struct hsearch_data	 fields;
+
+	int			 pi_cnt;
+	struct plot_item	 pi[MAX_FIELDS];
+};
+
 struct watch {
 	const char		*name;
 	const char		*help;
 	watch_read_fn_t		 read;
 
 	struct watch_items	 items;
+	struct watch_plot	 plot;
 };
 
 #define for_each_token(__tok, __buf, __sep, __tmp)		\
@@ -86,6 +114,31 @@ static int create_htable(struct hsearch_data *table, size_t size,
 	}
 
 	return 0;
+}
+
+static void plot_line(struct watch_plot *plot,
+		      struct watch_item *item,
+		      struct watch_line *line)
+{
+	struct plot_item *pi;
+	ENTRY e, *ep;
+
+	e.key = item->name;
+	if (!hsearch_r(e, FIND, &ep, &plot->items))
+		return;
+
+	pi = ep->data;
+	if (!pi) {
+		pi = &plot->pi[plot->pi_cnt++];
+		ep->data = pi;
+		pi->item = item->idx;
+	}
+
+	e.key = line->name;
+	if (!hsearch_r(e, FIND, &ep, &plot->fields))
+		return;
+
+	pi->line[pi->cnt++].line = line->idx;
 }
 
 __maybe_unused
@@ -179,6 +232,10 @@ static struct watch_line* new_line(struct watch_item *item,
 		line->color = 0;
 		line->idx   = item->cnt;
 		item->cnt++;
+
+		if (w->plot.enabled)
+			plot_line(&w->plot, item, line);
+
 	} else {
 		/* Old line. */
 		int equal = 0;
@@ -408,14 +465,162 @@ static int setup_fields(struct watch *w, const char *field)
 	return 0;
 }
 
+static int setup_plot(struct watch *w, const char *str_)
+{
+	struct watch_plot *plot = &w->plot;
+	char *tok, *tmp = NULL;
+	char *str    = strdup(str_);
+	char *items  = NULL;
+	char *fields = NULL;
+	char *file   = NULL;
+	char *yx     = NULL;
+
+	for_each_token(tok, str, ":", tmp) {
+		if (!items)
+			items = tok;
+		else if (!fields)
+			fields = tok;
+		else if (!yx) {
+			int yxb;
+
+			yx  = tok;
+			yxb = !strcmp(yx, "yx");
+
+			if (!yxb && strcmp(yx, "xy"))
+				file = tok;
+			else
+				plot->yx = yxb;
+		} else if (!file) {
+			file = tok;
+		} else {
+			return -1;
+		}
+	}
+
+	if (file)
+		plot->file = strdup(file);
+	else
+		plot->file = strdup("plot.data");
+
+	if (create_htable(&plot->items, MAX_FIELDS, items, ","))
+		return -1;
+
+	if (create_htable(&plot->fields, MAX_FIELDS, fields, ","))
+		return -1;
+
+	plot->enabled = true;
+	return 0;
+}
+
+static int plot_watch_xy(struct watch *w)
+{
+	struct watch_line *line;
+	struct plot_item *pi;
+	int i;
+
+	for (i = 0; i < w->plot.pi_cnt; i++) {
+		struct watch_item *item;
+		int l;
+
+		pi = &w->plot.pi[i];
+		item = &w->items.item[pi->item];
+
+		if (!pi->file) {
+			char path[PATH_MAX];
+
+			scnprintf(path, PATH_MAX, "%s-%s", w->plot.file, item->name);
+			pi->file = fopen(path, "w+");
+			if (!pi->file)
+				return -EINVAL;
+
+			fprintf(pi->file, "# time ");
+
+			for (l = 0; l < pi->cnt; l++) {
+				line = &item->line[pi->line[l].line];
+				fprintf(pi->file, "%s ", line->name);
+			}
+
+			fprintf(pi->file, "\n");
+		}
+
+		fprintf(pi->file, "%u ", (unsigned int) time(NULL));
+
+		for (l = 0; l < pi->cnt; l++) {
+			line = &item->line[pi->line[l].line];
+			fprintf(pi->file, "%s ", line->data);
+		}
+
+		fprintf(pi->file, "\n");
+
+		fflush(pi->file);
+	}
+
+	return 0;
+}
+
+static int plot_watch_yx(struct watch *w)
+{
+	struct watch_item *item;
+	struct watch_item *item0;
+	struct plot_item *pi0 = &w->plot.pi[0];
+	struct plot_item *pi;
+	struct plot_line *pl;
+	int i, l;
+
+	item0 = &w->items.item[pi0->item];
+
+	for (l = 0; l < pi0->cnt; l++) {
+		pl = &pi0->line[l];
+
+		if (!pl->file) {
+			char path[PATH_MAX];
+
+			scnprintf(path, PATH_MAX, "%s-%s", w->plot.file, item0->line[pl->line].name);
+			pl->file = fopen(path, "w+");
+			if (!pl->file)
+				return -EINVAL;
+
+			fprintf(pl->file, "# time ");
+
+			for (i = 0; i < w->plot.pi_cnt; i++) {
+				pi = &w->plot.pi[i];
+				item = &w->items.item[pi->item];
+				fprintf(pl->file, "%s ", item->name);
+			}
+
+			fprintf(pl->file, "\n");
+		}
+
+		fprintf(pl->file, "%u ", (unsigned int) time(NULL));
+
+		for (i = 0; i < w->plot.pi_cnt; i++) {
+			pi = &w->plot.pi[i];
+			item = &w->items.item[pi->item];
+			fprintf(pl->file, "%s ", item->line[pi->line[l].line].data);
+		}
+
+		fprintf(pl->file, "\n");
+		fflush(pl->file);
+	}
+
+	return 0;
+}
+
+static int plot_watch(struct watch *w)
+{
+	return w->plot.yx ? plot_watch_yx(w) : plot_watch_xy(w);
+}
+
 int cmd_watch(int argc, const char **argv,
 	      const char *prefix __maybe_unused)
 {
 	const char *field = NULL;
+	const char *plot = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
 		OPT_STRING('f', "field", &field, "field", "fields"),
+		OPT_STRING(0, "plot", &plot, "field", "fields"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -452,6 +657,11 @@ int cmd_watch(int argc, const char **argv,
 		return -1;
 	}
 
+	if (plot && setup_plot(w, plot)) {
+		pr_err("failed: initialize plots\n");
+		return -1;
+	}
+
 	ret = system("clear");
 	set_term_quiet_input(&old);
 
@@ -462,6 +672,14 @@ int cmd_watch(int argc, const char **argv,
 		if (ret) {
 			pr_err("failed: reading data\n");
 			break;
+		}
+
+		if (w->plot.enabled) {
+			ret = plot_watch(w);
+			if (ret) {
+				pr_err("failed: plotting data\n");
+				break;
+			}
 		}
 
 		display_watch(w);
