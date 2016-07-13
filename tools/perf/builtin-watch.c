@@ -47,8 +47,12 @@ struct watch_items {
 
 	size_t			 width_name;
 	size_t			 width_data;
+
 	bool			 has_fields;
 	struct hsearch_data	 fields;
+
+	bool			 has_zeros;
+	struct hsearch_data	 zeros;
 };
 
 typedef int (*watch_read_fn_t)(struct watch *);
@@ -205,6 +209,84 @@ static struct watch_item* new_item(struct watch *w, char *name)
 	return item;
 }
 
+struct zero_item {
+	char *data_old;
+};
+
+struct zero_field {
+	struct zero_item *item;
+	int item_cnt;
+};
+
+static struct zero_item *zero_item_get(void **ptr, struct watch_item *item)
+{
+	struct zero_field *field = *ptr;
+	struct zero_item *zi;
+	int new = 0;
+
+	if (!field) {
+		field = zalloc(sizeof(*field));
+		if (!field)
+			return NULL;
+
+		*ptr = field;
+	}
+
+	if (field->item_cnt <= item->idx) {
+		zi = realloc(field->item, sizeof(*zi) * (item->idx + 1));
+		if (!zi)
+			return NULL;
+
+		field->item     = zi;
+		field->item_cnt = item->idx + 1;
+
+		new = 1;
+	}
+
+	zi = &field->item[item->idx];
+
+	if (new)
+		memset(zi, 0x0, sizeof(*zi));
+
+	return zi;
+}
+
+static int zero_line(struct watch_item *item, struct watch_line *line,
+		     char **data_new, int *free_data)
+{
+	struct watch *w = item->watch;
+	struct zero_item *zi;
+	ENTRY e, *ep;
+
+	e.key = line->name;
+	if (!hsearch_r(e, FIND, &ep, &w->items.zeros))
+		return 0;
+
+	zi = zero_item_get(&ep->data, item);
+	if (!zi)
+		return -ENOMEM;
+
+	if (zi->data_old) {
+		unsigned long val_new, val_old;
+		char *endptr;
+
+		val_old = strtoull(zi->data_old,  &endptr, 0);
+		val_new = strtoull(*data_new, &endptr, 0);
+
+		zi->data_old = *data_new;
+
+		if (asprintf(data_new, "%lu", val_new - val_old) < 0)
+			return -ENOMEM;
+
+		*free_data   = 1;
+	} else {
+		zi->data_old = *data_new;
+		*data_new    = strdup("0");
+	}
+
+	return *data_new ? 0 : -1;
+}
+
 #define MAX_DATALEN 30
 
 __maybe_unused
@@ -214,6 +296,7 @@ static struct watch_line* new_line(struct watch_item *item,
 {
 	struct watch *w = item->watch;
 	struct watch_line *line;
+	int free_data = 0;
 
 	if (item->cnt_iter == MAX_LINES)
 		return NULL;
@@ -239,6 +322,9 @@ static struct watch_line* new_line(struct watch_item *item,
 		line->idx   = item->cnt;
 		item->cnt++;
 
+		if (w->items.has_zeros && zero_line(item, line, &data, &free_data))
+			return NULL;
+
 		if (w->plot.enabled)
 			plot_line(&w->plot, item, line);
 
@@ -250,6 +336,9 @@ static struct watch_line* new_line(struct watch_item *item,
 		if (strcmp(line->name, name))
 			return NULL;
 
+		if (w->items.has_zeros && zero_line(item, line, &data, &free_data))
+			return NULL;
+
 		if (!strcmp(line->data, data))
 			equal = 1;
 
@@ -259,6 +348,9 @@ static struct watch_line* new_line(struct watch_item *item,
 		if (!equal)
 			line->color = 3;
 	}
+
+	if (free_data)
+		free(line->data);
 
 	line->data = data;
 
@@ -617,15 +709,28 @@ static int plot_watch(struct watch *w)
 	return w->plot.yx ? plot_watch_yx(w) : plot_watch_xy(w);
 }
 
+static int setup_zero(struct watch *w, const char *str_)
+{
+	char *str = strdup(str_);
+
+	if (create_htable(&w->items.zeros, MAX_FIELDS, str, ","))
+		return -1;
+
+	w->items.has_zeros = true;
+	return 0;
+}
+
 int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 {
 	const char *field = NULL;
 	const char *plot = NULL;
+	const char *zero = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
 		OPT_STRING('f', "field", &field, "field", "fields"),
 		OPT_STRING(0, "plot", &plot, "field", "fields"),
+		OPT_STRING(0, "zero", &zero, "field", "fields"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -664,6 +769,11 @@ int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 
 	if (plot && setup_plot(w, plot)) {
 		pr_err("failed: initialize plots\n");
+		return -1;
+	}
+
+	if (zero && setup_zero(w, zero)) {
+		pr_err("failed: initialize zeros\n");
 		return -1;
 	}
 
