@@ -115,6 +115,10 @@ struct watch {
 		struct {
 			char	*buf;
 		} interrupt;
+		struct {
+			char		*buf;
+			const char	*file;
+		} debug;
 	};
 };
 
@@ -745,6 +749,52 @@ static int interrupts(struct watch *w)
 	return 0;
 }
 
+static int debug(struct watch *w)
+{
+	struct watch_item *item = NULL;
+	char *buf, *tok, *tmp = NULL;
+	char path[PATH_MAX];
+	size_t size;
+
+	scnprintf(path, PATH_MAX, "%s", w->debug.file);
+
+	if (filename__read_str(path, &buf, &size))
+		return -1;
+
+	buf[size] = 0x0;
+	zero_items(&w->items);
+
+	for_each_token(tok, buf, "\n", tmp) {
+		int skip;
+
+		if (tok[0] != '.') {
+			item = new_item(w, rtrim(tok));
+			if (!item)
+				return -ENOMEM;
+		} else {
+			struct watch_line *line;
+			char *name, *data;
+
+			data = index(tok, ' ');
+			*data++ = 0x0;
+			name = trim(tok);
+
+			line = new_line(item, name, trim(data), &skip);
+			if (!line) {
+				if (skip)
+					continue;
+				return -ENOMEM;
+			}
+
+			items_width(&w->items, line);
+		}
+	}
+
+	free(w->debug.buf);
+	w->debug.buf = buf;
+	return 0;
+}
+
 static struct watch watch[] = {
 	{
 		.name 		= "rq",
@@ -802,6 +852,11 @@ static struct watch watch[] = {
 		.name		= "int",
 		.read		= interrupts,
 		.help		= "interrupts    [/proc/interrupts]",
+	},
+	{
+		.name		= "debug",
+		.read		= debug,
+		.help		= "debug         [xxx]",
 	},
 	{ NULL },
 };
@@ -1141,6 +1196,7 @@ int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 	const char *plot = NULL;
 	const char *zero = NULL;
 	const char *pid = NULL;
+	const char *file = NULL;
 	const struct option options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show counter open errors, etc)"),
@@ -1148,6 +1204,7 @@ int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 		OPT_STRING(0, "plot", &plot, "field", "fields"),
 		OPT_STRING(0, "zero", &zero, "field", "fields"),
 		OPT_STRING('p', "pid", &pid, "pid", "pids"),
+		OPT_STRING(0, "file", &file, "file", "file"),
 		OPT_END()
 	};
 	const char *usage[] = {
@@ -1192,6 +1249,15 @@ int cmd_watch(int argc __maybe_unused, const char **argv __maybe_unused)
 	if (zero && setup_zero(w, zero)) {
 		pr_err("failed: initialize zeros\n");
 		return -1;
+	}
+
+	if (file) {
+		if (strcmp(w->name, "debug")) {
+			pr_err("failed: file is only for debug watch\n");
+			return -1;
+		}
+
+		w->debug.file = file;
 	}
 
 	if (pid) {
