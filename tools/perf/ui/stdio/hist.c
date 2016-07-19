@@ -714,7 +714,7 @@ hists__fprintf_standard_headers(struct hists *hists,
 
 int hists__fprintf_headers(struct hists *hists, FILE *fp)
 {
-	char bf[96];
+	char bf[1024];
 	struct perf_hpp dummy_hpp = {
 		.buf	= bf,
 		.size	= sizeof(bf),
