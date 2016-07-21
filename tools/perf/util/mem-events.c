@@ -270,8 +270,7 @@ int perf_script__meminfo_scnprintf(char *out, size_t sz, struct mem_info *mem_in
 	return i;
 }
 
-int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
-		     u64 weight)
+int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi)
 {
 	union perf_mem_data_src *data_src = &mi->data_src;
 	u64 daddr  = mi->daddr.addr;
@@ -331,10 +330,8 @@ int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
 		    (lvl & P(LVL, REM_CCE2))) {
 			if (snoop & P(SNOOP, HIT))
 				stats->rmt_hit++;
-			else if (snoop & P(SNOOP, HITM)) {
+			else if (snoop & P(SNOOP, HITM))
 				stats->rmt_hitm++;
-				update_stats(&stats->stats, weight);
-			}
 		}
 
 		if ((lvl & P(LVL, MISS)))
@@ -372,6 +369,8 @@ int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
 
 void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add)
 {
+	stats->nr_entries	+= add->nr_entries;
+
 	stats->locks		+= add->locks;
 	stats->store		+= add->store;
 	stats->st_uncache	+= add->st_uncache;
@@ -396,10 +395,4 @@ void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add)
 	stats->rmt_dram		+= add->rmt_dram;
 	stats->nomap		+= add->nomap;
 	stats->noparse		+= add->noparse;
-
-	/* FIX */
-	if (add->rmt_hitm)
-		update_stats(&stats->stats, add->stats.mean);
-
-	stats->nr_entries	+= add->nr_entries;
 }

@@ -39,7 +39,6 @@ int perf_script__meminfo_scnprintf(char *bf, size_t size, struct mem_info *mem_i
 
 struct c2c_stats {
 	int		nr_entries;
-	struct stats	stats;
 
 	int	locks;               /* count of 'lock' transactions */
 	int	store;               /* count of all stores in trace */
@@ -68,8 +67,7 @@ struct c2c_stats {
 };
 
 struct hist_entry;
-int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi,
-		     u64 weight);
+int c2c_decode_stats(struct c2c_stats *stats, struct mem_info *mi);
 void c2c_add_stats(struct c2c_stats *stats, struct c2c_stats *add);
 
 #endif /* __PERF_MEM_EVENTS_H */
