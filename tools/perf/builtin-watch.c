@@ -76,6 +76,7 @@ static struct winsize ws;
 static int rows_from;
 static int rows;
 static int vrows;
+static int lines_idx;
 
 static void update_rows(bool inc)
 {
@@ -92,7 +93,7 @@ static void update_rows(bool inc)
 	}
 }
 
-static void display_items(struct watch_items *items, int from, int to)
+static void display_items(struct watch_items *items, int from, int to, int lines_from, int lines_to)
 {
 	struct watch_item *item0 = &items->item[0];
 	int width_name = (int) items->width_name;
@@ -110,7 +111,7 @@ static void display_items(struct watch_items *items, int from, int to)
 
 	printf("\n");
 
-	for (j = 0; j < item0->cnt; j++) {
+	for (j = lines_from; j < lines_to; j++) {
 		printf("%-*s", width_name, item0->line[j].name);
 
 		for (i = from; i < to; i++) {
@@ -134,6 +135,7 @@ static void display_items(struct watch_items *items, int from, int to)
 static void __display_watch(struct watch *w)
 {
 	struct watch_item *item0 = &w->items.item[0];
+	int lines_idx_max, lines_from, lines_to;
 	int cols, items, lines, i;
 
 	/* for readability */
@@ -154,6 +156,15 @@ static void __display_watch(struct watch *w)
 	 * item and do not print last '\n'
 	 */
 	vrows = (ws.ws_row - 1) / lines;
+	vrows = max(vrows, 1);
+
+	lines_idx_max = (item0->cnt / ws.ws_row);
+	lines_idx = min(lines_idx, lines_idx_max);
+	lines_idx = ws.ws_row > item0->cnt ? 0 : lines_idx;
+
+	lines_from = lines_idx * ws.ws_row;
+	lines_from = max(0, lines_from - 2);
+	lines_to   = min(lines_from + ws.ws_row - 2, item0->cnt);
 
 	for (i = rows_from; i < rows_from + vrows; i++) {
 		int from = i * cols;
@@ -162,7 +173,7 @@ static void __display_watch(struct watch *w)
 		if (from >= items)
 			break;
 
-		display_items(&w->items, from, to);
+		display_items(&w->items, from, to, lines_from, lines_to);
 	}
 }
 
@@ -237,6 +248,15 @@ int cmd_watch(int argc, const char **argv,
 			break;
 		case 62:
 			update_rows(true);
+			break;
+		case ' ':
+			lines_idx++;
+			ret = system("clear");
+			break;
+		case 'w':
+			lines_idx = max(0, lines_idx - 1);
+			ret = system("clear");
+			break;
 		default:
 			break;
 		}
