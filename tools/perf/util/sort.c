@@ -588,7 +588,7 @@ static char *get_trace_output(struct hist_entry *he)
 	} else {
 		pevent_event_info(&seq, evsel->tp_format, &rec);
 	}
-	return seq.buffer;
+	return realloc(seq.buffer, seq.len);
 }
 
 static int64_t
