@@ -70,6 +70,32 @@ RECORD OPTIONS
 --all-user::
 	Configure all used events to run in user space.
 
+-i::
+--input::
+	Specify the input file to process.
+
+-N::
+--node-info::
+	Show extra node info in report (see NODE INFO section)
+
+-c::
+--coalesce::
+	Specify sorintg fields for single cacheline display.
+
+-g::
+--call-graph::
+	Setup callchains parameters.
+	Please refer to perf-report man page for details.
+
+--stdio::
+	Force the stdio output (see STDIO OUTPUT)
+
+--stats::
+	Display only statistic tables and force stdio mode.
+
+--full-symbols::
+	Display full lenght of symbols.
+
 RECORD OPTIONS
 --------------
 -k::
@@ -83,6 +109,15 @@ RECORD OPTIONS
 -i::
 --input=::
 	Input file name. (default: perf.data unless stdin is a fifo)
+
+NODE INFO
+---------
+
+STDIO OUTPUT
+------------
+
+TUI OUTPUT
+----------
 
 SEE ALSO
 --------
