@@ -14,6 +14,8 @@
 #include "tool.h"
 #include "data.h"
 #include "sort.h"
+#include "evlist.h"
+#include "evsel.h"
 #include <asm/bug.h>
 #include "ui/browsers/hists.h"
 
@@ -2150,13 +2152,32 @@ static void print_pareto(FILE *out)
 	}
 }
 
-static void perf_c2c__hists_fprintf(FILE *out)
+static void print_c2c_info(FILE *out, struct perf_session *session)
+{
+	struct perf_evlist *evlist = session->evlist;
+	struct perf_evsel *evsel;
+	bool first = true;
+
+	fprintf(out, "=================================================\n");
+	fprintf(out, "                 c2c details                     \n");
+	fprintf(out, "=================================================\n");
+
+	evlist__for_each_entry(evlist, evsel) {
+		fprintf(out, "%-36s: %s\n", first ? "  Events" : "",
+			perf_evsel__name(evsel));
+		first= false;
+	}
+}
+
+static void perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
 {
 	setup_pager();
 
 	print_c2c__display_stats(out);
 	fprintf(out, "\n");
 	print_shared_cacheline_info(out);
+	fprintf(out, "\n");
+	print_c2c_info(out, session);
 
 	if (c2c.stats_only)
 		return;
@@ -2211,8 +2232,8 @@ perf_c2c_cacheline_browser__title(struct hist_browser *browser,
 	cl_browser = container_of(browser, struct c2c_cacheline_browser, hb);
 	he = cl_browser->he;
 
-        if (he->mem_info)
-                addr = cl_address(he->mem_info->daddr.addr);
+	if (he->mem_info)
+		addr = cl_address(he->mem_info->daddr.addr);
 
 	scnprintf(bf, size, "Cacheline 0x%lx", addr);
 	return 0;
@@ -2441,7 +2462,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	ui_progress__finish();
 
 	if (c2c.use_stdio)
-		perf_c2c__hists_fprintf(stdout);
+		perf_c2c__hists_fprintf(stdout, session);
 	else
 		perf_c2c__hists_browse(&c2c.hists.hists);
 
