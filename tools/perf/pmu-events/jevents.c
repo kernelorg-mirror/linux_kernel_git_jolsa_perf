@@ -197,15 +197,83 @@ static struct msrmap *lookup_msr(char *map, jsmntok_t *val)
 	goto out_free;						\
 } } while (0)
 
+#define TOPIC_DEPTH 256
+static char *topic_array[TOPIC_DEPTH];
+static int   topic_level;
+
+static char *get_topic(void)
+{
+	char *tp_old, *tp = NULL;
+	int i;
+
+	for (i = 0; i < topic_level + 1; i++) {
+		int n;
+
+		tp_old = tp;
+		n = asprintf(&tp, "%s%s", tp ?: "", topic_array[i]);
+		if (n < 0) {
+			pr_info("%s: asprintf() error %s\n", prog);
+			return NULL;
+		}
+		free(tp_old);
+	}
+
+	for (i = 0; i < (int) strlen(tp); i++) {
+		char c = tp[i];
+
+		if (c == '-')
+			tp[i] = ' ';
+		else if (c == '.') {
+			tp[i] = '\0';
+			break;
+		}
+	}
+
+	return tp;;
+}
+
+static int add_topic(int level, char *bname)
+{
+	char *topic;
+
+	level -= 2;
+
+	if (level >= TOPIC_DEPTH)
+		return -EINVAL;
+
+	topic = strdup(bname);
+	if (!topic) {
+		pr_info("%s: strdup() error %s for file %s\n", prog,
+				strerror(errno), bname);
+		return -ENOMEM;
+	}
+
+	free(topic_array[topic_level]);
+	topic_array[topic_level] = topic;
+	topic_level              = level;
+	return 0;
+}
+
+struct perf_entry_data {
+	FILE *outfp;
+	char *topic;
+};
+
+static int close_table;
+
 static void print_events_table_prefix(FILE *fp, const char *tblname)
 {
 	fprintf(fp, "struct pmu_event %s[] = {\n", tblname);
+	close_table = 1;
 }
 
 static int print_events_table_entry(void *data, char *name, char *event,
 				    char *desc)
 {
-	FILE *outfp = data;
+	struct perf_entry_data *pd = data;
+	FILE *outfp = pd->outfp;
+	char *topic = pd->topic;
+
 	/*
 	 * TODO: Remove formatting chars after debugging to reduce
 	 *	 string lengths.
@@ -215,6 +283,7 @@ static int print_events_table_entry(void *data, char *name, char *event,
 	fprintf(outfp, "\t.name = \"%s\",\n", name);
 	fprintf(outfp, "\t.event = \"%s\",\n", event);
 	fprintf(outfp, "\t.desc = \"%s\",\n", desc);
+	fprintf(outfp, "\t.topic = \"%s\",\n", topic);
 
 	fprintf(outfp, "},\n");
 
@@ -231,6 +300,7 @@ static void print_events_table_suffix(FILE *outfp)
 
 	fprintf(outfp, "},\n");
 	fprintf(outfp, "};\n");
+	close_table = 0;
 }
 
 /* Call func with each event in the json file */
@@ -382,41 +452,6 @@ static void print_mapping_table_suffix(FILE *outfp)
 	fprintf(outfp, "};\n");
 }
 
-/*
- * Process the JSON file @json_file and write a table of PMU events found in
- * the JSON file to the outfp.
- */
-static int process_json(FILE *outfp, const char *json_file)
-{
-	char *tblname;
-	int err;
-
-	/*
-	 * Drop file name suffix. Replace hyphens with underscores.
-	 * Fail if file name contains any alphanum characters besides
-	 * underscores.
-	 */
-	tblname = file_name_to_table_name((char *)json_file);
-	if (!tblname) {
-		pr_info("%s: Error determining table name for %s\n", prog,
-				json_file);
-		return -1;
-	}
-
-	print_events_table_prefix(outfp, tblname);
-
-	err = json_events(json_file, print_events_table_entry, outfp);
-
-	if (err) {
-		pr_info("%s: Translation failed\n", prog);
-		return -1;
-	}
-
-	print_events_table_suffix(outfp);
-
-	return 0;
-}
-
 static int process_mapfile(FILE *outfp, char *fpath)
 {
 	int n = 16384;
@@ -528,17 +563,46 @@ static int get_maxfds(void)
  * nftw() doesn't let us pass an argument to the processing function,
  * so use a global variables.
  */
-FILE *eventsfp;
-char *mapfile;
+static FILE *eventsfp;
+static char *mapfile;
 
 static int process_one_file(const char *fpath, const struct stat *sb,
-				int typeflag __maybe_unused,
-				struct FTW *ftwbuf __maybe_unused)
+			    int typeflag, struct FTW *ftwbuf)
 {
-	char *bname;
+	char *tblname, *bname  = (char *) fpath + ftwbuf->base;
+	int is_dir  = typeflag == FTW_D;
+	int is_file = typeflag == FTW_F;
+	int level   = ftwbuf->level;
+	int err = 0;
 
-	if (!S_ISREG(sb->st_mode))
+	pr_debug("%s %d %7jd %-20s %s\n",
+		 is_file ? "f" : is_dir ? "d" : "x",
+		 level, sb->st_size, bname, fpath);
+
+	/* base dir */
+	if (level == 0)
 		return 0;
+
+	/* model directory, reset topic */
+	if (level == 1 && is_dir) {
+		if (close_table)
+			print_events_table_suffix(eventsfp);
+
+		/*
+		 * Drop file name suffix. Replace hyphens with underscores.
+		 * Fail if file name contains any alphanum characters besides
+		 * underscores.
+		 */
+		tblname = file_name_to_table_name(bname);
+		if (!tblname) {
+			pr_info("%s: Error determining table name for %s\n", prog,
+				bname);
+			return -1;
+		}
+
+		print_events_table_prefix(eventsfp, tblname);
+		return 0;
+	}
 
 	/*
 	 * Save the mapfile name for now. We will process mapfile
@@ -547,14 +611,18 @@ static int process_one_file(const char *fpath, const struct stat *sb,
 	 *
 	 * TODO: Allow for multiple mapfiles? Punt for now.
 	 */
-	bname = basename((char *)fpath);
-	if (!strncmp(bname, "mapfile.csv", 11)) {
-		if (mapfile) {
-			pr_info("%s: Many mapfiles? Using %s, ignoring %s\n",
-					prog, mapfile, fpath);
-		} else {
-			mapfile = strdup(fpath);
+	if (level == 1 && is_file) {
+		if (!strncmp(bname, "mapfile.csv", 11)) {
+			if (mapfile) {
+				pr_info("%s: Many mapfiles? Using %s, ignoring %s\n",
+						prog, mapfile, fpath);
+			} else {
+				mapfile = strdup(fpath);
+			}
+			return 0;
 		}
+
+		pr_info("%s: Ignoring file %s\n", prog, fpath);
 		return 0;
 	}
 
@@ -562,12 +630,18 @@ static int process_one_file(const char *fpath, const struct stat *sb,
 	 * If the file name does not have a .json extension,
 	 * ignore it. It could be a readme.txt for instance.
 	 */
-	bname += strlen(bname) - 5;
-	if (strncmp(bname, ".json", 5)) {
-		pr_info("%s: Ignoring file without .json suffix %s\n", prog,
+	if (is_file) {
+		char *suffix = bname + strlen(bname) - 5;
+
+		if (strncmp(suffix, ".json", 5)) {
+			pr_info("%s: Ignoring file without .json suffix %s\n", prog,
 				fpath);
-		return 0;
+			return 0;
+		}
 	}
+
+	if (level > 1 && add_topic(level, bname))
+		return -ENOMEM;
 
 	/*
 	 * Assume all other files are JSON files.
@@ -581,13 +655,18 @@ static int process_one_file(const char *fpath, const struct stat *sb,
 	 * i.e. if JSON file name cannot be mapped to C-style table name,
 	 * fail.
 	 */
-	if (process_json(eventsfp, fpath)) {
-		pr_info("%s: Error processing JSON file %s, ignoring all\n",
-				prog, fpath);
-		return -1;
+	if (is_file) {
+		struct perf_entry_data data = {
+			.topic = get_topic(),
+			.outfp = eventsfp,
+		};
+
+		err = json_events(fpath, print_events_table_entry, &data);
+
+		free(data.topic);
 	}
 
-	return 0;
+	return err;
 }
 
 #ifndef PATH_MAX
@@ -613,7 +692,6 @@ static int process_one_file(const char *fpath, const struct stat *sb,
 int main(int argc, char *argv[])
 {
 	int rc;
-	int flags;
 	int maxfds;
 	char ldirname[PATH_MAX];
 
@@ -655,17 +733,19 @@ int main(int argc, char *argv[])
 	 * separate tables for each symlink (presumably, each symlink refers
 	 * to specific version of the CPU).
 	 */
-	flags = FTW_DEPTH;
 
 	maxfds = get_maxfds();
 	mapfile = NULL;
-	rc = nftw(ldirname, process_one_file, maxfds, flags);
+	rc = nftw(ldirname, process_one_file, maxfds, 0);
 	if (rc && verbose) {
 		pr_info("%s: Error walking file tree %s\n", prog, ldirname);
 		goto empty_map;
 	} else if (rc) {
 		goto empty_map;
 	}
+
+	if (close_table)
+		print_events_table_suffix(eventsfp);
 
 	if (!mapfile) {
 		pr_info("%s: No CPU->JSON mapping?\n", prog);
