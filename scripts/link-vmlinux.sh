@@ -28,6 +28,9 @@
 # Error out on error
 set -e
 
+aflags="${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL}               \
+	${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS}"
+
 # Nice output in kbuild format
 # Will be supressed by "make -s"
 info()
@@ -136,9 +139,6 @@ kallsyms()
 		kallsymopt="${kallsymopt} --base-relative"
 	fi
 
-	local aflags="${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL}               \
-		      ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS}"
-
 	local afile="`basename ${2} .o`.S"
 
 	${NM} -n ${1} | scripts/kallsyms ${kallsymopt} > ${afile}
@@ -231,6 +231,17 @@ fi;
 # final build of init/
 ${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init GCC_PLUGINS_CFLAGS="${GCC_PLUGINS_CFLAGS}"
 
+if [ -n "${CONFIG_UNWIND}" ]; then
+	info UNWIND vmlinux
+
+	vmlinux_link "" .unwind_vmlinux
+
+	tools/unwind/convert .unwind_vmlinux > .unwind.S
+	${CC} ${aflags} -c -o .unwind.o .unwind.S
+
+	unwind_obj=.unwind.o
+fi
+
 kallsymso=""
 kallsyms_vmlinux=""
 if [ -n "${CONFIG_KALLSYMS}" ]; then
@@ -258,11 +269,11 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 	kallsyms_vmlinux=.tmp_vmlinux2
 
 	# step 1
-	vmlinux_link "" .tmp_vmlinux1
+	vmlinux_link "${unwind_obj}" .tmp_vmlinux1
 	kallsyms .tmp_vmlinux1 .tmp_kallsyms1.o
 
 	# step 2
-	vmlinux_link .tmp_kallsyms1.o .tmp_vmlinux2
+	vmlinux_link "${unwind_obj} .tmp_kallsyms1.o" .tmp_vmlinux2
 	kallsyms .tmp_vmlinux2 .tmp_kallsyms2.o
 
 	# step 2a
@@ -270,14 +281,14 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 		kallsymso=.tmp_kallsyms3.o
 		kallsyms_vmlinux=.tmp_vmlinux3
 
-		vmlinux_link .tmp_kallsyms2.o .tmp_vmlinux3
+		vmlinux_link "${unwind_obj} .tmp_kallsyms2.o" .tmp_vmlinux3
 
 		kallsyms .tmp_vmlinux3 .tmp_kallsyms3.o
 	fi
 fi
 
 info LD vmlinux
-vmlinux_link "${kallsymso}" vmlinux
+vmlinux_link "${unwind_obj} ${kallsymso}" vmlinux
 
 if [ -n "${CONFIG_BUILDTIME_EXTABLE_SORT}" ]; then
 	info SORTEX vmlinux
