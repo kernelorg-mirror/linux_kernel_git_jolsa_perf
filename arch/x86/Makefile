@@ -177,7 +177,12 @@ KBUILD_CFLAGS += -pipe
 # Workaround for a gcc prelease that unfortunately was shipped in a suse release
 KBUILD_CFLAGS += -Wno-sign-compare
 #
+
+ifdef CONFIG_DWARF_UNWIND_EH_FRAMES
+KBUILD_CFLAGS += -funwind-tables
+else
 KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
+endif
 
 KBUILD_CFLAGS += $(mflags-y)
 KBUILD_AFLAGS += $(mflags-y)
