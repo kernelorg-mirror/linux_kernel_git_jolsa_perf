@@ -4,3 +4,5 @@ config UNWIND
 	  Adding code allowing to use compiled debug data
 	  for stack unwinding.
 
+config UNWIND_EH_FRAMES
+	def_bool UNWIND
