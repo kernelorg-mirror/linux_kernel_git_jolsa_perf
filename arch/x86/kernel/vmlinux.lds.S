@@ -344,7 +344,9 @@ SECTIONS
 	/* Sections to be discarded */
 	DISCARDS
 	/DISCARD/ : {
+#ifndef CONFIG_DWARF_UNWIND_EH_FRAMES
 		*(.eh_frame)
+#endif
 		*(__func_stack_frame_non_standard)
 	}
 }
