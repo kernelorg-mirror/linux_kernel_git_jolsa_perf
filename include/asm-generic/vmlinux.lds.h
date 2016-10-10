@@ -283,6 +283,8 @@
 		*(.rodata1)						\
 	}								\
 									\
+	UNWIND_DATA							\
+									\
 	BUG_TABLE							\
 									\
 	/* PCI quirks */						\
@@ -653,6 +655,24 @@
 		.stab.index 0 : { *(.stab.index) }			\
 		.stab.indexstr 0 : { *(.stab.indexstr) }		\
 		.comment 0 : { *(.comment) }
+
+#ifdef CONFIG_UNWIND
+#define UNWIND_DATA							\
+	. = ALIGN(8);							\
+	__unwind_data : AT(ADDR(__unwind_data) - LOAD_OFFSET) {		\
+		VMLINUX_SYMBOL(__start___unwind_data) = .;		\
+		*(__unwind_data)					\
+		VMLINUX_SYMBOL(__stop___unwind_data) = .;		\
+	}								\
+	. = ALIGN(8);							\
+	__unwind_frame : AT(ADDR(__unwind_frame) - LOAD_OFFSET) {	\
+		VMLINUX_SYMBOL(__start___unwind_frame) = .;		\
+		*(__unwind_frame)					\
+		VMLINUX_SYMBOL(__stop___unwind_frame) = .;		\
+	}
+#else
+#define UNWIND_DATA
+#endif
 
 #ifdef CONFIG_GENERIC_BUG
 #define BUG_TABLE							\
