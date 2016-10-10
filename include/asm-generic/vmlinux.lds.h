@@ -286,6 +286,8 @@
 		*(.rodata1)						\
 	}								\
 									\
+	DWARF_UNWIND_DATA						\
+									\
 	BUG_TABLE							\
 									\
 	/* PCI quirks */						\
@@ -657,6 +659,22 @@
 		.stab.index 0 : { *(.stab.index) }			\
 		.stab.indexstr 0 : { *(.stab.indexstr) }		\
 		.comment 0 : { *(.comment) }
+
+#ifdef CONFIG_DWARF_UNWIND
+#define DWARF_UNWIND_DATA						\
+	. = ALIGN(8);							\
+	__dunw_data : AT(ADDR(__dunw_data) - LOAD_OFFSET) {		\
+		*(__dunw_data)						\
+	}								\
+	. = ALIGN(8);							\
+	__dunw_frame : AT(ADDR(__dunw_frame) - LOAD_OFFSET) {		\
+		VMLINUX_SYMBOL(__start___dunw_frame) = .;		\
+		*(__dunw_frame)						\
+		VMLINUX_SYMBOL(__stop___dunw_frame) = .;		\
+	}
+#else
+#define DWARF_UNWIND_DATA
+#endif
 
 #ifdef CONFIG_GENERIC_BUG
 #define BUG_TABLE							\
