@@ -6,7 +6,10 @@
 #include <linux/slab.h>
 #include <linux/bpf.h>
 #include <linux/filter.h>
+#include <linux/fs.h>
+#include <linux/debugfs.h>
 #include <uapi/linux/unwind.h>
+#include <linux/ptrace.h>
 #include "internal.h"
 
 extern const char __start___unwind_frame[], __stop___unwind_frame[];
@@ -252,10 +255,50 @@ static int module_add(struct module *mod)
 	return ret;
 }
 
+static void unwind_stack_regs(struct pt_regs *regs)
+{
+	struct unw_frame *f;
+
+	f = find_frame(regs->ip);
+	if (!f) {
+		printk("error: failed to find frame\n");
+		return;
+	}
+
+	BPF_PROG_RUN(f->prog, (const void *) regs);
+}
+
+static void unw_dump_stack(void)
+{
+	struct pt_regs regs;
+
+	regs_load(&regs);
+	unwind_stack_regs(&regs);
+}
+
+static ssize_t
+test_write(struct file *filp, const char __user *ubuf,
+	   size_t cnt, loff_t *ppos)
+{
+	printk("Testing dwarf unwind from process context.\n");
+
+	unw_dump_stack();
+	return cnt;
+}
+
+static const struct file_operations test_fops = {
+	.write = test_write,
+};
+
 static int __init unwind_init(void)
 {
 	kmem_frame = KMEM_CACHE(unw_frame, SLAB_PANIC);
 	bpf_register_prog_type(&unwind_type);
+
+	if (!debugfs_create_file("unwind_test", 0644, NULL, NULL,
+				 &test_fops))
+		return -ENOMEM;
+
 	return module_add(NULL);
 }
 
