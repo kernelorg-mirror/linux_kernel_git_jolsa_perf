@@ -5,6 +5,8 @@
 #include <linux/rbtree.h>
 #include <linux/slab.h>
 #include <linux/dwarf_unwind.h>
+#include <linux/bpf.h>
+#include <linux/filter.h>
 
 #ifdef CONFIG_DWARF_UNWIND_DEBUG
 # define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
@@ -20,6 +22,7 @@ static DEFINE_SPINLOCK(modules_lock);
 struct unw_frame {
 	struct rb_node	  rb_node;
 	struct du_frame	 *frame;
+	struct bpf_prog	 *prog[0];
 };
 
 struct unw_module {
@@ -118,9 +121,64 @@ static __maybe_unused struct unw_frame* find_frame(unsigned long ip)
 static struct unw_frame *frame_alloc(struct du_frame *frame)
 {
 	size_t size;
+	int cnt;
 
-	size = sizeof(struct unw_frame);
+	cnt  = frame->expr ? frame->expr->len : 1;
+	size = sizeof(struct unw_frame) + cnt * sizeof(struct bpf_prog *);
 	return kzalloc(size, GFP_KERNEL);
+}
+
+static struct bpf_prog *frame_prog(struct bpf_insn *insn, __u32 len)
+{
+	struct bpf_prog *prog;
+	int err;
+
+	prog = bpf_prog_alloc(bpf_prog_size(len), 0);
+	if (!prog)
+		return NULL;
+
+	memcpy(prog->insnsi, insn, len * sizeof(struct bpf_insn));
+
+	prog->len  = len;
+	prog->type = BPF_PROG_TYPE_UNWIND;
+	prog->aux->ops = &unwind_type_ops;
+
+	fixup_bpf_calls(prog);
+
+	prog = bpf_prog_select_runtime(prog, &err);
+	if (err < 0) {
+		bpf_prog_free(prog);
+		return NULL;
+	}
+
+	return prog;
+}
+
+static int frame_init(struct unw_frame *f)
+{
+	struct du_frame *frame = f->frame;
+	struct bpf_prog *prog;
+
+	prog = frame_prog(frame->insn, frame->len);
+	if (!prog)
+		return -ENOMEM;
+
+	f->prog[0] = prog;
+
+	if (frame->expr) {
+		struct du_expr_array *arr = frame->expr;
+		int i;
+
+		for (i = 0; i < arr->len; i++) {
+			prog = frame_prog(frame->insn, frame->len);
+			if (!prog)
+				return -ENOMEM;
+
+			f->prog[i + 1] = prog;
+		}
+	}
+
+	return 0;
 }
 
 static int __frames_add(struct unw_module *mod,
@@ -131,6 +189,8 @@ static int __frames_add(struct unw_module *mod,
 	struct unw_frame *new;
 
 	while (p < stop) {
+		int ret;
+
 		frame = *p;
 
 		new = frame_alloc(frame);
@@ -138,6 +198,10 @@ static int __frames_add(struct unw_module *mod,
 			return -ENOMEM;
 
 		new->frame = frame;
+
+		ret = frame_init(new);
+		if (ret)
+			return ret;
 
 		add_frame(new, mod);
 		p++;
