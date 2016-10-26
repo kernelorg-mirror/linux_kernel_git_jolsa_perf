@@ -550,4 +550,7 @@ config STACKDEPOT
 config SBITMAP
 	bool
 
+config HAVE_REGS_LOAD
+	bool
+
 endmenu
