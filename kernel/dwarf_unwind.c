@@ -4,6 +4,8 @@
 #include <linux/filter.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
+#include <linux/bpf.h>
+#include <linux/filter.h>
 #include <uapi/linux/unwind.h>
 
 extern const char __start___dunw_frame[], __stop___dunw_frame[];
@@ -16,6 +18,7 @@ static struct kmem_cache *kmem_frame;
 struct unw_frame {
 	struct rb_node		  rb_node;
 	struct unwind_frame	 *frame;
+	struct bpf_prog          *prog;
 };
 
 struct unw_module {
@@ -145,6 +148,35 @@ static struct unw_frame* find_frame(unsigned long ip)
 	return find_frame_mod(&core, ip);
 }
 
+static int frame_init(struct unw_frame *f)
+{
+	struct unwind_frame *frame = f->frame;
+	struct bpf_prog *prog;
+	int err;
+
+	prog = bpf_prog_alloc(bpf_prog_size(frame->len), 0);
+	if (!prog)
+		return -ENOMEM;
+
+	prog->len  = frame->len;
+	prog->type = BPF_PROG_TYPE_UNWIND;
+	prog->aux->ops = &unwind_type_ops;
+
+	memcpy(prog->insnsi, frame->insn, prog->len * sizeof(struct bpf_insn));
+
+	f->prog = prog;
+
+	fixup_bpf_calls(prog);
+
+	prog = bpf_prog_select_runtime(prog, &err);
+	if (err < 0) {
+		bpf_prog_free(prog);
+		return err;
+	}
+
+	return 0;
+}
+
 static int __frames_add(struct unw_module *mod,
 			struct unwind_frame **start,
 			struct unwind_frame **stop)
@@ -153,6 +185,8 @@ static int __frames_add(struct unw_module *mod,
 	struct unw_frame *new;
 
 	while (p < stop) {
+		int ret;
+
 		frame = *p;
 
 		new = kmem_cache_alloc(kmem_frame, GFP_KERNEL);
@@ -160,6 +194,10 @@ static int __frames_add(struct unw_module *mod,
 			return -ENOMEM;
 
 		new->frame = frame;
+
+		ret = frame_init(new);
+		if (ret)
+			return ret;
 
 		add_frame(new, mod);
 		p++;
