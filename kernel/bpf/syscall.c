@@ -560,7 +560,7 @@ void bpf_register_prog_type(struct bpf_prog_type_list *tl)
  *
  * this function is called after eBPF program passed verification
  */
-static void fixup_bpf_calls(struct bpf_prog *prog)
+void fixup_bpf_calls(struct bpf_prog *prog)
 {
 	const struct bpf_func_proto *fn;
 	int i;
