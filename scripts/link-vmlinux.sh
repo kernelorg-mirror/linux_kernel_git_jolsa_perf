@@ -236,7 +236,7 @@ if [ -n "${CONFIG_UNWIND}" ]; then
 
 	vmlinux_link "" .unwind_vmlinux
 
-	tools/unwind/convert .unwind_vmlinux > .unwind.S
+	tools/unwind/convert .unwind_vmlinux > .unwind.S 2>/tmp/krava
 	${CC} ${aflags} -c -o .unwind.o .unwind.S
 
 	unwind_obj=.unwind.o

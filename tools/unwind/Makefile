@@ -4,6 +4,16 @@ else
   Q = @
 endif
 
+CFLAGS += -I$(srctree)/tools/include -g
+
+ifndef DEBUG
+  DEBUG := 0
+endif
+
+ifeq ($(DEBUG),0)
+  CFLAGS += -O6
+endif
+
 CC=gcc
 MAKEFLAGS=--no-print-directory
 
@@ -29,7 +39,7 @@ convert: convert-in.o
 all: convert
 
 clean:
-	rm -f convert convert-in.o convert.o
+	$(Q)find $(if $(OUTPUT),$(OUTPUT),.) -name '*.o' -delete -o -name '\.*.cmd' -delete -o -name '\.*.d' -delete
 
 FORCE:
 

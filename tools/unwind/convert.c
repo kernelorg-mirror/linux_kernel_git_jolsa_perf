@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/types.h>
+#include "parse.h"
 
 static Elf_Scn *elf_section_by_name(Elf *elf, GElf_Ehdr *ep,
 				    GElf_Shdr *shp, const char *name, size_t *idx)
@@ -69,6 +71,13 @@ static int get_ehframe(Elf **_elf, int fd, unsigned long *start, unsigned long *
 	*_elf  = elf;
 	*start = (unsigned long) data->d_buf;
 	*stop  = (unsigned long) data->d_buf + data->d_size;
+
+	eh_frame_base = shdr.sh_addr;
+	eh_frame_ptr  = (unsigned long) *start;
+
+	fprintf(stderr, "eh_frame_base 0x%lx\n", eh_frame_base);
+	fprintf(stderr, "eh_frame_ptr  0x%lx\n", eh_frame_ptr);
+
 	return 0;
 
 out_elf_end:
@@ -76,11 +85,6 @@ out_elf_end:
 out_close:
 	close(fd);
 	return err;;
-}
-
-static int parse_ehframe(unsigned long start, unsigned long stop)
-{
-	return 0;
 }
 
 int main(int argc, char **argv)
@@ -102,7 +106,7 @@ int main(int argc, char **argv)
 	if (get_ehframe(&elf, fd, &start, &stop))
 		return -1;
 
-	if (parse_ehframe(start, stop))
+	if (parse_limits((u8 *) start, (u8 *) stop))
 		return -1;
 
 	fprintf(stdout, ".pushsection __unwind_data,\"a\"\n");
