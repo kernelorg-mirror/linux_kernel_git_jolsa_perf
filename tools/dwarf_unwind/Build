@@ -1,0 +1,23 @@
+convert-y += convert.o
+convert-y += cfi.o
+convert-y += expr.o
+convert-y += code.o
+convert-y += read.o
+convert-y += parse.o
+convert-y += debug.o
+convert-y += eh_frame.o
+convert-y += rbtree.o
+convert-y += string.o
+convert-y += str_error_r.o
+
+$(OUTPUT)rbtree.o: ../lib/rbtree.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)string.o: ../lib/string.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)str_error_r.o: ../lib/str_error_r.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
