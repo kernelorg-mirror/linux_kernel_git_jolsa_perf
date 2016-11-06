@@ -22,7 +22,6 @@ static struct kmem_cache *kmem_frame;
 struct unw_frame {
 	struct rb_node		  rb_node;
 	struct unwind_frame	 *frame;
-	const unsigned char	 *code;
 	struct bpf_prog          *prog;
 };
 
@@ -168,7 +167,7 @@ static int frame_init(struct unw_frame *f)
 	prog->aux->ops = &unwind_type_ops;
 	prog->type = BPF_PROG_TYPE_UNWIND;
 
-	memcpy(prog->insnsi, f->code, prog->len * sizeof(struct bpf_insn));
+	memcpy(prog->insnsi, frame->insn, prog->len * sizeof(struct bpf_insn));
 
 	f->prog = prog;
 
@@ -187,16 +186,13 @@ static int __frames_add(struct unw_module *m,
 			const char *start, const char *stop)
 {
 	struct unwind_data *data;
-	struct unwind_frame *frame, *last_frame;
+	struct unwind_frame *frame;
 	struct unw_frame *new;
-	const char *code;
 
 	data       = (struct unwind_data *) start;
-	code       = start + data->code;
 	frame      = data->frames;
-	last_frame = (struct unwind_frame *) code;
 
-	while (frame < last_frame) {
+	while (frame < (struct unwind_frame *) stop) {
 		int ret;
 
 		new = kmem_cache_alloc(kmem_frame, GFP_KERNEL);
@@ -204,7 +200,6 @@ static int __frames_add(struct unw_module *m,
 			return -ENOMEM;
 
 		new->frame = frame;
-		new->code  = code + frame->code;
 
 		ret = frame_init(new);
 		if (ret)
@@ -212,7 +207,7 @@ static int __frames_add(struct unw_module *m,
 
 		add_frame(new, &m->frames);
 
-		frame++;
+		frame = (struct unwind_frame *) &frame->insn[frame->len];
 	}
 
 	return 0;
