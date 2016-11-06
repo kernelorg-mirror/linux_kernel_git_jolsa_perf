@@ -236,8 +236,9 @@ if [ -n "${CONFIG_UNWIND}" ]; then
 
 	vmlinux_link "" .unwind_vmlinux
 
-	tools/unwind/convert .unwind_vmlinux > .unwind.S
-	${CC} ${aflags} -c -o .unwind.o .unwind.S
+	tools/unwind/convert .unwind_vmlinux > .unwind.c 2>/tmp/unwind
+	echo "${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} -c -o .unwind.o .unwind.c"
+	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} -c -o .unwind.o .unwind.c
 
 	unwind_obj=.unwind.o
 fi

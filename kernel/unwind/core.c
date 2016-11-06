@@ -12,7 +12,8 @@
 #include <linux/ptrace.h>
 #include "internal.h"
 
-extern const char __start___unwind_data[], __stop___unwind_data[];
+extern const char __start___unwind_data[],   __stop___unwind_data[];
+extern const char __start___unwind_frames[], __stop___unwind_frames[];
 
 static LIST_HEAD(modules_list);
 static DEFINE_SPINLOCK(modules_lock);

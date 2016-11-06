@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <linux/types.h>
+#include <linux/bpf.h>
 #include "parse.h"
 
 static Elf_Scn *elf_section_by_name(Elf *elf, GElf_Ehdr *ep,
@@ -87,17 +88,45 @@ out_close:
 	return err;;
 }
 
+#define BPF_LD_IMM64(DST, IMM)					\
+	BPF_LD_IMM64_RAW(DST, 0, IMM)
+
+#define BPF_LD_IMM64_RAW(DST, SRC, IMM)				\
+	((struct bpf_insn) {					\
+		.code  = BPF_LD | BPF_DW | BPF_IMM,		\
+		.dst_reg = DST,					\
+		.src_reg = SRC,					\
+		.off   = 0,					\
+		.imm   = (__u32) (IMM) }),			\
+	((struct bpf_insn) {					\
+		.code  = 0, /* zero is reserved opcode */	\
+		.dst_reg = 0,					\
+		.src_reg = 0,					\
+		.off   = 0,					\
+		.imm   = ((__u64) (IMM)) >> 32 })
+
+#define BPF_EMIT_CALL_UNWIND()					\
+	((struct bpf_insn) {					\
+		.code  = BPF_JMP | BPF_CALL,			\
+		.dst_reg = 0,					\
+		.src_reg = 0,					\
+		.off   = 0,					\
+		.imm   = BPF_FUNC_unwind })
+
+static void emit_frame(struct du_fde *fde, struct bpf_insn *insn, int len)
+{
+	fprintf(stdout, "\t\t{\n");
+	fprintf(stdout, "\t\t\t.loc_start = (__u8 *) 0x%lx,\n", fde->loc_start);
+	fprintf(stdout, "\t\t\t.loc_end   = (__u8 *) 0x%lx,\n", fde->loc_end);
+	fprintf(stdout, "\t\t\t.len       = %d,\n", len);
+//	fprintf(stdout, "\t\t\t.insn      = { },\n");
+	fprintf(stdout, "\t\t},\n");
+
+}
+
 int fde_cb(struct du_fde *fde)
 {
-	fprintf(stderr, "GOT %p\n", fde->loc_start);
-
-	fprintf(stdout, ".pushsection __unwind_data,\"a\"\n");
-	fprintf(stdout, ".byte 0x0\n");
-	fprintf(stdout, ".byte 0x1\n");
-	fprintf(stdout, ".byte 0x2\n");
-	fprintf(stdout, ".byte 0x3\n");
-	fprintf(stdout, ".popsection\n");
-
+	emit_frame(fde, NULL, 0);
 	return 0;
 }
 
@@ -120,11 +149,23 @@ int main(int argc, char **argv)
 	if (get_ehframe(&elf, fd, &start, &stop))
 		return -1;
 
+	fprintf(stdout, "#include <linux/unwind.h>\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "struct unwind_data __attribute__((section(\"__unwind_data\"))) data = {\n");
+	fprintf(stdout, "\t.version = 1,\n");
+	fprintf(stdout, "\t.frames  = {\n");
+
 	if (parse_limits((u8 *) start, (u8 *) stop))
 		return -1;
 
 	if (walk_fdes(fde_cb))
 		return -1;
+
+	fprintf(stdout, "\t\t{\n");
+	fprintf(stdout, "\t\t\t.loc_start = NULL,\n");
+	fprintf(stdout, "\t\t}\n");
+	fprintf(stdout, "\t}\n");
+	fprintf(stdout, "};\n");
 
 	elf_end(elf);
 	close(fd);
