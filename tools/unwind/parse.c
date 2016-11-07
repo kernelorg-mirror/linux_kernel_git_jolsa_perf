@@ -78,6 +78,8 @@ static int add_cie(struct du_cie *entry)
 		return -ENOMEM;
 
 	*cie = *entry;
+	RB_CLEAR_NODE(&cie->frame.rb_node);
+
 	rb_link_node(&cie->frame.rb_node, parent, p);
 	rb_insert_color(&cie->frame.rb_node, &cies);
 	return 0;
@@ -89,7 +91,7 @@ static int add_fde(struct du_fde *entry)
 	struct rb_node *parent = NULL;
 	struct du_fde *fde;
 
-	p = &cies.rb_node;
+	p = &fdes.rb_node;
 
 	while (*p != NULL) {
 		parent = *p;
@@ -106,6 +108,8 @@ static int add_fde(struct du_fde *entry)
 		return -ENOMEM;
 
 	*fde = *entry;
+	RB_CLEAR_NODE(&fde->frame.rb_node);
+
 	rb_link_node(&fde->frame.rb_node, parent, p);
 	rb_insert_color(&fde->frame.rb_node, &fdes);
 	return 0;
@@ -200,6 +204,7 @@ static int __parse_entry_fde(struct du_cie *cie, u8 *p,
 	fde.frame.ilen  = end - p;
 
 	fde.loc_end = (u8 *) (fde.loc_start + range);
+
 	fprintf(stderr, "FDE start %p, end %p\n", fde.loc_start, fde.loc_end);
 	return add_fde(&fde);
 }

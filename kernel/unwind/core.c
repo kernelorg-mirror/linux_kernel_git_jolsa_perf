@@ -12,8 +12,8 @@
 #include <linux/ptrace.h>
 #include "internal.h"
 
-extern const char __start___unwind_data[],   __stop___unwind_data[];
-extern const char __start___unwind_frames[], __stop___unwind_frames[];
+extern const char __start___unwind_frame[], __stop___unwind_frame[];
+extern const char __start___unwind_data[],  __stop___unwind_data[];
 
 static LIST_HEAD(modules_list);
 static DEFINE_SPINLOCK(modules_lock);
@@ -184,17 +184,18 @@ static int frame_init(struct unw_frame *f)
 }
 
 static int __frames_add(struct unw_module *m,
-			const char *start, const char *stop)
+			struct unwind_frame **start,
+			struct unwind_frame **stop)
 {
-	struct unwind_data *data;
-	struct unwind_frame *frame;
+	struct unwind_frame *frame, **p = start;
 	struct unw_frame *new;
 
-	data       = (struct unwind_data *) start;
-	frame      = data->frames;
+printk("KRAVA __frames_add start %p, stop %p\n", start, stop);
 
-	while (frame < (struct unwind_frame *) stop) {
+	while (p < stop) {
 		int ret;
+
+		frame = *p;
 
 		new = kmem_cache_alloc(kmem_frame, GFP_KERNEL);
 		if (!new)
@@ -207,8 +208,7 @@ static int __frames_add(struct unw_module *m,
 			return ret;
 
 		add_frame(new, &m->frames);
-
-		frame = (struct unwind_frame *) &frame->insn[frame->len];
+		p++;
 	}
 
 	return 0;
@@ -216,10 +216,12 @@ static int __frames_add(struct unw_module *m,
 
 static int frames_add(struct unw_module *m)
 {
-	const char *start, *stop;
+	struct unwind_frame **start, **stop;
 
-	start = __start___unwind_data;
-	stop  = __stop___unwind_data;
+printk("KRAVA frames_add %p\n", m);
+
+	start = (struct unwind_frame **) __start___unwind_frame;
+	stop  = (struct unwind_frame **) __stop___unwind_frame;
 
 	return __frames_add(&core, start, stop);
 }
@@ -229,6 +231,8 @@ static int module_add(struct module *mod)
 	struct unw_module *m;
 	unsigned long flags;
 	int ret;
+
+printk("KRAVA module_add %p\n", mod);
 
 	m = kzalloc(sizeof(*m), GFP_KERNEL);
 	if (!m)

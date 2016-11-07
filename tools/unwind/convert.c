@@ -115,13 +115,33 @@ out_close:
 
 static void emit_frame(struct du_fde *fde, struct bpf_insn *insn, int len)
 {
-	fprintf(stdout, "\t\t{\n");
-	fprintf(stdout, "\t\t\t.loc_start = (__u8 *) 0x%lx,\n", fde->loc_start);
-	fprintf(stdout, "\t\t\t.loc_end   = (__u8 *) 0x%lx,\n", fde->loc_end);
-	fprintf(stdout, "\t\t\t.len       = %d,\n", len);
-//	fprintf(stdout, "\t\t\t.insn      = { },\n");
-	fprintf(stdout, "\t\t},\n");
+	static int idx;
 
+	fprintf(stdout, "struct bpf_insn ");
+	fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+	fprintf(stdout, "insn_%d[%d] = {\n", idx, len);
+	fprintf(stdout, "};\n");
+
+	fprintf(stdout, "\n");
+
+	fprintf(stdout, "struct unwind_frame ");
+	fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+	fprintf(stdout, "frame_%d = {\n", idx);
+	fprintf(stdout, "	.loc_start = (__u8 *) 0x%lx,\n", fde->loc_start);
+	fprintf(stdout, "	.loc_end   = (__u8 *) 0x%lx,\n", fde->loc_end);
+	fprintf(stdout, "	.len       = %d,\n", len);
+	fprintf(stdout, "	.insn      = insn_%d,\n", idx);
+	fprintf(stdout, "};\n");
+
+	fprintf(stdout, "\n");
+
+	fprintf(stdout, "struct unwind_frame* ");
+	fprintf(stdout, "__attribute__((section(\"__unwind_frame\"))) ");
+	fprintf(stdout, "frame_ptr_%d = &frame_%d;\n", idx, idx);
+
+	fprintf(stdout, "\n");
+
+	idx++;
 }
 
 int fde_cb(struct du_fde *fde)
@@ -151,21 +171,12 @@ int main(int argc, char **argv)
 
 	fprintf(stdout, "#include <linux/unwind.h>\n");
 	fprintf(stdout, "\n");
-	fprintf(stdout, "struct unwind_data __attribute__((section(\"__unwind_data\"))) data = {\n");
-	fprintf(stdout, "\t.version = 1,\n");
-	fprintf(stdout, "\t.frames  = {\n");
 
 	if (parse_limits((u8 *) start, (u8 *) stop))
 		return -1;
 
 	if (walk_fdes(fde_cb))
 		return -1;
-
-	fprintf(stdout, "\t\t{\n");
-	fprintf(stdout, "\t\t\t.loc_start = NULL,\n");
-	fprintf(stdout, "\t\t}\n");
-	fprintf(stdout, "\t}\n");
-	fprintf(stdout, "};\n");
 
 	elf_end(elf);
 	close(fd);
