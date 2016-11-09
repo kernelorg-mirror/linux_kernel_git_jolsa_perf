@@ -40,9 +40,9 @@ struct unw_module core = {
 	.frames	= RB_ROOT,
 };
 
-BPF_CALL_1(bpf_unwind, void *, func)
+BPF_CALL_3(bpf_unwind, void *, p1, void *, p2, void *, p3)
 {
-	printk("bpf_unwind %p\n", func);
+	printk("bpf_unwind %p %p %p\n", p1, p2, p3);
 	return 0;
 }
 
@@ -52,6 +52,8 @@ const struct bpf_func_proto bpf_unwind_proto = {
 	.pkt_access	= false,
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_ANYTHING,
+	.arg2_type	= ARG_ANYTHING,
+	.arg3_type	= ARG_ANYTHING,
 };
 
 static const struct bpf_func_proto *
@@ -255,17 +257,46 @@ static int module_add(struct module *mod)
 	return ret;
 }
 
-static void unwind_stack_regs(struct pt_regs *regs)
+static int apply_state(struct du_state *state, struct pt_regs *regs)
 {
+	return 0;
+}
+
+static int unwind_step(struct pt_regs *regs)
+{
+	static struct du_unwind u;
 	struct unw_frame *f;
+	int ret;
 
 	f = find_frame(regs->ip);
 	if (!f) {
 		printk("error: failed to find frame\n");
-		return;
+		return -1;
 	}
 
-	BPF_PROG_RUN(f->prog, (const void *) regs);
+	memset(&u.state, 0, sizeof(u.state));
+	u.ip  = regs->ip;
+	u.end = (unsigned long) f->frame->loc_end;
+
+	printk("KRAVA unwind_step ctx %p, ip 0x%lx, end %p\n", &u, u.ip, u.end);
+
+	ret = BPF_PROG_RUN(f->prog, (const void *) &u);
+	if (!ret)
+		ret = apply_state(&u.state, regs);
+
+	return ret;
+}
+
+static void unwind_stack_regs(struct pt_regs *regs)
+{
+	struct pt_regs r;
+
+	memcpy(&r, regs, sizeof(r));
+
+	while (!unwind_step(&r)) {
+		printk("[%p]\n", (void *) r.ip);
+		break;
+	}
 }
 
 static void unw_dump_stack(void)
