@@ -1,0 +1,9 @@
+#ifndef _DWARF_UNWIND_H
+#define _DWARF_UNWIND_H
+
+#include <uapi/linux/dwarf_unwind.h>
+
+void du_arch_regs_get(struct du_regs *dr, struct pt_regs *pr);
+void du_arch_regs_set(struct du_regs *dr, struct pt_regs *pr);
+
+#endif /* _DWARF_UNWIND_H */

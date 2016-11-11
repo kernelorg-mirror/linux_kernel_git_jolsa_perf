@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <linux/bpf.h>
 #include <asm/dwarf_unwind.h>
+#include <asm/ptrace.h>
 
 struct du_expr {
 	__u32		 len;
