@@ -361,4 +361,7 @@ config PUNIT_ATOM_DEBUG
 	  The current power state can be read from
 	  /sys/kernel/debug/punit_atom/dev_power_state
 
+
+source "kernel/Kconfig.dwarf_unwind"
+
 endmenu
