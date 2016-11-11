@@ -231,6 +231,21 @@ modpost_link vmlinux.o
 # modpost vmlinux.o to check for section mismatches
 ${MAKE} -f "${srctree}/scripts/Makefile.modpost" vmlinux.o
 
+if [ -n "${CONFIG_DWARF_UNWIND}" ]; then
+	info UNWIND vmlinux
+
+	vmlinux_link "" .unwind_vmlinux
+
+	if [ -n "${CONFIG_DWARF_UNWIND_DEBUG}" ]; then
+		CONVERT_DEBUG=-d
+	fi
+
+	tools/dwarf_unwind/convert -c ${CONVERT_DEBUG} .unwind_vmlinux > .unwind.c 2>/dev/null
+	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} -c -o .unwind.o .unwind.c
+
+	unwind_obj=.unwind.o
+fi
+
 kallsymso=""
 kallsyms_vmlinux=""
 if [ -n "${CONFIG_KALLSYMS}" ]; then
@@ -262,11 +277,11 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 	kallsyms_vmlinux=.tmp_vmlinux2
 
 	# step 1
-	vmlinux_link "" .tmp_vmlinux1
+	vmlinux_link "${unwind_obj}" .tmp_vmlinux1
 	kallsyms .tmp_vmlinux1 .tmp_kallsyms1.o
 
 	# step 2
-	vmlinux_link .tmp_kallsyms1.o .tmp_vmlinux2
+	vmlinux_link "${unwind_obj} .tmp_kallsyms1.o" .tmp_vmlinux2
 	kallsyms .tmp_vmlinux2 .tmp_kallsyms2.o
 
 	# step 3
@@ -277,14 +292,14 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 		kallsymso=.tmp_kallsyms3.o
 		kallsyms_vmlinux=.tmp_vmlinux3
 
-		vmlinux_link .tmp_kallsyms2.o .tmp_vmlinux3
+		vmlinux_link "${unwind_obj} .tmp_kallsyms2.o" .tmp_vmlinux3
 
 		kallsyms .tmp_vmlinux3 .tmp_kallsyms3.o
 	fi
 fi
 
 info LD vmlinux
-vmlinux_link "${kallsymso}" vmlinux
+vmlinux_link "${unwind_obj} ${kallsymso}" vmlinux
 
 if [ -n "${CONFIG_BUILDTIME_EXTABLE_SORT}" ]; then
 	info SORTEX vmlinux
