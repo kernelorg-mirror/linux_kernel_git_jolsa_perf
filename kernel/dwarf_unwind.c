@@ -37,6 +37,45 @@ struct unw_module core = {
 	.frames	= RB_ROOT,
 };
 
+BPF_CALL_5(bpf_unwind, void *, r1, void *, r2, void *, r3, void *, r4, void *, r5)
+{
+	pr("bpf_unwind R1 %p, R2 %p, R3 %p, R4 %p, R5 %p\n",
+	   r1, r2, r3, r4, r5);
+	return 0;
+}
+
+const struct bpf_func_proto bpf_unwind_proto = {
+	.func		= bpf_unwind,
+	.gpl_only	= false,
+	.pkt_access	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_ANYTHING,
+	.arg2_type      = ARG_ANYTHING,
+	.arg3_type      = ARG_ANYTHING,
+	.arg4_type      = ARG_ANYTHING,
+	.arg5_type      = ARG_ANYTHING,
+};
+
+static const struct bpf_func_proto *
+unwind_func_proto(enum bpf_func_id func_id)
+{
+	switch (func_id) {
+	case BPF_FUNC_unwind:
+		return &bpf_unwind_proto;
+	default:
+		return NULL;
+	}
+}
+
+static const struct bpf_verifier_ops unwind_type_ops = {
+	.get_func_proto		= unwind_func_proto,
+};
+
+static struct bpf_prog_type_list unwind_type __read_mostly = {
+	.ops	= &unwind_type_ops,
+	.type	= BPF_PROG_TYPE_UNWIND,
+};
+
 static struct unw_module *modules_find(struct module *mod)
 {
 	struct unw_module *m;
@@ -254,6 +293,7 @@ static int module_add(struct module *mod)
 
 static int __init unwind_init(void)
 {
+	bpf_register_prog_type(&unwind_type);
 	return module_add(NULL);
 }
 
