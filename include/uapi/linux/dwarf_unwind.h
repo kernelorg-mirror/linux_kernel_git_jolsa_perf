@@ -3,6 +3,7 @@
 
 #include <linux/types.h>
 #include <linux/bpf.h>
+#include <asm/dwarf_unwind.h>
 
 struct du_frame {
         __u8            *loc_start;
