@@ -53,7 +53,7 @@ enum du_arch_regs {
 };
 
 struct du_state_reg {
-	enum du_location loc;
+	unsigned long loc;
 	union {
 		unsigned long val;
 		struct {

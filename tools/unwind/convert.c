@@ -96,20 +96,86 @@ out_close:
 	return err;;
 }
 
-static int write_frame(struct du_fde *fde, struct bpf_insn *insn, int len)
+struct unw_insn {
+	struct bpf_insn  bi;
+	char		*str;
+	char		*astr;
+};
+
+struct code {
+	struct unw_insn *insn;
+	int len;
+	int alloc;
+};
+
+static struct code code;
+
+#define CODE_ALLOC 100
+
+static int add_code(struct code *code, struct unw_insn *insn, int len)
+{
+	int i;
+
+	if (code->len + len >= code->alloc) {
+		int alloc = code->alloc + CODE_ALLOC;
+		struct unw_insn *insn;
+
+		insn = realloc(code->insn, sizeof(*insn) * alloc);
+		if (!insn)
+			return -ENOMEM;
+
+		code->insn  = insn;
+		code->alloc = alloc;
+	}
+
+	memcpy(&code->insn[code->len], insn, sizeof(*insn) * len);
+	code->len += len;
+	return 0;
+}
+
+static int clean_code(struct code *code)
+{
+	int i;
+
+	for (i = 0; i < code->len; i++)
+		free(code->insn[i].astr);
+
+	code->len = 0;
+}
+
+static int free_code(struct code *code)
+{
+	free(code->insn);
+}
+
+
+static int write_frame(struct du_fde *fde, struct unw_insn *insn, int len)
 {
 	static int idx;
-	int i;
+	int i, ret;
 
 	fprintf(stdout, "struct bpf_insn ");
 	fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
 	fprintf(stdout, "insn_%d[%d] = {\n", idx, len);
 
 	for (i = 0; i < len; i++) {
-		struct bpf_insn *bi = &insn[i];
+		struct bpf_insn *bi = &insn[i].bi;
+		char *s;
 
-		fprintf(stdout, "	{ 0x%x, 0x%x, 0x%x, 0x%x, 0x%x },\n",
-			bi->code, bi->dst_reg, bi->src_reg, bi->off, bi->imm);
+		ret = fprintf(stdout, "	{ 0x%x, 0x%x, 0x%x, 0x%x, 0x%x },",
+			      bi->code, bi->dst_reg, bi->src_reg, bi->off, bi->imm);
+
+		s = insn[i].str ? insn[i].str : insn[i].astr;
+
+		if (s) {
+			int indent = 50 - ret;
+			ret += fprintf(stdout, "%*s/* %s ", indent, " ", s);
+
+			indent = 100 - ret;
+			ret = fprintf(stdout, "%*s */", indent, " ");
+		
+		}
+		fprintf(stdout, "\n");
 	}
 
 	fprintf(stdout, "};\n");
@@ -241,64 +307,25 @@ static int write_frame(struct du_fde *fde, struct bpf_insn *insn, int len)
  * exit
  */
 
-static struct bpf_insn insn_unwind[] = {
-	BPF_EMIT_CALL_UNWIND(),
+static struct unw_insn insn_unwind[] = {
+	{ .bi = BPF_EMIT_CALL_UNWIND(), .str = "CALL UNWIND" },
 };
 
-static struct bpf_insn insn_entry[] = {
-	BPF_LDX_MEM(BPF_DW, BPF_REG_2, BPF_REG_1, 0),
-	BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, sizeof(unsigned long)),
-	BPF_LDX_MEM(BPF_DW, BPF_REG_3, BPF_REG_1, 0),
-	BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, sizeof(unsigned long)),
+static struct unw_insn insn_entry[] = {
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_2, BPF_REG_1, 0),			.str = "REG_2 = [REG_1]"	},
+	{ .bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, sizeof(unsigned long)),	.str = "REG_1 += 8"		},
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_3, BPF_REG_1, 0),			.str = "REG_3 = [REG_1]"	},
+	{ .bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, sizeof(unsigned long)),	.str = "REG_1 += 8"		},
 };
 
-static struct bpf_insn insn_exit[] ={
-	BPF_EXIT_INSN(),
+static struct unw_insn insn_exit[] = {
+	{ .bi = BPF_EXIT_INSN(), .str = "RET" },
 };
 
-static struct bpf_insn insn_next[] = {
-	BPF_JMP_REG(BPF_JGE, BPF_REG_3, BPF_REG_4, 1),
-	BPF_EXIT_INSN(),
+static struct unw_insn insn_next[] = {
+	{ .bi = BPF_JMP_REG(BPF_JGT, BPF_REG_3, BPF_REG_2, 1),	.str = "IF (REG_2 >= REG_3)" },
+	{ .bi = BPF_EXIT_INSN(),				.str = "   RET" },
 };
-
-struct code {
-	struct bpf_insn *insn;
-	int len;
-	int alloc;
-};
-
-static struct code code;
-
-#define CODE_ALLOC 100
-
-static int add_code(struct code *code, struct bpf_insn *insn, int len)
-{
-	if (code->len + len >= code->alloc) {
-		int alloc = code->alloc + CODE_ALLOC;
-		struct bpf_insn *insn;
-
-		insn = realloc(code->insn, sizeof(*insn) * alloc);
-		if (!insn)
-			return -ENOMEM;
-
-		code->insn  = insn;
-		code->alloc = alloc;
-	}
-
-	memcpy(&code->insn[code->len], insn, sizeof(*insn) * len);
-	code->len += len;
-	return 0;
-}
-
-static int clean_code(struct code *code)
-{
-	code->len = 0;
-}
-
-static int free_code(struct code *code)
-{
-	free(code->insn);
-}
 
 #define DWARF_CFA_OPCODE_MASK	0xc0
 #define DWARF_CFA_OPERAND_MASK	0x3f
@@ -370,17 +397,56 @@ do {						\
 } while (0)					\
 
 
+static int set_reg(struct code *code, unsigned long reg, unsigned long val, unsigned long loc, int state_idx)
+{
+	unsigned int offset_val, offset_loc;
+	struct unw_insn insn[10];
+	char buf[100];
+
+	memset(insn, 0, sizeof(insn));
+
+	/*
+	 * state->state_current[state_idx]
+	 * rs->reg[reg].loc = loc;
+	 * rs->reg[reg].val = val;
+	 */
+
+	offset_val = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].val);
+	offset_loc = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].loc);
+
+	snprintf(buf, 100, "REG_4 = 0x%lx", val);
+	insn[0].astr = strdup(buf);
+
+	snprintf(buf, 100, "[REG_1 + 0x%lx] = REG_4", offset_val);
+	insn[2].astr = strdup(buf);
+
+	snprintf(buf, 100, "[REG_1 + 0x%lx] = DU_LOCATION_MEMORY", offset_loc);
+	insn[3].astr = strdup(buf);
+
+	insn[0].bi = BPF_LD_IMM64_1(BPF_REG_4, val);
+	insn[1].bi = BPF_LD_IMM64_2(BPF_REG_4, val);
+	insn[2].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_val),
+	insn[3].bi = BPF_ST_MEM(BPF_DW, BPF_REG_1, offset_loc, loc);
+
+	return add_code(code, insn, 4);
+}
+
 static int emit_cfi_code(struct code *code, struct du_fde *fde,
-			 struct du_frame *frame)
+			 struct du_frame *frame, int *_state_idx)
 {
 	struct du_cie *cie = fde->cie;
 	u8 *addr     = frame->icode;
 	u8 *addr_end = frame->icode + frame->ilen;
 	u8 *curr_ip  = fde->loc_start;
+	u8 *last_ip  = fde->loc_start;
 	u8 *end_ip   = fde->loc_end;
-	struct bpf_insn insn[10];
-	int state_idx = 0;
+	struct unw_insn insn[10];
+	int state_init, state_idx = *_state_idx;
 	unsigned int offset_val, offset_loc;
+	unsigned int offset_init_val, offset_init_loc;
+	char buf[100];
+
+	state_init = state_idx;
 
 	while ((curr_ip <= end_ip) && (addr < addr_end)) {
 		u8 op, operand, reg, val8;
@@ -388,6 +454,8 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 		u16 val16;
 		u32 val32;
 
+		memset(insn, 0, sizeof(insn));
+
 		op = DU_READ(addr, u8, addr_end);
 
 		/* TODO check operand */
@@ -400,38 +468,54 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 
 		switch (op) {
 		case DW_CFA_advance_loc:
-			insn[0] = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, operand * cie->align_code);
+			insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, operand * cie->align_code);
 
-			/* curr_ip += operand * cie->align_code; */
+			snprintf(buf, 100, "REG_2 += 0x%lx", operand * cie->align_code);
+			insn[0].astr = strdup(buf);
+
 			if (add_code(code, insn, 1))
 				return -1;
+
+			curr_ip += operand * cie->align_code;
 			break;
 
 		case DW_CFA_advance_loc1:
-			val8    = DU_READ(addr, u8, addr_end);
-			insn[0] = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val8 * cie->align_code);
+			val8       = DU_READ(addr, u8, addr_end);
+			insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val8 * cie->align_code);
 
-			/* curr_ip += val8 * cie->align_code; */
+			snprintf(buf, 100, "REG_2 += 0x%lx", val8 * cie->align_code);
+			insn[0].astr = strdup(buf);
+
 			if (add_code(code, insn, 1))
 				return -1;
+
+			curr_ip += val8 * cie->align_code;
 			break;
 
 		case DW_CFA_advance_loc2:
-			val16   = DU_READ(addr, u16, addr_end);
-			insn[0] = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val16 * cie->align_code);
+			val16      = DU_READ(addr, u16, addr_end);
+			insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val16 * cie->align_code);
 
-			/* curr_ip += val16 * cie->align_code; */
+			snprintf(buf, 100, "REG_2 += 0x%lx", val16 * cie->align_code);
+			insn[0].astr = strdup(buf);
+
 			if (add_code(code, insn, 1))
 				return -1;
+
+			curr_ip += val16 * cie->align_code;
 			break;
 
 		case DW_CFA_advance_loc4:
-			val32   = DU_READ(addr, u32, addr_end);
-			insn[0] = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val32 * cie->align_code);
+			val32      = DU_READ(addr, u32, addr_end);
+			insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_2, val32 * cie->align_code);
 
-			/* curr_ip += val32 * cie->align_code; */
+			snprintf(buf, 100, "REG_2 += 0x%lx", val32 * cie->align_code);
+			insn[0].astr = strdup(buf);
+
 			if (add_code(code, insn, 1))
 				return -1;
+
+			curr_ip += val32 * cie->align_code;
 			break;
 
 		case DW_CFA_MIPS_advance_loc8:
@@ -441,50 +525,80 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 			val = DU_READ_ULEB128(addr, addr_end);
 			val *= cie->align_data;
 
-			/*
-			 * state->state_current[state_idx]
-			 * rs->reg[reg].loc = loc;
-			 * rs->reg[reg].val = val;
-			 */
+			if (set_reg(code, operand, val, DU_LOCATION_MEMORY, state_idx))
+				return -1;
 
-			offset_val = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[operand].loc);
-			offset_loc = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[operand].val);
+			break;
 
-			insn[0] = BPF_LD_IMM64_1(BPF_REG_4, val);
-			insn[1] = BPF_LD_IMM64_2(BPF_REG_4, val);
-			insn[2] = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_val),
-			insn[3] = BPF_ST_MEM(BPF_DW, BPF_REG_1, offset_loc, DU_LOCATION_MEMORY);
+		case DW_CFA_offset_extended:
+		case DW_CFA_offset_extended_sf:
+			reg = DU_READ_ULEB128(addr, addr_end);
+			val = DU_READ_ULEB128(addr, addr_end);
+			val *= cie->align_data;
+
+			if (set_reg(code, reg, val, DU_LOCATION_MEMORY, state_idx))
+				return -1;
+			
+			break;
+
+		case DW_CFA_restore:
+			reg = operand;
+
+			offset_val = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].loc);
+			offset_loc = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].val);
+
+			offset_init_val = (state_init * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].loc);
+			offset_init_loc = (state_init * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].val);
+
+			snprintf(buf, 100, "REG_4 = [REG_1 + 0x%lx]", offset_val);
+			insn[0].astr = strdup(buf);
+
+			snprintf(buf, 100, "[REG_1 + 0x%lx], REG_4", offset_init_val);
+			insn[1].astr = strdup(buf);
+
+			snprintf(buf, 100, "REG_4 = [REG_1 + 0x%lx]", offset_loc);
+			insn[2].astr = strdup(buf);
+
+			snprintf(buf, 100, "[REG_1 + 0x%lx], REG_4", offset_init_loc);
+			insn[3].astr = strdup(buf);
+
+			insn[0].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_val);
+			insn[1].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_val);
+			insn[2].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_loc);
+			insn[3].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_loc);
 
 			if (add_code(code, insn, 4))
 				return -1;
 			break;
 
-		case DW_CFA_offset_extended:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_ULEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(reg, DU_LOCATION_MEMORY, val);
-			break;
-
-		case DW_CFA_offset_extended_sf:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_SLEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(reg, DU_LOCATION_MEMORY, val);
-			break;
-
-		case DW_CFA_restore:
-			CHK_REG(operand);
-			//STATE_CURRENT->reg[operand] = STATE_INITIAL->reg[operand];
-			break;
-
 		case DW_CFA_restore_extended:
 			reg = DU_READ_ULEB128(addr, addr_end);
-			CHK_REG(operand);
 
-			//STATE_CURRENT->reg[reg] = STATE_INITIAL->reg[reg];
+			offset_val = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].loc);
+			offset_loc = (state_idx * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].val);
+
+			offset_init_val = (state_init * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].loc);
+			offset_init_loc = (state_init * sizeof(struct du_state)) + offsetof(struct du_state, stack->reg[reg].val);
+
+			snprintf(buf, 100, "REG_4 = [REG_1 + 0x%lx]", offset_val);
+			insn[0].astr = strdup(buf);
+
+			snprintf(buf, 100, "[REG_1 + 0x%lx], REG_4", offset_init_val);
+			insn[1].astr = strdup(buf);
+
+			snprintf(buf, 100, "REG_4 = [REG_1 + 0x%lx]", offset_loc);
+			insn[2].astr = strdup(buf);
+
+			snprintf(buf, 100, "[REG_1 + 0x%lx], REG_4", offset_init_loc);
+			insn[3].astr = strdup(buf);
+
+			insn[0].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_val);
+			insn[1].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_val);
+			insn[2].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_loc);
+			insn[3].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_loc);
+
+			if (add_code(code, insn, 4))
+				return -1;
 			break;
 
 		case DW_CFA_nop:
@@ -493,51 +607,80 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 		case DW_CFA_set_loc:
 			curr_ip = (u8 *) DU_READ_ENCODED_VALUE(addr, addr_end,
 							       cie->encoding);
+
+			snprintf(buf, 100, "REG_4 = 0x%lx", curr_ip);
+			insn[0].astr = strdup(buf);
+
+			insn[0].bi = BPF_LD_IMM64_1(BPF_REG_4, (unsigned long) curr_ip);
+			insn[1].bi = BPF_LD_IMM64_2(BPF_REG_4, (unsigned long) curr_ip);
+
+			if (add_code(code, insn, 2))
+				return -1;
 			break;
 
 		case DW_CFA_undefined:
 			reg = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_UNDEF, 0);
+
+			if (set_reg(code, reg, 0, DU_LOCATION_UNDEF, state_idx))
+				return -1;
 			break;
 
 		case DW_CFA_same_value:
 			reg = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_SAME, 0);
+
+			if (set_reg(code, reg, 0, DU_LOCATION_SAME, state_idx))
+				return -1;
 			break;
 
 		case DW_CFA_register:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			val = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_REG, val);
+
+			if (set_reg(code, reg, val, DU_LOCATION_REG, state_idx))
+				return -1;
 			break;
 
 		case DW_CFA_remember_state:
-/*
-			if ((state->cur + 1) >= DWARF_UNWIND_CFA_STACK_MAX) {
+			if ((state_idx + 1) >= DWARF_UNWIND_CFA_STACK_MAX) {
 				return -EINVAL;
 			}
-			state->cur++;
-*/
+			state_idx++;
+
+			snprintf(buf, 100, "REG_0++");
+			insn[0].astr = strdup(buf);
+
+			insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, 1);
+
+			if (add_code(code, insn, 1))
+				return -1;
 			break;
 
 		case DW_CFA_restore_state:
-/*
-			if (!state->cur) {
+			if (!state_idx) {
 				return -EINVAL;
 			}
 
-			state->cur--;
-*/
+			state_idx--;
+
+			snprintf(buf, 100, "REG_0--");
+			insn[0].astr = strdup(buf);
+
+			insn[0].bi = BPF_ALU64_IMM(BPF_SUB, BPF_REG_1, 1);
+
+			if (add_code(code, insn, 1))
+				return -1;
 			break;
 
 		case DW_CFA_def_cfa:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			val = DU_READ_ULEB128(addr, addr_end);
 
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, reg, DU_LOCATION_REG, state_idx))
+				return -1;
+
+			if (set_reg(code, DU_REG_CFA_OFF_COLUMN, val, DU_LOCATION_VALUE, state_idx))
+				return -1;
+
 			break;
 
 		case DW_CFA_def_cfa_sf:
@@ -545,64 +688,86 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 			val = DU_READ_SLEB128(addr, addr_end);
 			val *= cie->align_data;
 
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, reg, DU_LOCATION_REG, state_idx))
+				return -1;
+
+			if (set_reg(code, DU_REG_CFA_OFF_COLUMN, val, DU_LOCATION_VALUE, state_idx))
+				return -1;
+
 			break;
 
 		case DW_CFA_def_cfa_register:
 			reg = DU_READ_ULEB128(addr, addr_end);
 
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, reg, DU_LOCATION_REG, state_idx))
+				return -1;
+
 			break;
 
 		case DW_CFA_def_cfa_offset:
 			val = DU_READ_ULEB128(addr, addr_end);
 
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
+			if (set_reg(code, DU_REG_CFA_OFF_COLUMN, val, DU_LOCATION_VALUE, state_idx))
+				return -1;
 			break;
 
 		case DW_CFA_def_cfa_offset_sf:
 			val = DU_READ_SLEB128(addr, addr_end);
 			val *= cie->align_data;
 
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
+			if (set_reg(code, DU_REG_CFA_OFF_COLUMN, val, DU_LOCATION_VALUE, state_idx))
+				return -1;
 			break;
 
 		case DW_CFA_def_cfa_expression:
 			len = DU_READ_ULEB128(addr, addr_end);
+
+			fprintf(stderr, "PICA\n");
 
 			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
 				    DU_LOCATION_EXPR,
 				    addr, len);
 
 			addr += len;
+
+			insn[0].astr = strdup("PICA");
+
+			if (add_code(code, insn, 1))
+				return -1;
 			break;
 
 		case DW_CFA_expression:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
+			fprintf(stderr, "PICA\n");
 			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
 				    DU_LOCATION_EXPR,
 				    addr, len);
 
 			addr += len;
+
+			insn[0].astr = strdup("PICA");
+
+			if (add_code(code, insn, 1))
+				return -1;
 			break;
 
 		case DW_CFA_val_expression:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
+			fprintf(stderr, "PICA\n");
 			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
 				    DU_LOCATION_EXPR_VALUE,
 				    addr, len);
 
 			addr += len;
+
+			insn[0].astr = strdup("PICA");
+
+			if (add_code(code, insn, 1))
+				return -1;
 			break;
 
 		case DW_CFA_GNU_negative_offset_extended:
@@ -610,7 +775,9 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 			val = DU_READ_ULEB128(addr, addr_end);
 			val *= -cie->align_data;
 
-			SETREG(reg, DU_LOCATION_MEMORY, val);
+			if (set_reg(code, reg, val, DU_LOCATION_MEMORY, state_idx))
+				return -1;
+
 			break;
 
 		case DW_CFA_GNU_window_save:
@@ -622,353 +789,34 @@ static int emit_cfi_code(struct code *code, struct du_fde *fde,
 		default:
 			return -EINVAL;
 		}
+
+		add_code(code, insn_unwind, ARRAY_SIZE(insn_unwind));
+
+		if (curr_ip != last_ip) {
+			if (add_code(code, insn_next, ARRAY_SIZE(insn_next)))
+				return -1;
+
+			last_ip = curr_ip;
+		}
 	}
 
+	*_state_idx = state_idx;
 	return 0;
 }
 
 static int emit_code(struct code *code, struct du_fde *fde)
 {
 	struct du_cie *cie = fde->cie;
+	int state_idx = 0;
 
-//	add_code(code, insn_unwind, ARRAY_SIZE(insn_unwind));
-
-	if (emit_cfi_code(code, fde, &cie->frame))
+	if (emit_cfi_code(code, fde, &cie->frame, &state_idx))
 		return -1;
 
-	if (emit_cfi_code(code, fde, &fde->frame))
+	if (emit_cfi_code(code, fde, &fde->frame, &state_idx))
 		return -1;
 
 	return 0;
 }
-
-#if 0
-
-
-
-#define STATE_CURRENT (&state->state_current[state->cur])
-#define STATE_INITIAL (&state->state_initial)
-
-#define CHK_REG(reg)						\
-do {								\
-	if (reg > DU_REGS_NUM) {				\
-		return -EINVAL;					\
-	}							\
-} while (0)
-
-#define SETREG(reg, loc, val)			\
-do {						\
-	CHK_REG(reg);				\
-	setreg(STATE_CURRENT, reg, loc, val);	\
-} while (0)					\
-
-#define SETREG_EXPR(reg, loc, addr, len)	\
-do {						\
-	CHK_REG(reg);				\
-	setreg_expr(STATE_CURRENT, reg, loc, addr, len);\
-} while (0)					\
-
-
-
-
-
-
-
-#include "internal.h"
-
-int du_cfi(struct du_fde *fde, struct du_state *state,
-	   unsigned long ip, struct du_frame *frame)
-{
-	struct du_cie *cie = fde->cie;
-	u8 *addr = frame->icode;
-	u8 *addr_end = frame->icode + frame->ilen;
-	u8 *curr_ip = fde->loc_start;
-
-	while ((curr_ip <= (u8 *) ip) && (addr < addr_end)) {
-		u8 op, operand, reg, val8;
-		unsigned long val, len;
-		u16 val16;
-		u32 val32;
-
-		op = DU_READ(addr, u8, addr_end);
-
-		/* TODO check operand */
-		operand = (u8) -1;
-
-		if (op & DWARF_CFA_OPCODE_MASK) {
-			operand = op & DWARF_CFA_OPERAND_MASK;
-			op &= ~DWARF_CFA_OPERAND_MASK;
-		}
-
-		switch (op) {
-		case DW_CFA_advance_loc:
-			curr_ip += operand * cie->align_code;
-			DU_DEBUG_CFI("CFA_advance_loc to %p\n", curr_ip);
-			break;
-
-		case DW_CFA_advance_loc1:
-			val8 = DU_READ(addr, u8, addr_end);
-			curr_ip += val8 * cie->align_code;
-			DU_DEBUG_CFI("CFA_advance_loc1 to %p\n", curr_ip);
-			break;
-
-		case DW_CFA_advance_loc2:
-			val16 = DU_READ(addr, u16, addr_end);
-			curr_ip += val16 * cie->align_code;
-			DU_DEBUG_CFI("CFA_advance_loc2 to %p\n", curr_ip);
-			break;
-
-		case DW_CFA_advance_loc4:
-			val32 = DU_READ(addr, u32, addr_end);
-			curr_ip += val32 * cie->align_code;
-			DU_DEBUG_CFI("CFA_advance_loc4 to %p\n", curr_ip);
-			break;
-
-		case DW_CFA_MIPS_advance_loc8:
-			DU_DEBUG_CFI("FAILED DW_CFA_MIPS_advance_loc8\n");
-			return -EINVAL;
-
-		case DW_CFA_offset:
-			val = DU_READ_ULEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(operand, DU_LOCATION_MEMORY, val);
-
-			DU_DEBUG_CFI("CFA_offset r%u at cfa+%lu\n",
-				     operand, val);
-			break;
-
-		case DW_CFA_offset_extended:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_ULEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(reg, DU_LOCATION_MEMORY, val);
-
-			DU_DEBUG_CFI("CFA_offset_extended r%u at cf+0x%lx\n",
-				     reg, val);
-			break;
-
-		case DW_CFA_offset_extended_sf:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_SLEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(reg, DU_LOCATION_MEMORY, val);
-
-			DU_DEBUG_CFI("DW_CFA_offset_extended_sf r%u at cf+0x%lx\n",
-				     reg, val);
-			break;
-
-		case DW_CFA_restore:
-			CHK_REG(operand);
-			STATE_CURRENT->reg[operand] = STATE_INITIAL->reg[operand];
-
-			DU_DEBUG_CFI("CFA_restore r%u\n", operand);
-			break;
-
-		case DW_CFA_restore_extended:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			CHK_REG(operand);
-
-			STATE_CURRENT->reg[reg] = STATE_INITIAL->reg[reg];
-			DU_DEBUG_CFI("CFA_restore_extended r%u\n", reg);
-			break;
-
-		case DW_CFA_nop:
-			DU_DEBUG_CFI("DW_CFA_nop\n");
-			break;
-
-		case DW_CFA_set_loc:
-			curr_ip = (u8 *) DU_READ_ENCODED_VALUE(addr, addr_end,
-							       cie->encoding);
-
-			DU_DEBUG_CFI("CFA_set_loc to %p\n", curr_ip);
-			break;
-
-		case DW_CFA_undefined:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_UNDEF, 0);
-
-			DU_DEBUG_CFI("CFA_undefined r%u\n", reg);
-			break;
-
-		case DW_CFA_same_value:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_SAME, 0);
-
-			DU_DEBUG_CFI("CFA_same_value r%u\n", reg);
-			break;
-
-		case DW_CFA_register:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_ULEB128(addr, addr_end);
-			SETREG(reg, DU_LOCATION_REG, val);
-
-			DU_DEBUG_CFI("CFA_register r%u to r%lu\n", reg, val);
-			break;
-
-		case DW_CFA_remember_state:
-			if ((state->cur + 1) >= DWARF_UNWIND_CFA_STACK_MAX) {
-				DU_DEBUG_CFI("FAILED stack top reached\n");
-				return -EINVAL;
-			}
-
-			DU_DEBUG_CFI("CFA_remember_state %d\n", state->cur);
-			state->cur++;
-			break;
-
-		case DW_CFA_restore_state:
-			if (!state->cur) {
-				DU_DEBUG_CFI("FAILED stack underflow\n");
-				return -EINVAL;
-			}
-
-			state->cur--;
-			DU_DEBUG_CFI("DW_CFA_restore_state %d\n", state->cur);
-			break;
-
-		case DW_CFA_def_cfa:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
-
-			DU_DEBUG_CFI("CFA_def_cfa r%u+0x%lx\n", reg, val);
-			break;
-
-		case DW_CFA_def_cfa_sf:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_SLEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
-
-			DU_DEBUG_CFI("CFA_def_cfa_sf r%u+0x%lx\n", reg, val);
-			break;
-
-		case DW_CFA_def_cfa_register:
-			reg = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG(DU_REG_CFA_REG_COLUMN,
-			       DU_LOCATION_REG, reg);
-
-			DU_DEBUG_CFI("CFA_def_cfa_register r%u\n", reg);
-			break;
-
-		case DW_CFA_def_cfa_offset:
-			val = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
-
-			DU_DEBUG_CFI("CFA_def_cfa_offset 0x%lx\n", val);
-			break;
-
-		case DW_CFA_def_cfa_offset_sf:
-			val = DU_READ_SLEB128(addr, addr_end);
-			val *= cie->align_data;
-
-			SETREG(DU_REG_CFA_OFF_COLUMN,
-			       DU_LOCATION_VALUE, val);
-
-			DU_DEBUG_CFI("CFA_def_cfa_offset_sf 0x%lx\n", val);
-			break;
-
-		case DW_CFA_def_cfa_expression:
-			len = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR,
-				    addr, len);
-
-			addr += len;
-			DU_DEBUG_CFI("CFA_def_cfa_expr @ %p [%lu bytes]\n",
-				     addr, len);
-			break;
-
-		case DW_CFA_expression:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			len = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR,
-				    addr, len);
-
-			addr += len;
-
-			DU_DEBUG_CFI("CFA_expression r%u @ %p [%lu bytes]\n",
-				     reg, addr, len);
-			break;
-
-		case DW_CFA_val_expression:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			len = DU_READ_ULEB128(addr, addr_end);
-
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR_VALUE,
-				    addr, len);
-
-			addr += len;
-
-			DU_DEBUG_CFI("CFA_expression r%u @ %p [%lu bytes]\n",
-				     reg, addr, len);
-			break;
-
-		case DW_CFA_GNU_negative_offset_extended:
-			reg = DU_READ_ULEB128(addr, addr_end);
-			val = DU_READ_ULEB128(addr, addr_end);
-			val *= -cie->align_data;
-
-			SETREG(reg, DU_LOCATION_MEMORY, val);
-
-			DU_DEBUG_CFI("CFA_GNU_negative_offset_extended cfa+0x%lx\n", val);
-			break;
-
-		case DW_CFA_GNU_window_save:
-			/*
-			 * This is a special CFA to handle all 16 windowed
-			 * registers on SPARC.
-			 */
-
-		default:
-			return -EINVAL;
-		}
-	}
-
-	return 0;
-}
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 static int emit_entry(struct code *code)
 {
@@ -983,11 +831,15 @@ int fde_cb(struct du_fde *fde)
 	if (emit_entry(&code))
 		return -1;
 
+	add_code(&code, insn_unwind, ARRAY_SIZE(insn_unwind));
+
 	if (emit_code(&code, fde))
 		return -1;
 
 	if (add_code(&code, insn_exit, ARRAY_SIZE(insn_exit)))
 		return -1;
+
+	add_code(&code, insn_unwind, ARRAY_SIZE(insn_unwind));
 
 	if (write_frame(fde, code.insn, code.len))
 		return -1;
