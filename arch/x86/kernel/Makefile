@@ -124,6 +124,7 @@ obj-$(CONFIG_EFI)			+= sysfb_efi.o
 obj-$(CONFIG_PERF_EVENTS)		+= perf_regs.o
 obj-$(CONFIG_TRACING)			+= tracepoint.o
 obj-$(CONFIG_SCHED_MC_PRIO)		+= itmt.o
+obj-$(CONFIG_DWARF_UNWIND)		+= dwarf_unwind.o
 
 ifdef CONFIG_FRAME_POINTER
 obj-y					+= unwind_frame.o
