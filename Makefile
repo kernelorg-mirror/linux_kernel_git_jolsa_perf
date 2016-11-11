@@ -946,6 +946,9 @@ ifdef CONFIG_TRIM_UNUSED_KSYMS
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/adjust_autoksyms.sh \
 	  "$(MAKE) KBUILD_MODULES=1 -f $(srctree)/Makefile vmlinux_prereq"
 endif
+ifdef CONFIG_DWARF_UNWIND
+	$(Q)$(MAKE) -C $(srctree)/tools/dwarf_unwind srctree=$(abspath $(srctree))
+endif
 
 # standalone target for easier testing
 include/generated/autoksyms.h: FORCE
