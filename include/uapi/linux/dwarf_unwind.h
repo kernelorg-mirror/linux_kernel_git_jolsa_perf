@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <linux/bpf.h>
 #include <asm/dwarf_unwind.h>
+#include <asm/ptrace.h>
 
 struct du_expr {
 	__u32		 len;
@@ -62,5 +63,8 @@ struct du_int_expr {
 	unsigned long	 val;
 	struct du_regs	*regs;
 };
+
+void du_arch_regs_get(struct du_regs *dr, struct pt_regs *pr);
+void du_arch_regs_set(struct du_regs *dr, struct pt_regs *pr);
 
 #endif /* _UAPI__DWARF_UNWIND_H */
