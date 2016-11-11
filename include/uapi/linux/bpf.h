@@ -96,6 +96,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_TRACEPOINT,
 	BPF_PROG_TYPE_XDP,
 	BPF_PROG_TYPE_PERF_EVENT,
+	BPF_PROG_TYPE_UNWIND,
 };
 
 #define BPF_PSEUDO_MAP_FD	1
@@ -425,6 +426,9 @@ enum bpf_func_id {
 	 * @skb: pointer to skb
 	 */
 	BPF_FUNC_set_hash_invalid,
+
+	/* unwind */
+	BPF_FUNC_unwind,
 
 	__BPF_FUNC_MAX_ID,
 };
