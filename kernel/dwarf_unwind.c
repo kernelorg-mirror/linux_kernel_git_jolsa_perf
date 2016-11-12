@@ -7,6 +7,10 @@
 #include <linux/dwarf_unwind.h>
 #include <linux/bpf.h>
 #include <linux/filter.h>
+#include <linux/fs.h>
+#include <linux/debugfs.h>
+#include <linux/ptrace.h>
+#include <linux/uaccess.h>
 
 #ifdef CONFIG_DWARF_UNWIND_DEBUG
 # define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
@@ -160,9 +164,11 @@ static __maybe_unused struct unw_frame* find_frame(unsigned long ip)
 static struct unw_frame *frame_alloc(struct du_frame *frame)
 {
 	size_t size;
-	int cnt;
+	int cnt = 1;
 
-	cnt  = frame->expr ? frame->expr->len : 1;
+	if (frame->expr)
+		cnt += frame->expr->len;
+
 	size = sizeof(struct unw_frame) + cnt * sizeof(struct bpf_prog *);
 	return kzalloc(size, GFP_KERNEL);
 }
@@ -289,6 +295,211 @@ static int module_add(struct module *mod)
 		kfree(m);
 
 	return ret;
+}
+
+static u64 run_expr(struct unw_frame *f, struct du_regs *regs, u64 val, u64 idx)
+{
+	struct du_int_expr expr = {
+		.val	= val,
+		.regs	= regs,
+	};
+
+	return BPF_PROG_RUN(f->prog[idx + 1], (const void *) &expr);
+}
+
+static int __apply_state(struct unw_frame *f, struct du_regs *regs,
+			 struct du_state_regs *state)
+{
+	struct du_state_reg *cfa_state;
+	struct du_regs tmp_regs;
+	unsigned long prev_ip;
+	unsigned long prev_cfa;
+	unsigned long cfa;
+	int i;
+
+	cfa_state = &state->reg[DU_REG_CFA_REG_COLUMN];
+
+	prev_ip  = regs->reg[DU_REG_IP];
+	prev_cfa = regs->reg[DU_REG_CFA];
+
+	pr("prev_cfa 0x%lx, prev_ip 0x%lx\n", prev_cfa, prev_ip);
+
+	pr("cfa_state %p, cfa_state->loc %llx\n", cfa_state, cfa_state->loc);
+
+	if (cfa_state->loc == DU_LOCATION_REG) {
+		struct du_state_reg *sp_state;
+
+		/*
+		 * CFA is equal to [reg] + offset:
+		 *
+		 * As a special-case, if the stack-pointer is the CFA and the
+		 * stack-pointer wasn't saved, popping the CFA implicitly pops
+		 * the stack-pointer as well.
+		 */
+
+		sp_state = &state->reg[DU_REG_SP];
+
+		if ((cfa_state->val == DU_REG_SP) &&
+		    (sp_state->loc == DU_LOCATION_SAME))
+			cfa = prev_cfa;
+		else {
+			unsigned long reg;
+
+			reg = cfa_state->val;
+
+			pr("cfa reg 0x%llx, val 0x%lx\n", cfa_state->val, regs->reg[reg]);
+
+			cfa = regs->reg[reg];
+		}
+
+		cfa += state->reg[DU_REG_CFA_OFF_COLUMN].val;
+
+		pr("cfa %lx += off 0x%llx\n",
+		   cfa, state->reg[DU_REG_CFA_OFF_COLUMN].val);
+
+	} else {
+		if ((cfa_state->loc != DU_LOCATION_EXPR) ||
+		    (cfa_state->loc != DU_LOCATION_EXPR_VALUE))
+			return -EINVAL;
+
+		cfa = run_expr(f, regs, prev_cfa, cfa_state->val);
+
+		if (cfa_state->loc == DU_LOCATION_EXPR)
+			regs->reg[i] = *((unsigned long *) cfa);
+		else
+			regs->reg[i] = cfa;
+	}
+
+	regs->reg[DU_REG_CFA] = cfa;
+
+	/* Suck new register values. */
+	for (i = 0; i < DU_REGS_NUM; ++i) {
+		if (state->reg[i].loc == DU_LOCATION_REG) {
+			int reg = state->reg[i].val;
+			tmp_regs.reg[i] = regs->reg[reg];
+		}
+	}
+
+	/* And the rest. */
+	for (i = 0; i < DU_REGS_NUM; ++i) {
+		struct du_state_reg *rs = &state->reg[i];
+		unsigned long *p;
+		unsigned long val;
+
+		switch (rs->loc) {
+		case DU_LOCATION_REG:
+			regs->reg[i] = tmp_regs.reg[i];
+			break;
+
+		case DU_LOCATION_SAME:
+			break;
+
+		case DU_LOCATION_MEMORY:
+			p = (unsigned long *) (cfa + rs->val);
+
+			if (probe_kernel_address(p, val)) {
+				pr("LOC MEMORY failed %p\n", p);
+				return -EFAULT;
+			}
+
+			pr("LOC MEMORY reg %d, cfa 0x%lx + 0x%llx [%p] = 0x%lx\n",
+			   i, cfa, rs->val, p, val);
+
+			regs->reg[i] = val;
+			break;
+
+		case DU_LOCATION_EXPR:
+		case DU_LOCATION_EXPR_VALUE:
+			val = run_expr(f, regs, regs->reg[i], rs->val);
+
+			if (rs->loc == DU_LOCATION_EXPR)
+				regs->reg[i] = *((unsigned long *) val);
+			else
+				regs->reg[i] = val;
+
+		case DU_LOCATION_UNDEF:
+			regs->reg[i] = 0;
+
+		case DU_LOCATION_VALUE:
+			break;
+		}
+	}
+
+	pr("cfa 0x%lx, ip 0x%lx\n", cfa, regs->reg[DU_REG_IP]);
+
+	/* No change, too bad.. */
+	if ((regs->reg[DU_REG_IP] == prev_ip) &&
+	    (cfa == prev_cfa))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int apply_state(struct unw_frame *f, struct du_state *state,
+		       struct pt_regs *pregs, int idx)
+{
+	struct du_regs regs;
+	struct du_state_regs *state_regs;
+	int ret;
+
+	du_arch_regs_get(&regs, pregs);
+
+	state_regs = &state->stack[idx];
+
+	pr("apply_state idx %d, state %p\n", idx, state_regs);
+
+	ret = __apply_state(f, &regs, state_regs);
+	if (!ret)
+		du_arch_regs_set(&regs, pregs);
+
+	return ret;
+}
+
+static int unwind_step(struct pt_regs *regs)
+{
+	static struct du_unwind u;
+	struct unw_frame *f;
+	int ret;
+
+	f = find_frame(regs->ip);
+	if (!f) {
+		pr("error: failed to find frame\n");
+		return -1;
+	}
+
+	memset(&u.state, 0, sizeof(u.state));
+	u.ip   = (unsigned long) f->frame->loc_start;
+	u.end  = regs->ip;
+
+	pr("unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", &u, u.ip, u.end);
+
+	ret = BPF_PROG_RUN(f->prog[0], (const void *) &u);
+
+	pr("unwind_step ret %d\n", ret);
+
+	if (ret >= 0)
+		ret = apply_state(f, &u.state, regs, ret);
+
+	return ret;
+}
+
+static void unwind_stack_regs(struct pt_regs *regs)
+{
+	struct pt_regs r;
+
+	memcpy(&r, regs, sizeof(r));
+
+	while (!unwind_step(&r)) {
+		printk("[%p] %pB\n", (void *) r.ip, (void *) r.ip);
+	}
+}
+
+static noinline __maybe_unused void du_dump_stack(void)
+{
+	struct pt_regs regs;
+
+	regs_load(&regs);
+	unwind_stack_regs(&regs);
 }
 
 static int __init unwind_init(void)
