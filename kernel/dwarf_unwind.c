@@ -7,6 +7,10 @@
 #include <linux/dwarf_unwind.h>
 #include <linux/bpf.h>
 #include <linux/filter.h>
+#include <linux/fs.h>
+#include <linux/debugfs.h>
+#include <linux/ptrace.h>
+#include <linux/uaccess.h>
 
 #ifdef CONFIG_DWARF_UNWIND_DEBUG
 # define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
@@ -160,9 +164,11 @@ static __maybe_unused struct unw_frame* find_frame(unsigned long ip)
 static struct unw_frame *frame_alloc(struct du_frame *frame)
 {
 	size_t size;
-	int cnt;
+	int cnt = 1;
 
-	cnt  = frame->expr ? frame->expr->len : 1;
+	if (frame->expr)
+		cnt += frame->expr->len;
+
 	size = sizeof(struct unw_frame) + cnt * sizeof(struct bpf_prog *);
 	return kzalloc(size, GFP_KERNEL);
 }
@@ -288,6 +294,241 @@ static int module_add(struct module *mod)
 	if (ret)
 		kfree(m);
 
+	return ret;
+}
+
+static u64 run_expr(struct unw_frame *f, struct du_regs *regs, u64 val, u64 idx)
+{
+	struct du_int_expr expr = {
+		.val	= val,
+		.regs	= regs,
+	};
+
+	return BPF_PROG_RUN(f->prog[idx + 1], (const void *) &expr);
+}
+
+static int __apply_state(struct unw_frame *f, struct du_regs *regs,
+			 struct du_state_regs *state)
+{
+	struct du_state_reg *cfa_state;
+	struct du_regs tmp_regs;
+	unsigned long prev_ip;
+	unsigned long prev_cfa;
+	unsigned long cfa;
+	int i;
+
+	cfa_state = &state->reg[DU_REG_CFA_REG_COLUMN];
+
+	prev_ip  = regs->reg[DU_REG_IP];
+	prev_cfa = regs->reg[DU_REG_CFA];
+
+	if (cfa_state->loc == DU_LOCATION_REG) {
+		struct du_state_reg *sp_state;
+
+		/*
+		 * CFA is equal to [reg] + offset:
+		 *
+		 * As a special-case, if the stack-pointer is the CFA and the
+		 * stack-pointer wasn't saved, popping the CFA implicitly pops
+		 * the stack-pointer as well.
+		 */
+
+		sp_state = &state->reg[DU_REG_SP];
+
+		if ((cfa_state->val == DU_REG_SP) &&
+		    (sp_state->loc == DU_LOCATION_SAME))
+			cfa = prev_cfa;
+		else {
+			unsigned long reg;
+
+			reg = cfa_state->val;
+			cfa = regs->reg[reg];
+		}
+
+		cfa += state->reg[DU_REG_CFA_OFF_COLUMN].val;
+
+	} else {
+		if ((cfa_state->loc != DU_LOCATION_EXPR) ||
+		    (cfa_state->loc != DU_LOCATION_EXPR_VALUE))
+			return -EINVAL;
+
+		cfa = run_expr(f, regs, prev_cfa, cfa_state->val);
+
+		if (cfa_state->loc == DU_LOCATION_EXPR)
+			regs->reg[DU_REG_CFA] = *((unsigned long *) cfa);
+		else
+			regs->reg[DU_REG_CFA] = cfa;
+	}
+
+	regs->reg[DU_REG_CFA] = cfa;
+
+	/* Suck new register values. */
+	for (i = 0; i < DU_REGS_NUM; ++i) {
+		if (state->reg[i].loc == DU_LOCATION_REG) {
+			int reg = state->reg[i].val;
+			tmp_regs.reg[i] = regs->reg[reg];
+		}
+	}
+
+	/* And the rest. */
+	for (i = 0; i < DU_REGS_NUM; ++i) {
+		struct du_state_reg *rs = &state->reg[i];
+		unsigned long *p;
+		unsigned long val;
+
+		switch (rs->loc) {
+		case DU_LOCATION_REG:
+			regs->reg[i] = tmp_regs.reg[i];
+			break;
+
+		case DU_LOCATION_SAME:
+			break;
+
+		case DU_LOCATION_MEMORY:
+			p = (unsigned long *) (cfa + rs->val);
+
+			if (probe_kernel_address(p, val))
+				return -EFAULT;
+
+			regs->reg[i] = val;
+			break;
+
+		case DU_LOCATION_EXPR:
+		case DU_LOCATION_EXPR_VALUE:
+			val = run_expr(f, regs, regs->reg[i], rs->val);
+
+			if (rs->loc == DU_LOCATION_EXPR)
+				regs->reg[i] = *((unsigned long *) val);
+			else
+				regs->reg[i] = val;
+
+			break;
+
+		case DU_LOCATION_UNDEF:
+			regs->reg[i] = 0;
+
+		case DU_LOCATION_VALUE:
+			break;
+		}
+	}
+
+	/* No change, too bad.. */
+	if ((regs->reg[DU_REG_IP] == prev_ip) &&
+	    (cfa == prev_cfa))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int apply_state(struct unw_frame *f, struct du_state *state,
+		       struct pt_regs *pregs, int idx)
+{
+	struct du_regs regs;
+	struct du_state_regs *state_regs;
+	int ret;
+
+	du_arch_regs_get(&regs, pregs);
+
+	state_regs = &state->stack[idx];
+
+	ret = __apply_state(f, &regs, state_regs);
+	if (!ret)
+		du_arch_regs_set(&regs, pregs);
+
+	return ret;
+}
+
+#define NR_CONTEXTS 4
+
+static DEFINE_PER_CPU(int, recursion[NR_CONTEXTS]);
+
+static inline int get_recursion_context(void)
+{
+	int *r = this_cpu_ptr(recursion);
+	int rctx;
+
+	if (in_nmi())
+		rctx = 3;
+	else if (in_irq())
+		rctx = 2;
+	else if (in_softirq())
+		rctx = 1;
+	else
+		rctx = 0;
+
+	if (r[rctx])
+		return -1;
+
+	r[rctx]++;
+	barrier();
+
+	return rctx;
+}
+
+static inline void put_recursion_context(int rctx)
+{
+	int *r = this_cpu_ptr(recursion);
+
+	barrier();
+	r[rctx]--;
+}
+
+static int unwind_step(struct du_unwind *u, struct pt_regs *regs)
+{
+	struct unw_frame *f;
+	int ret;
+
+	f = find_frame(regs->ip);
+	if (!f)
+		return -EINVAL;
+
+	u->ip  = (unsigned long) f->frame->loc_start;
+	u->end = regs->ip;
+
+	ret = BPF_PROG_RUN(f->prog[0], (const void *) u);
+	if (ret >= 0)
+		ret = apply_state(f, &u->state, regs, ret);
+
+	return ret;
+}
+
+static DEFINE_PER_CPU(struct du_unwind, du_ctx[NR_CONTEXTS]);
+
+static int unwind_stack(struct pt_regs *regs, du_entry entry, void *data, int rctx)
+{
+	struct du_unwind *u, *ctx = this_cpu_ptr(du_ctx);
+	struct pt_regs r;
+	int ret = 0;
+
+	u = &ctx[rctx];
+
+	memset(u, 0, sizeof(*u));
+	du_arch_state_init(&u->state.stack[0]);
+
+	memcpy(&r, regs, sizeof(r));
+
+	while (!ret && !unwind_step(u, &r)) {
+		ret = entry(&r, data);
+	}
+
+	return ret;
+}
+
+int du_unwind_stack(struct pt_regs *regs, du_entry entry, void *data)
+{
+	int ret = 0, rctx;
+
+	preempt_disable();
+
+	rctx = get_recursion_context();
+	if (rctx < 0)
+		goto out;
+
+	ret = unwind_stack(regs, entry, data, rctx);
+
+	put_recursion_context(rctx);
+out:
+	preempt_enable();
 	return ret;
 }
 
