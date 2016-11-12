@@ -532,9 +532,43 @@ out:
 	return ret;
 }
 
+static int entry_printk(struct pt_regs *regs, void *data __maybe_unused)
+{
+	printk("[%p] %pB\n", (void *) regs->ip, (void *) regs->ip);
+
+	return 0;
+}
+
+static noinline __maybe_unused void du_dump_stack(void)
+{
+	struct pt_regs regs;
+
+	regs_load(&regs);
+	du_unwind_stack(&regs, entry_printk, NULL);
+}
+
+static ssize_t
+test_write(struct file *filp, const char __user *ubuf,
+	   size_t cnt, loff_t *ppos)
+{
+	printk("Testing dwarf unwind from process context.\n");
+
+	du_dump_stack();
+	return cnt;
+}
+
+static const struct file_operations test_fops = {
+	.write = test_write,
+};
+
 static int __init unwind_init(void)
 {
 	bpf_register_prog_type(&unwind_type);
+
+	if (!debugfs_create_file("unwind_test", 0644, NULL, NULL,
+				 &test_fops))
+		return -ENOMEM;
+
 	return module_add(NULL);
 }
 
