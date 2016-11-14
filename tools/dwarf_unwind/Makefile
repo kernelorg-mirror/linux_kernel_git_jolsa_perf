@@ -62,10 +62,7 @@ $(CONVERT_IN): FORCE
 $(CONVERT): $(CONVERT_IN) $(LIBSUBCMD)
 	$(QUIET_LINK)$(CC) -o $@ $^ -lelf
 
-$(LIBSUBCMD)-clean:
-	$(Q)$(MAKE) -C $(SUBCMD_DIR) O=$(OUTPUT) clean
-
-clean: $(LIBSUBCMD)-clean FORCE
+clean:
 	$(Q)find $(if $(OUTPUT),$(OUTPUT),.) -name '*.o' -delete -o -name '\.*.cmd' -delete -o -name '\.*.d' -delete
 	$(call QUIET_CLEAN, convert)
 	$(Q)$(RM) $(CONVERT)
@@ -84,4 +81,4 @@ cscope:
 
 FORCE:
 
-.PHONY: FORCE tags cscope
+.PHONY: FORCE tags cscope clean

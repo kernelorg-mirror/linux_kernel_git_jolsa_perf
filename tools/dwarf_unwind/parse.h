@@ -29,9 +29,9 @@ struct unw_fde {
 	u8	*loc_end;
 };
 
-typedef int (fde_cb_t)(struct unw_fde *);
+typedef int (unw_fde_cb_t)(struct unw_fde *);
 
 int parse_fdes(u8 *start, u8 *end);
-int walk_fdes(fde_cb_t cb);
+int walk_fdes(unw_fde_cb_t cb);
 
 #endif /* __PARSE_H */

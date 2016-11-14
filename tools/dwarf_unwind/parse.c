@@ -320,7 +320,7 @@ int parse_fdes(u8 *start, u8 *end)
 	return 0;
 }
 
-int walk_fdes(fde_cb_t cb)
+int walk_fdes(unw_fde_cb_t cb)
 {
 	struct rb_node *next;
 

@@ -17,12 +17,10 @@ extern const char __start___dunw_frame[], __stop___dunw_frame[];
 static LIST_HEAD(modules_list);
 static DEFINE_SPINLOCK(modules_lock);
 
-static struct kmem_cache *kmem_frame;
-
 struct unw_frame {
 	struct rb_node	  rb_node;
 	struct du_frame	 *frame;
-	struct bpf_prog	 *prog;
+	struct bpf_prog	 *prog[0];
 };
 
 struct unw_module {
@@ -157,30 +155,65 @@ static __maybe_unused struct unw_frame* find_frame(unsigned long ip)
 	return find_frame_mod(&core, ip);
 }
 
-static int frame_init(struct unw_frame *f)
+static struct unw_frame *frame_alloc(struct du_frame *frame)
 {
-	struct du_frame *frame = f->frame;
+	size_t size;
+	int cnt;
+
+	cnt  = frame->expr ? frame->expr->len : 1;
+	size = sizeof(struct unw_frame) + cnt * sizeof(struct bpf_prog *);
+
+	return kzalloc(size, GFP_KERNEL);
+}
+
+static struct bpf_prog *frame_prog(struct bpf_insn *insn, __u32 len)
+{
 	struct bpf_prog *prog;
 	int err;
 
-	prog = bpf_prog_alloc(bpf_prog_size(frame->len), 0);
+	prog = bpf_prog_alloc(bpf_prog_size(len), 0);
 	if (!prog)
-		return -ENOMEM;
+		return NULL;
 
-	prog->len  = frame->len;
+	memcpy(prog->insnsi, insn, len * sizeof(struct bpf_insn));
+
+	prog->len  = len;
 	prog->type = BPF_PROG_TYPE_UNWIND;
 	prog->aux->ops = &unwind_type_ops;
-
-	memcpy(prog->insnsi, frame->insn, prog->len * sizeof(struct bpf_insn));
-
-	f->prog = prog;
 
 	fixup_bpf_calls(prog);
 
 	prog = bpf_prog_select_runtime(prog, &err);
 	if (err < 0) {
 		bpf_prog_free(prog);
-		return err;
+		return NULL;
+	}
+
+	return prog;
+}
+
+static int frame_init(struct unw_frame *f)
+{
+	struct du_frame *frame = f->frame;
+	struct bpf_prog *prog;
+
+	prog = frame_prog(frame->insn, frame->len);
+	if (!prog)
+		return -ENOMEM;
+
+	f->prog[0] = prog;
+
+	if (frame->expr) {
+		struct du_expr_array *arr = frame->expr;
+		int i;
+
+		for (i = 0; i < arr->len; i++) {
+			prog = frame_prog(frame->insn, frame->len);
+			if (!prog)
+				return -ENOMEM;
+
+			f->prog[i + 1] = prog;
+		}
 	}
 
 	return 0;
@@ -198,7 +231,7 @@ static int __frames_add(struct unw_module *mod,
 
 		frame = *p;
 
-		new = kmem_cache_alloc(kmem_frame, GFP_KERNEL);
+		new = frame_alloc(frame);
 		if (!new)
 			return -ENOMEM;
 
@@ -257,16 +290,19 @@ static int module_add(struct module *mod)
 	return ret;
 }
 
-static int __apply_state(struct du_regs *regs,
-				struct du_state_regs *state)
+static u64 run_expr(struct unw_frame *f, u64 prev, u64 idx)
+{
+	return BPF_PROG_RUN(f->prog[idx + 1], (const void *) &prev);
+}
+
+static int __apply_state(struct unw_frame *f, struct du_regs *regs,
+			 struct du_state_regs *state)
 {
 	struct du_state_reg *cfa_state;
 	struct du_regs tmp_regs;
 	unsigned long prev_ip;
 	unsigned long prev_cfa;
 	unsigned long cfa;
-	unsigned long expr_len;
-	u8 *expr;
 	int i;
 
 	cfa_state = &state->reg[DU_REG_CFA_REG_COLUMN];
@@ -277,7 +313,7 @@ static int __apply_state(struct du_regs *regs,
 	printk("prev_cfa 0x%lx, prev_ip 0x%lx\n",
 			prev_cfa, prev_ip);
 
-	printk("cfa_state %p, cfa_state->loc %x\n", cfa_state, cfa_state->loc);
+	printk("cfa_state %p, cfa_state->loc %llx\n", cfa_state, cfa_state->loc);
 
 	if (cfa_state->loc == DU_LOCATION_REG) {
 		struct du_state_reg *sp_state;
@@ -316,16 +352,7 @@ static int __apply_state(struct du_regs *regs,
 		    (cfa_state->loc != DU_LOCATION_EXPR_VALUE))
 			return -EINVAL;
 
-		printk("cfa expr\n");
-
-		expr     = cfa_state->expr;
-		expr_len = cfa_state->len;
-
-		printk("PICA PICA PICA\n");
-		/*
-		if (du_expr(regs, expr, expr_len, &cfa))
-			return -EINVAL;
-		*/
+		cfa = run_expr(f, prev_cfa, cfa_state->val);
 	}
 
 	regs->reg[DU_REG_CFA] = cfa;
@@ -368,14 +395,7 @@ static int __apply_state(struct du_regs *regs,
 
 		case DU_LOCATION_EXPR:
 		case DU_LOCATION_EXPR_VALUE:
-			expr     = rs->expr;
-			expr_len = rs->len;
-
-		printk("PICA PICA PICA\n");
-/*
-			if (du_expr(regs, expr, expr_len, &val))
-				return -EINVAL;
-*/
+			val = run_expr(f, 0, rs->val);
 
 			if (rs->loc == DU_LOCATION_EXPR)
 				regs->reg[i] = *((unsigned long *) val);
@@ -400,7 +420,8 @@ static int __apply_state(struct du_regs *regs,
 	return 0;
 }
 
-static int apply_state(struct du_state *state, struct pt_regs *pregs, int idx)
+static int apply_state(struct unw_frame *f, struct du_state *state,
+		       struct pt_regs *pregs, int idx)
 {
 	struct du_regs regs;
 	struct du_state_regs *state_regs;
@@ -412,7 +433,7 @@ static int apply_state(struct du_state *state, struct pt_regs *pregs, int idx)
 
 	printk("apply_state idx %d, state %p\n", idx, state_regs);
 
-	ret = __apply_state(&regs, state_regs);
+	ret = __apply_state(f, &regs, state_regs);
 	if (!ret)
 		du_arch_regs_set(&regs, pregs);
 
@@ -437,9 +458,9 @@ static int unwind_step(struct pt_regs *regs)
 
 	printk("KRAVA unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", &u, u.ip, u.end);
 
-	ret = BPF_PROG_RUN(f->prog, (const void *) &u);
+	ret = BPF_PROG_RUN(f->prog[0], (const void *) &u);
 	if (ret >= 0)
-		ret = apply_state(&u.state, regs, ret);
+		ret = apply_state(f, &u.state, regs, ret);
 
 	return ret;
 }
@@ -479,7 +500,6 @@ static const struct file_operations test_fops = {
 
 static int __init unwind_init(void)
 {
-	kmem_frame = KMEM_CACHE(unw_frame, SLAB_PANIC);
 	bpf_register_prog_type(&unwind_type);
 
 	if (!debugfs_create_file("unwind_test", 0644, NULL, NULL,

@@ -1,4 +1,7 @@
 convert-y += convert.o
+convert-y += cfi.o
+convert-y += expr.o
+convert-y += code.o
 convert-y += read.o
 convert-y += parse.o
 convert-y += debug.o
