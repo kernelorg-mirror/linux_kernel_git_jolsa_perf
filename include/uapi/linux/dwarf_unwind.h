@@ -6,11 +6,22 @@
 #include <asm/dwarf_unwind.h>
 #include <asm/ptrace.h>
 
-struct du_frame {
-        __u8            *loc_start;
-        __u8            *loc_end;
+struct du_expr {
         __u32            len;
         struct bpf_insn *insn;
+};
+
+struct du_expr_array {
+	int		 len;
+	struct du_expr	*expr[];
+};
+
+struct du_frame {
+	__u8			*loc_start;
+	__u8			*loc_end;
+	__u32			 len;
+	struct bpf_insn		*insn;
+	struct du_expr_array	*expr;
 };
 
 enum du_location {
@@ -24,14 +35,8 @@ enum du_location {
 };
 
 struct du_state_reg {
-	__u8		loc;
-	union {
-		__u64	val;
-		struct {
-			__u8	*expr;
-			__u32	 len;
-		};
-	};
+	__u64	loc;
+	__u64	val;
 };
 
 struct du_state_regs {

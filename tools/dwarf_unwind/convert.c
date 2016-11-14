@@ -33,6 +33,18 @@ struct code {
 	int alloc;
 };
 
+struct expr {
+	struct code code;
+};
+
+#define MAX_EXPR 10
+
+struct expr_array {
+	struct expr expr[MAX_EXPR];
+	int len;
+};
+
+static struct expr_array expr_array;
 static struct code code;
 static bool comments;
 
@@ -74,15 +86,9 @@ static int free_code(struct code *code)
 	free(code->insn);
 }
 
-
-static int write_frame(struct unw_fde *fde, struct unw_insn *insn, int len)
+static int write_insn(struct unw_insn *insn, int len)
 {
-	static int idx;
-	int i, ret;
-
-	fprintf(stdout, "struct bpf_insn ");
-	fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
-	fprintf(stdout, "insn_%d[%d] = {\n", idx, len);
+	int ret, i;
 
 	for (i = 0; i < len; i++) {
 		struct bpf_insn *bi = &insn[i].bi;
@@ -104,9 +110,55 @@ static int write_frame(struct unw_fde *fde, struct unw_insn *insn, int len)
 		fprintf(stdout, "\n");
 	}
 
-	fprintf(stdout, "};\n");
+	return 0;
+}
 
+static int write_frame(struct unw_fde *fde, struct unw_insn *insn, int len)
+{
+	static int idx;
+	int i, ret;
+
+	fprintf(stdout, "struct bpf_insn ");
+	fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+	fprintf(stdout, "insn_%d[%d] = {\n", idx, len);
+
+	write_insn(insn, len);
+
+	fprintf(stdout, "};\n");
 	fprintf(stdout, "\n");
+
+	if (expr_array.len) {
+		for (i = 0; i < expr_array.len; i++) {
+			fprintf(stdout, "struct bpf_insn ");
+			fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+			fprintf(stdout, "expr_insn_%d_%d[%d] = {\n", idx, i, expr_array.expr[i].code.len);
+
+			write_insn(expr_array.expr[i].code.insn, expr_array.expr[i].code.len);
+
+			fprintf(stdout, "};\n");
+			fprintf(stdout, "\n");
+
+			fprintf(stdout, "struct du_expr ");
+			fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+			fprintf(stdout, "expr_%d_%d = { %d, expr_insn_%d_%d };\n",
+				idx, i, expr_array.expr[i].code.len, idx, i);
+			fprintf(stdout, "\n");
+		}
+
+		fprintf(stdout, "struct du_expr_array ");
+		fprintf(stdout, "__attribute__((section(\"__unwind_data\"))) ");
+		fprintf(stdout, "expr_array_%d = {\n", idx, expr_array.len);
+		fprintf(stdout, "	.len      = %d,\n", expr_array.len);
+		fprintf(stdout, "	.expr = {\n");
+
+		for (i = 0; i < expr_array.len; i++) {
+			fprintf(stdout, "		&expr_%d_%d,\n", idx, i);
+		}
+		fprintf(stdout, "	}\n");
+
+		fprintf(stdout, "};\n");
+		fprintf(stdout, "\n");
+	}
 
 	fprintf(stdout, "struct du_frame ");
 	fprintf(stdout, "__attribute__((section(\"__dunw_data\"))) ");
@@ -115,6 +167,8 @@ static int write_frame(struct unw_fde *fde, struct unw_insn *insn, int len)
 	fprintf(stdout, "	.loc_end   = (__u8 *) 0x%lx,\n", fde->loc_end);
 	fprintf(stdout, "	.len       = %d,\n", len);
 	fprintf(stdout, "	.insn      = insn_%d,\n", idx);
+	if (expr_array.len)
+		fprintf(stdout, "	.expr      = &expr_array_%d,\n", idx);
 	fprintf(stdout, "};\n");
 
 	fprintf(stdout, "\n");
@@ -129,6 +183,7 @@ static int write_frame(struct unw_fde *fde, struct unw_insn *insn, int len)
 
 	return 0;
 }
+
 /*
  * mov R2, *R1   -> R2 holds IP
  * add R1, 8
@@ -173,6 +228,38 @@ static int emit_debug(struct code *code)
 	return add_code(code, insn_unwind, ARRAY_SIZE(insn_unwind));
 }
 
+static int process_expr(struct code *code, u8* expr, unsigned long len)
+{
+	return emit_debug(code);
+}
+
+static void clean_expr(struct expr_array *array)
+{
+	int i;
+
+	for (i = 0; i < array->len; i++) {
+		clean_code(&array->expr[i].code);
+	}
+
+	array->len = 0;
+}
+
+static int add_expr(struct expr_array *array, u8 *p, unsigned long len, int *idx)
+{
+	struct expr *expr;
+
+	if (array->len == MAX_EXPR)
+		return -1;
+
+	*idx = array->len;
+	expr = &array->expr[array->len++];
+
+	if (process_expr(&expr->code, p, len))
+		return -1;
+
+	return 0;
+}
+
 static int set_reg(struct code *code, unsigned long reg, unsigned long val, unsigned long loc, int state_idx)
 {
 	unsigned int offset_val, offset_loc;
@@ -202,7 +289,7 @@ static int set_reg(struct code *code, unsigned long reg, unsigned long val, unsi
 	insn[0].bi = BPF_LD_IMM64_1(BPF_REG_4, val);
 	insn[1].bi = BPF_LD_IMM64_2(BPF_REG_4, val);
 	insn[2].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_val),
-	insn[3].bi = BPF_ST_MEM(BPF_B, BPF_REG_1, offset_loc, loc);
+	insn[3].bi = BPF_ST_MEM(BPF_DW, BPF_REG_1, offset_loc, loc);
 
 	return add_code(code, insn, 4);
 }
@@ -237,8 +324,8 @@ static int restore(struct code *code, unsigned long reg, int state_idx, int stat
 
 	insn[0].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_val);
 	insn[1].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_val);
-	insn[2].bi = BPF_LDX_MEM(BPF_B, BPF_REG_4, BPF_REG_1, offset_loc);
-	insn[3].bi = BPF_STX_MEM(BPF_B, BPF_REG_1, BPF_REG_4, offset_init_loc);
+	insn[2].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_4, BPF_REG_1, offset_loc);
+	insn[3].bi = BPF_STX_MEM(BPF_DW, BPF_REG_1, BPF_REG_4, offset_init_loc);
 
 	return add_code(code, insn, 4);
 }
@@ -298,7 +385,9 @@ static int emit_cfi_code(struct code *code, struct unw_fde *fde,
 	unsigned int offset_val, offset_loc;
 	unsigned int offset_init_val, offset_init_loc;
 	char buf[100];
+	int expr_idx;
 
+	clean_expr(&expr_array);
 	state_init = state_idx;
 
 	while ((curr_ip <= end_ip) && (addr < addr_end)) {
@@ -530,52 +619,40 @@ static int emit_cfi_code(struct code *code, struct unw_fde *fde,
 		case DW_CFA_def_cfa_expression:
 			len = DU_READ_ULEB128(addr, addr_end);
 
-			fprintf(stderr, "PICA\n");
+			if (add_expr(&expr_array, addr, len, &expr_idx))
+				return -1;
 
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR,
-				    addr, len);
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, expr_idx, DU_LOCATION_EXPR, state_idx))
+				return -1;
 
 			addr += len;
 
-			insn[0].astr = strdup("PICA");
-
-			if (add_code(code, insn, 1))
-				return -1;
 			break;
 
 		case DW_CFA_expression:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
-			fprintf(stderr, "PICA\n");
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR,
-				    addr, len);
+			if (add_expr(&expr_array, addr, len, &expr_idx))
+				return -1;
+
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, expr_idx, DU_LOCATION_EXPR, state_idx))
+				return -1;
 
 			addr += len;
-
-			insn[0].astr = strdup("PICA");
-
-			if (add_code(code, insn, 1))
-				return -1;
 			break;
 
 		case DW_CFA_val_expression:
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
-			fprintf(stderr, "PICA\n");
-			SETREG_EXPR(DU_REG_CFA_REG_COLUMN,
-				    DU_LOCATION_EXPR_VALUE,
-				    addr, len);
+			if (add_expr(&expr_array, addr, len, &expr_idx))
+				return -1;
+
+			if (set_reg(code, DU_REG_CFA_REG_COLUMN, expr_idx, DU_LOCATION_EXPR_VALUE, state_idx))
+				return -1;
 
 			addr += len;
-
-			insn[0].astr = strdup("PICA");
-
-			if (add_code(code, insn, 1))
-				return -1;
 			break;
 
 		case DW_CFA_GNU_negative_offset_extended:
