@@ -586,6 +586,115 @@ void uncore_pmu_event_read(struct perf_event *event)
 	uncore_perf_event_update(box, event);
 }
 
+struct fake_event {
+	struct perf_event	*event;
+	struct intel_uncore_box	*box;
+	bool			 box_alloc;
+};
+
+struct fake_env {
+	int			  cnt;
+	struct fake_event	  fe[0];
+};
+
+static bool has_equal_box(struct perf_event *a, struct perf_event *b)
+{
+	struct intel_uncore_pmu *pa = uncore_event_to_pmu(a);
+	struct intel_uncore_pmu *pb = uncore_event_to_pmu(b);
+
+	return pa->pmu.type == pb->pmu.type;
+}
+
+static void free_fake_env(struct fake_env *env)
+{
+	int i;
+
+	for (i = 0; i < env->cnt; i++) {
+		struct fake_event *fe = &env->fe[i];
+
+		if (fe->box_alloc)
+			kfree(fe->box);
+	}
+
+	kfree(env);
+}
+
+static bool is_fake_event(struct perf_event *event)
+{
+	return is_uncore_event(event) && (event->state > PERF_EVENT_STATE_OFF);
+}
+
+static struct fake_env *alloc_fake_env(struct perf_event *event)
+{
+	struct perf_event *sibling, *leader = event->group_leader;
+	struct fake_env *env;
+	int i = 0, j, n = 0;
+	size_t size;
+
+	if (is_uncore_event(leader))
+		n++;
+
+	if (is_uncore_event(event))
+		n++;
+
+	list_for_each_entry(sibling, &leader->sibling_list, group_entry) {
+		if (is_uncore_event(sibling) && (event->state > PERF_EVENT_STATE_OFF))
+			n++;
+	}
+
+	size = sizeof(*env) + n * sizeof(struct fake_event);
+
+	env = kzalloc(size, GFP_KERNEL);
+	if (!env)
+		return NULL;
+
+	env->cnt = n;
+
+	/*
+	 * The event is not yet connected with its siblings,
+	 * therefore we must collect leader, event and its
+	 * siblings.
+	 */
+	if (is_uncore_event(leader))
+		env->fe[i++].event = leader;
+
+	if (is_uncore_event(event))
+		env->fe[i++].event = event;
+
+	list_for_each_entry(sibling, &leader->sibling_list, group_entry) {
+		if (is_uncore_event(sibling) && (event->state > PERF_EVENT_STATE_OFF))
+			env->fe[i++].event = sibling;
+	}
+
+	for (i = 0; i < n; i++) {
+		struct fake_event *fe = &env->fe[i];
+		struct intel_uncore_pmu *pmu;
+
+		for (j = 0; j < i; j++) {
+			if (has_equal_box(env->fe[j].event, fe->event)) {
+				fe->box = env->fe[j].box;
+				break;
+			}
+		}
+
+		if (fe->box)
+			continue;
+
+		pmu = uncore_event_to_pmu(fe->event);
+
+		fe->box = uncore_alloc_box(pmu->type, NUMA_NO_NODE);
+		if (!fe->box) {
+			free_fake_env(env);
+			return NULL;
+		}
+
+		fe->box->pmu  = pmu;
+		fe->box_alloc = true;
+	}
+
+	return env;
+}
+
 /*
  * validation ensures the group can be loaded onto the
  * PMU if it was the only group available.
@@ -593,35 +702,38 @@ void uncore_pmu_event_read(struct perf_event *event)
 static int uncore_validate_group(struct intel_uncore_pmu *pmu,
 				struct perf_event *event)
 {
-	struct perf_event *leader = event->group_leader;
-	struct intel_uncore_box *fake_box;
-	int ret = -EINVAL, n;
+	struct fake_env *env;
+	int ret = -EINVAL, i;
 
-	fake_box = uncore_alloc_box(pmu->type, NUMA_NO_NODE);
-	if (!fake_box)
+	env = alloc_fake_env(event);
+	if (!env)
 		return -ENOMEM;
 
-	fake_box->pmu = pmu;
-	/*
-	 * the event is not yet connected with its
-	 * siblings therefore we must first collect
-	 * existing siblings, then add the new event
-	 * before we can simulate the scheduling
-	 */
-	n = uncore_collect_events(fake_box, leader, true);
-	if (n < 0)
-		goto out;
+	for (i = 0; i < env->cnt; i++) {
+		struct fake_event *fe = &env->fe[i];
+		int n;
 
-	fake_box->n_events = n;
-	n = uncore_collect_events(fake_box, event, false);
-	if (n < 0)
-		goto out;
+		if (!fe->box)
+			return -EINVAL;
 
-	fake_box->n_events = n;
+		n = uncore_collect_events(fe->box, fe->event, false);
+		if (n < 0)
+			goto out;
 
-	ret = uncore_assign_events(fake_box, NULL, n);
+		fe->box->n_events = n;
+	}
+
+	for (i = 0; i < env->cnt; i++) {
+		struct fake_event *fe = &env->fe[i];
+
+		ret = uncore_assign_events(fe->box, NULL, fe->box->n_events);
+
+		if (ret)
+			break;
+	}
+
 out:
-	kfree(fake_box);
+	free_fake_env(env);
 	return ret;
 }
 
