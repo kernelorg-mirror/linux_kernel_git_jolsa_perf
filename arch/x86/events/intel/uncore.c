@@ -325,10 +325,8 @@ static bool is_uncore_event(struct perf_event *event)
 }
 
 static int
-uncore_collect_events(struct intel_uncore_box *box, struct perf_event *leader,
-		      bool dogrp)
+uncore_collect_events(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct perf_event *event;
 	int n, max_count;
 
 	max_count = box->pmu->type->num_counters;
@@ -340,22 +338,7 @@ uncore_collect_events(struct intel_uncore_box *box, struct perf_event *leader,
 
 	n = box->n_events;
 
-	if (is_uncore_event(leader)) {
-		box->event_list[n] = leader;
-		n++;
-	}
-
-	if (!dogrp)
-		return n;
-
-	list_for_each_entry(event, &leader->sibling_list, group_entry) {
-		if (!is_uncore_event(event) ||
-		    event->state <= PERF_EVENT_STATE_OFF)
-			continue;
-
-		if (n >= max_count)
-			return -EINVAL;
-
+	if (is_uncore_event(event)) {
 		box->event_list[n] = event;
 		n++;
 	}
@@ -506,7 +489,7 @@ static int uncore_pmu_event_add(struct perf_event *event, int flags)
 	if (!box)
 		return -ENODEV;
 
-	ret = n = uncore_collect_events(box, event, false);
+	ret = n = uncore_collect_events(box, event);
 	if (ret < 0)
 		return ret;
 
@@ -716,7 +699,7 @@ static int uncore_validate_group(struct intel_uncore_pmu *pmu,
 		if (!fe->box)
 			return -EINVAL;
 
-		n = uncore_collect_events(fe->box, fe->event, false);
+		n = uncore_collect_events(fe->box, fe->event);
 		if (n < 0)
 			goto out;
 
