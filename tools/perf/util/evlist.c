@@ -1067,6 +1067,9 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
 
 		fd = FD(evsel, cpu, thread);
 
+		if (fd < 0 && symbol_conf.ignore_missing_cpu_thread)
+			continue;
+
 		if (*output == -1) {
 			*output = fd;
 

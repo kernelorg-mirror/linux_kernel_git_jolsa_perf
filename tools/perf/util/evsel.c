@@ -1021,9 +1021,12 @@ static int perf_evsel__run_ioctl(struct perf_evsel *evsel, int ncpus, int nthrea
 
 	for (cpu = 0; cpu < ncpus; cpu++) {
 		for (thread = 0; thread < nthreads; thread++) {
-			int fd = FD(evsel, cpu, thread),
-			    err = ioctl(fd, ioc, arg);
+			int err, fd = FD(evsel, cpu, thread);
 
+			if (fd < 0 && symbol_conf.ignore_missing_cpu_thread)
+				continue;
+
+			err = ioctl(fd, ioc, arg);
 			if (err)
 				return err;
 		}
@@ -1419,6 +1422,29 @@ static int __open_attr__fprintf(FILE *fp, const char *name, const char *val,
 	return fprintf(fp, "  %-32s %s\n", name, val);
 }
 
+static bool ignore_missing_cpu_thread(int cpu, int pid, int err)
+{
+	/*
+	 * ESRCH  for pid's not found
+	 * ENODEV for cpu's not online
+	 */
+	bool ignore = ((err == -ESRCH) || (err == -ENODEV)) &&
+			symbol_conf.ignore_missing_cpu_thread;
+
+	/*
+	 * Just single line warning for standard run, otherwise we
+	 * get all cpu's output (leave this for -v option).
+	 */
+	if (WARN_ONCE(ignore, "WARNING: Ignoring open failure (run with -v for details)\n")) {
+		if (pid != -1)
+			pr_debug("WARNING: Ignored open failure for pid %d on cpu %d\n", pid, cpu);
+		else
+			pr_debug("WARNING: Ignored open failure for cpu %d\n", cpu);
+	}
+
+	return ignore;
+}
+
 static int __perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 			      struct thread_map *threads)
 {
@@ -1490,6 +1516,10 @@ retry_open:
 									  group_fd, flags);
 			if (fd < 0) {
 				err = -errno;
+
+				if (ignore_missing_cpu_thread(cpus->map[cpu], pid, err))
+					continue;
+
 				pr_debug2("\nsys_perf_event_open failed, error %d\n",
 					  err);
 				goto try_fallback;
