@@ -1021,9 +1021,12 @@ static int perf_evsel__run_ioctl(struct perf_evsel *evsel, int ncpus, int nthrea
 
 	for (cpu = 0; cpu < ncpus; cpu++) {
 		for (thread = 0; thread < nthreads; thread++) {
-			int fd = FD(evsel, cpu, thread),
-			    err = ioctl(fd, ioc, arg);
+			int err, fd = FD(evsel, cpu, thread);
 
+			if (fd < 0 && symbol_conf.ignore_missing_cpu_thread)
+				continue;
+
+			err = ioctl(fd, ioc, arg);
 			if (err)
 				return err;
 		}
