@@ -1419,6 +1419,21 @@ static int __open_attr__fprintf(FILE *fp, const char *name, const char *val,
 	return fprintf(fp, "  %-32s %s\n", name, val);
 }
 
+static bool ignore_missing_cpu_thread(int cpu, int pid, int err)
+{
+	bool search_errno = (err == -ESRCH) || (err == -ENODEV);
+	bool ignore = search_errno && symbol_conf.ignore_missing_cpu_thread;
+
+	if (ignore) {
+		if (pid != -1)
+			pr_warning("WARNING: Ignored open failure for pid %d on cpu %d\n", pid, cpu);
+		else
+			pr_warning("WARNING: Ignored open failure for cpu %d\n", cpu);
+	}
+
+	return ignore;
+}
+
 static int __perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 			      struct thread_map *threads)
 {
@@ -1490,6 +1505,10 @@ retry_open:
 									  group_fd, flags);
 			if (fd < 0) {
 				err = -errno;
+
+				if (ignore_missing_cpu_thread(cpus->map[cpu], pid, err))
+					continue;
+
 				pr_debug2("\nsys_perf_event_open failed, error %d\n",
 					  err);
 				goto try_fallback;
