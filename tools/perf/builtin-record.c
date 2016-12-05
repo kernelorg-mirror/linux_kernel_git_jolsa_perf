@@ -1687,6 +1687,9 @@ int cmd_record(int argc, const char **argv, const char *prefix __maybe_unused)
 		goto out;
 	}
 
+	if (rec->opts.target.uid != UINT_MAX)
+		symbol_conf.ignore_missing_cpu_thread = true;
+
 	err = -ENOMEM;
 	if (perf_evlist__create_maps(rec->evlist, &rec->opts.target) < 0)
 		usage_with_options(record_usage, record_options);
