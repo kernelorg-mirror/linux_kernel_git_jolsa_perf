@@ -289,9 +289,14 @@ static int module_add(struct module *mod)
 	return ret;
 }
 
-static u64 run_expr(struct unw_frame *f, u64 prev, u64 idx)
+static u64 run_expr(struct unw_frame *f, struct du_regs *regs, u64 val, u64 idx)
 {
-	return BPF_PROG_RUN(f->prog[idx + 1], (const void *) &prev);
+	struct du_int_expr expr = {
+		.val	= val,
+		.regs	= regs,
+	};
+
+	return BPF_PROG_RUN(f->prog[idx + 1], (const void *) &expr);
 }
 
 static int __apply_state(struct unw_frame *f, struct du_regs *regs,
@@ -351,7 +356,12 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 		    (cfa_state->loc != DU_LOCATION_EXPR_VALUE))
 			return -EINVAL;
 
-		cfa = run_expr(f, prev_cfa, cfa_state->val);
+		cfa = run_expr(f, regs, prev_cfa, cfa_state->val);
+
+		if (cfa_state->loc == DU_LOCATION_EXPR)
+			regs->reg[i] = *((unsigned long *) cfa);
+		else
+			regs->reg[i] = cfa;
 	}
 
 	regs->reg[DU_REG_CFA] = cfa;
@@ -394,7 +404,7 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 
 		case DU_LOCATION_EXPR:
 		case DU_LOCATION_EXPR_VALUE:
-			val = run_expr(f, 0, rs->val);
+			val = run_expr(f, regs, regs->reg[i], rs->val);
 
 			if (rs->loc == DU_LOCATION_EXPR)
 				regs->reg[i] = *((unsigned long *) val);

@@ -3,9 +3,12 @@
 #include <asm/bug.h>
 #include <asm/errno.h>
 #include <stdio.h>
+#include <string.h>
 #include "debug.h"
 #include "read.h"
 #include "code.h"
+#include "bpf.h"
+#include "convert.h"
 
 #define NUM_OPERANDS(signature)	(((signature) >> 6) & 0x3)
 #define OPND1_TYPE(signature)	(((signature) >> 3) & 0x7)
@@ -280,14 +283,188 @@ bool is_big_endian(void)
 /* TODO check this!!! */
 #define sword(arg) arg
 
-int emit_expr(struct unw_code *code, u8 *addr, unsigned long len)
+/*
+ * push:            -> value to push
+ *   sub  R10, 8    -> new stack pointer
+ *   mov *R10, R3
+ *
+ * pop:
+ *   mov R3,*R10    -> R3 holds popped value
+ *   add R10, 8     -> R10 holds new stack pointer
+ */
+
+static struct unw_insn insn_push[] = {
+	{ .bi = BPF_ALU64_IMM(BPF_SUB, BPF_REG_10, sizeof(unsigned long)),	.cstr = "SUB  R10,8"	},
+	{ .bi = BPF_STX_MEM(BPF_DW, BPF_REG_10, BPF_REG_3, 0),			.cstr = "MOV [R10],R3"	},
+};
+
+static struct unw_insn insn_pop[] = {
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_10, BPF_REG_3, 0),			.cstr = "MOV  R3,[R10]"	},
+	{ .bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_10, sizeof(unsigned long)),	.cstr = "ADD  R10,8"	},
+};
+
+static struct unw_insn insn_pop_final[] = {
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_10, BPF_REG_1, 0),			.cstr = "MOV  R1,[R10]"	},
+};
+
+static struct unw_insn mov_R2_to_R3[] = {
+	{ .bi = BPF_MOV64_REG(BPF_REG_3, BPF_REG_2), .cstr = "MOV  R3,R2" },
+};
+
+static int push(struct unw_code *code)
 {
+	return add_code(code, insn_push, ARRAY_SIZE(insn_push));
+}
+
+static int push_val(struct unw_code *code, unsigned long val)
+{
+	struct unw_insn mov_val_to_R3[] = {
+		{ .bi = BPF_MOV64_IMM(BPF_REG_3, val), .cstr = "MOV R3,val" },
+	};
+
+	return add_code(code, mov_val_to_R3, ARRAY_SIZE(mov_val_to_R3)) ||
+	       add_code(code, insn_push, ARRAY_SIZE(insn_push));
+}
+
+static int pop(struct unw_code *code)
+{
+	return add_code(code, insn_pop, ARRAY_SIZE(insn_pop));
+}
+
+static int pop_final(struct unw_code *code)
+{
+	return add_code(code, insn_pop_final, ARRAY_SIZE(insn_pop_final));
+}
+
+/*
+ * get register value to R3
+ * mov R3, [R1 + reg offset]
+ */
+static int get_reg(struct unw_code *code, int idx)
+{
+	struct unw_insn insn[10];
+	unsigned int offset_val;
+	char buf[100];
+
+	memset(insn, 0, sizeof(insn));
+	offset_val = offsetof(struct du_regs, reg[idx]);
+
+	snprintf(buf, 100, "REG_3 = [REG_1 + 0x%lx]", offset_val);
+	insn[0].astr = strdup(buf);
+
+	insn[0].bi = BPF_LDX_MEM(BPF_DW, BPF_REG_3, BPF_REG_1, offset_val);
+
+	return add_code(code, insn, 1);
+}
+
+static int add(struct unw_code *code, unsigned int val)
+{
+	struct unw_insn insn[10];
+	char buf[100];
+
+	memset(insn, 0, sizeof(insn));
+
+	snprintf(buf, 100, "ADD REG_3,0x%lx", val);
+	insn[0].astr = strdup(buf);
+
+	insn[0].bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_3, val);
+
+	return add_code(code, insn, 1);
+}
+
+/*
+ * # R1  holds struct du_int_expr
+ * # R10 holds stack pointer
+ *
+ * mov R2, *R1   -> R2 holds register value
+ * add R1, 8     -> R1 holds struct du_regs pointer
+ *
+ * exit
+ */
+int _emit_expr(struct unw_code *code, u8 *addr, unsigned long len)
+{
+	struct unw_insn insn[10];
+	u8 *addr_end = addr + len;
+
+	if (add_code(code, mov_R2_to_R3, ARRAY_SIZE(mov_R2_to_R3)) ||
+	    push(code))
+		return -1;
+
+	while (addr < addr_end) {
+		u8 opcode, opsign, lit, reg;
+		unsigned long op1 = 0, op2 = 0;
+		unsigned long tmp1, tmp2, tmp3;
+
+		opcode = DU_READ(addr, u8, addr_end);
+		opsign = operands[opcode];
+
+		if ((NUM_OPERANDS(opsign) > 0)) {
+			op1 = READ_OPERAND(addr, OPND1_TYPE(opsign),
+					   addr_end);
+
+			if (NUM_OPERANDS(opsign) > 1)
+				op2 = READ_OPERAND(addr, OPND2_TYPE(opsign),
+						   addr_end);
+		}
+
+		switch (opcode) {
+		case DW_OP_lit0 ... DW_OP_lit31:
+			lit = opcode - DW_OP_lit0;
+
+			if (push_val(code, lit))
+				return -1;
+
+			pr_debug("OP_lit(%d)\n", lit);
+			break;
+
+		case DW_OP_breg0 ... DW_OP_breg31:
+			reg = opcode - DW_OP_breg0;
+
+			if (get_reg(code, reg))
+				return -1;
+
+			if (add(code, op1))
+				return -1;
+
+			if (push(code))
+				return -1;
+
+			pr_debug("OP_breg(r%d,0x%lx)\n", reg, op1);
+			break;
+
+		case DW_OP_bregx:
+			reg = (u8) op1;
+
+			if (get_reg(code, reg))
+				return -1;
+
+			if (add(code, op2))
+				return -1;
+
+			if (push(code))
+				return -1;
+
+			pr_debug("OP_bregx(r%d,0x%lx)\n", reg, op2);
+			break;
+
+		case DW_OP_reg0 ... DW_OP_reg31:
+			reg = opcode - DW_OP_reg0;
+			//val = GETREG(reg);
+
+			pr_debug("OP_reg(r%d)\n", reg);
+			return 0;
+
+		};
+	}
+
+	pop_final(code);
+	return 0;
+
+#if 0
 	unsigned long stack[MAX_EXPR_STACK_SIZE];
 	unsigned long cfa, val = 0;
 	u8 *addr_end = addr + len;
 	int sp = 0;
-
-	return 0;
 
 	cfa = GETREG(DU_REG_CFA_REG_COLUMN);
 
@@ -714,5 +891,43 @@ int emit_expr(struct unw_code *code, u8 *addr, unsigned long len)
 
 	pr_debug("value = 0x%lx\n", val);
 	return 0;
+#endif
 }
 
+static struct unw_insn insn_entry[] = {
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_2, BPF_REG_1, 0),                   .cstr = "REG_2 = [REG_1]"       },
+	{ .bi = BPF_ALU64_IMM(BPF_ADD, BPF_REG_1, sizeof(unsigned long)),       .cstr = "REG_1 += 8"            },
+	{ .bi = BPF_LDX_MEM(BPF_DW, BPF_REG_1, BPF_REG_1, 0),                   .cstr = "REG_1 = [REG_1]"       },
+};
+
+static struct unw_insn insn_exit[] = {
+	{ .bi = BPF_EXIT_INSN(), .cstr = "RET" },
+};
+
+static int emit_entry(struct unw_code *code)
+{
+	return add_code(code, insn_entry, ARRAY_SIZE(insn_entry));
+}
+
+static int emit_exit(struct unw_code *code)
+{
+	return add_code(code, insn_exit, ARRAY_SIZE(insn_exit));
+}
+
+int emit_expr(struct unw_code *code, u8 *addr, unsigned long len)
+{
+	if (emit_entry(code))
+		return -1;
+
+	emit_debug(code);
+
+	if (_emit_expr(code, addr, len))
+		return -1;
+
+	emit_debug(code);
+
+	if (emit_exit(code))
+		return -1;
+
+	return 0;
+}

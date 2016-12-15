@@ -131,6 +131,8 @@ static int write_frame(struct unw_convert *c)
 }
 
 /*
+ * # R1 holds struct du_unwind
+ *
  * mov R2, *R1   -> R2 holds IP
  * add R1, 8
  * add R3, R1    -> R3 holds loc_end

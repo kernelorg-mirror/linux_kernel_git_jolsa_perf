@@ -59,6 +59,11 @@ struct du_unwind {
 	struct du_state	state;
 };
 
+struct du_int_expr {
+	unsigned long	 val;
+	struct du_regs	*regs;
+};
+
 void du_arch_regs_get(struct du_regs *dr, struct pt_regs *pr);
 void du_arch_regs_set(struct du_regs *dr, struct pt_regs *pr);
 

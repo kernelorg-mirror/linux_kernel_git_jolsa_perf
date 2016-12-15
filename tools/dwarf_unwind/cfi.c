@@ -386,7 +386,7 @@ int emit_cfi(struct unw_convert *c, struct unw_frame *frame)
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
-			if (add_expr(c, addr, len, DU_REG_CFA_REG_COLUMN, DU_LOCATION_EXPR))
+			if (add_expr(c, addr, len, reg, DU_LOCATION_EXPR))
 				return -1;
 
 			addr += len;
@@ -396,7 +396,7 @@ int emit_cfi(struct unw_convert *c, struct unw_frame *frame)
 			reg = DU_READ_ULEB128(addr, addr_end);
 			len = DU_READ_ULEB128(addr, addr_end);
 
-			if (add_expr(c, addr, len, DU_REG_CFA_REG_COLUMN, DU_LOCATION_EXPR_VALUE))
+			if (add_expr(c, addr, len, reg, DU_LOCATION_EXPR_VALUE))
 				return -1;
 
 			addr += len;

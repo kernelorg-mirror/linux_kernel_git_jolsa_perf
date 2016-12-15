@@ -236,7 +236,7 @@ if [ -n "${CONFIG_DWARF_UNWIND}" ]; then
 
 	vmlinux_link "" .unwind_vmlinux
 
-	tools/dwarf_unwind/convert .unwind_vmlinux > .unwind.c 2>/dev/null
+	tools/dwarf_unwind/convert -c .unwind_vmlinux > .unwind.c 2>/dev/null
 	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} -c -o .unwind.o .unwind.c
 
 	unwind_obj=.unwind.o
