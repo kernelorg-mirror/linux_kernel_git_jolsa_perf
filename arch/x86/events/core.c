@@ -1276,6 +1276,89 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 	perf_event_update_userpage(event);
 }
 
+static int snprintf_counter_status(char *buf, size_t size, u64 status)
+{
+	int ret = 0, idx;
+
+	*buf = 0;
+
+	for (idx = 0; (idx < 61) && (status & (1ULL << idx)); idx++) {
+		ret += snprintf(buf + ret, size - ret, "%s%d ",
+				idx > INTEL_PMC_IDX_FIXED ?  "f" : "",
+				idx > INTEL_PMC_IDX_FIXED ?
+					idx - INTEL_PMC_IDX_FIXED : idx);
+	}
+
+	return ret;
+}
+
+static int snprintf_counter_overflow(char *buf, size_t size, u64 overflow)
+{
+	int ret = snprintf_counter_status(buf, size, overflow);
+
+	if (overflow & (1ULL << 61))
+		ret += snprintf(buf + ret, size - ret, "uncore ");
+	if (overflow & (1ULL << 62))
+		ret += snprintf(buf + ret, size - ret, "ds ");
+	if (overflow & (1ULL << 63))
+		ret += snprintf(buf + ret, size - ret, "cond");
+
+	return ret;
+}
+
+static int snprintf_counter_fixed(char *buf, size_t size, u64 fixed)
+{
+	int ret = 0, idx;
+
+	*buf = 0;
+
+	for (idx = 0; idx < x86_pmu.num_counters_fixed; idx++) {
+		const char *stat[4] = { "", "OS", "USR", "ALL" };
+		u64 bits = (fixed >> (idx * 4)) & 0xfULL;
+
+		if (!(bits & 3))
+			continue;
+
+		ret += snprintf(buf + ret, size - ret, "%d: %s%s%s ",
+				idx,
+				stat[bits & 3],
+				bits & 4 ? ",ANY" : "",
+				bits & 8 ? ",PMI" : "");
+	}
+
+	return ret;
+}
+
+static int snprintf_counter_ctrl(char *buf, size_t size, u64 ctrl)
+{
+	int ret;
+
+	if (!ctrl) {
+		*buf = 0;
+		return 0;
+	}
+
+#define B(bit) \
+	ctrl & ARCH_PERFMON_EVENTSEL_ ## bit ? "," # bit : ""
+
+	ret = snprintf(buf, size, "event=0x%02llx,umask=%02llx,cmask=%02llx",
+		        ctrl & ARCH_PERFMON_EVENTSEL_EVENT,
+		       (ctrl & ARCH_PERFMON_EVENTSEL_UMASK) >> 8,
+		       (ctrl & ARCH_PERFMON_EVENTSEL_CMASK) >> 24);
+
+	ret += snprintf(buf + ret, size - ret, "%s", B(USR));
+	ret += snprintf(buf + ret, size - ret, "%s", B(OS));
+	ret += snprintf(buf + ret, size - ret, "%s", B(EDGE));
+	ret += snprintf(buf + ret, size - ret, "%s", B(PIN_CONTROL));
+	ret += snprintf(buf + ret, size - ret, "%s", B(INT));
+	ret += snprintf(buf + ret, size - ret, "%s", B(ANY));
+	ret += snprintf(buf + ret, size - ret, "%s", B(ENABLE));
+	ret += snprintf(buf + ret, size - ret, "%s", B(INV));
+#undef B
+
+	return ret;
+}
+
 void perf_event_print_debug(void)
 {
 	u64 ctrl, status, overflow, pmc_ctrl, pmc_count, prev_left, fixed;
@@ -1283,6 +1366,7 @@ void perf_event_print_debug(void)
 	struct cpu_hw_events *cpuc;
 	unsigned long flags;
 	int cpu, idx;
+	char buf[200];
 
 	if (!x86_pmu.num_counters)
 		return;
@@ -1300,12 +1384,20 @@ void perf_event_print_debug(void)
 
 		pr_info("\n");
 		pr_info("CPU#%d: ctrl:       %016llx\n", cpu, ctrl);
-		pr_info("CPU#%d: status:     %016llx\n", cpu, status);
-		pr_info("CPU#%d: overflow:   %016llx\n", cpu, overflow);
-		pr_info("CPU#%d: fixed:      %016llx\n", cpu, fixed);
+
+		snprintf_counter_status(buf, sizeof(buf), status);
+		pr_info("CPU#%d: status:     %016llx %s\n", cpu, status, buf);
+
+		snprintf_counter_overflow(buf, sizeof(buf), overflow);
+		pr_info("CPU#%d: overflow:   %016llx %s\n", cpu, overflow, buf);
+
+		snprintf_counter_fixed(buf, sizeof(buf), fixed);
+		pr_info("CPU#%d: fixed:      %016llx %s\n", cpu, fixed, buf);
+
 		if (x86_pmu.pebs_constraints) {
 			rdmsrl(MSR_IA32_PEBS_ENABLE, pebs);
-			pr_info("CPU#%d: pebs:       %016llx\n", cpu, pebs);
+			snprintf_counter_overflow(buf, sizeof(buf), pebs);
+			pr_info("CPU#%d: pebs:       %016llx %s\n", cpu, pebs, buf);
 		}
 		if (x86_pmu.lbr_nr) {
 			rdmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
@@ -1320,8 +1412,10 @@ void perf_event_print_debug(void)
 
 		prev_left = per_cpu(pmc_prev_left[idx], cpu);
 
-		pr_info("CPU#%d:   gen-PMC%d ctrl:  %016llx\n",
-			cpu, idx, pmc_ctrl);
+		snprintf_counter_ctrl(buf, sizeof(buf), pmc_ctrl);
+		pr_info("CPU#%d:   gen-PMC%d ctrl:  %016llx %s\n",
+			cpu, idx, pmc_ctrl, buf);
+
 		pr_info("CPU#%d:   gen-PMC%d count: %016llx\n",
 			cpu, idx, pmc_count);
 		pr_info("CPU#%d:   gen-PMC%d left:  %016llx\n",
