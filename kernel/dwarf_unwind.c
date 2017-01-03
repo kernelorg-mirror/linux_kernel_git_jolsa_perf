@@ -12,6 +12,12 @@
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
 
+#ifdef CONFIG_DWARF_UNWIND_DEBUG
+# define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
+#else
+# define pr(fmt, ...)
+#endif
+
 extern const char __start___dunw_frame[], __stop___dunw_frame[];
 
 static LIST_HEAD(modules_list);
@@ -37,8 +43,8 @@ struct unw_module core = {
 
 BPF_CALL_5(bpf_unwind, void *, r1, void *, r2, void *, r3, void *, r4, void *, r5)
 {
-	printk("bpf_unwind R1 %p, R2 %p, R3 %p, R4 %p, R5 %p\n",
-		r1, r2, r3, r4, r5);
+	pr("bpf_unwind R1 %p, R2 %p, R3 %p, R4 %p, R5 %p\n",
+	   r1, r2, r3, r4, r5);
 	return 0;
 }
 
@@ -314,10 +320,9 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 	prev_ip  = regs->reg[DU_REG_IP];
 	prev_cfa = regs->reg[DU_REG_CFA];
 
-	printk("prev_cfa 0x%lx, prev_ip 0x%lx\n",
-			prev_cfa, prev_ip);
+	pr("prev_cfa 0x%lx, prev_ip 0x%lx\n", prev_cfa, prev_ip);
 
-	printk("cfa_state %p, cfa_state->loc %llx\n", cfa_state, cfa_state->loc);
+	pr("cfa_state %p, cfa_state->loc %llx\n", cfa_state, cfa_state->loc);
 
 	if (cfa_state->loc == DU_LOCATION_REG) {
 		struct du_state_reg *sp_state;
@@ -340,16 +345,15 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 
 			reg = cfa_state->val;
 
-			printk("cfa reg 0x%llx, val 0x%lx\n",
-					cfa_state->val, regs->reg[reg]);
+			pr("cfa reg 0x%llx, val 0x%lx\n", cfa_state->val, regs->reg[reg]);
 
 			cfa = regs->reg[reg];
 		}
 
 		cfa += state->reg[DU_REG_CFA_OFF_COLUMN].val;
 
-		printk("cfa %lx += off 0x%llx\n",
-				cfa, state->reg[DU_REG_CFA_OFF_COLUMN].val);
+		pr("cfa %lx += off 0x%llx\n",
+		   cfa, state->reg[DU_REG_CFA_OFF_COLUMN].val);
 
 	} else {
 		if ((cfa_state->loc != DU_LOCATION_EXPR) ||
@@ -392,12 +396,12 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 			p = (unsigned long *) (cfa + rs->val);
 
 			if (probe_kernel_address(p, val)) {
-				printk("LOC MEMORY failed %p\n", p);
+				pr("LOC MEMORY failed %p\n", p);
 				return -EFAULT;
 			}
 
-			printk("LOC MEMORY reg %d, cfa 0x%lx + 0x%llx [%p] = 0x%lx\n",
-					i, cfa, rs->val, p, val);
+			pr("LOC MEMORY reg %d, cfa 0x%lx + 0x%llx [%p] = 0x%lx\n",
+			   i, cfa, rs->val, p, val);
 
 			regs->reg[i] = val;
 			break;
@@ -419,7 +423,7 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 		}
 	}
 
-	printk("cfa 0x%lx, ip 0x%lx\n", cfa, regs->reg[DU_REG_IP]);
+	pr("cfa 0x%lx, ip 0x%lx\n", cfa, regs->reg[DU_REG_IP]);
 
 	/* No change, too bad.. */
 	if ((regs->reg[DU_REG_IP] == prev_ip) &&
@@ -440,7 +444,7 @@ static int apply_state(struct unw_frame *f, struct du_state *state,
 
 	state_regs = &state->stack[idx];
 
-	printk("apply_state idx %d, state %p\n", idx, state_regs);
+	pr("apply_state idx %d, state %p\n", idx, state_regs);
 
 	ret = __apply_state(f, &regs, state_regs);
 	if (!ret)
@@ -457,7 +461,7 @@ static int unwind_step(struct pt_regs *regs)
 
 	f = find_frame(regs->ip);
 	if (!f) {
-		printk("error: failed to find frame\n");
+		pr("error: failed to find frame\n");
 		return -1;
 	}
 
@@ -465,9 +469,12 @@ static int unwind_step(struct pt_regs *regs)
 	u.ip   = (unsigned long) f->frame->loc_start;
 	u.end  = regs->ip;
 
-	printk("KRAVA unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", &u, u.ip, u.end);
+	pr("unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", &u, u.ip, u.end);
 
 	ret = BPF_PROG_RUN(f->prog[0], (const void *) &u);
+
+	pr("unwind_step ret %d\n", ret);
+
 	if (ret >= 0)
 		ret = apply_state(f, &u.state, regs, ret);
 

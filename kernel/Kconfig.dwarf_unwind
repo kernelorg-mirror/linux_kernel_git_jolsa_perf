@@ -4,5 +4,9 @@ config DWARF_UNWIND
 	  Adding code allowing to use compiled debug data
 	  for stack unwinding.
 
+config DWARF_UNWIND_DEBUG
+	bool "Get debug output in console."
+	depends on DWARF_UNWIND
+
 config DWARF_UNWIND_EH_FRAMES
 	def_bool DWARF_UNWIND
