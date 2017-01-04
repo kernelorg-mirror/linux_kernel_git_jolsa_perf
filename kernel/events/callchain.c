@@ -183,17 +183,18 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	bool user   = !event->attr.exclude_callchain_user;
 	/* Disallow cross-task user callchains. */
 	bool crosstask = event->ctx->task && event->ctx->task != current;
+	bool kernel_du = event->attr.kernel_du;
 	const u32 max_stack = event->attr.sample_max_stack;
 
 	if (!kernel && !user)
 		return NULL;
 
-	return get_perf_callchain(regs, 0, kernel, user, max_stack, crosstask, true);
+	return get_perf_callchain(regs, 0, kernel, user, max_stack, crosstask, true, kernel_du);
 }
 
 struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
-		   u32 max_stack, bool crosstask, bool add_mark)
+		   u32 max_stack, bool crosstask, bool add_mark, bool kernel_du)
 {
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
@@ -215,7 +216,10 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	if (kernel && !user_mode(regs)) {
 		if (add_mark)
 			perf_callchain_store_context(&ctx, PERF_CONTEXT_KERNEL);
-		perf_callchain_kernel(&ctx, regs);
+		if (kernel_du)
+			perf_du_dump_stack(&ctx, regs);
+		else
+			perf_callchain_kernel(&ctx, regs);
 	}
 
 	if (user) {

@@ -1119,7 +1119,7 @@ extern void perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct p
 extern void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs);
 extern struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
-		   u32 max_stack, bool crosstask, bool add_mark);
+		   u32 max_stack, bool crosstask, bool add_mark, bool kernel_du);
 extern int get_callchain_buffers(int max_stack);
 extern void put_callchain_buffers(void);
 
@@ -1150,6 +1150,12 @@ static inline int perf_callchain_store(struct perf_callchain_entry_ctx *ctx, u64
 		return -1; /* no more room, stop walking the stack */
 	}
 }
+
+#ifdef CONFIG_DWARF_UNWIND
+void perf_du_dump_stack(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs);
+#else
+void perf_du_dump_stack(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs) { }
+#endif
 
 extern int sysctl_perf_event_paranoid;
 extern int sysctl_perf_event_mlock;

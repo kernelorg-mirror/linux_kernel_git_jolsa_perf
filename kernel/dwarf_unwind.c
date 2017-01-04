@@ -11,6 +11,7 @@
 #include <linux/debugfs.h>
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
+#include <linux/perf_event.h>
 
 #ifdef CONFIG_DWARF_UNWIND_DEBUG
 # define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
@@ -557,6 +558,21 @@ static void unwind_stack_regs(struct pt_regs *regs)
 
 	while (!unwind_step(&r)) {
 		printk("[%p] %pB\n", (void *) r.ip, (void *) r.ip);
+	}
+}
+
+void perf_du_dump_stack(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
+{
+	struct pt_regs r;
+
+	memcpy(&r, regs, sizeof(r));
+
+	if (perf_callchain_store(entry, r.ip))
+		return;
+
+	while (!unwind_step(&r)) {
+		if (perf_callchain_store(entry, r.ip))
+			return;
 	}
 }
 
