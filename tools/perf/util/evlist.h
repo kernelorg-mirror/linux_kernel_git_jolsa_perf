@@ -69,6 +69,8 @@ enum bkw_mmap_state {
 	BKW_MMAP_EMPTY,
 };
 
+#define TRACK_MMAP_SIZE  (((128 * 1024 / page_size) + 1) * page_size)
+
 struct perf_evlist {
 	struct list_head entries;
 	struct hlist_head heads[PERF_EVLIST__HLIST_SIZE];
@@ -90,6 +92,7 @@ struct perf_evlist {
 	struct fdarray	 pollfd;
 	struct perf_mmap *mmap;
 	struct perf_mmap *backward_mmap;
+	struct perf_mmap *track_mmap;
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
 	struct perf_evsel *selected;
