@@ -455,11 +455,55 @@ static int apply_state(struct unw_frame *f, struct du_state *state,
 	return ret;
 }
 
-static int unwind_step(struct pt_regs *regs)
+static DEFINE_PER_CPU(int, recursion[PERF_NR_CONTEXTS]);
+
+static inline int get_recursion_context(void)
 {
-	static struct du_unwind u;
+	int *r = this_cpu_ptr(recursion);
+	int rctx;
+
+	pr("get_recursion_context %p\n", r);
+
+	if (in_nmi())
+		rctx = 3;
+	else if (in_irq())
+		rctx = 2;
+	else if (in_softirq())
+		rctx = 1;
+	else
+		rctx = 0;
+
+	if (r[rctx])
+		return -1;
+
+	r[rctx]++;
+	barrier();
+
+	pr("get_recursion_context %d %d\n", rctx, r[rctx]);
+	return rctx;
+}
+
+static inline void put_recursion_context(int rctx)
+{
+	int *r = this_cpu_ptr(recursion);
+
+	pr("put_recursion_context %d %d\n", rctx, r[rctx]);
+
+	barrier();
+	r[rctx]--;
+}
+
+#define NR_CONTEXTS	4
+
+static DEFINE_PER_CPU(struct du_unwind, du_ctx[NR_CONTEXTS]);
+
+static int __unwind_step(struct pt_regs *regs, int rctx)
+{
+	struct du_unwind *u, *ctx = this_cpu_ptr(du_ctx);
 	struct unw_frame *f;
 	int ret;
+
+	u = &ctx[rctx];
 
 	f = find_frame(regs->ip);
 	if (!f) {
@@ -467,19 +511,41 @@ static int unwind_step(struct pt_regs *regs)
 		return -1;
 	}
 
-	memset(&u.state, 0, sizeof(u.state));
-	u.ip   = (unsigned long) f->frame->loc_start;
-	u.end  = regs->ip;
+	memset(&u->state, 0, sizeof(u->state));
+	u->ip   = (unsigned long) f->frame->loc_start;
+	u->end  = regs->ip;
 
-	pr("unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", &u, u.ip, u.end);
+	pr("__unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", u, u->ip, u->end);
 
-	ret = BPF_PROG_RUN(f->prog[0], (const void *) &u);
+	ret = BPF_PROG_RUN(f->prog[0], (const void *) u);
 
-	pr("unwind_step ret %d\n", ret);
+	pr("__unwind_step ret %d\n", ret);
 
 	if (ret >= 0)
-		ret = apply_state(f, &u.state, regs, ret);
+		ret = apply_state(f, &u->state, regs, ret);
 
+	return ret;
+}
+
+static int unwind_step(struct pt_regs *regs)
+{
+	int ret = 0, rctx;
+
+	preempt_disable();
+
+	rctx = get_recursion_context();
+
+	pr("unwind_step rctx %d\n", rctx);
+
+	if (rctx < 0)
+		goto out;
+
+	ret = __unwind_step(regs, rctx);
+
+	put_recursion_context(rctx);
+
+out:
+	preempt_enable();
 	return ret;
 }
 
