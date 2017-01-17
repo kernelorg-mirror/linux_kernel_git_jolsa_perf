@@ -85,6 +85,12 @@ enum chain_value {
 	CCVAL_COUNT,
 };
 
+enum chain_space {
+	CCSPACE_UNSET,
+	CCSPACE_USER,
+	CCSPACE_KERNEL,
+};
+
 struct callchain_param {
 	bool			enabled;
 	enum perf_call_graph_mode record_mode;
@@ -99,6 +105,7 @@ struct callchain_param {
 	enum chain_key		key;
 	bool			branch_callstack;
 	enum chain_value	value;
+	enum chain_space	space;
 };
 
 extern struct callchain_param callchain_param;
