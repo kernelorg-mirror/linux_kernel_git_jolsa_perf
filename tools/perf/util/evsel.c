@@ -656,6 +656,13 @@ void perf_evsel__config_callchain(struct perf_evsel *evsel,
 		pr_info("Disabling user space callchains for function trace event.\n");
 		attr->exclude_callchain_user = 1;
 	}
+
+	if (param->space != CCSPACE_UNSET) {
+		if (param->space == CCSPACE_USER)
+			attr->exclude_callchain_kernel = 1;
+		if (param->space == CCSPACE_KERNEL)
+			attr->exclude_callchain_user = 1;
+	}
 }
 
 static void
