@@ -461,6 +461,19 @@ int get_stack_size(const char *str, unsigned long *_size)
 	return -1;
 }
 
+static enum chain_space chain_space(char *tok)
+{
+	if (!tok || strlen(tok) != 1)
+		return CCSPACE_UNSET;
+
+	if (*tok == 'u')
+		return CCSPACE_USER;
+	if (*tok == 'k')
+		return CCSPACE_KERNEL;
+
+	return CCSPACE_UNSET;
+}
+
 int parse_callchain_record(const char *arg, struct callchain_param *param)
 {
 	char *tok, *name, *saveptr = NULL;
@@ -480,12 +493,19 @@ int parse_callchain_record(const char *arg, struct callchain_param *param)
 	do {
 		/* Framepointer style */
 		if (!strncmp(name, "fp", sizeof("fp"))) {
-			if (!strtok_r(NULL, ",", &saveptr)) {
-				param->record_mode = CALLCHAIN_FP;
-				ret = 0;
-			} else
-				pr_err("callchain: No more arguments "
-				       "needed for --call-graph fp\n");
+			param->record_mode = CALLCHAIN_FP;
+			tok = strtok_r(NULL, ",", &saveptr);
+			if (tok) {
+				param->space = chain_space(tok);
+				if (!param->space) {
+					pr_err("callchain: Wrong space argument"
+					       "for --call-graph fp[,uk]\n");
+					break;
+				}
+			}
+
+			param->record_mode = CALLCHAIN_FP;
+			ret = 0;
 			break;
 
 		/* Dwarf style */
