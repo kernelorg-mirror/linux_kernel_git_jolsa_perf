@@ -531,6 +531,14 @@ int parse_callchain_record(const char *arg, struct callchain_param *param)
 				pr_err("callchain: No more arguments "
 					"needed for --call-graph lbr\n");
 			break;
+		} else if (!strncmp(name, "du", sizeof("du"))) {
+			param->record_mode = CALLCHAIN_KERNEL_DU;
+			if (!strtok_r(NULL, ",", &saveptr)) {
+				ret = 0;
+			} else
+				pr_err("callchain: No more arguments "
+					"needed for --call-graph du\n");
+			break;
 		} else {
 			pr_err("callchain: Unknown --call-graph option "
 			       "value: %s\n", arg);
