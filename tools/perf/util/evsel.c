@@ -652,6 +652,10 @@ void perf_evsel__config_callchain(struct perf_evsel *evsel,
 		}
 	}
 
+	if (param->record_mode == CALLCHAIN_KERNEL_DU) {
+		attr->kernel_du = 1;
+	}
+
 	if (function) {
 		pr_info("Disabling user space callchains for function trace event.\n");
 		attr->exclude_callchain_user = 1;
