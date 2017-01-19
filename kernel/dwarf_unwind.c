@@ -13,6 +13,9 @@
 #include <linux/uaccess.h>
 #include <linux/perf_event.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/dwarf_unwind.h>
+
 #ifdef CONFIG_DWARF_UNWIND_DEBUG
 # define pr(fmt, ...) printk(fmt, ##__VA_ARGS__)
 #else
@@ -309,7 +312,8 @@ static u64 run_expr(struct unw_frame *f, struct du_regs *regs, u64 val, u64 idx)
 }
 
 static int __apply_state(struct unw_frame *f, struct du_regs *regs,
-			 struct du_state_regs *state)
+			 struct du_state_regs *state,
+			 struct du_step_trace *trace)
 {
 	struct du_state_reg *cfa_state;
 	struct du_regs tmp_regs;
@@ -365,6 +369,9 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 
 		cfa = run_expr(f, regs, prev_cfa, cfa_state->val);
 
+		trace->expr_cfa     = true;
+		trace->expr_cfa_ret = cfa;
+
 		if (cfa_state->loc == DU_LOCATION_EXPR)
 			regs->reg[i] = *((unsigned long *) cfa);
 		else
@@ -413,10 +420,16 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 		case DU_LOCATION_EXPR_VALUE:
 			val = run_expr(f, regs, regs->reg[i], rs->val);
 
+			trace->expr_reg     = true;
+			trace->expr_reg_val = val;
+			trace->expr_reg_idx = i;
+
 			if (rs->loc == DU_LOCATION_EXPR)
 				regs->reg[i] = *((unsigned long *) val);
 			else
 				regs->reg[i] = val;
+
+			break;
 
 		case DU_LOCATION_UNDEF:
 			regs->reg[i] = 0;
@@ -437,7 +450,8 @@ static int __apply_state(struct unw_frame *f, struct du_regs *regs,
 }
 
 static int apply_state(struct unw_frame *f, struct du_state *state,
-		       struct pt_regs *pregs, int idx)
+		       struct pt_regs *pregs, int idx,
+		       struct du_step_trace *trace)
 {
 	struct du_regs regs;
 	struct du_state_regs *state_regs;
@@ -449,7 +463,7 @@ static int apply_state(struct unw_frame *f, struct du_state *state,
 
 	pr("apply_state idx %d, state %p\n", idx, state_regs);
 
-	ret = __apply_state(f, &regs, state_regs);
+	ret = __apply_state(f, &regs, state_regs, trace);
 	if (!ret)
 		du_arch_regs_set(&regs, pregs);
 
@@ -497,34 +511,45 @@ static inline void put_recursion_context(int rctx)
 #define NR_CONTEXTS	4
 
 static DEFINE_PER_CPU(struct du_unwind, du_ctx[NR_CONTEXTS]);
+static DEFINE_PER_CPU(struct du_step_trace, du_trace_ctx[NR_CONTEXTS]);
 
 static int __unwind_step(struct pt_regs *regs, int rctx)
 {
+	struct du_step_trace *trace, *trace_ctx = this_cpu_ptr(du_trace_ctx);
 	struct du_unwind *u, *ctx = this_cpu_ptr(du_ctx);
 	struct unw_frame *f;
-	int ret;
+	int ret = -1;
 
 	u = &ctx[rctx];
 
+	trace = &trace_ctx[rctx];
+	memset(trace, 0, sizeof(*trace));
+	trace->regs_in = *regs;
+
 	f = find_frame(regs->ip);
-	if (!f) {
-		pr("error: failed to find frame\n");
-		return -1;
+	if (f) {
+		memset(&u->state, 0, sizeof(u->state));
+		u->ip   = (unsigned long) f->frame->loc_start;
+		u->end  = regs->ip;
+
+		pr("__unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", u, u->ip, u->end);
+
+		ret = BPF_PROG_RUN(f->prog[0], (const void *) u);
+
+		trace->cfi_ret = ret;
+
+		pr("__unwind_step ret %d\n", ret);
+
+		if (ret >= 0)
+			ret = apply_state(f, &u->state, regs, ret, trace);
 	}
 
-	memset(&u->state, 0, sizeof(u->state));
-	u->ip   = (unsigned long) f->frame->loc_start;
-	u->end  = regs->ip;
+	trace->ret      = ret;
+	trace->frame    = f ? f->frame : NULL;
+	if (f)
+		trace->regs_out = *regs;
 
-	pr("__unwind_step ctx %p, ip 0x%lx, end 0x%lx\n", u, u->ip, u->end);
-
-	ret = BPF_PROG_RUN(f->prog[0], (const void *) u);
-
-	pr("__unwind_step ret %d\n", ret);
-
-	if (ret >= 0)
-		ret = apply_state(f, &u->state, regs, ret);
-
+	trace_dwarf_unwind_step(trace);
 	return ret;
 }
 
