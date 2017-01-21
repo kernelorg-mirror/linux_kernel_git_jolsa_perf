@@ -136,7 +136,7 @@ BPF_CALL_3(bpf_get_stackid, struct pt_regs *, regs, struct bpf_map *, map,
 		return -EINVAL;
 
 	trace = get_perf_callchain(regs, init_nr, kernel, user,
-				   sysctl_perf_event_max_stack, false, false);
+				   sysctl_perf_event_max_stack, false, false, false);
 
 	if (unlikely(!trace))
 		/* couldn't fetch the stack trace */
