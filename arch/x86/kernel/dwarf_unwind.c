@@ -103,4 +103,39 @@ void du_arch_regs_set(struct du_regs *dr, struct pt_regs *pr)
 	SET_0(cs);
 	SET_0(ss);
 }
+
+void du_arch_state_init(struct du_state_regs *state)
+{
+#define L(l, v)		((struct du_state_reg) { .loc = (l), .val = (v) })
+#define __I(sr, lr)	state->reg[DU_REG_ ## sr] = L(DU_LOCATION_REG, DU_REG_ ## lr)
+#define I(lr)		__I(lr, lr)
+#define N(sr, lr)	state->reg[DU_REG_ ## sr] = L(0, 0)
+
+	I(X86_64_RAX);
+	I(X86_64_RDX);
+	I(X86_64_RCX);
+	I(X86_64_RBX);
+	I(X86_64_RSI);
+	I(X86_64_RDI);
+	I(X86_64_RBP);
+	I(X86_64_RSP);
+	I(X86_64_R8);
+	I(X86_64_R9);
+	I(X86_64_R10);
+	I(X86_64_R11);
+	I(X86_64_R12);
+	I(X86_64_R13);
+	I(X86_64_R14);
+	I(X86_64_R15);
+	I(X86_64_RIP);
+
+	__I(CFA_REG_COLUMN, X86_64_RSP);
+	N(CFA_OFF_COLUMN, 0);
+
+#undef __I
+#undef I
+#undef L
+#undef N
+}
+
 #endif /* __i386__ */

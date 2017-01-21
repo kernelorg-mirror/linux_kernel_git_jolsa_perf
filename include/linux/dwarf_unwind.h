@@ -5,5 +5,6 @@
 
 void du_arch_regs_get(struct du_regs *dr, struct pt_regs *pr);
 void du_arch_regs_set(struct du_regs *dr, struct pt_regs *pr);
+void du_arch_state_init(struct du_state_regs *state);
 
 #endif /* _DWARF_UNWIND_H */
