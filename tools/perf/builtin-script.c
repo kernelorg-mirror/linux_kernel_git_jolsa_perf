@@ -2122,14 +2122,14 @@ int find_scripts(char **scripts_array, char **scripts_path_array)
 	char scripts_path[MAXPATHLEN], lang_path[MAXPATHLEN];
 	DIR *scripts_dir, *lang_dir;
 	struct perf_session *session;
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.path = input_name,
 		.mode = PERF_DATA_MODE_READ,
 	};
 	char *temp;
 	int i = 0;
 
-	session = perf_session__new(&file, false, NULL);
+	session = perf_session__new(&data, false, NULL);
 	if (!session)
 		return -1;
 
@@ -2406,7 +2406,7 @@ int cmd_script(int argc, const char **argv)
 			.ordering_requires_timestamps = true,
 		},
 	};
-	struct perf_data_file file = {
+	struct perf_data data = {
 		.mode = PERF_DATA_MODE_READ,
 	};
 	const struct option options[] = {
@@ -2506,8 +2506,8 @@ int cmd_script(int argc, const char **argv)
 	argc = parse_options_subcommand(argc, argv, options, script_subcommands, script_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
-	file.path = input_name;
-	file.force = symbol_conf.force;
+	data.path = input_name;
+	data.force = symbol_conf.force;
 
 	if (argc > 1 && !strncmp(argv[0], "rec", strlen("rec"))) {
 		rec_script_path = get_script_path(argv[1], RECORD_SUFFIX);
@@ -2674,7 +2674,7 @@ int cmd_script(int argc, const char **argv)
 	if (!script_name)
 		setup_pager();
 
-	session = perf_session__new(&file, false, &script.tool);
+	session = perf_session__new(&data, false, &script.tool);
 	if (session == NULL)
 		return -1;
 
@@ -2725,7 +2725,7 @@ int cmd_script(int argc, const char **argv)
 			goto out_delete;
 		}
 
-		input = open(file.path, O_RDONLY);	/* input_name */
+		input = open(data.path, O_RDONLY);	/* input_name */
 		if (input < 0) {
 			err = -errno;
 			perror("failed to open file");
