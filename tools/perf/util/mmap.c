@@ -267,8 +267,8 @@ static int overwrite_rb_find_range(void *buf, int mask, u64 head, u64 *start, u6
 	return -1;
 }
 
-int perf_mmap__push(struct perf_mmap *md, bool overwrite,
-		    void *to, int push(void *to, void *buf, size_t size))
+int perf_mmap__push(struct perf_mmap *md, bool overwrite, void *to,
+		    int push(struct perf_mmap *map, void *to, void *buf, size_t size))
 {
 	u64 head = perf_mmap__read_head(md);
 	u64 old = md->prev;
@@ -307,7 +307,7 @@ int perf_mmap__push(struct perf_mmap *md, bool overwrite,
 		size = md->mask + 1 - (start & md->mask);
 		start += size;
 
-		if (push(to, buf, size) < 0) {
+		if (push(md, to, buf, size) < 0) {
 			rc = -1;
 			goto out;
 		}
@@ -317,7 +317,7 @@ int perf_mmap__push(struct perf_mmap *md, bool overwrite,
 	size = end - start;
 	start += size;
 
-	if (push(to, buf, size) < 0) {
+	if (push(md, to, buf, size) < 0) {
 		rc = -1;
 		goto out;
 	}
