@@ -30,8 +30,9 @@ struct mmap_cpu_mask {
  * @refcnt - e.g. code using PERF_EVENT_IOC_SET_OUTPUT to share this
  */
 struct mmap {
-	struct perf_mmap	core;
-	struct auxtrace_mmap auxtrace_mmap;
+	struct perf_mmap	 core;
+	struct auxtrace_mmap	 auxtrace_mmap;
+	struct perf_data_file	*file;
 #ifdef HAVE_AIO_SUPPORT
 	struct {
 		void		 **data;
