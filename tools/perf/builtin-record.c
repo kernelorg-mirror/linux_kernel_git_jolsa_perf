@@ -115,10 +115,13 @@ static bool switch_output_time(struct record *rec)
 	       trigger_is_ready(&switch_output_trigger);
 }
 
-static int record__write(struct record *rec, struct perf_mmap *map __maybe_unused,
+static int record__write(struct record *rec, struct perf_mmap *map,
 			 void *bf, size_t size)
 {
-	struct perf_data_file *file = &rec->session->data->file;
+	struct perf_data_file *file = &rec->data.file;
+
+	if (map && map->file)
+		file = map->file;
 
 	if (perf_data_file__write(file, bf, size) < 0) {
 		pr_err("failed to write perf data, error: %m\n");
@@ -126,6 +129,15 @@ static int record__write(struct record *rec, struct perf_mmap *map __maybe_unuse
 	}
 
 	rec->bytes_written += size;
+
+	/*
+	 * Update header file size manualy, data files size are
+	 * ok to be updated by stat command, but header files
+	 * contains more stuff, so we need to track data size
+	 * manualy.
+	 */
+	if (file == &rec->data.file)
+		rec->session->header.data_size += size;
 
 	if (switch_output_size(rec))
 		trigger_hit(&switch_output_trigger);
@@ -318,6 +330,7 @@ static int record__aio_push(struct record *rec, struct perf_mmap *map, off_t *of
 	if (!ret) {
 		*off += aio.size;
 		rec->bytes_written += aio.size;
+		rec->session->header.data_size += aio.size;
 		if (switch_output_size(rec))
 			trigger_hit(&switch_output_trigger);
 	} else {
@@ -705,6 +718,25 @@ static int record__mmap_evlist(struct record *rec,
 	return 0;
 }
 
+static int record__mmap_dir_data(struct record *rec)
+{
+	struct perf_evlist *evlist = rec->evlist;
+	struct perf_data *data = &rec->data;
+	int i, ret, nr = evlist->nr_mmaps;
+
+	ret = perf_data__create_dir(data, nr);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < nr; i++) {
+		struct perf_mmap *map = &evlist->mmap[i];
+
+		map->file = &data->dir.files[i];
+	}
+
+	return 0;
+}
+
 static int record__mmap(struct record *rec)
 {
 	return record__mmap_evlist(rec, rec->evlist);
@@ -970,8 +1002,12 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 	/*
 	 * Mark the round finished in case we wrote
 	 * at least one event.
+	 *
+	 * No need for round events in directory mode,
+	 * because per-cpu files/maps have sorted data
+	 * from kernel.
 	 */
-	if (bytes_written != rec->bytes_written)
+	if (!perf_data__is_dir(&rec->data) && bytes_written != rec->bytes_written)
 		rc = record__write(rec, NULL, &finished_round_event, sizeof(finished_round_event));
 
 	if (overwrite)
@@ -1014,7 +1050,9 @@ static void record__init_features(struct record *rec)
 	if (!(rec->opts.use_clockid && rec->opts.clockid_res_ns))
 		perf_header__clear_feat(&session->header, HEADER_CLOCKID);
 
-	perf_header__clear_feat(&session->header, HEADER_DIR_FORMAT);
+	if (!perf_data__is_dir(session->data))
+		perf_header__clear_feat(&session->header, HEADER_DIR_FORMAT);
+
 	if (!record__comp_enabled(rec))
 		perf_header__clear_feat(&session->header, HEADER_COMPRESSED);
 
@@ -1030,8 +1068,10 @@ record__finish_output(struct record *rec)
 	if (data->is_pipe)
 		return;
 
-	rec->session->header.data_size += rec->bytes_written;
 	data->file.size = lseek(perf_data__fd(data), 0, SEEK_CUR);
+
+	if (perf_data__is_dir(data))
+		perf_data__update_dir(data);
 
 	if (!rec->no_buildid) {
 		process_buildids(rec);
@@ -1119,6 +1159,12 @@ record__switch_output(struct record *rec, bool at_exit)
 
 	/* Output tracking events */
 	if (!at_exit) {
+		if (perf_data__is_dir(data)) {
+			err = record__mmap_dir_data(rec);
+			if (err)
+				return -1;
+		}
+
 		record__synthesize(rec, false);
 
 		/*
@@ -1378,11 +1424,23 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	if (data->is_pipe && rec->evlist->nr_entries == 1)
 		rec->opts.sample_id = true;
 
+	if (data->is_pipe && perf_data__is_dir(data)) {
+		pr_err("Directory output is not allowed for pipe output\n");
+		err = -1;
+		goto out_child;
+	}
+
 	if (record__open(rec) != 0) {
 		err = -1;
 		goto out_child;
 	}
 	session->header.env.comp_mmap_len = session->evlist->mmap_len;
+
+	if (perf_data__is_dir(data)) {
+		err = record__mmap_dir_data(rec);
+		if (err)
+			goto out_child;
+	}
 
 	err = bpf__apply_obj_config();
 	if (err) {
@@ -2228,6 +2286,8 @@ static struct option __record_options[] = {
 			    "n", "Compressed records using specified level (default: 1 - fastest compression, 22 - greatest compression)",
 			    record__parse_comp_level),
 #endif
+	OPT_BOOLEAN(0, "dir", &record.data.is_dir,
+		    "Store data into directory perf.data"),
 	OPT_END()
 };
 
@@ -2390,6 +2450,17 @@ int cmd_record(int argc, const char **argv)
 	    __perf_evlist__add_default(rec->evlist, !record.opts.no_samples) < 0) {
 		pr_err("Not enough memory for event selector list\n");
 		goto out;
+	}
+
+	if (perf_data__is_dir(&rec->data)) {
+		if (!rec->opts.sample_time) {
+			pr_err("Sample timestamp is required for indexing\n");
+			goto out;
+		}
+		if (record__aio_enabled(rec)) {
+			pr_err("Cannot use both --dir and --aio yet.\n");
+			goto out;
+		}
 	}
 
 	if (rec->opts.target.tid && !rec->opts.no_inherit_set)
