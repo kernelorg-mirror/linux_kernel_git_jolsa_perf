@@ -206,6 +206,11 @@ static void clean_index(struct perf_data *data,
 	free_index(index, index_nr);
 }
 
+void perf_data__clean_index(struct perf_data *data)
+{
+	clean_index(data, data->index, data->index_nr);
+}
+
 int perf_data__create_index(struct perf_data *data, int nr)
 {
 	struct perf_data_file *index;
@@ -215,6 +220,9 @@ int perf_data__create_index(struct perf_data *data, int nr)
 	index = malloc(nr * sizeof(*index));
 	if (!index)
 		return -ENOMEM;
+
+	data->index    = index;
+	data->index_nr = nr;
 
 	scnprintf(path, sizeof(path), "%s.dir", data->file.path);
 	if (rm_rf(path) < 0 || mkdir(path, S_IRWXU) < 0)

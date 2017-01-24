@@ -27,13 +27,14 @@ struct record_opts;
  * @refcnt - e.g. code using PERF_EVENT_IOC_SET_OUTPUT to share this
  */
 struct perf_mmap {
-	void		 *base;
-	int		 mask;
-	int		 fd;
-	refcount_t	 refcnt;
-	u64		 prev;
-	struct auxtrace_mmap auxtrace_mmap;
-	char		 event_copy[PERF_SAMPLE_MAX_SIZE] __attribute__((aligned(8)));
+	void			*base;
+	int			 mask;
+	int			 fd;
+	refcount_t		 refcnt;
+	u64			 prev;
+	struct auxtrace_mmap	 auxtrace_mmap;
+	struct perf_data_file	*file;
+	char			 event_copy[PERF_SAMPLE_MAX_SIZE] __attribute__((aligned(8)));
 };
 
 static inline size_t
