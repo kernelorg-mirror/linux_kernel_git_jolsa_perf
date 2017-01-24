@@ -205,6 +205,11 @@ static void clean_index(struct perf_data *data,
 	free_index(index, index_nr);
 }
 
+void perf_data__clean_index(struct perf_data *data)
+{
+	clean_index(data, data->index, data->index_nr);
+}
+
 int perf_data__create_index(struct perf_data *data, int nr)
 {
 	struct perf_data_file *index;

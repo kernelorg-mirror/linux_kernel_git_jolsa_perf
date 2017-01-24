@@ -19,6 +19,7 @@ struct perf_data {
 	bool			 force;
 	unsigned long		 size;
 	enum perf_data_mode	 mode;
+	int			 index_nr;
 	struct perf_data_file	*index;
 };
 
@@ -65,4 +66,5 @@ int perf_data__switch(struct perf_data *data,
 			   size_t pos, bool at_exit);
 int perf_data__create_index(struct perf_data *data,
 			    int nr);
+void perf_data__clean_index(struct perf_data *data);
 #endif /* __PERF_DATA_H */
