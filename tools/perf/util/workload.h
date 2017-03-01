@@ -1,6 +1,8 @@
 #ifndef __PERF_WORKLOAD_H
 #define __PERF_WORKLOAD_H
 
+#include <signal.h>
+
 struct perf_workload {
 	int	cork_fd;
 	pid_t	pid;
