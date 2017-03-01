@@ -1697,133 +1697,26 @@ int perf_evlist__prepare_workload(struct perf_evlist *evlist, struct target *tar
 				  const char *argv[], bool pipe_output,
 				  void (*exec_error)(int signo, siginfo_t *info, void *ucontext))
 {
-	int child_ready_pipe[2], go_pipe[2];
-	char bf;
-
-	if (pipe(child_ready_pipe) < 0) {
-		perror("failed to create 'ready' pipe");
-		return -1;
-	}
-
-	if (pipe(go_pipe) < 0) {
-		perror("failed to create 'go' pipe");
-		goto out_close_ready_pipe;
-	}
-
-	evlist->workload.pid = fork();
-	if (evlist->workload.pid < 0) {
-		perror("failed to fork");
-		goto out_close_pipes;
-	}
-
-	if (!evlist->workload.pid) {
-		int ret;
-
-		if (pipe_output)
-			dup2(2, 1);
-
-		signal(SIGTERM, SIG_DFL);
-
-		close(child_ready_pipe[0]);
-		close(go_pipe[1]);
-		fcntl(go_pipe[0], F_SETFD, FD_CLOEXEC);
-
-		/*
-		 * Tell the parent we're ready to go
-		 */
-		close(child_ready_pipe[1]);
-
-		/*
-		 * Wait until the parent tells us to go.
-		 */
-		ret = read(go_pipe[0], &bf, 1);
-		/*
-		 * The parent will ask for the execvp() to be performed by
-		 * writing exactly one byte, in workload.cork_fd, usually via
-		 * perf_evlist__start_workload().
-		 *
-		 * For cancelling the workload without actually running it,
-		 * the parent will just close workload.cork_fd, without writing
-		 * anything, i.e. read will return zero and we just exit()
-		 * here.
-		 */
-		if (ret != 1) {
-			if (ret == -1)
-				perror("unable to read pipe");
-			exit(ret);
-		}
-
-		execvp(argv[0], (char **)argv);
-
-		if (exec_error) {
-			union sigval val;
-
-			val.sival_int = errno;
-			if (sigqueue(getppid(), SIGUSR1, val))
-				perror(argv[0]);
-		} else
-			perror(argv[0]);
-		exit(-1);
-	}
-
-	if (exec_error) {
-		struct sigaction act = {
-			.sa_flags     = SA_SIGINFO,
-			.sa_sigaction = exec_error,
-		};
-		sigaction(SIGUSR1, &act, NULL);
-	}
+	int ret;
 
 	if (target__none(target)) {
 		if (evlist->threads == NULL) {
 			fprintf(stderr, "FATAL: evlist->threads need to be set at this point (%s:%d).\n",
 				__func__, __LINE__);
-			goto out_close_pipes;
+			return -1;
 		}
+	}
+
+	ret = perf_workload__prepare(&evlist->workload, argv, pipe_output, exec_error);
+	if (!ret)
 		thread_map__set_pid(evlist->threads, 0, evlist->workload.pid);
-	}
 
-	close(child_ready_pipe[1]);
-	close(go_pipe[0]);
-	/*
-	 * wait for child to settle
-	 */
-	if (read(child_ready_pipe[0], &bf, 1) == -1) {
-		perror("unable to read pipe");
-		goto out_close_pipes;
-	}
-
-	fcntl(go_pipe[1], F_SETFD, FD_CLOEXEC);
-	evlist->workload.cork_fd = go_pipe[1];
-	close(child_ready_pipe[0]);
-	return 0;
-
-out_close_pipes:
-	close(go_pipe[0]);
-	close(go_pipe[1]);
-out_close_ready_pipe:
-	close(child_ready_pipe[0]);
-	close(child_ready_pipe[1]);
-	return -1;
+	return ret;
 }
 
 int perf_evlist__start_workload(struct perf_evlist *evlist)
 {
-	if (evlist->workload.cork_fd > 0) {
-		char bf = 0;
-		int ret;
-		/*
-		 * Remove the cork, let it rip!
-		 */
-		ret = write(evlist->workload.cork_fd, &bf, 1);
-		if (ret < 0)
-			perror("unable to write to pipe");
-
-		close(evlist->workload.cork_fd);
-		return ret;
-	}
-
-	return 0;
+	return perf_workload__start(&evlist->workload);
 }
 
 int perf_evlist__parse_sample(struct perf_evlist *evlist, union perf_event *event,
