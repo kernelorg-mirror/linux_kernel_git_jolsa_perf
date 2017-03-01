@@ -11,6 +11,7 @@
 #include "evsel.h"
 #include "util.h"
 #include "auxtrace.h"
+#include "workload.h"
 #include <unistd.h>
 
 struct pollfd;
@@ -84,10 +85,7 @@ struct perf_evlist {
 	int		 is_pos;
 	u64		 combined_sample_type;
 	enum bkw_mmap_state bkw_mmap_state;
-	struct {
-		int	cork_fd;
-		pid_t	pid;
-	} workload;
+	struct perf_workload workload;
 	struct fdarray	 pollfd;
 	struct perf_mmap *mmap;
 	struct perf_mmap *backward_mmap;
