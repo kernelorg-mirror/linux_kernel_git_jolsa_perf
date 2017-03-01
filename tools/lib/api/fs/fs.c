@@ -42,6 +42,10 @@
 #define BPF_FS_MAGIC           0xcafe4a11
 #endif
 
+#ifndef RDTGROUP_SUPER_MAGIC
+#define RDTGROUP_SUPER_MAGIC   0x7655821
+#endif
+
 static const char * const sysfs__fs_known_mountpoints[] = {
 	"/sys",
 	0,
@@ -84,6 +88,11 @@ static const char * const bpf_fs__known_mountpoints[] = {
 	0,
 };
 
+static const char * const resctrlfs__known_mountpoints[] = {
+	"/sys/fs/resctrl",
+	0,
+};
+
 struct fs {
 	const char		*name;
 	const char * const	*mounts;
@@ -93,12 +102,13 @@ struct fs {
 };
 
 enum {
-	FS__SYSFS   = 0,
-	FS__PROCFS  = 1,
-	FS__DEBUGFS = 2,
-	FS__TRACEFS = 3,
+	FS__SYSFS     = 0,
+	FS__PROCFS    = 1,
+	FS__DEBUGFS   = 2,
+	FS__TRACEFS   = 3,
 	FS__HUGETLBFS = 4,
-	FS__BPF_FS = 5,
+	FS__BPF_FS    = 5,
+	FS__RESCTRLFS = 6,
 };
 
 #ifndef TRACEFS_MAGIC
@@ -135,6 +145,11 @@ static struct fs fs__entries[] = {
 		.name	= "bpf",
 		.mounts = bpf_fs__known_mountpoints,
 		.magic	= BPF_FS_MAGIC,
+	},
+	[FS__RESCTRLFS] = {
+		.name	= "resctrl",
+		.mounts = resctrlfs__known_mountpoints,
+		.magic	= RDTGROUP_SUPER_MAGIC,
 	},
 };
 
@@ -290,12 +305,13 @@ bool name##__configured(void)			\
 	return name##__mountpoint() != NULL;	\
 }
 
-FS(sysfs,   FS__SYSFS);
-FS(procfs,  FS__PROCFS);
-FS(debugfs, FS__DEBUGFS);
-FS(tracefs, FS__TRACEFS);
+FS(sysfs,     FS__SYSFS);
+FS(procfs,    FS__PROCFS);
+FS(debugfs,   FS__DEBUGFS);
+FS(tracefs,   FS__TRACEFS);
 FS(hugetlbfs, FS__HUGETLBFS);
-FS(bpf_fs, FS__BPF_FS);
+FS(bpf_fs,    FS__BPF_FS);
+FS(resctrlfs, FS__RESCTRLFS);
 
 int filename__read_int(const char *filename, int *value)
 {
