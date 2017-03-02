@@ -10,6 +10,7 @@ struct cpu_topology_map {
 };
 
 struct cpu_cache_level {
+	u32	id;
 	u32	level;
 	u32	line_size;
 	u32	sets;
