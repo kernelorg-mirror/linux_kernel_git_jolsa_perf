@@ -966,6 +966,13 @@ static int cpu_cache_level__read(struct cpu_cache_level *cache, u32 cpu, u16 lev
 
 	cache->map[len] = 0;
 	cache->map = rtrim(cache->map);
+
+	/* id might be missing.. no big deal, just warn */
+	scnprintf(file, PATH_MAX, "%s/id", path);
+	if (WARN_ONCE(sysfs__read_int(file, (int *) &cache->id),
+		      "warning: missing sysfs cache 'id' field\n"))
+		cache->id = -1;
+
 	return 0;
 }
 
