@@ -985,7 +985,7 @@ static void cpu_cache_level__fprintf(FILE *out, struct cpu_cache_level *c)
 	fprintf(out, "L%d %-15s %8s [%s]\n", c->level, c->type, c->size, c->map);
 }
 
-static int build_caches(struct cpu_cache_level caches[], u32 size, u32 *cntp)
+int perf_build_caches(struct cpu_cache_level caches[], u32 size, u32 *cntp)
 {
 	u32 i, cnt = 0;
 	long ncpus;
@@ -1038,7 +1038,7 @@ static int write_cache(int fd, struct perf_header *h __maybe_unused,
 	u32 cnt = 0, i, version = 1;
 	int ret;
 
-	ret = build_caches(caches, MAX_CACHES, &cnt);
+	ret = perf_build_caches(caches, MAX_CACHES, &cnt);
 	if (ret)
 		goto out;
 
