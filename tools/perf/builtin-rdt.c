@@ -34,7 +34,26 @@ struct rdt_resource {
 	} dom;
 };
 
+struct rdt_cbm {
+	u64	id;
+	u64	val;
+};
+
+struct rdt_schemata {
+	int		 cnt;
+	struct rdt_cbm	*cbm;
+};
+
+struct rdt_group {
+	const char		*name;
+	struct rdt_schemata	 schemata[RDT_NUM_RESOURCES];
+	struct list_head	 list;
+};
+
 static struct rdt_resource resource[RDT_NUM_RESOURCES];
+static LIST_HEAD(groups);
+static int groups_cnt;
+static int groups_width;
 
 static char *cache_name(struct cpu_cache_level *c)
 {
@@ -140,6 +159,155 @@ static int load_resources(struct rdt_resource res[])
 	return ok ? 0 : -1;
 }
 
+static struct rdt_group *rdt_group__alloc(const char *name)
+{
+	struct rdt_group *group = zalloc(sizeof(*group));
+
+	if (!group)
+		return NULL;
+
+	INIT_LIST_HEAD(&group->list);
+	group->name = strdup(name);
+	return group;
+}
+
+static int get_resource(char *line)
+{
+	static const char *name[RDT_NUM_RESOURCES] = {
+		"L3", "L3DATA", "L3CODE", "L2",
+	};
+	int i;
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		if (!strncmp(name[i], line, strlen(name[i])))
+			return i;
+	}
+
+	return -1;
+}
+
+static int add_ass(struct rdt_schemata *schemata, char *ass)
+{
+	char *cbms, *ids = ass;
+	int id;
+	u64 cbm;
+
+	cbms = strchr(ass, '=');
+	if (!cbms)
+		return -EINVAL;
+
+	*cbms++ = 0;
+
+	cbm = strtoul(cbms, NULL, 16);
+	id  = strtoul(ids, NULL, 10);
+
+	schemata->cbm = realloc(schemata->cbm, (schemata->cnt + 1) * sizeof(struct rdt_cbm));
+	if (schemata->cbm) {
+		schemata->cbm[schemata->cnt].id  = id;
+		schemata->cbm[schemata->cnt].val = cbm;
+		schemata->cnt++;
+	}
+
+	return schemata->cbm ? 0 : -ENOMEM;
+}
+
+static int parse_schemata(char *line, struct rdt_schemata *schemata)
+{
+	char *buf, *tmp = NULL, *ass;
+
+	buf = strchr(line, ':');
+	if (!buf)
+		return -EINVAL;
+
+	buf++;
+
+	ass = strtok_r(buf, ";", &tmp);
+	while (ass) {
+		add_ass(schemata, ass);
+		ass = strtok_r(NULL, ";", &tmp);
+	};
+
+	return 0;
+}
+
+static int rdt_group__load(struct rdt_group *group, const char *path)
+{
+	char file[PATH_MAX];
+	size_t size;
+	char *buf, *tmp, *line;
+
+	scnprintf(file, PATH_MAX, "%s/schemata", path);
+	if (filename__read_str(file, &buf, &size)) {
+		pr_err("failed: read schemata for %s\n", group->name);
+		return -1;
+	}
+
+	line = strtok_r(buf, "\n", &tmp);
+	while (line) {
+		int r = get_resource(line);
+
+		if (r >= 0)
+			parse_schemata(line, &group->schemata[r]);
+
+		line = strtok_r(NULL, "\n", &tmp);
+	}
+
+	free(buf);
+	return 0;
+}
+
+static int add_group(const char *name, const char *path, struct list_head *head)
+{
+	struct rdt_group *group = rdt_group__alloc(name);
+
+	if (!group)
+		return -ENOMEM;
+
+	if (rdt_group__load(group, path))
+		return -1;
+
+	list_add_tail(&group->list, head);
+	return 0;
+}
+
+static int load_groups(struct list_head *head, int *width)
+{
+	struct dirent *entry;
+	DIR *dir;
+	int nr = 1;
+
+	if (add_group("default", resctrlfs, head))
+		return -1;
+
+	*width = strlen("default");
+
+	dir = opendir(resctrlfs);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir))) {
+		char path[PATH_MAX];
+
+		if (entry->d_type != DT_DIR)
+			continue;
+
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0 ||
+		    strcmp(entry->d_name, "info") == 0)
+			continue;
+
+		scnprintf(path, PATH_MAX, "%s/%s", resctrlfs, entry->d_name);
+
+		if (add_group(entry->d_name, path, head))
+			return -1;
+		nr++;
+		*width = max(*width, (int) strlen(entry->d_name));
+	}
+
+	closedir(dir);
+	return nr;
+}
+
 static int setup_resctrl(void)
 {
 	resctrlfs = resctrlfs__mount();
@@ -150,6 +318,12 @@ static int setup_resctrl(void)
 
 	if (load_resources(resource)) {
 		pr_err("failed: load rdt resources\n");
+		return -1;
+	}
+
+	groups_cnt = load_groups(&groups, &groups_width);
+	if (groups_cnt < 0) {
+		pr_err("failed: load rdt groups\n");
 		return -1;
 	}
 
