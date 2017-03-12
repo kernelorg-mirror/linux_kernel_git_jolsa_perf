@@ -4,6 +4,8 @@
 #include "workload.h"
 #include "env.h"
 #include "header.h"
+#include "ui/browser.h"
+#include "ui/keysyms.h"
 #include <linux/compiler.h>
 #include <subcmd/parse-options.h>
 #include <api/fs/fs.h>
@@ -50,6 +52,17 @@ struct rdt_group {
 	struct list_head	 list;
 };
 
+struct rdt_browser {
+	struct ui_browser	 b;
+	int			 cur;
+	struct {
+		u16	cnt;
+		u16	vis;
+		u16	sta;
+		u16	cur;
+	} col;
+};
+
 static struct rdt_resource resource[RDT_NUM_RESOURCES];
 static LIST_HEAD(groups);
 static int groups_cnt;
@@ -59,8 +72,7 @@ static char *cache_name(struct cpu_cache_level *c)
 {
 	char buf[1000];
 
-	scnprintf(buf, 1000, "ID %d (L%d %s %s %s)",
-		  c->id, c->level, c->type, c->size, c->map);
+	scnprintf(buf, 1000, "ID %d (%s)", c->id, c->map);
 	return strdup(buf);
 }
 
@@ -94,7 +106,7 @@ static int load_cache(int r, struct rdt_resource *res)
 
 	res->dom.cache = memdup(cache, j * sizeof(*c));
 	res->dom.name  = memdup(name,  j * sizeof(char *));
-	res->dom.width = width;
+	res->dom.width = width + 1;
 	res->dom.cnt   = j;
 	return res->dom.cache ? 0 : -ENOMEM;
 }
@@ -304,6 +316,8 @@ static int load_groups(struct list_head *head, int *width)
 		*width = max(*width, (int) strlen(entry->d_name));
 	}
 
+	(*width)++;
+
 	closedir(dir);
 	return nr;
 }
@@ -420,6 +434,200 @@ static int do_list(void)
 	return 0;
 }
 
+static void rdt_browser__write(struct ui_browser *b, void *entry, int row)
+{
+	struct rdt_browser *browser = container_of(b, struct rdt_browser, b);
+	struct rdt_group *group = list_entry(entry, struct rdt_group, list);
+	struct rdt_resource *res;
+	bool current_entry = ui_browser__is_current_entry(b, row);
+	int color = current_entry ? HE_COLORSET_SELECTED : HE_COLORSET_NORMAL;
+	int cnt, ret, i, width = b->width;
+	char buf[100];
+
+	ret = scnprintf(buf, width, "%-*s", groups_width, group->name);
+	ui_browser__set_color(b, color);
+	ui_browser__printf(b, "%s", buf);
+
+	res = &resource[browser->cur];
+	cnt = browser->col.sta + browser->col.vis;
+
+	for (i = browser->col.sta; i < cnt; i++) {
+		char val[100];
+		int col = color;
+
+		scnprintf(val, 100, "0x%lx", group->schemata[browser->cur].cbm[i].val);
+		ret += scnprintf(buf, width - ret, "%-*s", res->dom.width, val);
+
+		if (current_entry && browser->col.cur == i)
+			col = HE_COLORSET_TOP;
+
+		ui_browser__set_color(b, col);
+		ui_browser__printf(b, "%s", buf);
+	}
+
+	width -= ret;
+	ui_browser__write_nstring(b, "", width);
+}
+
+static void next_resource(struct rdt_browser *browser)
+{
+	int cur = browser->cur;
+
+	do {
+		cur = (cur + 1) % RDT_NUM_RESOURCES;
+	} while (!resource[cur].enabled);
+
+	browser->cur = cur;
+}
+
+static void rdt_browser__title(struct rdt_browser *browser,
+			       char *title, int size)
+{
+	struct rdt_resource *res;
+
+	res = &resource[browser->cur];
+	scnprintf(title, size, "RDT resource: %s %s %s\n",
+		  res->name, res->dom.cache[0].type, res->dom.cache[0].size);
+}
+
+static struct rdt_resource *current(struct rdt_browser *browser)
+{
+	return &resource[browser->cur];
+}
+
+static void rdt_browser__refresh_dimensions(struct ui_browser *b)
+{
+	struct rdt_browser *browser = container_of(b, struct rdt_browser, b);
+	struct rdt_resource *res;
+
+	ui_browser__refresh_dimensions(b);
+	b->y++;
+
+	res = current(browser);
+	browser->col.cnt = res->dom.cnt;
+	browser->col.vis = min(res->dom.cnt, (b->width - groups_width) / res->dom.width);
+	browser->col.sta = 0;
+	browser->col.cur = 0;
+}
+
+static void rdt_browser__horiz_scroll(struct rdt_browser *b, bool left)
+{
+	if (left) {
+		if (b->col.cur > 0)
+			b->col.cur--;
+		if (b->col.cur < b->col.sta)
+			b->col.sta = b->col.cur;
+	} else {
+		if ((b->col.cur + 1) < b->col.cnt)
+			b->col.cur++;
+		if (b->col.cur - b->col.sta >= b->col.vis)
+			b->col.sta++;
+	}
+}
+
+static int rdt_browser__run(struct rdt_browser *browser)
+{
+	char title[200];
+	int key;
+
+	rdt_browser__title(browser, title, sizeof(title));
+
+	if (ui_browser__show(&browser->b, title,
+			     "Press ESC to exit") < 0)
+		return -1;
+
+	while (1) {
+		key = ui_browser__run(&browser->b, 0);
+
+		switch (key) {
+		default:
+			break;
+		case K_TAB:
+			next_resource(browser);
+			rdt_browser__title(browser, title, sizeof(title));
+			rdt_browser__refresh_dimensions(&browser->b);
+			ui_browser__show_title(&browser->b, title);
+			break;
+		case K_LEFT:
+			rdt_browser__horiz_scroll(browser, true);
+			break;
+		case K_RIGHT:
+			rdt_browser__horiz_scroll(browser, false);
+			break;
+		case K_ESC:
+		case 'q':
+		case CTRL('c'):
+			goto out;
+		}
+	}
+out:
+	ui_browser__hide(&browser->b);
+	return 0;
+}
+
+static int headers_scnprintf(struct rdt_browser *browser, char *buf, int size)
+{
+	struct rdt_resource *res;
+	int cnt, i, ret = 0;
+
+	res = &resource[browser->cur];
+
+	ret = scnprintf(buf, size - ret, "%-*s", groups_width, "Group");
+	cnt = browser->col.sta + browser->col.vis;
+
+	for (i = browser->col.sta; i < cnt; i++) {
+		ret += scnprintf(buf + ret, size - ret, "%-*s", res->dom.width, res->dom.name[i]);
+	}
+
+	return ret;
+}
+
+static int display_headers(struct rdt_browser *browser)
+{
+	int width = browser->b.width + 1;
+	char *buf;
+
+	buf = zalloc(width);
+	if (!buf)
+		return -ENOMEM;
+
+	width -= headers_scnprintf(browser, buf, width);
+
+	SLsmg_gotorc(1, 0);
+	ui_browser__set_color(&browser->b, HE_COLORSET_ROOT);
+	ui_browser__printf(&browser->b, "%s", buf);
+	ui_browser__write_nstring(&browser->b, "", width);
+
+	free(buf);
+	return 0;
+}
+
+static unsigned int rdt_browser__refresh(struct ui_browser *b)
+{
+	struct rdt_browser *browser = container_of(b, struct rdt_browser, b);
+
+	display_headers(browser);
+	return ui_browser__list_head_refresh(b);
+}
+
+static int cmd_rdt_tui(void)
+{
+	struct rdt_browser browser = {
+		.b      = {
+			.seek			= ui_browser__list_head_seek,
+			.refresh		= rdt_browser__refresh,
+			.write			= rdt_browser__write,
+			.refresh_dimensions	= rdt_browser__refresh_dimensions,
+			.entries		= &groups,
+			.nr_entries		= groups_cnt,
+		},
+	};
+
+	use_browser = 1;
+	setup_browser(true);
+	return rdt_browser__run(&browser);
+}
+
 int cmd_rdt(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	const char * const rdt_usage[] = {
@@ -442,8 +650,8 @@ int cmd_rdt(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	argc = parse_options(argc, argv, rdt_options, rdt_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
-	if (!argc && !list)
-		usage_with_options(rdt_usage, rdt_options);
+	if (!argc && !list && !group)
+		cmd_rdt_tui();
 
 	if (list)
 		return do_list();
