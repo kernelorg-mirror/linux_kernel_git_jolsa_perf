@@ -358,6 +358,68 @@ static int move_task(int pid, const char *group)
 	return 0;
 }
 
+static void display_resource(struct rdt_resource *res)
+{
+	int i;
+
+	fprintf(stdout, "  %s mask(0x%lx) min(%ld) ids(%ld)\n",
+		res->name, res->cbm_mask, res->min_cbm_bits, res->num_closids);
+
+	for (i = 0; i < res->dom.cnt; i++)
+		fprintf(stdout, "    %s\n", res->dom.name[i]);
+}
+
+static void display_schemata(struct rdt_schemata *schemata)
+{
+	int i;
+
+	for (i = 0; i < schemata->cnt; i++) {
+		fprintf(stdout, "      ID %ld = 0x%lx\n",
+				 schemata->cbm[i].id, schemata->cbm[i].val);
+	}
+}
+
+static void display_group(struct rdt_group *group)
+{
+	struct rdt_resource *res;
+	int i;
+
+	fprintf(stdout, "  %s\n", group->name);
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		res = &resource[i];
+
+		if (res->enabled) {
+			fprintf(stdout, "    %s\n", res->name);
+			display_schemata(&group->schemata[i]);
+		}
+	}
+}
+
+static int do_list(void)
+{
+	struct rdt_resource *res;
+	struct rdt_group *group;
+	int i;
+
+	fprintf(stdout, "Enabled resources:\n");
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		res = &resource[i];
+
+		if (res->enabled)
+			display_resource(res);
+	}
+
+	fprintf(stdout, "Enabled groups:\n");
+
+	list_for_each_entry(group, &groups, list) {
+		display_group(group);
+	}
+
+	return 0;
+}
+
 int cmd_rdt(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	const char * const rdt_usage[] = {
@@ -366,10 +428,12 @@ int cmd_rdt(int argc, const char **argv, const char *prefix __maybe_unused)
 		NULL
 	};
 	static const char *group;
+	bool list = false;
 	const struct option rdt_options[] = {
 	OPT_INCR('v', "verbose", &verbose, "be more verbose"),
 	OPT_STRING('g', "group", &group, "group",
 		   "group to attach workload to"),
+	OPT_BOOLEAN('l', "list", &list, "List resources and groups"),
 	OPT_END()
 	};
 
@@ -378,8 +442,11 @@ int cmd_rdt(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	argc = parse_options(argc, argv, rdt_options, rdt_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
-	if (!argc)
+	if (!argc && !list)
 		usage_with_options(rdt_usage, rdt_options);
+
+	if (list)
+		return do_list();
 
 	if (group) {
 		struct perf_workload workload;
