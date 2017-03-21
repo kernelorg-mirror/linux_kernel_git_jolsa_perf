@@ -92,6 +92,9 @@ libperf-y += drv_configs.o
 libperf-y += time-utils.o
 libperf-y += expr-bison.o
 libperf-y += workload.o
+libperf-y += rdt.o
+libperf-y += rdt-flex.o
+libperf-y += rdt-bison.o
 
 libperf-$(CONFIG_LIBBPF) += bpf-loader.o
 libperf-$(CONFIG_BPF_PROLOGUE) += bpf-prologue.o
@@ -156,14 +159,25 @@ $(OUTPUT)util/pmu-bison.c: util/pmu.y
 	$(call rule_mkdir)
 	$(Q)$(call echo-cmd,bison)$(BISON) -v util/pmu.y -d -o $@ -p perf_pmu_
 
+$(OUTPUT)util/rdt-flex.c: util/rdt.l $(OUTPUT)util/rdt-bison.c
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,flex)$(FLEX) -o $@ --header-file=$(OUTPUT)util/rdt-flex.h $(PARSER_DEBUG_FLEX) util/rdt.l
+
+$(OUTPUT)util/rdt-bison.c: util/rdt.y
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,bison)$(BISON) -v util/rdt.y -d $(PARSER_DEBUG_BISON) -o $@ -p perf_rdt_
+
 CFLAGS_parse-events-flex.o  += -w
 CFLAGS_pmu-flex.o           += -w
+CFLAGS_rdt-flex.o           += -w
 CFLAGS_parse-events-bison.o += -DYYENABLE_NLS=0 -w
 CFLAGS_pmu-bison.o          += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
 CFLAGS_expr-bison.o         += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
+CFLAGS_rdt-bison.o          += -DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=0 -w
 
 $(OUTPUT)util/parse-events.o: $(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-bison.c
 $(OUTPUT)util/pmu.o: $(OUTPUT)util/pmu-flex.c $(OUTPUT)util/pmu-bison.c
+$(OUTPUT)util/rdt.o: $(OUTPUT)util/rdt-flex.c $(OUTPUT)util/rdt-bison.c
 
 CFLAGS_bitmap.o        += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_find_bit.o      += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
