@@ -1,0 +1,49 @@
+perf-rdt(1)
+==============
+
+NAME
+----
+perf-rdt - Use RDT subsystem
+
+SYNOPSIS
+--------
+[verse]
+'perf record' [-e <EVENT> | --event=EVENT] [-l] [-a] <command>
+'perf record' [-e <EVENT> | --event=EVENT] [-l] [-a] -- <command> [<options>]
+
+perf rdt group <workload> [-x]	# -x for not waiting for workload
+perf rdt group -p <PIDS>
+perf rdt group -C <CPUS>
+perf rdt load <file>			# load file to system
+perf rdt dump <file>			# load system to file
+perf rdt <file>	[--stdio]		# tui - load <file> 
+perf rdt <resource>			# tui - get mask for given resource
+
+dump:
+RDT version
+R,resource,cbm_mask,min_cbm_bits,num_closids
+I,resource,IDs
+G,group,cpus,tasks,schemata
+
+RDT version
+
+resource <NAME> {
+	cbm_mask=X
+	min_cbm_bits=X
+	num_closids=X
+	ids = {
+		X=map
+		...
+	}
+}
+
+group <NAME> {
+	cpus=map
+	tasks=list
+	schemata=
+}
+
+sort entry: rdt-group
+
+DESCRIPTION
+-----------
