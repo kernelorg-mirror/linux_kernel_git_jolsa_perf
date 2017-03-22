@@ -160,11 +160,11 @@ $(OUTPUT)util/pmu-bison.c: util/pmu.y
 
 $(OUTPUT)util/rdt-flex.c: util/rdt.l $(OUTPUT)util/rdt-bison.c
 	$(call rule_mkdir)
-	$(Q)$(call echo-cmd,flex)$(FLEX) -o $@ --header-file=$(OUTPUT)util/rdt-flex.h util/rdt.l
+	$(Q)$(call echo-cmd,flex)$(FLEX) -o $@ --header-file=$(OUTPUT)util/rdt-flex.h $(PARSER_DEBUG_FLEX) util/rdt.l
 
 $(OUTPUT)util/rdt-bison.c: util/rdt.y
 	$(call rule_mkdir)
-	$(Q)$(call echo-cmd,bison)$(BISON) -v util/rdt.y -d -o $@ -p perf_rdt_
+	$(Q)$(call echo-cmd,bison)$(BISON) -v util/rdt.y -d $(PARSER_DEBUG_BISON) -o $@ -p perf_rdt_
 
 CFLAGS_parse-events-flex.o  += -w
 CFLAGS_pmu-flex.o           += -w
