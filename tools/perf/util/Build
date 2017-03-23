@@ -92,6 +92,7 @@ libperf-y += drv_configs.o
 libperf-y += time-utils.o
 libperf-y += expr-bison.o
 libperf-y += workload.o
+libperf-y += rdt.o
 libperf-y += rdt-flex.o
 libperf-y += rdt-bison.o
 
