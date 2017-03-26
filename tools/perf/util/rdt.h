@@ -48,4 +48,6 @@ struct rdt_data {
 	struct rdt_resource	 resource[RDT_NUM_RESOURCES];
 };
 
+int rdt_dump(FILE *file);
+
 #endif /* __PERF_RDT_H */
