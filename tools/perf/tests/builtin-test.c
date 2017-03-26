@@ -262,6 +262,10 @@ static struct test generic_tests[] = {
 		.func = test__cpu_map__read,
 	},
 	{
+		.desc = "RDT parser",
+		.func = test__rdt_parser,
+	},
+	{
 		.func = NULL,
 	},
 };
