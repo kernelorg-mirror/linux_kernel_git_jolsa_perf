@@ -581,3 +581,93 @@ int rdt_load(struct rdt_data *data, const char *resctrl)
 					  process_rdt_load,
 					  resctrl);
 }
+
+#define P(fmt, ...)				\
+	fprintf(file, hash ? "# " : "");	\
+	fprintf(file, fmt, ##__VA_ARGS__);
+
+
+static int display_resource(FILE *file, struct rdt_resource *res,
+			    bool hash)
+{
+	P("    cbm_mask       = %lx\n", res->cache.cbm_mask);
+	P("    min_cbm_bits   = %lx\n", res->cache.min_cbm_bits);
+	P("    num_closids    = %lu\n", res->num_closids);
+	return 0;
+}
+
+static int display_group(FILE *file, struct rdt_group *group, bool hash)
+{
+	char buf[1000];
+	int i;
+
+	P("    id       = %d\n", group->id);
+
+	cpu_map__snprint(group->cpus, buf, sizeof(buf));
+	P("    cpus     = %s\n", buf);
+
+	thread_map__snprint(group->threads, buf, sizeof(buf));
+	P("    tasks    = %s\n", buf);
+
+	P("    schemata { \n");
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		struct rdt_schemata *schemata = &group->schemata[i];
+		int j;
+
+		if (!schemata->cnt)
+			continue;
+
+		P("      %s {\n", rdt_name(i));
+
+		for (j = 0; j < schemata->cnt; j++) {
+			P("        %3lu=%lx\n", schemata->cbm[j].id, schemata->cbm[j].val);
+		}
+		P("      }\n");
+	}
+
+	P("    }\n");
+	return 0;
+}
+
+int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
+{
+	struct rdt_group *group;
+	int i;
+
+	P("Resources:\n");
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		struct rdt_resource *res = &rdt->resource[i];
+
+		if (!res->enabled)
+			continue;
+
+		P("  %s {\n", res->name);
+		display_resource(file, res, hash);
+		P("  }\n");
+	}
+
+	P("Groups:\n");
+
+	list_for_each_entry(group, &rdt->groups, list) {
+		P("  %s {\n", group->name);
+		display_group(file, group, hash);
+		P("  }\n");
+	}
+
+	return 0;
+}
+
+#undef P
+
+int rdt_dump(FILE *file)
+{
+	struct rdt_data data;
+	int ret;
+
+	ret = rdt_load(&data, resctrlfs__mount());
+	if (!ret)
+		ret = rdt_display(file, &data, false);
+
+	return ret;
+}

@@ -60,5 +60,7 @@ int perf_event__process_rdt(struct perf_tool *tool,
 struct rdt_group *rdt_group__find(struct rdt_data *data, u32 closid);
 int rdt_load(struct rdt_data *data, const char *resctrl);
 void rdt_data__init(struct rdt_data *data);
+int rdt_dump(FILE *file);
+int rdt_display(FILE *file, struct rdt_data *rdt, bool hash);
 
 #endif /* __PERF_RDT_H */
