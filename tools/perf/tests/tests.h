@@ -100,6 +100,7 @@ const char *test__clang_subtest_get_desc(int subtest);
 int test__clang_subtest_get_nr(void);
 int test__unit_number__scnprint(int subtest);
 int test__cpu_map__read(int subtest);
+int test__rdt_parser(int subtest);
 
 bool test__bp_signal_is_supported(void);
 
