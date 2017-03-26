@@ -94,18 +94,27 @@ int test__cpu_map_synthesize(int subtest __maybe_unused)
 	return 0;
 }
 
-static int cpu_map_print(const char *str)
+static int cpu_map_test(struct cpu_map *map, const char *str)
 {
-	struct cpu_map *map = cpu_map__new(str);
 	char buf[100];
-
-	if (!map)
-		return -1;
 
 	cpu_map__snprint(map, buf, sizeof(buf));
 	cpu_map__put(map);
-
 	return !strcmp(buf, str);
+}
+
+static int cpu_map_print(const char *str)
+{
+	struct cpu_map *map = cpu_map__new(str);
+
+	return map ? cpu_map_test(map, str) : -1;
+}
+
+static int cpu_map_print_empty(const char *str)
+{
+	struct cpu_map *map = cpu_map__empty_new(0);
+
+	return map ? cpu_map_test(map, str) : -1;
 }
 
 int test__cpu_map_print(int subtest __maybe_unused)
@@ -117,6 +126,7 @@ int test__cpu_map_print(int subtest __maybe_unused)
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1,3-6,8-10,24,35-37"));
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1,3-6,8-10,24,35-37"));
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1-10,12-20,22-30,32-40"));
+	TEST_ASSERT_VAL("failed to convert map", cpu_map_print_empty(""));
 	return 0;
 }
 

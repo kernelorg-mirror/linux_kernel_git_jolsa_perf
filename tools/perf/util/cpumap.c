@@ -74,6 +74,9 @@ struct cpu_map *cpu_map__read(FILE *file)
 		n = fscanf(file, "%c", &sep);
 		if (n != 1)
 			return NULL;
+
+		if (sep == '\n')
+			break;
 	}
 
 	map = cpu_map__empty_new(nr);
@@ -683,6 +686,11 @@ size_t cpu_map__snprint(struct cpu_map *map, char *buf, size_t size)
 	size_t ret = 0;
 
 #define COMMA first ? "" : ","
+
+	if (map->nr == 0) {
+		*buf = 0;
+		return 1;
+	}
 
 	for (i = 0; i < map->nr + 1; i++) {
 		bool last = i == map->nr;

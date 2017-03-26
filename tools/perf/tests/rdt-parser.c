@@ -97,13 +97,14 @@ group krava2 {				\n\
 }					\n\
 ";
 	FILE *file;
-	struct rdt_data data = { };
+	struct rdt_data data;
 	int ret;
 
 #ifdef PARSER_DEBUG
 	perf_rdt_debug = 1;
 #endif
 
+	memset(&data, 0, sizeof(data));
 	INIT_LIST_HEAD(&data.groups);
 
 	file = fmemopen((void *) test, strlen(test), "r");
