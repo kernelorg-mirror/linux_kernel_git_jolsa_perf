@@ -344,7 +344,7 @@ int filename__read_ull(const char *filename, unsigned long long *value)
 		return -1;
 
 	if (read(fd, line, sizeof(line)) > 0) {
-		*value = strtoull(line, NULL, 0);
+		*value = strtoull(line, NULL, 16);
 		if (*value != ULLONG_MAX)
 			err = 0;
 	}

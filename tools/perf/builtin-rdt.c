@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <linux/compiler.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include "perf.h"
 #include "builtin.h"
 #include "debug.h"
@@ -20,24 +23,95 @@ static int setup_resctrl(void)
 	return 0;
 }
 
-static int dump_resources(FILE *file __maybe_unused)
+static int dump_resource(FILE *file, const char *name, char *base)
 {
+	unsigned long long val;
 	char path[PATH_MAX];
+
+	fprintf(file, "resource %s {\n", name);
+
+	scnprintf(path, PATH_MAX, "%s/cbm_mask", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read cbm_mask for %s\n", name);
+		return -1;
+	}
+
+	fprintf(file, "	cbm_mask     = %llx\n", val);
+
+	scnprintf(path, PATH_MAX, "%s/min_cbm_bits", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read min_cbm_bits for %s\n", name);
+		return -1;
+	}
+
+	fprintf(file, "	min_cbm_bits = %llu\n", val);
+
+	scnprintf(path, PATH_MAX, "%s/num_closids", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read num_closids for %s\n", name);
+		return -1;
+	}
+
+	fprintf(file, "	num_closids  = %llu\n", val);
+	fprintf(file, "}\n");
+	return 0;
+}
+
+static int dump_resources(FILE *file)
+{
 	static const char *name[RDT_NUM_RESOURCES] = {
 		"L3", "L3DATA", "L3CODE", "L2",
 	};
 	int i;
 
 	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		char path[PATH_MAX];
+		struct stat st;
+
 		scnprintf(path, PATH_MAX, "%s/info/%s", resctrlfs, name[i]);
 
+		if (stat(path, &st))
+			continue;
+
+		dump_resource(file, name[i], path);
 	}
 
 	return 0;
 }
 
-static int dump_groups(FILE *file __maybe_unused)
+static int dump_group(FILE *file, char *name, char *base __maybe_unused)
 {
+	fprintf(file, "group %s {\n", name);
+	fprintf(file, "}\n");
+	return 0;
+}
+
+static int dump_groups(FILE *file)
+{
+	struct dirent *entry;
+	DIR *dir;
+
+	dir = opendir(resctrlfs);
+	if (!dir)
+		return -1;
+
+	while ((entry = readdir(dir))) {
+		char path[PATH_MAX];
+
+		if (entry->d_type != DT_DIR)
+			continue;
+
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0 ||
+		    strcmp(entry->d_name, "info") == 0)
+			continue;
+
+		scnprintf(path, PATH_MAX, "%s/%s", resctrlfs, entry->d_name);
+
+		dump_group(file, entry->d_name, path);
+	}
+
+	closedir(dir);
 	return 0;
 }
 
