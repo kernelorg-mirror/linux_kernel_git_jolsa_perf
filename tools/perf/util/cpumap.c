@@ -52,6 +52,54 @@ static struct cpu_map *cpu_map__trim_new(int nr_cpus, int *tmp_cpus)
 	return cpus;
 }
 
+struct cpu_map *cpu_map__read(FILE *file)
+{
+	const int CHUNKSZ = 32;
+	struct cpu_map *map;
+	unsigned long val[100];
+	int i, nr = 0, shift = 0;
+
+	for (i = 0; i < 100; i++) {
+		char sep __maybe_unused;
+		int n;
+
+		n = fscanf(file, "%lx", &val[i]);
+		if (n != 1)
+			return NULL;
+
+		nr += bitmap_weight(&val[i], CHUNKSZ);
+
+		if (feof(file))
+			break;
+
+		n = fscanf(file, "%c", &sep);
+		if (n != 1)
+			return NULL;
+
+		if (sep == '\n')
+			break;
+	}
+
+	map = cpu_map__empty_new(nr);
+	nr  = 0;
+
+	while (i + 1) {
+		int bit = find_first_bit(&val[i], CHUNKSZ);
+
+		if (bit < CHUNKSZ) {
+			do {
+				map->map[nr++] = bit + shift;
+				bit = find_next_bit(&val[i], CHUNKSZ, bit + 1);
+			} while (bit < CHUNKSZ);
+		}
+
+		shift += CHUNKSZ;
+		i--;
+	}
+
+	return map;
+}
+
 struct cpu_map *cpu_map__read_list(FILE *file)
 {
 	struct cpu_map *cpus = NULL;
@@ -641,6 +689,11 @@ size_t cpu_map__snprint(struct cpu_map *map, char *buf, size_t size)
 	size_t ret = 0;
 
 #define COMMA first ? "" : ","
+
+	if (map->nr == 0) {
+		*buf = 0;
+		return 1;
+	}
 
 	for (i = 0; i < map->nr + 1; i++) {
 		bool last = i == map->nr;
