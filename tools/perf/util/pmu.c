@@ -500,7 +500,7 @@ static struct cpu_map *pmu_cpumask(const char *name)
 	if (!file)
 		return NULL;
 
-	cpus = cpu_map__read(file);
+	cpus = cpu_map__read_list(file);
 	fclose(file);
 	return cpus;
 }
