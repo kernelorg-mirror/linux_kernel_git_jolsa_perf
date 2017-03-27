@@ -103,6 +103,8 @@ static int cpu_map_print(const char *str)
 		return -1;
 
 	cpu_map__snprint(map, buf, sizeof(buf));
+	cpu_map__put(map);
+
 	return !strcmp(buf, str);
 }
 
@@ -115,5 +117,34 @@ int test__cpu_map_print(int subtest __maybe_unused)
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1,3-6,8-10,24,35-37"));
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1,3-6,8-10,24,35-37"));
 	TEST_ASSERT_VAL("failed to convert map", cpu_map_print("1-10,12-20,22-30,32-40"));
+	return 0;
+}
+
+static int read_test(const char *str, const char *list)
+{
+	struct cpu_map *map;
+	char buf[100];
+	FILE *file;
+
+	file = fmemopen((void *) str, strlen(str), "r");
+	if (!file)
+		return -1;
+
+	map = cpu_map__read(file);
+	fclose(file);
+
+	TEST_ASSERT_VAL("failed to read map", map);
+
+	cpu_map__snprint(map, buf, sizeof(buf));
+	cpu_map__put(map);
+
+	return !strcmp(buf, list);
+}
+
+int test__cpu_map__read(int subtest __maybe_unused)
+{
+	TEST_ASSERT_VAL("failed to convert map", read_test("08", "3"));
+	TEST_ASSERT_VAL("failed to convert map", read_test("0a,08", "3,65,67"));
+	TEST_ASSERT_VAL("failed to convert map", read_test("8ff,08,0a", "3,5,67,128-135,139"));
 	return 0;
 }
