@@ -18,7 +18,7 @@ struct cpu_map *cpu_map__new(const char *cpu_list);
 struct cpu_map *cpu_map__empty_new(int nr);
 struct cpu_map *cpu_map__dummy_new(void);
 struct cpu_map *cpu_map__new_data(struct cpu_map_data *data);
-struct cpu_map *cpu_map__read(FILE *file);
+struct cpu_map *cpu_map__read_list(FILE *file);
 size_t cpu_map__snprint(struct cpu_map *map, char *buf, size_t size);
 size_t cpu_map__snprint_mask(struct cpu_map *map, char *buf, size_t size);
 size_t cpu_map__fprintf(struct cpu_map *map, FILE *fp);
