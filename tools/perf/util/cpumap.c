@@ -52,6 +52,48 @@ static struct cpu_map *cpu_map__trim_new(int nr_cpus, int *tmp_cpus)
 	return cpus;
 }
 
+struct cpu_map *cpu_map__read(FILE *file)
+{
+	struct cpu_map *map;
+	unsigned long val[100];
+	int i, nr = 0, shift = 0;
+
+	for (i = 0; i < 100; i++) {
+		char sep __maybe_unused;
+		int n;
+
+		n = fscanf(file, "%lx", &val[i]);
+		if (n != 1)
+			return NULL;
+
+		nr += bitmap_weight(&val[i], BITS_PER_LONG);
+
+		if (feof(file))
+			break;
+
+		n = fscanf(file, "%c", &sep);
+		if (n != 1)
+			return NULL;
+	}
+
+	map = cpu_map__empty_new(nr);
+	nr  = 0;
+
+	while (i + 1) {
+		int bit = find_first_bit(&val[i], BITS_PER_LONG);
+
+		do {
+			map->map[nr++] = bit + shift;
+			bit = find_next_bit(&val[i], BITS_PER_LONG, bit + 1);
+		} while (bit < BITS_PER_LONG);
+
+		shift += BITS_PER_LONG;
+		i--;
+	}
+
+	return map;
+}
+
 struct cpu_map *cpu_map__read_list(FILE *file)
 {
 	struct cpu_map *cpus = NULL;
