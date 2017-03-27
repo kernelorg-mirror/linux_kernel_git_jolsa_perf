@@ -258,6 +258,10 @@ static struct test generic_tests[] = {
 		.func = test__unit_number__scnprint,
 	},
 	{
+		.desc = "test__cpu_map__read",
+		.func = test__cpu_map__read,
+	},
+	{
 		.func = NULL,
 	},
 };
