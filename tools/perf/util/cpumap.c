@@ -52,7 +52,7 @@ static struct cpu_map *cpu_map__trim_new(int nr_cpus, int *tmp_cpus)
 	return cpus;
 }
 
-struct cpu_map *cpu_map__read(FILE *file)
+struct cpu_map *cpu_map__read_list(FILE *file)
 {
 	struct cpu_map *cpus = NULL;
 	int nr_cpus = 0;
@@ -116,7 +116,7 @@ static struct cpu_map *cpu_map__read_all_cpu_map(void)
 	if (!onlnf)
 		return cpu_map__default_new();
 
-	cpus = cpu_map__read(onlnf);
+	cpus = cpu_map__read_list(onlnf);
 	fclose(onlnf);
 	return cpus;
 }
