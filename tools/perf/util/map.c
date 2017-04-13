@@ -830,7 +830,7 @@ static void __maps__insert_by_time(struct maps *maps, struct map *map)
 			p = &(*p)->rb_right;
 		else if (timestamp > m->timestamp)
 			p = &(*p)->rb_left;
-		else if (timestamp < m->timestamp)
+		else if (timestamp <= m->timestamp)
 			p = &(*p)->rb_right;
 		else
 			BUG_ON(1);
