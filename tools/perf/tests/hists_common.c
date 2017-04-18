@@ -166,7 +166,7 @@ void print_hists_in(struct hists *hists)
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	pr_info("----- %s --------\n", __func__);
 	node = rb_first(root);

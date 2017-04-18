@@ -150,7 +150,7 @@ static int __validate_match(struct hists *hists)
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	node = rb_first(root);
 	while (node) {
@@ -202,7 +202,7 @@ static int __validate_link(struct hists *hists, int idx)
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	node = rb_first(root);
 	while (node) {

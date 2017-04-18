@@ -131,7 +131,7 @@ static void del_hist_entries(struct hists *hists)
 	if (hists__has(hists, need_collapse))
 		root_in = &hists->entries_collapsed;
 	else
-		root_in = hists->entries_in;
+		root_in = hists->in.entries;
 
 	root_out = &hists->entries;
 

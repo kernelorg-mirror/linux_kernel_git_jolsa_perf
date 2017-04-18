@@ -312,7 +312,7 @@ static void hists__delete_entry(struct hists *hists, struct hist_entry *he)
 		if (hists__has(hists, need_collapse))
 			root_in = &hists->entries_collapsed;
 		else
-			root_in = hists->entries_in;
+			root_in = hists->in.entries;
 		root_out = &hists->entries;
 	}
 
@@ -503,7 +503,7 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 	u64 period = entry->stat.period;
 	u64 weight = entry->stat.weight;
 
-	p = &hists->entries_in->rb_node;
+	p = &hists->in.entries->rb_node;
 
 	while (*p != NULL) {
 		parent = *p;
@@ -559,7 +559,7 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 	hists->nr_entries++;
 
 	rb_link_node(&he->rb_node_in, parent, p);
-	rb_insert_color(&he->rb_node_in, hists->entries_in);
+	rb_insert_color(&he->rb_node_in, hists->in.entries);
 out:
 	if (sample_self)
 		he_stat__add_cpumode_period(&he->stat, al->cpumode, period);
@@ -1432,13 +1432,14 @@ static int hists__collapse_insert_entry(struct hists *hists,
 
 struct rb_root *hists__get_rotate_entries_in(struct hists *hists)
 {
+	struct hists_in *in = &hists->in;
 	struct rb_root *root;
 
 	pthread_mutex_lock(&hists->lock);
 
-	root = hists->entries_in;
-	if (++hists->entries_in > &hists->entries_in_array[1])
-		hists->entries_in = &hists->entries_in_array[0];
+	root = in->entries;
+	if (++in->entries > &in->entries_array[1])
+		in->entries = &in->entries_array[0];
 
 	pthread_mutex_unlock(&hists->lock);
 
@@ -1722,7 +1723,7 @@ static void output_resort(struct hists *hists, struct ui_progress *prog,
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	next = rb_first(root);
 	hists->entries = RB_ROOT;
@@ -2158,7 +2159,7 @@ static struct hist_entry *hists__add_dummy_entry(struct hists *hists,
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	p = &root->rb_node;
 
@@ -2244,7 +2245,7 @@ static struct hist_entry *hists__find_entry(struct hists *hists,
 	if (hists__has(hists, need_collapse))
 		n = hists->entries_collapsed.rb_node;
 	else
-		n = hists->entries_in->rb_node;
+		n = hists->in.entries->rb_node;
 
 	while (n) {
 		struct hist_entry *iter = rb_entry(n, struct hist_entry, rb_node_in);
@@ -2324,7 +2325,7 @@ void hists__match(struct hists *leader, struct hists *other)
 	if (hists__has(leader, need_collapse))
 		root = &leader->entries_collapsed;
 	else
-		root = leader->entries_in;
+		root = leader->in.entries;
 
 	for (nd = rb_first(root); nd; nd = rb_next(nd)) {
 		pos  = rb_entry(nd, struct hist_entry, rb_node_in);
@@ -2400,7 +2401,7 @@ int hists__link(struct hists *leader, struct hists *other)
 	if (hists__has(other, need_collapse))
 		root = &other->entries_collapsed;
 	else
-		root = other->entries_in;
+		root = other->in.entries;
 
 	for (nd = rb_first(root); nd; nd = rb_next(nd)) {
 		pos = rb_entry(nd, struct hist_entry, rb_node_in);
@@ -2496,8 +2497,8 @@ int perf_hist_config(const char *var, const char *value)
 int __hists__init(struct hists *hists, struct perf_hpp_list *hpp_list)
 {
 	memset(hists, 0, sizeof(*hists));
-	hists->entries_in_array[0] = hists->entries_in_array[1] = RB_ROOT;
-	hists->entries_in = &hists->entries_in_array[0];
+	hists->in.entries_array[0] = hists->in.entries_array[1] = RB_ROOT;
+	hists->in.entries = &hists->in.entries_array[0];
 	hists->entries_collapsed = RB_ROOT;
 	hists->entries = RB_ROOT;
 	pthread_mutex_init(&hists->lock, NULL);
@@ -2524,8 +2525,8 @@ static void hists__delete_remaining_entries(struct rb_root *root)
 static void hists__delete_all_entries(struct hists *hists)
 {
 	hists__delete_entries(hists);
-	hists__delete_remaining_entries(&hists->entries_in_array[0]);
-	hists__delete_remaining_entries(&hists->entries_in_array[1]);
+	hists__delete_remaining_entries(&hists->in.entries_array[0]);
+	hists__delete_remaining_entries(&hists->in.entries_array[1]);
 	hists__delete_remaining_entries(&hists->entries_collapsed);
 }
 

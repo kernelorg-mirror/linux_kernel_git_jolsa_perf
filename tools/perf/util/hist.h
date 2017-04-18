@@ -65,9 +65,13 @@ enum hist_column {
 struct thread;
 struct dso;
 
+struct hists_in {
+	struct rb_root		 entries_array[2];
+	struct rb_root		*entries;
+};
+
 struct hists {
-	struct rb_root		entries_in_array[2];
-	struct rb_root		*entries_in;
+	struct hists_in		in;
 	struct rb_root		entries;
 	struct rb_root		entries_collapsed;
 	u64			nr_entries;

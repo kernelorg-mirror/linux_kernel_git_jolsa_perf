@@ -434,7 +434,7 @@ static void hists__baseline_only(struct hists *hists)
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	next = rb_first(root);
 	while (next != NULL) {
@@ -456,7 +456,7 @@ static void hists__precompute(struct hists *hists)
 	if (hists__has(hists, need_collapse))
 		root = &hists->entries_collapsed;
 	else
-		root = hists->entries_in;
+		root = hists->in.entries;
 
 	next = rb_first(root);
 	while (next != NULL) {
