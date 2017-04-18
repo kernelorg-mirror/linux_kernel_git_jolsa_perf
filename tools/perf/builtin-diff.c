@@ -270,12 +270,12 @@ static s64 compute_wdiff(struct hist_entry *he, struct hist_entry *pair)
 static int formula_delta(struct hist_entry *he, struct hist_entry *pair,
 			 char *buf, size_t size)
 {
-	u64 he_total = he->hists->stats.total_period;
-	u64 pair_total = pair->hists->stats.total_period;
+	u64 he_total = he->hists->in.stats.total_period;
+	u64 pair_total = pair->hists->in.stats.total_period;
 
 	if (symbol_conf.filter_relative) {
-		he_total = he->hists->stats.total_non_filtered_period;
-		pair_total = pair->hists->stats.total_non_filtered_period;
+		he_total = he->hists->in.stats.total_non_filtered_period;
+		pair_total = pair->hists->in.stats.total_non_filtered_period;
 	}
 	return scnprintf(buf, size,
 			 "(%" PRIu64 " * 100 / %" PRIu64 ") - "
@@ -349,9 +349,9 @@ static int diff__process_sample_event(struct perf_tool *tool __maybe_unused,
 	 * hists__output_resort() and precompute needs the total
 	 * period in order to sort entries by percentage delta.
 	 */
-	hists->stats.total_period += sample->period;
+	hists->in.stats.total_period += sample->period;
 	if (!al.filtered)
-		hists->stats.total_non_filtered_period += sample->period;
+		hists->in.stats.total_non_filtered_period += sample->period;
 	ret = 0;
 out_put:
 	addr_location__put(&al);

@@ -611,7 +611,7 @@ static int hist_entry__fprintf(struct hist_entry *he, size_t size,
 		.size		= size,
 	};
 	struct hists *hists = he->hists;
-	u64 total_period = hists->stats.total_period;
+	u64 total_period = hists->in.stats.total_period;
 
 	if (size == 0 || size > bfsz)
 		size = hpp.size = bfsz;

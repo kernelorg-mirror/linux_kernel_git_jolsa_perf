@@ -280,9 +280,9 @@ static bool hists__decay_entry(struct hists *hists, struct hist_entry *he)
 	diff = prev_period - he->stat.period;
 
 	if (!he->depth) {
-		hists->stats.total_period -= diff;
+		hists->in.stats.total_period -= diff;
 		if (!he->filtered)
-			hists->stats.total_non_filtered_period -= diff;
+			hists->in.stats.total_non_filtered_period -= diff;
 	}
 
 	if (!he->leaf) {
@@ -1516,21 +1516,20 @@ static int hist_entry__sort(struct hist_entry *a, struct hist_entry *b)
 static void hists__reset_filter_stats(struct hists *hists)
 {
 	hists->nr_non_filtered_entries = 0;
-	hists->stats.total_non_filtered_period = 0;
+	hists->in.stats.total_non_filtered_period = 0;
 }
 
 void hists__reset_stats(struct hists *hists)
 {
 	hists->in.nr_entries = 0;
-	hists->stats.total_period = 0;
-
+	hists->in.stats.total_period = 0;
 	hists__reset_filter_stats(hists);
 }
 
 static void hists__inc_filter_stats(struct hists *hists, struct hist_entry *h)
 {
 	hists->nr_non_filtered_entries++;
-	hists->stats.total_non_filtered_period += h->stat.period;
+	hists->in.stats.total_non_filtered_period += h->stat.period;
 }
 
 void hists__inc_stats(struct hists *hists, struct hist_entry *h)
@@ -1539,7 +1538,7 @@ void hists__inc_stats(struct hists *hists, struct hist_entry *h)
 		hists__inc_filter_stats(hists, h);
 
 	hists->in.nr_entries++;
-	hists->stats.total_period += h->stat.period;
+	hists->in.stats.total_period += h->stat.period;
 }
 
 static void hierarchy_recalc_total_periods(struct hists *hists)
@@ -1549,8 +1548,8 @@ static void hierarchy_recalc_total_periods(struct hists *hists)
 
 	node = rb_first(&hists->entries);
 
-	hists->stats.total_period = 0;
-	hists->stats.total_non_filtered_period = 0;
+	hists->in.stats.total_period = 0;
+	hists->in.stats.total_non_filtered_period = 0;
 
 	/*
 	 * recalculate total period using top-level entries only
@@ -1561,9 +1560,9 @@ static void hierarchy_recalc_total_periods(struct hists *hists)
 		he = rb_entry(node, struct hist_entry, rb_node);
 		node = rb_next(node);
 
-		hists->stats.total_period += he->stat.period;
+		hists->in.stats.total_period += he->stat.period;
 		if (!he->filtered)
-			hists->stats.total_non_filtered_period += he->stat.period;
+			hists->in.stats.total_non_filtered_period += he->stat.period;
 	}
 }
 
@@ -1885,7 +1884,7 @@ next:
 	h->row_offset = 0;
 	h->nr_rows = 0;
 
-	hists->stats.nr_non_filtered_samples += h->stat.nr_events;
+	hists->in.stats.nr_non_filtered_samples += h->stat.nr_events;
 
 	hists__inc_filter_stats(hists, h);
 	hists__calc_col_len(hists, h);
@@ -1947,7 +1946,7 @@ static void hists__filter_by_type(struct hists *hists, int type, filter_fn_t fil
 {
 	struct rb_node *nd;
 
-	hists->stats.nr_non_filtered_samples = 0;
+	hists->in.stats.nr_non_filtered_samples = 0;
 
 	hists__reset_filter_stats(hists);
 	hists__reset_col_len(hists);
@@ -2004,7 +2003,7 @@ static void hists__filter_hierarchy(struct hists *hists, int type, const void *a
 	struct rb_node *nd;
 	struct rb_root new_root = RB_ROOT;
 
-	hists->stats.nr_non_filtered_samples = 0;
+	hists->in.stats.nr_non_filtered_samples = 0;
 
 	hists__reset_filter_stats(hists);
 	hists__reset_col_len(hists);
@@ -2137,14 +2136,14 @@ void events_stats__add(struct events_stats *dst, struct events_stats *src)
 
 void hists__inc_nr_events(struct hists *hists, u32 type)
 {
-	events_stats__inc(&hists->stats, type);
+	events_stats__inc(&hists->in.stats, type);
 }
 
 void hists__inc_nr_samples(struct hists *hists, bool filtered)
 {
-	events_stats__inc(&hists->stats, PERF_RECORD_SAMPLE);
+	events_stats__inc(&hists->in.stats, PERF_RECORD_SAMPLE);
 	if (!filtered)
-		hists->stats.nr_non_filtered_samples++;
+		hists->in.stats.nr_non_filtered_samples++;
 }
 
 static struct hist_entry *hists__add_dummy_entry(struct hists *hists,
@@ -2458,7 +2457,7 @@ size_t perf_evlist__fprintf_nr_events(struct perf_evlist *evlist, FILE *fp)
 
 	evlist__for_each_entry(evlist, pos) {
 		ret += fprintf(fp, "%s stats:\n", perf_evsel__name(pos));
-		ret += events_stats__fprintf(&evsel__hists(pos)->stats, fp);
+		ret += events_stats__fprintf(&evsel__hists(pos)->in.stats, fp);
 	}
 
 	return ret;
@@ -2467,8 +2466,8 @@ size_t perf_evlist__fprintf_nr_events(struct perf_evlist *evlist, FILE *fp)
 
 u64 hists__total_period(struct hists *hists)
 {
-	return symbol_conf.filter_relative ? hists->stats.total_non_filtered_period :
-		hists->stats.total_period;
+	return symbol_conf.filter_relative ? hists->in.stats.total_non_filtered_period :
+		hists->in.stats.total_period;
 }
 
 int parse_filter_percentage(const struct option *opt __maybe_unused,

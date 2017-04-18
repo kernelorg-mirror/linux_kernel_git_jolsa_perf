@@ -316,8 +316,8 @@ static size_t hists__fprintf_nr_sample_events(struct hists *hists, struct report
 {
 	size_t ret;
 	char unit;
-	unsigned long nr_samples = hists->stats.nr_events[PERF_RECORD_SAMPLE];
-	u64 nr_events = hists->stats.total_period;
+	unsigned long nr_samples = hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
+	u64 nr_events = hists->in.stats.total_period;
 	struct perf_evsel *evsel = hists_to_evsel(hists);
 	char buf[512];
 	size_t size = sizeof(buf);
@@ -327,8 +327,8 @@ static size_t hists__fprintf_nr_sample_events(struct hists *hists, struct report
 		return 0;
 
 	if (symbol_conf.filter_relative) {
-		nr_samples = hists->stats.nr_non_filtered_samples;
-		nr_events = hists->stats.total_non_filtered_period;
+		nr_samples = hists->in.stats.nr_non_filtered_samples;
+		nr_events = hists->in.stats.total_non_filtered_period;
 	}
 
 	if (perf_evsel__is_group_event(evsel)) {
@@ -341,11 +341,11 @@ static size_t hists__fprintf_nr_sample_events(struct hists *hists, struct report
 			const struct hists *pos_hists = evsel__hists(pos);
 
 			if (symbol_conf.filter_relative) {
-				nr_samples += pos_hists->stats.nr_non_filtered_samples;
-				nr_events += pos_hists->stats.total_non_filtered_period;
+				nr_samples += pos_hists->in.stats.nr_non_filtered_samples;
+				nr_events += pos_hists->in.stats.total_non_filtered_period;
 			} else {
-				nr_samples += pos_hists->stats.nr_events[PERF_RECORD_SAMPLE];
-				nr_events += pos_hists->stats.total_period;
+				nr_samples += pos_hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
+				nr_events += pos_hists->in.stats.total_period;
 			}
 		}
 	}

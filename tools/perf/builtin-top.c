@@ -274,13 +274,13 @@ static void perf_top__print_sym_table(struct perf_top *top)
 
 	printf("%-*.*s\n", win_width, win_width, graph_dotted_line);
 
-	if (hists->stats.nr_lost_warned !=
-	    hists->stats.nr_events[PERF_RECORD_LOST]) {
-		hists->stats.nr_lost_warned =
-			      hists->stats.nr_events[PERF_RECORD_LOST];
+	if (hists->in.stats.nr_lost_warned !=
+	    hists->in.stats.nr_events[PERF_RECORD_LOST]) {
+		hists->in.stats.nr_lost_warned =
+			      hists->in.stats.nr_events[PERF_RECORD_LOST];
 		color_fprintf(stdout, PERF_COLOR_RED,
 			      "WARNING: LOST %d chunks, Check IO/CPU overload",
-			      hists->stats.nr_lost_warned);
+			      hists->in.stats.nr_lost_warned);
 		++printed;
 	}
 

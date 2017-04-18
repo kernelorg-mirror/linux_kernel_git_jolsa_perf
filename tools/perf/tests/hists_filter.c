@@ -150,19 +150,19 @@ int test__hists_filter(int subtest __maybe_unused)
 		}
 
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 		TEST_ASSERT_VAL("Unmatched nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] ==
-				hists->stats.nr_non_filtered_samples);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] ==
+				hists->in.stats.nr_non_filtered_samples);
 		TEST_ASSERT_VAL("Unmatched nr hist entries",
 				hists->in.nr_entries == hists->nr_non_filtered_entries);
 		TEST_ASSERT_VAL("Unmatched total period",
-				hists->stats.total_period ==
-				hists->stats.total_non_filtered_period);
+				hists->in.stats.total_period ==
+				hists->in.stats.total_non_filtered_period);
 
 		/* now applying thread filter for 'bash' */
 		hists->thread_filter = fake_samples[9].thread;
@@ -175,19 +175,19 @@ int test__hists_filter(int subtest __maybe_unused)
 
 		/* normal stats should be invariant */
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 
 		/* but filter stats are changed */
 		TEST_ASSERT_VAL("Unmatched nr samples for thread filter",
-				hists->stats.nr_non_filtered_samples == 4);
+				hists->in.stats.nr_non_filtered_samples == 4);
 		TEST_ASSERT_VAL("Unmatched nr hist entries for thread filter",
 				hists->nr_non_filtered_entries == 4);
 		TEST_ASSERT_VAL("Unmatched total period for thread filter",
-				hists->stats.total_non_filtered_period == 400);
+				hists->in.stats.total_non_filtered_period == 400);
 
 		/* remove thread filter first */
 		hists->thread_filter = NULL;
@@ -204,19 +204,19 @@ int test__hists_filter(int subtest __maybe_unused)
 
 		/* normal stats should be invariant */
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 
 		/* but filter stats are changed */
 		TEST_ASSERT_VAL("Unmatched nr samples for dso filter",
-				hists->stats.nr_non_filtered_samples == 3);
+				hists->in.stats.nr_non_filtered_samples == 3);
 		TEST_ASSERT_VAL("Unmatched nr hist entries for dso filter",
 				hists->nr_non_filtered_entries == 3);
 		TEST_ASSERT_VAL("Unmatched total period for dso filter",
-				hists->stats.total_non_filtered_period == 300);
+				hists->in.stats.total_non_filtered_period == 300);
 
 		/* remove dso filter first */
 		hists->dso_filter = NULL;
@@ -239,19 +239,19 @@ int test__hists_filter(int subtest __maybe_unused)
 
 		/* normal stats should be invariant */
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 
 		/* but filter stats are changed */
 		TEST_ASSERT_VAL("Unmatched nr samples for symbol filter",
-				hists->stats.nr_non_filtered_samples == 3);
+				hists->in.stats.nr_non_filtered_samples == 3);
 		TEST_ASSERT_VAL("Unmatched nr hist entries for symbol filter",
 				hists->nr_non_filtered_entries == 2);
 		TEST_ASSERT_VAL("Unmatched total period for symbol filter",
-				hists->stats.total_non_filtered_period == 300);
+				hists->in.stats.total_non_filtered_period == 300);
 
 		/* remove symbol filter first */
 		hists->symbol_filter_str = NULL;
@@ -268,19 +268,19 @@ int test__hists_filter(int subtest __maybe_unused)
 
 		/* normal stats should be invariant */
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 
 		/* but filter stats are changed */
 		TEST_ASSERT_VAL("Unmatched nr samples for socket filter",
-				hists->stats.nr_non_filtered_samples == 2);
+				hists->in.stats.nr_non_filtered_samples == 2);
 		TEST_ASSERT_VAL("Unmatched nr hist entries for socket filter",
 				hists->nr_non_filtered_entries == 2);
 		TEST_ASSERT_VAL("Unmatched total period for socket filter",
-				hists->stats.total_non_filtered_period == 200);
+				hists->in.stats.total_non_filtered_period == 200);
 
 		/* remove socket filter first */
 		hists->socket_filter = -1;
@@ -299,19 +299,19 @@ int test__hists_filter(int subtest __maybe_unused)
 
 		/* normal stats should be invariant */
 		TEST_ASSERT_VAL("Invalid nr samples",
-				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
+				hists->in.stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
 				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
-				hists->stats.total_period == 1000);
+				hists->in.stats.total_period == 1000);
 
 		/* but filter stats are changed */
 		TEST_ASSERT_VAL("Unmatched nr samples for all filter",
-				hists->stats.nr_non_filtered_samples == 2);
+				hists->in.stats.nr_non_filtered_samples == 2);
 		TEST_ASSERT_VAL("Unmatched nr hist entries for all filter",
 				hists->nr_non_filtered_entries == 1);
 		TEST_ASSERT_VAL("Unmatched total period for all filter",
-				hists->stats.total_non_filtered_period == 200);
+				hists->in.stats.total_non_filtered_period == 200);
 	}
 
 

@@ -713,10 +713,10 @@ int hist_browser__run(struct hist_browser *browser, const char *help)
 			nr_entries = hist_browser__nr_entries(browser);
 			ui_browser__update_nr_entries(&browser->b, nr_entries);
 
-			if (browser->hists->stats.nr_lost_warned !=
-			    browser->hists->stats.nr_events[PERF_RECORD_LOST]) {
-				browser->hists->stats.nr_lost_warned =
-					browser->hists->stats.nr_events[PERF_RECORD_LOST];
+			if (browser->hists->in.stats.nr_lost_warned !=
+			    browser->hists->in.stats.nr_events[PERF_RECORD_LOST]) {
+				browser->hists->in.stats.nr_lost_warned =
+					browser->hists->in.stats.nr_events[PERF_RECORD_LOST];
 				ui_browser__warn_lost_events(&browser->b);
 			}
 
@@ -2377,8 +2377,8 @@ static int perf_evsel_browser_title(struct hist_browser *browser,
 	const struct dso *dso = hists->dso_filter;
 	const struct thread *thread = hists->thread_filter;
 	int socket_id = hists->socket_filter;
-	unsigned long nr_samples = hists->stats.nr_events[PERF_RECORD_SAMPLE];
-	u64 nr_events = hists->stats.total_period;
+	unsigned long nr_samples = hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
+	u64 nr_events = hists->in.stats.total_period;
 	struct perf_evsel *evsel = hists_to_evsel(hists);
 	const char *ev_name = perf_evsel__name(evsel);
 	char buf[512];
@@ -2387,8 +2387,8 @@ static int perf_evsel_browser_title(struct hist_browser *browser,
 	bool enable_ref = false;
 
 	if (symbol_conf.filter_relative) {
-		nr_samples = hists->stats.nr_non_filtered_samples;
-		nr_events = hists->stats.total_non_filtered_period;
+		nr_samples = hists->in.stats.nr_non_filtered_samples;
+		nr_events = hists->in.stats.total_non_filtered_period;
 	}
 
 	if (perf_evsel__is_group_event(evsel)) {
@@ -2401,11 +2401,11 @@ static int perf_evsel_browser_title(struct hist_browser *browser,
 			struct hists *pos_hists = evsel__hists(pos);
 
 			if (symbol_conf.filter_relative) {
-				nr_samples += pos_hists->stats.nr_non_filtered_samples;
-				nr_events += pos_hists->stats.total_non_filtered_period;
+				nr_samples += pos_hists->in.stats.nr_non_filtered_samples;
+				nr_events += pos_hists->in.stats.total_non_filtered_period;
 			} else {
-				nr_samples += pos_hists->stats.nr_events[PERF_RECORD_SAMPLE];
-				nr_events += pos_hists->stats.total_period;
+				nr_samples += pos_hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
+				nr_events += pos_hists->in.stats.total_period;
 			}
 		}
 	}
@@ -3300,7 +3300,7 @@ static void perf_evsel_menu__write(struct ui_browser *browser,
 	struct perf_evsel *evsel = list_entry(entry, struct perf_evsel, node);
 	struct hists *hists = evsel__hists(evsel);
 	bool current_entry = ui_browser__is_current_entry(browser, row);
-	unsigned long nr_events = hists->stats.nr_events[PERF_RECORD_SAMPLE];
+	unsigned long nr_events = hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
 	const char *ev_name = perf_evsel__name(evsel);
 	char bf[256], unit;
 	const char *warn = " ";
@@ -3316,7 +3316,7 @@ static void perf_evsel_menu__write(struct ui_browser *browser,
 
 		for_each_group_member(pos, evsel) {
 			struct hists *pos_hists = evsel__hists(pos);
-			nr_events += pos_hists->stats.nr_events[PERF_RECORD_SAMPLE];
+			nr_events += pos_hists->in.stats.nr_events[PERF_RECORD_SAMPLE];
 		}
 	}
 
@@ -3325,7 +3325,7 @@ static void perf_evsel_menu__write(struct ui_browser *browser,
 			   unit, unit == ' ' ? "" : " ", ev_name);
 	ui_browser__printf(browser, "%s", bf);
 
-	nr_events = hists->stats.nr_events[PERF_RECORD_LOST];
+	nr_events = hists->in.stats.nr_events[PERF_RECORD_LOST];
 	if (nr_events != 0) {
 		menu->lost_events = true;
 		if (!current_entry)

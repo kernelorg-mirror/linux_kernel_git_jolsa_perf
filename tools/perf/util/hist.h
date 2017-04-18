@@ -69,6 +69,7 @@ struct hists_in {
 	struct rb_root		 entries_array[2];
 	struct rb_root		*entries;
 	u64			 nr_entries;
+	struct events_stats	 stats;
 };
 
 struct hists {
@@ -83,7 +84,6 @@ struct hists {
 	const char		*uid_filter_str;
 	const char		*symbol_filter_str;
 	pthread_mutex_t		lock;
-	struct events_stats	stats;
 	u64			event_stream;
 	u16			col_len[HISTC_NR_COLS];
 	int			socket_filter;
