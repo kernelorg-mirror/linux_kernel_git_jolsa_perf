@@ -2642,7 +2642,7 @@ static int perf_c2c__report(int argc, const char **argv)
 			c2c.display == DISPLAY_LCL ? "lcl_hitm" : "rmt_hitm"
 			);
 
-	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
+	ui_progress__init(&prog, c2c.hists.hists.in.nr_entries, "Sorting...");
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_hitm_cb);

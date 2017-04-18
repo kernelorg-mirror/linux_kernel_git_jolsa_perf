@@ -152,14 +152,14 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 		TEST_ASSERT_VAL("Unmatched nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] ==
 				hists->stats.nr_non_filtered_samples);
 		TEST_ASSERT_VAL("Unmatched nr hist entries",
-				hists->nr_entries == hists->nr_non_filtered_entries);
+				hists->in.nr_entries == hists->nr_non_filtered_entries);
 		TEST_ASSERT_VAL("Unmatched total period",
 				hists->stats.total_period ==
 				hists->stats.total_non_filtered_period);
@@ -177,7 +177,7 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 
@@ -206,7 +206,7 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 
@@ -241,7 +241,7 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 
@@ -270,7 +270,7 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 
@@ -301,7 +301,7 @@ int test__hists_filter(int subtest __maybe_unused)
 		TEST_ASSERT_VAL("Invalid nr samples",
 				hists->stats.nr_events[PERF_RECORD_SAMPLE] == 10);
 		TEST_ASSERT_VAL("Invalid nr hist entries",
-				hists->nr_entries == 9);
+				hists->in.nr_entries == 9);
 		TEST_ASSERT_VAL("Invalid total period",
 				hists->stats.total_period == 1000);
 

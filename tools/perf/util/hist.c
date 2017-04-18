@@ -319,7 +319,7 @@ static void hists__delete_entry(struct hists *hists, struct hist_entry *he)
 	rb_erase(&he->rb_node_in, root_in);
 	rb_erase(&he->rb_node, root_out);
 
-	--hists->nr_entries;
+	--hists->in.nr_entries;
 	if (!he->filtered)
 		--hists->nr_non_filtered_entries;
 
@@ -556,7 +556,7 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 
 	if (sample_self)
 		hist_entry__add_callchain_period(he, period);
-	hists->nr_entries++;
+	hists->in.nr_entries++;
 
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, hists->in.entries);
@@ -1305,7 +1305,7 @@ static struct hist_entry *hierarchy_insert_entry(struct hists *hists,
 	if (new == NULL)
 		return NULL;
 
-	hists->nr_entries++;
+	hists->in.nr_entries++;
 
 	/* save related format list for output */
 	new->hpp_list = hpp_list;
@@ -1423,7 +1423,7 @@ static int hists__collapse_insert_entry(struct hists *hists,
 		else
 			p = &(*p)->rb_right;
 	}
-	hists->nr_entries++;
+	hists->in.nr_entries++;
 
 	rb_link_node(&he->rb_node_in, parent, p);
 	rb_insert_color(&he->rb_node_in, root);
@@ -1464,7 +1464,7 @@ int hists__collapse_resort(struct hists *hists, struct ui_progress *prog)
 	if (!hists__has(hists, need_collapse))
 		return 0;
 
-	hists->nr_entries = 0;
+	hists->in.nr_entries = 0;
 
 	root = hists__get_rotate_entries_in(hists);
 
@@ -1521,7 +1521,7 @@ static void hists__reset_filter_stats(struct hists *hists)
 
 void hists__reset_stats(struct hists *hists)
 {
-	hists->nr_entries = 0;
+	hists->in.nr_entries = 0;
 	hists->stats.total_period = 0;
 
 	hists__reset_filter_stats(hists);
@@ -1538,7 +1538,7 @@ void hists__inc_stats(struct hists *hists, struct hist_entry *h)
 	if (!h->filtered)
 		hists__inc_filter_stats(hists, h);
 
-	hists->nr_entries++;
+	hists->in.nr_entries++;
 	hists->stats.total_period += h->stat.period;
 }
 
@@ -1617,7 +1617,7 @@ static void hists__hierarchy_output_resort(struct hists *hists,
 		if (prog)
 			ui_progress__update(prog, 1);
 
-		hists->nr_entries++;
+		hists->in.nr_entries++;
 		if (!he->filtered) {
 			hists->nr_non_filtered_entries++;
 			hists__calc_col_len(hists, he);

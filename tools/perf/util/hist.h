@@ -68,13 +68,13 @@ struct dso;
 struct hists_in {
 	struct rb_root		 entries_array[2];
 	struct rb_root		*entries;
+	u64			 nr_entries;
 };
 
 struct hists {
 	struct hists_in		in;
 	struct rb_root		entries;
 	struct rb_root		entries_collapsed;
-	u64			nr_entries;
 	u64			nr_non_filtered_entries;
 	u64			callchain_period;
 	u64			callchain_non_filtered_period;

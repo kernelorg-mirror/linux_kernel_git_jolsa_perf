@@ -68,7 +68,7 @@ static u32 hist_browser__nr_entries(struct hist_browser *hb)
 	else if (hist_browser__has_filter(hb))
 		nr_entries = hb->nr_non_filtered_entries;
 	else
-		nr_entries = hb->hists->nr_entries;
+		nr_entries = hb->hists->in.nr_entries;
 
 	hb->nr_callchain_rows = hist_browser__get_folding(hb);
 	return nr_entries + hb->nr_callchain_rows;
@@ -731,7 +731,7 @@ int hist_browser__run(struct hist_browser *browser, const char *help)
 			ui_helpline__pop();
 			ui_helpline__fpush("%d: nr_ent=(%d,%d), rows=%d, idx=%d, fve: idx=%d, row_off=%d, nrows=%d",
 					   seq++, browser->b.nr_entries,
-					   browser->hists->nr_entries,
+					   browser->hists->in.nr_entries,
 					   browser->b.rows,
 					   browser->b.index,
 					   browser->b.top_idx,
@@ -2580,7 +2580,7 @@ do_annotate(struct hist_browser *browser, struct popup_action *act)
 	if ((err == 'q' || err == CTRL('c')) && he->branch_info)
 		return 1;
 
-	ui_browser__update_nr_entries(&browser->b, browser->hists->nr_entries);
+	ui_browser__update_nr_entries(&browser->b, browser->hists->in.nr_entries);
 	if (err)
 		ui_browser__handle_resize(&browser->b);
 	return 0;

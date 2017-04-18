@@ -580,7 +580,7 @@ static int __cmd_report(struct report *rep)
 	report__warn_kptr_restrict(rep);
 
 	evlist__for_each_entry(session->evlist, pos)
-		rep->nr_entries += evsel__hists(pos)->nr_entries;
+		rep->nr_entries += evsel__hists(pos)->in.nr_entries;
 
 	if (use_browser == 0) {
 		if (verbose > 3)
@@ -611,7 +611,7 @@ static int __cmd_report(struct report *rep)
 	 */
 	rep->nr_entries = 0;
 	evlist__for_each_entry(session->evlist, pos)
-		rep->nr_entries += evsel__hists(pos)->nr_entries;
+		rep->nr_entries += evsel__hists(pos)->in.nr_entries;
 
 	if (rep->nr_entries == 0) {
 		ui__error("The %s file has no samples!\n", data->file.path);
