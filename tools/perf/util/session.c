@@ -1984,6 +1984,125 @@ int perf_session__process_events(struct perf_session *session)
 	return err;
 }
 
+static int perf_session__get_index(struct perf_session *session)
+{
+	static pthread_mutex_t idx_lock = PTHREAD_MUTEX_INITIALIZER;
+	static unsigned idx = 0;
+	int ret;
+
+	pthread_mutex_lock(&idx_lock);
+	if (idx < session->header.nr_index)
+		ret = idx++;
+	else
+		ret = -1;
+	pthread_mutex_unlock(&idx_lock);
+	return ret;
+}
+
+struct worker_data {
+	pthread_t		 th_id;
+	struct perf_session	*session;
+	struct events_stats	 stats;
+	int			 idx;
+};
+
+static void *worker(void *arg)
+{
+	static __thread struct ordered_events oe;
+	struct worker_data *data = arg;
+	struct perf_session *session = data->session;
+	u64 file_size = perf_data__size(session->data);
+	int idx;
+
+	/*
+	 * Just single init is needed, it gets reinit-ed
+	 * in __perf_session__process_events.
+	 */
+	ordered_events__init(&oe, ordered_events__deliver_event, session);
+
+	hists_mt_idx = data->idx;
+
+	while ((idx = perf_session__get_index(session)) >= 0) {
+		u64 offset = session->header.index[idx].offset;
+		u64 size   = session->header.index[idx].size;
+
+		if (size == 0)
+			continue;
+
+		pr_debug("thread %d, processing samples [index %d]\n",
+			 hists_mt_idx, idx);
+
+		if (__perf_session__process_events(session, &data->stats, &oe,
+						   offset, size, file_size) < 0) {
+			pr_err("thread %d, processing samples failed [index %d]\n",
+			       hists_mt_idx, idx);
+			return NULL;
+		}
+
+		pr_debug("thread %d, processing samples done [index %d]\n",
+			 hists_mt_idx, idx);
+	}
+
+	return arg;
+}
+
+int perf_session__process_events_mt(struct perf_session *session)
+{
+	int nr_thread = sysconf(_SC_NPROCESSORS_ONLN);
+	int nr_index  = session->header.nr_index;
+	struct worker_data *data;
+	struct perf_evlist *evlist = session->evlist;
+	struct perf_evsel  *evsel;
+	int i;
+
+	if (nr_thread > nr_index - 1)
+		nr_thread = nr_index - 1;
+
+	data = calloc(nr_thread, sizeof(*data));
+	if (data == NULL)
+		return -ENOMEM;
+
+	for (i = 0; i < nr_thread; i++) {
+		data[i].session = session;
+		data[i].idx     = i;
+	}
+
+	evlist__for_each_entry(evlist, evsel) {
+		struct hists *hists = evsel__hists(evsel);
+
+		hists->in_mt = calloc(nr_thread, sizeof(*hists->in_mt));
+		if (hists->in_mt == NULL)
+			goto out;
+
+		for (i = 0; i < nr_thread; i++)
+			hists_in__init(&hists->in_mt[i]);
+	}
+
+	hists_mt_enabled = true;
+
+	for (i = 0; i < nr_thread; i++)
+		pthread_create(&data[i].th_id, NULL, worker, &data[i]);
+
+	for (i = 0; i < nr_thread; i++)
+		pthread_join(data[i].th_id, NULL);
+
+	hists_mt_enabled = false;
+
+	for (i = 0; i < nr_thread; i++) {
+		events_stats__add(&evlist->stats, &data[i].stats);
+
+		evlist__for_each_entry(evlist, evsel) {
+			struct hists *hists = evsel__hists(evsel);
+
+			events_stats__add(&hists->in.stats, &hists->in_mt[i].stats);
+			hists__mt_resort(hists, &hists->in_mt[i]);
+		}
+	}
+out:
+	free(data);
+	return 0;
+}
+
 bool perf_session__has_traces(struct perf_session *session, const char *msg)
 {
 	struct perf_evsel *evsel;
