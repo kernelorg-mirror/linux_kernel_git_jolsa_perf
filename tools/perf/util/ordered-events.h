@@ -36,6 +36,7 @@ struct ordered_events {
 	struct ordered_event	*buffer;
 	struct ordered_event	*last;
 	ordered_events__deliver_t deliver;
+	void			*arg;
 	int			buffer_idx;
 	unsigned int		nr_events;
 	enum oe_flush		last_flush_type;
@@ -47,7 +48,7 @@ int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
 			  struct perf_sample *sample, u64 file_offset);
 void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event);
 int ordered_events__flush(struct ordered_events *oe, enum oe_flush how);
-void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t deliver);
+void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t deliver, void *arg);
 void ordered_events__free(struct ordered_events *oe);
 void ordered_events__reinit(struct ordered_events *oe);
 
