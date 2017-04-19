@@ -105,9 +105,9 @@ static void perf_session__set_comm_exec(struct perf_session *session)
 static int ordered_events__deliver_event(struct ordered_events *oe,
 					 struct ordered_event *event)
 {
+	struct perf_session *session = oe->arg;
 	struct perf_sample sample;
-	struct perf_session *session = container_of(oe, struct perf_session,
-						    ordered_events);
+
 	int ret = perf_evlist__parse_sample(session->evlist, event->event, &sample);
 
 	if (ret) {
@@ -132,7 +132,9 @@ struct perf_session *perf_session__new(struct perf_data *data,
 	session->tool   = tool;
 	INIT_LIST_HEAD(&session->auxtrace_index);
 	machines__init(&session->machines);
-	ordered_events__init(&session->ordered_events, ordered_events__deliver_event);
+	ordered_events__init(&session->ordered_events,
+			     ordered_events__deliver_event,
+			     session);
 
 	if (data) {
 		if (perf_data__open(data))
