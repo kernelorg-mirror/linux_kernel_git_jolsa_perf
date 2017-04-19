@@ -1319,10 +1319,10 @@ static int perf_session__deliver_event(struct perf_session *session,
 }
 
 static s64 perf_session__process_user_event(struct perf_session *session,
+					    struct ordered_events *oe,
 					    union perf_event *event,
 					    u64 file_offset)
 {
-	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
 	int fd = perf_data__fd(session->data);
 	int err;
@@ -1393,7 +1393,7 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	events_stats__inc(&evlist->stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
-		return perf_session__process_user_event(session, event, 0);
+		return perf_session__process_user_event(session, &session->ordered_events, event, 0);
 
 	return machines__deliver_event(&session->machines, &evlist->stats,
 				       evlist, event, sample, tool, 0);
@@ -1465,6 +1465,7 @@ out_parse_sample:
 
 static s64 perf_session__process_event(struct perf_session *session,
 				       struct events_stats *stats,
+				       struct ordered_events *oe,
 				       union perf_event *event,
 				       u64 file_offset)
 {
@@ -1482,7 +1483,7 @@ static s64 perf_session__process_event(struct perf_session *session,
 	events_stats__inc(stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
-		return perf_session__process_user_event(session, event, file_offset);
+		return perf_session__process_user_event(session, oe, event, file_offset);
 
 	/*
 	 * For all kernel events we get the sample data
@@ -1492,7 +1493,7 @@ static s64 perf_session__process_event(struct perf_session *session,
 		return ret;
 
 	if (tool->ordered_events) {
-		ret = perf_session__queue_event(session, event, &sample, file_offset);
+		ret = ordered_events__queue(oe, event, &sample, file_offset);
 		if (ret != -ETIME)
 			return ret;
 	}
@@ -1727,7 +1728,7 @@ more:
 		}
 	}
 
-	if ((skip = perf_session__process_event(session, stats, event,
+	if ((skip = perf_session__process_event(session, stats, oe, event,
 						head)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 		       head, event->header.size, event->header.type);
@@ -1801,10 +1802,10 @@ fetch_mmaped_event(struct perf_session *session,
 
 static int __perf_session__process_events(struct perf_session *session,
 					  struct events_stats *stats,
+					  struct ordered_events *oe,
 					  u64 data_offset, u64 data_size,
 					  u64 file_size)
 {
-	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
 	int fd = perf_data__fd(session->data);
 	u64 head, page_offset, file_offset, file_pos, size;
@@ -1879,7 +1880,7 @@ more:
 	size = event->header.size;
 
 	if (size < sizeof(struct perf_event_header) ||
-	    (skip = perf_session__process_event(session, stats, event,
+	    (skip = perf_session__process_event(session, stats, oe, event,
 						file_pos)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 		       file_offset + head, event->header.size,
@@ -1946,6 +1947,7 @@ static int __perf_session__process_indexed_events(struct perf_session *session)
 			tool->ordered_events = false;
 
 		err = __perf_session__process_events(session, stats,
+						     &session->ordered_events,
 						     idx->offset,
 						     idx->size, size);
 		if (err < 0)
@@ -1972,6 +1974,7 @@ int perf_session__process_events(struct perf_session *session)
 		return __perf_session__process_indexed_events(session);
 
 	err = __perf_session__process_events(session, stats,
+					     &session->ordered_events,
 					     session->header.data_offset,
 					     session->header.data_size,
 					     size);
