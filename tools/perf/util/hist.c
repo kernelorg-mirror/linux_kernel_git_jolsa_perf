@@ -2494,11 +2494,17 @@ int perf_hist_config(const char *var, const char *value)
 	return 0;
 }
 
+int hists_in__init(struct hists_in *in)
+{
+	in->entries_array[0] = in->entries_array[1] = RB_ROOT;
+	in->entries = &in->entries_array[0];
+	return 0;
+}
+
 int __hists__init(struct hists *hists, struct perf_hpp_list *hpp_list)
 {
 	memset(hists, 0, sizeof(*hists));
-	hists->in.entries_array[0] = hists->in.entries_array[1] = RB_ROOT;
-	hists->in.entries = &hists->in.entries_array[0];
+	hists_in__init(&hists->in);
 	hists->entries_collapsed = RB_ROOT;
 	hists->entries = RB_ROOT;
 	pthread_mutex_init(&hists->lock, NULL);

@@ -226,6 +226,7 @@ static inline struct hists *evsel__hists(struct perf_evsel *evsel)
 
 int hists__init(void);
 int __hists__init(struct hists *hists, struct perf_hpp_list *hpp_list);
+int hists_in__init(struct hists_in *in);
 
 struct rb_root *hists__get_rotate_entries_in(struct hists *hists);
 
