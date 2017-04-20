@@ -1454,19 +1454,12 @@ static void hists__apply_filters(struct hists *hists, struct hist_entry *he)
 	hists__filter_entry_by_socket(hists, he);
 }
 
-int hists__collapse_resort(struct hists *hists, struct ui_progress *prog)
+static int __hists__collapse_resort(struct hists *hists, struct rb_root *root,
+				    struct ui_progress *prog)
 {
-	struct rb_root *root;
 	struct rb_node *next;
 	struct hist_entry *n;
 	int ret;
-
-	if (!hists__has(hists, need_collapse))
-		return 0;
-
-	hists->in.nr_entries = 0;
-
-	root = hists__get_rotate_entries_in(hists);
 
 	next = rb_first(root);
 
@@ -1492,6 +1485,29 @@ int hists__collapse_resort(struct hists *hists, struct ui_progress *prog)
 		if (prog)
 			ui_progress__update(prog, 1);
 	}
+	return 0;
+}
+
+int hists__collapse_resort(struct hists *hists, struct ui_progress *prog)
+{
+	struct rb_root *root;
+
+	if (!hists__has(hists, need_collapse))
+		return 0;
+
+	hists->in.nr_entries = 0;
+
+	root = hists__get_rotate_entries_in(hists);
+	__hists__collapse_resort(hists, root, prog);
+	return 0;
+}
+
+int hists__mt_resort(struct hists *dst, struct hists_in *src)
+{
+	struct rb_root *root = src->entries;
+
+	perf_hpp_list.need_collapse = true;
+	__hists__collapse_resort(dst, root, NULL);
 	return 0;
 }
 
