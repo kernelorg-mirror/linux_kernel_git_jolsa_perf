@@ -1,4 +1,5 @@
 #include <linux/compiler.h>
+#include <errno.h>
 #include "cpumap.h"
 #include "util.h"
 #include "rdt.h"
