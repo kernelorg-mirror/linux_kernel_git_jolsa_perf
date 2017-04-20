@@ -10,6 +10,13 @@
 #include "env.h"
 #include "header.h"
 
+int perf_rdt_parse(void *data);
+extern FILE *perf_rdt_in;
+
+#ifdef PARSER_DEBUG
+extern int perf_rdt_debug;
+#endif
+
 static int get_resource(char *str)
 {
 	static const char *name[RDT_NUM_RESOURCES] = {
@@ -98,6 +105,28 @@ int rdt_group__add(struct rdt_data *data __maybe_unused, char *name, struct list
 
 	list_add_tail(&g->list, &data->groups);
 	return 0;
+}
+
+int rdt_parse(struct rdt_data *data, const char *str)
+{
+	FILE *file;
+	int ret;
+
+#ifdef PARSER_DEBUG
+	perf_rdt_debug = 1;
+#endif
+
+	memset(data, 0, sizeof(*data));
+	INIT_LIST_HEAD(&data->groups);
+
+	file = fmemopen((void *) str, strlen(str), "r");
+	if (!file)
+		return -1;
+
+	perf_rdt_in = file;
+	ret = perf_rdt_parse(data);
+	fclose(file);
+	return ret;
 }
 
 static int add_ids(struct rdt_resource *r __maybe_unused,

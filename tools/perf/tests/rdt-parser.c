@@ -4,13 +4,6 @@
 #include "tests.h"
 #include "rdt.h"
 
-int perf_rdt_parse(void *data);
-extern FILE *perf_rdt_in;
-
-#ifdef PARSER_DEBUG
-extern int perf_rdt_debug;
-#endif
-
 static int check_rdt_resource(struct rdt_data *data)
 {
 	struct rdt_resource *res;
@@ -100,25 +93,8 @@ group krava2 {				\n\
 	}				\n\
 }					\n\
 ";
-	FILE *file;
 	struct rdt_data data;
-	int ret;
 
-#ifdef PARSER_DEBUG
-	perf_rdt_debug = 1;
-#endif
-
-	memset(&data, 0, sizeof(data));
-	INIT_LIST_HEAD(&data.groups);
-
-	file = fmemopen((void *) test, strlen(test), "r");
-	if (!file)
-		return -1;
-
-	perf_rdt_in = file;
-	ret = perf_rdt_parse(&data);
-	fclose(file);
-
-	TEST_ASSERT_VAL("failed to parse rdt data", !ret);
+	TEST_ASSERT_VAL("failed to parse rdt data", !rdt_parse(&data, test));
 	return check_rdt_data(&data);
 }

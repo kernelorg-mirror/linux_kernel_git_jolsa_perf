@@ -92,5 +92,6 @@ struct rdt_config {
 
 int rdt_group__add(struct rdt_data *data, char *name, struct list_head *head);
 int rdt_resource__add(struct rdt_data *data, char *name, struct list_head *head);
+int rdt_parse(struct rdt_data *data, const char *str);
 int rdt_dump(FILE *file);
 #endif /* __PERF_RDT_H */
