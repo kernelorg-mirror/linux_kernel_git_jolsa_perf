@@ -22,6 +22,9 @@ static bool hists__filter_entry_by_symbol(struct hists *hists,
 static bool hists__filter_entry_by_socket(struct hists *hists,
 					  struct hist_entry *he);
 
+bool		hists_mt_enabled;
+__thread int	hists_mt_idx;
+
 u16 hists__col_len(struct hists *hists, enum hist_column col)
 {
 	return hists->col_len[col];
@@ -611,6 +614,9 @@ __hists__add_entry(struct hists *hists,
 		.raw_size = sample->raw_size,
 		.ops = ops,
 	};
+
+	if (hists_mt_enabled)
+		in = &hists->in_mt[hists_mt_idx];
 
 	return hists__findnew_entry(in, &entry, al, sample_self);
 }
@@ -2559,6 +2565,7 @@ static void hists_evsel__exit(struct perf_evsel *evsel)
 	struct perf_hpp_list_node *node, *tmp;
 
 	hists__delete_all_entries(hists);
+	free(hists->in_mt);
 
 	list_for_each_entry_safe(node, tmp, &hists->hpp_formats, list) {
 		perf_hpp_list__for_each_format_safe(&node->hpp, fmt, pos) {

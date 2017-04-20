@@ -65,6 +65,9 @@ enum hist_column {
 struct thread;
 struct dso;
 
+extern bool		hists_mt_enabled;
+extern __thread int	hists_mt_idx;
+
 struct hists_in {
 	struct rb_root		 entries_array[2];
 	struct rb_root		*entries;
@@ -74,6 +77,7 @@ struct hists_in {
 
 struct hists {
 	struct hists_in		in;
+	struct hists_in		*in_mt;
 	struct rb_root		entries;
 	struct rb_root		entries_collapsed;
 	u64			nr_non_filtered_entries;
