@@ -491,7 +491,7 @@ static void hist_entry__add_callchain_period(struct hist_entry *he, u64 period)
 		he->hists->callchain_non_filtered_period += period;
 }
 
-static struct hist_entry *hists__findnew_entry(struct hists *hists,
+static struct hist_entry *hists__findnew_entry(struct hists_in *in,
 					       struct hist_entry *entry,
 					       struct addr_location *al,
 					       bool sample_self)
@@ -503,7 +503,7 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 	u64 period = entry->stat.period;
 	u64 weight = entry->stat.weight;
 
-	p = &hists->in.entries->rb_node;
+	p = &in->entries->rb_node;
 
 	while (*p != NULL) {
 		parent = *p;
@@ -556,10 +556,10 @@ static struct hist_entry *hists__findnew_entry(struct hists *hists,
 
 	if (sample_self)
 		hist_entry__add_callchain_period(he, period);
-	hists->in.nr_entries++;
+	in->nr_entries++;
 
 	rb_link_node(&he->rb_node_in, parent, p);
-	rb_insert_color(&he->rb_node_in, hists->in.entries);
+	rb_insert_color(&he->rb_node_in, in->entries);
 out:
 	if (sample_self)
 		he_stat__add_cpumode_period(&he->stat, al->cpumode, period);
@@ -578,6 +578,7 @@ __hists__add_entry(struct hists *hists,
 		   bool sample_self,
 		   struct hist_entry_ops *ops)
 {
+	struct hists_in *in = &hists->in;
 	struct namespaces *ns = thread__namespaces(al->thread);
 	struct hist_entry entry = {
 		.thread	= al->thread,
@@ -611,7 +612,7 @@ __hists__add_entry(struct hists *hists,
 		.ops = ops,
 	};
 
-	return hists__findnew_entry(hists, &entry, al, sample_self);
+	return hists__findnew_entry(in, &entry, al, sample_self);
 }
 
 struct hist_entry *hists__add_entry(struct hists *hists,
