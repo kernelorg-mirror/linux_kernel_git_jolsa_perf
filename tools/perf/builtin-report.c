@@ -549,6 +549,7 @@ static void report__output_resort(struct report *rep)
 static int __cmd_report(struct report *rep)
 {
 	int ret;
+	struct perf_evsel *evsel;
 	struct perf_session *session = rep->session;
 	struct perf_evsel *pos;
 	struct perf_data *data = session->data;
@@ -584,6 +585,14 @@ static int __cmd_report(struct report *rep)
 	if (ret) {
 		ui__error("failed to process sample\n");
 		return ret;
+	}
+
+	evlist__for_each_entry(session->evlist, evsel) {
+		struct hists *hists = evsel__hists(evsel);
+
+		if (perf_evsel__is_dummy_tracking(evsel))
+			continue;
+		fprintf(stderr, "KRAVA hists->nr_entries %lu\n", hists->in.nr_entries);
 	}
 
 	report__warn_kptr_restrict(rep);

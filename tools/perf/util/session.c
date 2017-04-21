@@ -1919,7 +1919,7 @@ out_err:
 	 * We may switching perf.data output, make ordered_events
 	 * reusable.
 	 */
-	ordered_events__reinit(&session->ordered_events);
+	ordered_events__reinit(oe);
 	auxtrace__free_events(session);
 	session->one_mmap = false;
 	return err;
@@ -1932,6 +1932,8 @@ static int __perf_session__process_indexed_events(struct perf_session *session)
 	u64 size = perf_data__size(data);
 	struct events_stats *stats = &session->evlist->stats;
 	int err = 0, i;
+	struct perf_evsel *evsel;
+	u64 last = 0;
 
 	for (i = 0; i < (int)session->header.nr_index; i++) {
 		struct perf_file_section *idx = &session->header.index[i];
@@ -1953,6 +1955,18 @@ static int __perf_session__process_indexed_events(struct perf_session *session)
 						     idx->size, size);
 		if (err < 0)
 			break;
+
+               evlist__for_each_entry(session->evlist, evsel) {
+                       struct hists *hists = evsel__hists(evsel);
+                       struct hists_in *in = &hists->in;
+       
+                       if (perf_evsel__is_dummy_tracking(evsel))
+                               continue;
+               
+                       fprintf(stderr, "KRAVA index %d, nr_entries %lu\n", i, in->nr_entries - last);
+                       last = in->nr_entries;
+               }
+
 	}
 
 	perf_session__warn_about_errors(session, stats);
@@ -2013,6 +2027,8 @@ static void *worker(void *arg)
 	struct perf_session *session = data->session;
 	u64 file_size = perf_data__size(session->data);
 	int idx;
+	u64 last = 0;
+	struct perf_evsel *evsel;
 
 	/*
 	 * Just single init is needed, it gets reinit-ed
@@ -2041,6 +2057,18 @@ static void *worker(void *arg)
 
 		pr_debug("thread %d, processing samples done [index %d]\n",
 			 hists_mt_idx, idx);
+
+		evlist__for_each_entry(session->evlist, evsel) {
+			struct hists *hists = evsel__hists(evsel);
+			struct hists_in *in = &hists->in_mt[hists_mt_idx];
+	
+			if (perf_evsel__is_dummy_tracking(evsel))
+				continue;
+		
+			fprintf(stderr, "KRAVA index %d, thread %d, nr_entries %lu\n", idx, hists_mt_idx, in->nr_entries - last);
+			last = in->nr_entries;
+		}
+
 	}
 
 	return arg;
@@ -2078,6 +2106,8 @@ int perf_session__process_events_mt(struct perf_session *session)
 			hists_in__init(&hists->in_mt[i]);
 	}
 
+	session->tool->ordered_events = false;
+
 	hists_mt_enabled = true;
 
 	for (i = 0; i < nr_thread; i++)
@@ -2096,6 +2126,15 @@ int perf_session__process_events_mt(struct perf_session *session)
 
 			events_stats__add(&hists->in.stats, &hists->in_mt[i].stats);
 			hists__mt_resort(hists, &hists->in_mt[i]);
+
+			/* Non-group events are considered as leader */
+			if (symbol_conf.event_group &&
+			    !perf_evsel__is_group_leader(evsel)) {
+				struct hists *leader_hists = evsel__hists(evsel->leader);
+
+				hists__match(leader_hists, hists);
+				hists__link(leader_hists, hists);
+			}
 		}
 	}
 out:
