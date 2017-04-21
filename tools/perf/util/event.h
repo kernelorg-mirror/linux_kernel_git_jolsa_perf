@@ -202,6 +202,7 @@ struct perf_sample {
 	u32 flags;
 	u16 insn_len;
 	u8  cpumode;
+	u32 closid;
 	char insn[MAX_INSN];
 	void *raw_data;
 	struct ip_callchain *callchain;
