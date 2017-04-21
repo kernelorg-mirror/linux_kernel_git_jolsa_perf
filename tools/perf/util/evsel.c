@@ -951,6 +951,9 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 	if (opts->sample_transaction)
 		perf_evsel__set_sample_bit(evsel, TRANSACTION);
 
+	if (opts->closid)
+		perf_evsel__set_sample_bit(evsel, CLOSID);
+
 	if (opts->running_time) {
 		evsel->attr.read_format |=
 			PERF_FORMAT_TOTAL_TIME_ENABLED |
@@ -1319,7 +1322,7 @@ static void __p_sample_type(char *buf, size_t size, u64 value)
 		bit_name(PERIOD), bit_name(STREAM_ID), bit_name(RAW),
 		bit_name(BRANCH_STACK), bit_name(REGS_USER), bit_name(STACK_USER),
 		bit_name(IDENTIFIER), bit_name(REGS_INTR), bit_name(DATA_SRC),
-		bit_name(WEIGHT),
+		bit_name(WEIGHT), bit_name(CLOSID),
 		{ .name = NULL, }
 	};
 #undef bit_name
@@ -2041,6 +2044,18 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			data->intr_regs.regs = (u64 *)array;
 			array = (void *)array + sz;
 		}
+	}
+
+	if (type & PERF_SAMPLE_CLOSID) {
+		u.val64 = *array;
+		if (swapped) {
+			/* undo swap of u64, then swap on individual u32s */
+			u.val64    = bswap_64(u.val64);
+			u.val32[0] = bswap_32(u.val32[0]);
+		}
+
+		data->closid = u.val32[0];
+		array++;
 	}
 
 	return 0;
