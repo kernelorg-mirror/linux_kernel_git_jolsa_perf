@@ -577,6 +577,7 @@ __hists__add_entry(struct hists *hists,
 		   struct branch_info *bi,
 		   struct mem_info *mi,
 		   struct perf_sample *sample,
+		   struct rdt_group *rdt_group,
 		   bool sample_self,
 		   struct hist_entry_ops *ops)
 {
@@ -611,6 +612,7 @@ __hists__add_entry(struct hists *hists,
 		.raw_data = sample->raw_data,
 		.raw_size = sample->raw_size,
 		.ops = ops,
+		.rdt_group = rdt_group,
 	};
 
 	return hists__findnew_entry(hists, &entry, al, sample_self);
@@ -622,10 +624,11 @@ struct hist_entry *hists__add_entry(struct hists *hists,
 				    struct branch_info *bi,
 				    struct mem_info *mi,
 				    struct perf_sample *sample,
+				    struct rdt_group *rdt_group,
 				    bool sample_self)
 {
 	return __hists__add_entry(hists, al, sym_parent, bi, mi,
-				  sample, sample_self, NULL);
+				  sample, rdt_group, sample_self, NULL);
 }
 
 struct hist_entry *hists__add_entry_ops(struct hists *hists,
@@ -635,10 +638,11 @@ struct hist_entry *hists__add_entry_ops(struct hists *hists,
 					struct branch_info *bi,
 					struct mem_info *mi,
 					struct perf_sample *sample,
+					struct rdt_group *rdt_group,
 					bool sample_self)
 {
 	return __hists__add_entry(hists, al, sym_parent, bi, mi,
-				  sample, sample_self, ops);
+				  sample, rdt_group, sample_self, ops);
 }
 
 static int
@@ -695,7 +699,7 @@ iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al
 	sample->period = cost;
 
 	he = hists__add_entry(hists, al, iter->parent, NULL, mi,
-			      sample, true);
+			      sample, NULL, true);
 	if (!he)
 		return -ENOMEM;
 
@@ -800,7 +804,7 @@ iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *a
 	sample->weight = bi->flags.cycles ? bi->flags.cycles : 1;
 
 	he = hists__add_entry(hists, al, iter->parent, &bi[i], NULL,
-			      sample, true);
+			      sample, NULL, true);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -834,10 +838,13 @@ iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location 
 {
 	struct perf_evsel *evsel = iter->evsel;
 	struct perf_sample *sample = iter->sample;
+	struct rdt_group *group;
 	struct hist_entry *he;
 
+	group = rdt_group__find(iter->session, sample->closid);
+
 	he = hists__add_entry(evsel__hists(evsel), al, iter->parent, NULL, NULL,
-			      sample, true);
+			      sample, group, true);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -898,7 +905,7 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 	int err = 0;
 
 	he = hists__add_entry(hists, al, iter->parent, NULL, NULL,
-			      sample, true);
+			      sample, NULL, true);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -973,7 +980,7 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 	}
 
 	he = hists__add_entry(evsel__hists(evsel), al, iter->parent, NULL, NULL,
-			      sample, false);
+			      sample, NULL, false);
 	if (he == NULL)
 		return -ENOMEM;
 
