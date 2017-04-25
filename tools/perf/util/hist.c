@@ -198,6 +198,9 @@ void hists__calc_col_len(struct hists *hists, struct hist_entry *h)
 
 	if (h->trace_output)
 		hists__new_col_len(hists, HISTC_TRACE, strlen(h->trace_output));
+
+	if (h->rdt_group)
+		hists__new_col_len(hists, HISTC_RDT_GROUP, strlen(h->rdt_group->name));
 }
 
 void hists__output_recalc_col_len(struct hists *hists, int max_rows)

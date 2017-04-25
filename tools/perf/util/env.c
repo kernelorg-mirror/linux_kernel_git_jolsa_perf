@@ -5,6 +5,11 @@
 
 struct perf_env perf_env;
 
+void perf_env__init(struct perf_env *env)
+{
+	rdt_data__init(&env->rdt);
+}
+
 void perf_env__exit(struct perf_env *env)
 {
 	int i;

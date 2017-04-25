@@ -38,6 +38,7 @@
 #include "util/time-utils.h"
 #include "util/auxtrace.h"
 #include "util/units.h"
+#include "util/rdt.h"
 
 #include <dlfcn.h>
 #include <errno.h>
@@ -719,6 +720,7 @@ int cmd_report(int argc, const char **argv)
 			.id_index	 = perf_event__process_id_index,
 			.auxtrace_info	 = perf_event__process_auxtrace_info,
 			.auxtrace	 = perf_event__process_auxtrace,
+			.rdt		 = perf_event__process_rdt,
 			.ordered_events	 = true,
 			.ordering_requires_timestamps = true,
 		},

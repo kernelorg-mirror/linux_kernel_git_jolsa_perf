@@ -14,6 +14,7 @@
 #include "machine.h"
 #include "session.h"
 #include "thread_map.h"
+#include "rdt.h"
 
 static const char *rdt_resource_name[RDT_NUM_RESOURCES] = {
 	"L3", "L3DATA", "L3CODE", "L2",
@@ -34,6 +35,186 @@ static int rdt_index(const char *name)
 	}
 
 	return -1;
+}
+
+struct perf_rdt_tool {
+	struct perf_tool  tool;
+	struct rdt_data	 *data;
+};
+
+void rdt_data__init(struct rdt_data *data)
+{
+	memset(data, 0, sizeof(*data));
+	INIT_LIST_HEAD(&data->groups);
+}
+
+struct rdt_group *rdt_group__find(struct rdt_data *data, u32 closid)
+{
+	struct rdt_group *group;
+
+	list_for_each_entry(group, &data->groups, list) {
+		if ((u32) group->id == closid)
+			return group;
+	}
+
+	return NULL;
+}
+
+static struct rdt_group *rdt_group__new(struct rdt_data *data, u32 closid)
+{
+	struct rdt_group *group;
+
+	group = zalloc(sizeof(*group));
+	if (group) {
+		group->id = closid;
+		list_add_tail(&group->list, &data->groups);
+	}
+	return group;
+}
+
+static struct rdt_group *rdt_group__findnew(struct rdt_data *data, u32 closid)
+{
+	struct rdt_group *group;
+
+	group = rdt_group__find(data, closid);
+	return group ?: rdt_group__new(data, closid);
+}
+
+static int process_rdt(struct rdt_data *rdt, union perf_event *event)
+{
+	struct rdt_id *id = &event->rdt.id;
+	struct rdt_group *group;
+
+	switch (id->type) {
+	case PERF_RDT_ID_TYPE__GROUP_NAME: {
+		struct rdt_group_name *data = (struct rdt_group_name*) event->rdt.data;
+
+		group = rdt_group__findnew(rdt, id->val);
+		if (!group) {
+			return -ENOMEM;
+		}
+
+		if (WARN_ONCE(group->name, "corrupted RDT info"))
+			return -EINVAL;
+
+		group->name = strdup(data->name);
+		if (!group->name)
+			return -ENOMEM;
+		break;
+	}
+	case PERF_RDT_ID_TYPE__GROUP_CPUS: {
+		struct cpu_map_data *cpus = (struct cpu_map_data *) event->rdt.data;
+
+		group = rdt_group__findnew(rdt, id->val);
+		if (!group) {
+			return -ENOMEM;
+		}
+
+		if (WARN_ONCE(group->cpus, "corrupted RDT info"))
+			return -EINVAL;
+
+		group->cpus = cpu_map__new_data(cpus);
+		if (!group->cpus)
+			return -EINVAL;
+		break;
+	}
+	case PERF_RDT_ID_TYPE__GROUP_SCHEMATA: {
+		struct rdt_group_schemata *data = (struct rdt_group_schemata*) event->rdt.data;
+		struct rdt_schemata *schemata;
+		struct rdt_cbm *cbm;
+		unsigned int i;
+
+		group = rdt_group__findnew(rdt, id->val);
+		if (!group) {
+			return -ENOMEM;
+		}
+
+		if (WARN_ONCE(data->id >= RDT_NUM_RESOURCES, "corrupted RDT data"))
+			return -EINVAL;
+
+		schemata = &group->schemata[data->id];
+
+		if (WARN_ONCE(schemata->cbm, "corrupted RDT data"))
+			return -EINVAL;
+
+		cbm = zalloc(sizeof(*cbm) * data->cnt);
+		if (!cbm)
+			return -ENOMEM;
+
+		for (i = 0; i < data->cnt; i++) {
+			cbm[i].id  = data->cbm[i].id;
+			cbm[i].val = data->cbm[i].val;
+		}
+
+		schemata->cbm = cbm;
+		schemata->cnt = data->cnt;
+		break;
+	}
+	case PERF_RDT_ID_TYPE__GROUP_TASKS: {
+		struct thread_map_data *data = (struct thread_map_data *) event->rdt.data;
+		struct thread_map *threads;
+
+		group = rdt_group__findnew(rdt, id->val);
+		if (!group) {
+			return -ENOMEM;
+		}
+
+		if (WARN_ONCE(group->threads, "corrupted RDT info"))
+			return -EINVAL;
+
+		threads = thread_map__new_event(data);
+		if (!threads)
+			return -EINVAL;
+
+		group->threads = threads;
+		break;
+	}
+	case PERF_RDT_ID_TYPE__RESOURCE_CACHE: {
+		struct rdt_resource_cache *data = (struct rdt_resource_cache *) event->rdt.data;
+		struct rdt_resource *res;
+
+		if (WARN_ONCE(id->val >= RDT_NUM_RESOURCES, "corrupted RDT info"))
+			return -EINVAL;
+
+		res = &rdt->resource[id->val];
+
+		if (WARN_ONCE(res->enabled, "corrupted RDT info"))
+			return -EINVAL;
+
+		res->enabled		= true;
+		res->name		= rdt_name(id->val);
+		res->num_closids	= data->num_closids;
+		res->cache.cbm_mask	= data->cbm_mask;
+		res->cache.min_cbm_bits	= data->min_cbm_bits;
+		break;
+	}
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+int perf_event__process_rdt(struct perf_tool *tool __maybe_unused,
+			    union perf_event *event,
+			    struct perf_session *session)
+{
+	struct machine *machine = &session->machines.host;
+	struct rdt_data *data;
+
+	data = &machine->env->rdt;
+	return process_rdt(data, event);
+}
+
+static int process_rdt_load(struct perf_tool *tool,
+			    union perf_event *event,
+			    struct perf_sample *sample __maybe_unused,
+			    struct machine *machine __maybe_unused)
+{
+	struct perf_rdt_tool *rdt_tool;
+
+	rdt_tool = container_of(tool, struct perf_rdt_tool, tool);
+	return process_rdt(rdt_tool->data, event);
 }
 
 #define RDT_EVENT_SIZE (0xff00)
@@ -387,4 +568,16 @@ perf_event__synthesize_rdt(struct perf_tool *tool,
 
 	free(s.event);
 	return ret;
+}
+
+int rdt_load(struct rdt_data *data, const char *resctrl)
+{
+	struct perf_rdt_tool rdt_tool = {
+		.data = data,
+	};
+
+	rdt_data__init(data);
+	return perf_event__synthesize_rdt(&rdt_tool.tool,
+					  process_rdt_load,
+					  resctrl);
 }
