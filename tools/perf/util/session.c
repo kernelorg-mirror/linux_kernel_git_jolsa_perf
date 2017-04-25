@@ -428,6 +428,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 		tool->stat_round = process_stat_round_stub;
 	if (tool->time_conv == NULL)
 		tool->time_conv = process_event_op2_stub;
+	if (tool->rdt == NULL)
+		tool->rdt = process_event_op2_stub;
 }
 
 static void swap_sample_id_all(union perf_event *event, void *data)
@@ -1372,6 +1374,8 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 	case PERF_RECORD_TIME_CONV:
 		session->time_conv = event->time_conv;
 		return tool->time_conv(tool, event, session);
+	case PERF_RECORD_RDT:
+		return tool->rdt(tool, event, session);
 	default:
 		return -EINVAL;
 	}
