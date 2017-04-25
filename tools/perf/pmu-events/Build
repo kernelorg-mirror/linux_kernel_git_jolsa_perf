@@ -11,3 +11,13 @@ JSON		=  $(shell [ -d $(JDIR) ] &&				\
 #
 $(OUTPUT)pmu-events/pmu-events.c: $(JSON) $(JEVENTS)
 	$(Q)$(call echo-cmd,gen)$(JEVENTS) $(ARCH) pmu-events/arch $(OUTPUT)pmu-events/pmu-events.c $(V)
+
+CHOSTFLAGS_jevents = -Ijson
+
+$(OUTPUT)pmu-events/json.o: json/json.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,host_cc_o_c)
+
+$(OUTPUT)pmu-events/jsmn.o: json/jsmn.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,host_cc_o_c)
