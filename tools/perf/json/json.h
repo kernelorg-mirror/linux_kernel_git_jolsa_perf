@@ -10,9 +10,15 @@ const char *json_name(jsmntok_t *t);
 int json_streq(char *map, jsmntok_t *t, const char *s);
 int json_len(jsmntok_t *t);
 
-extern int verbose;
-
 #include <stdbool.h>
+
+/*
+ * The pmu-events/jevent is standalone application with
+ * its own version of eprintf. It defines JEVENTS_DEBUG.
+ */
+#ifdef JEVENTS_DEBUG
+
+extern int verbose;
 
 extern int eprintf(int level, int var, const char *fmt, ...);
 #define pr_fmt(fmt)	fmt
@@ -25,6 +31,8 @@ extern int eprintf(int level, int var, const char *fmt, ...);
 
 #define pr_debug(fmt, ...) \
 	eprintf(2, verbose, pr_fmt(fmt), ##__VA_ARGS__)
+
+#endif /* JEVENTS_DEBUG */
 
 #ifndef roundup
 #define roundup(x, y) (                                \
