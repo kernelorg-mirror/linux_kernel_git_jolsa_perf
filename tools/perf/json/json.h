@@ -16,6 +16,9 @@ int json_len(jsmntok_t *t);
 /*
  * The pmu-events/jevent is standalone application with
  * its own version of eprintf. It defines JEVENTS_DEBUG.
+ *
+ * When included within perf build the util/debug.h
+ * takes over.
  */
 #ifdef JEVENTS_DEBUG
 
@@ -33,6 +36,8 @@ extern int eprintf(int level, int var, const char *fmt, ...);
 #define pr_debug(fmt, ...) \
 	eprintf(2, verbose, pr_fmt(fmt), ##__VA_ARGS__)
 
+#else
+#include "debug.h"
 #endif /* JEVENTS_DEBUG */
 
 #ifndef roundup
