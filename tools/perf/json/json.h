@@ -4,6 +4,7 @@
 #include "jsmn.h"
 
 jsmntok_t *parse_json(const char *fn, char **map, size_t *size, int *len);
+jsmntok_t *parse_json_map(char *map, size_t size, int *len);
 void free_json(char *map, size_t size, jsmntok_t *tokens);
 int json_line(char *map, jsmntok_t *t);
 const char *json_name(jsmntok_t *t);
