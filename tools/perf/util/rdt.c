@@ -10,10 +10,23 @@
 #include "env.h"
 #include "header.h"
 #include "string2.h"
+#include "json.h"
 
 static const char *rdt_name[RDT_NUM_RESOURCES] = {
 	"L3", "L3DATA", "L3CODE", "L2",
 };
+
+static int rdt_name_idx(const char *res)
+{
+	int i;
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		if (!strcmp(res, rdt_name[i]))
+			return i;
+	}
+
+	return -1;
+}
 
 static int dump_ids(FILE *file, int res)
 {
@@ -276,4 +289,375 @@ int rdt_dump(FILE *file)
 	fprintf(file, "\t]\n");
 	fprintf(file, "}\n");
 	return ret;
+}
+
+#define EXPECT(obj, func)					\
+	do {							\
+		jsmntok_t *tok = data->curr;			\
+		if (obj == tok->type) {				\
+			if (parse_ ## func(data))		\
+				goto out;			\
+		} else {					\
+			jsmntok_t *loc = tok;			\
+			if (!tok->start && tok > data->tokens)	\
+				loc = tok - 1;			\
+			pr_err("rdt parse, line %d: expected " #obj ", got %s\n",	\
+				json_line(data->map, loc),	\
+				json_name(tok));		\
+			goto out;				\
+		}						\
+	} while (0)
+
+struct parse_data {
+	struct rdt_data		*rdt;
+	jsmntok_t		*curr;
+	jsmntok_t		*tokens;
+	char			*map;
+	size_t			 size;
+	char			*str;
+	u64			 val;
+	struct cpu_map		*cpus;
+	struct rdt_group	 group;
+	struct rdt_schemata	*schemata;
+	int			 cbm_idx;
+};
+
+static int parse_string(struct parse_data *data)
+{
+	jsmntok_t *curr = data->curr;
+
+	data->str = strndup(data->map + curr->start, json_len(curr));
+	if (!data->str)
+		return -ENOMEM;
+
+	pr_debug("got string: %s\n", data->str);
+	data->curr++;
+	return 0;
+}
+
+static int parse_cpumap(struct parse_data *data)
+{
+	jsmntok_t *curr = data->curr;
+	char *str;
+
+	str = strndup(data->map + curr->start, json_len(curr));
+	if (!str)
+		return -ENOMEM;
+
+	data->cpus = cpu_map__new(str);
+	if (!data->cpus) {
+		free(str);
+		return -ENOMEM;
+	}
+
+	pr_debug("got cpus  : %s\n", str);
+	data->curr++;
+	return 0;
+}
+
+static int parse_val(struct parse_data *data, int base)
+{
+	jsmntok_t *curr = data->curr;
+	char *str;
+
+	str = strndup(data->map + curr->start, json_len(curr));
+	if (!str)
+		return -ENOMEM;
+
+        errno = 0;
+	data->val = (u64) strtoul(str, NULL, base);
+	if (errno)
+		return -EINVAL;
+
+	pr_debug("got value : %lu\n", data->val);
+	data->curr++;
+	return 0;
+}
+
+static int parse_val_hex(struct parse_data *data)
+{
+	return parse_val(data, 16);
+}
+
+static int parse_val_dec(struct parse_data *data)
+{
+	return parse_val(data, 10);
+}
+
+static int parse_id(struct parse_data *data)
+{
+	int err = -1;
+
+	data->curr += 1;
+	EXPECT(JSMN_STRING, string);
+	EXPECT(JSMN_STRING, string);
+	err = 0;
+out:
+	return err;
+}
+
+static int parse_ids(struct parse_data *data)
+{
+	jsmntok_t *curr;
+	int i, err = -1;
+
+	curr = data->curr++;
+
+	for (i = 0; i < curr->size; i += 1)
+		EXPECT(JSMN_OBJECT, id);
+
+	err = 0;
+out:
+	return err;
+}
+
+static int add_resource(struct parse_data *data, struct rdt_resource *res)
+{
+	struct rdt_data *rdt = data->rdt;
+	int idx;
+
+	idx = rdt_name_idx(res->name);
+	if (idx < 0)
+		return -EINVAL;
+
+	rdt->resource[idx] = *res;
+	return 0;
+}
+
+static int parse_resource(struct parse_data *data)
+{
+	struct rdt_resource res = { .enabled = true, };
+	jsmntok_t *curr;
+	int i, err = -1;
+
+	curr = data->curr++;
+
+	for (i = 0; i < curr->size; i += 2) {
+		EXPECT(JSMN_STRING, string);
+
+		if (!strcmp(data->str, "name")) {
+			EXPECT(JSMN_STRING, string);
+			res.name = data->str;
+			data->str = NULL;
+		} else if (!strcmp(data->str, "cbm_mask")) {
+			EXPECT(JSMN_STRING, val_hex);
+			res.cache.cbm_mask = data->val;
+		} else if (!strcmp(data->str, "min_cbm_bits")) {
+			EXPECT(JSMN_STRING, val_dec);
+			res.cache.min_cbm_bits = data->val;
+		} else if (!strcmp(data->str, "num_closids")) {
+			EXPECT(JSMN_STRING, val_dec);
+			res.num_closids = data->val;
+		} else if (!strcmp(data->str, "ids")) {
+			EXPECT(JSMN_ARRAY, ids);
+		}
+	}
+
+	err = add_resource(data, &res);
+out:
+	return err;
+}
+
+static int parse_schemata_data_ass(struct parse_data *data)
+{
+	struct rdt_schemata *schemata = data->schemata;
+	struct rdt_cbm *cbm = &schemata->cbm[data->cbm_idx];
+	int err = -1;
+
+	data->curr += 1;
+	EXPECT(JSMN_STRING, val_dec);
+	cbm->id = data->val;
+	EXPECT(JSMN_STRING, val_hex);
+	cbm->val = data->val;
+
+	err = 0;
+out:
+	return err;
+}
+
+static int parse_schemata_data(struct parse_data *data)
+{
+	struct rdt_schemata *schemata = data->schemata;
+	jsmntok_t *curr;
+	int err = -1;
+
+	curr = data->curr++;
+
+	schemata->cbm = zalloc(sizeof(*schemata->cbm) * curr->size);
+	if (!schemata->cbm)
+		return -ENOMEM;
+
+	schemata->cnt = curr->size;
+	data->cbm_idx = 0;
+
+	for (data->cbm_idx = 0; data->cbm_idx  < curr->size;
+	     data->cbm_idx += 1)
+		EXPECT(JSMN_OBJECT, schemata_data_ass);
+
+	err = 0;
+out:
+	return err;
+}
+
+static int parse_schemata_name(struct parse_data *data)
+{
+	jsmntok_t *curr = data->curr;
+	char *str;
+	int idx;
+
+	str = strndup(data->map + curr->start, json_len(curr));
+	if (!str)
+		return -ENOMEM;
+
+	idx = rdt_name_idx(str);
+	if (idx >= 0) {
+		data->schemata = &data->group.schemata[idx];
+		pr_debug("got idx   : %d\n", idx);
+		data->curr++;
+	}
+
+	return idx >= 0 ? 0 : -EINVAL;
+}
+
+static int parse_schemata(struct parse_data *data __maybe_unused)
+{
+	jsmntok_t *curr;
+	int i, err = -1;
+
+	curr = data->curr++;
+
+	for (i = 0; i < curr->size; i += 2) {
+		EXPECT(JSMN_STRING, schemata_name);
+		EXPECT(JSMN_ARRAY,  schemata_data);
+	}
+
+	err = 0;
+out:
+	return err;
+}
+
+static int add_group(struct parse_data *data)
+{
+	struct rdt_data *rdt = data->rdt;
+	struct rdt_group *group;
+
+	group = memdup(&data->group, sizeof(*group));
+	if (!group)
+		return -ENOMEM;
+
+	list_add_tail(&group->list, &rdt->groups);
+	return 0;
+}
+
+static int parse_group(struct parse_data *data)
+{
+	struct rdt_group *group = &data->group;
+	jsmntok_t *curr;
+	int i, err = -1;
+
+	curr = data->curr++;
+
+	for (i = 0; i < curr->size; i += 2) {
+		EXPECT(JSMN_STRING, string);
+
+		if (!strcmp(data->str, "name")) {
+			EXPECT(JSMN_STRING, string);
+			group->name = data->str;
+		} else if (!strcmp(data->str, "id")) {
+			EXPECT(JSMN_STRING, val_dec);
+			group->id = data->val;
+		} else if (!strcmp(data->str, "cpus")) {
+			EXPECT(JSMN_STRING, cpumap);
+			group->cpus = data->cpus;
+		} else if (!strcmp(data->str, "schemata")) {
+			EXPECT(JSMN_ARRAY, schemata);
+		}
+	}
+
+	err = add_group(data);
+out:
+	return err;
+}
+
+static int parse_top_array(struct parse_data *data __maybe_unused)
+{
+	jsmntok_t *curr = data->curr;
+	bool resources = !strcmp(data->str, "resources");
+	bool groups    = !strcmp(data->str, "groups");
+	int i, err = -1;
+
+	if (!resources && !groups)
+		return -1;
+
+	data->curr += 1;
+
+	for (i = 0; i < curr->size; i++) {
+		if (resources)
+			EXPECT(JSMN_OBJECT, resource);
+		if (groups)
+			EXPECT(JSMN_OBJECT, group);
+	}
+
+	err = 0;
+out:
+	return err;
+}
+
+static int parse_top(struct parse_data *data)
+{
+	int err = -1;
+
+	data->curr++;
+	EXPECT(JSMN_STRING, string);
+	EXPECT(JSMN_ARRAY,  top_array);
+	EXPECT(JSMN_STRING, string);
+	EXPECT(JSMN_ARRAY,  top_array);
+	err = 0;
+out:
+	return err;
+}
+
+static int parse(struct parse_data *data)
+{
+	struct rdt_data *rdt = data->rdt;
+	int err = -1;
+
+	memset(rdt, 0, sizeof(*rdt));
+	INIT_LIST_HEAD(&rdt->groups);
+
+	EXPECT(JSMN_OBJECT, top);
+	err = 0;
+out:
+	free_json(data->map, data->size, data->tokens);
+	return err;
+}
+
+int rdt_parse_map(struct rdt_data *rdt, char *map)
+{
+	struct parse_data data = {
+		.rdt  = rdt,
+		.map  = map,
+		.size = strlen(map),
+	};
+	int len;
+
+	data.tokens = data.curr = parse_json_map(map, data.size, &len);
+	if (!data.tokens)
+		return -1;
+
+	return parse(&data);
+}
+
+int rdt_parse(struct rdt_data *rdt, char *file)
+{
+	struct parse_data data = {
+		.rdt = rdt,
+	};
+	int len;
+
+	data.tokens = data.curr = parse_json(file, &data.map, &data.size, &len);
+	if (!data.tokens)
+		return -1;
+
+	return parse(&data);
 }
