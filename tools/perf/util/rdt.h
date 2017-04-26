@@ -49,5 +49,7 @@ struct rdt_data {
 };
 
 int rdt_dump(FILE *file);
+int rdt_parse(struct rdt_data *data, char *file);
+int rdt_parse_map(struct rdt_data *data, char *map);
 
 #endif /* __PERF_RDT_H */
