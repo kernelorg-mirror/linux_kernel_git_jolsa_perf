@@ -944,6 +944,7 @@ struct perf_sample_data {
 
 	struct perf_regs		regs_intr;
 	u64				stack_user_size;
+	u64				closid;
 } ____cacheline_aligned;
 
 /* default value for data source */
