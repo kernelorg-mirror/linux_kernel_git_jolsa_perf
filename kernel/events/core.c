@@ -1562,6 +1562,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 	if (sample_type & PERF_SAMPLE_TRANSACTION)
 		size += sizeof(data->txn);
 
+	if (sample_type & PERF_SAMPLE_CLOSID)
+		size += sizeof(data->closid);
+
 	event->header_size = size;
 }
 
@@ -5954,6 +5957,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 		}
 	}
 
+	if (sample_type & PERF_SAMPLE_CLOSID)
+		perf_output_put(handle, data->closid);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -5967,6 +5973,11 @@ void perf_output_sample(struct perf_output_handle *handle,
 			}
 		}
 	}
+}
+
+__weak u64 arch_rdt_get_closid(void)
+{
+	return (u64) -1;
 }
 
 void perf_prepare_sample(struct perf_event_header *header,
@@ -6087,6 +6098,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 		header->size += size;
 	}
+
+	if (sample_type & PERF_SAMPLE_CLOSID)
+		data->closid = arch_rdt_get_closid();
 }
 
 static void __always_inline
