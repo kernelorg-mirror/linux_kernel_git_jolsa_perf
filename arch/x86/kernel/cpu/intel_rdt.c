@@ -121,6 +121,17 @@ struct rdt_resource rdt_resources_all[] = {
 	},
 };
 
+u32 arch_rdt_get_closid(void)
+{
+	if (static_branch_likely(&rdt_enable_key)) {
+		struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
+
+		return state->closid;
+	}
+
+	return (u32) -1;
+}
+
 static unsigned int cbm_idx(struct rdt_resource *r, unsigned int closid)
 {
 	return closid * r->cache.cbm_idx_mult + r->cache.cbm_idx_offset;
