@@ -715,8 +715,23 @@ int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
 
 #undef P
 
+static u32 get_max_group_id(struct rdt_data *data)
+{
+	struct rdt_group *group;
+	u32 max = 0;
+
+	list_for_each_entry(group, &data->groups, list) {
+		if ((u32) group->id > max)
+			max = group->id;
+	}
+
+	return max + 1;
+}
+
 struct rdt_group *rdt_group__find(struct perf_session *session, u32 closid)
 {
+	static struct rdt_group **group_cache;
+	static u32 max_id;
 	struct rdt_data *data;
 	struct rdt_group *group;
 
@@ -725,9 +740,26 @@ struct rdt_group *rdt_group__find(struct perf_session *session, u32 closid)
 
 	data = &session->header.env.rdt_data;
 
+	if (!group_cache) {
+		max_id = get_max_group_id(data);
+
+		group_cache = zalloc(sizeof(group) * max_id);
+		if (!group_cache)
+			return NULL;
+	}
+
+	if (WARN_ONCE(closid >= max_id, "closid crossed max %u >= %u\n",
+		      closid, max_id))
+		return NULL;
+
+	if (group_cache[closid])
+		return group_cache[closid];
+
 	list_for_each_entry(group, &data->groups, list) {
-		if ((u32) group->id == closid)
+		if ((u32) group->id == closid) {
+			group_cache[closid] = group;
 			return group;
+		}
 	}
 
 	WARN_ONCE(1, "group not found for id %d\n", closid);
