@@ -31,6 +31,7 @@ enum hist_column {
 	HISTC_THREAD,
 	HISTC_COMM,
 	HISTC_CGROUP_ID,
+	HISTC_RDT_GROUP,
 	HISTC_PARENT,
 	HISTC_CPU,
 	HISTC_SOCKET,
@@ -109,6 +110,7 @@ struct hist_entry_iter {
 
 	struct perf_evsel *evsel;
 	struct perf_sample *sample;
+	struct perf_session *session;
 	struct hist_entry *he;
 	struct symbol *parent;
 	void *priv;
@@ -130,6 +132,7 @@ struct hist_entry *hists__add_entry(struct hists *hists,
 				    struct branch_info *bi,
 				    struct mem_info *mi,
 				    struct perf_sample *sample,
+				    struct rdt_group *rdt_group,
 				    bool sample_self);
 
 struct hist_entry *hists__add_entry_ops(struct hists *hists,
@@ -139,6 +142,7 @@ struct hist_entry *hists__add_entry_ops(struct hists *hists,
 					struct branch_info *bi,
 					struct mem_info *mi,
 					struct perf_sample *sample,
+					struct rdt_group *rdt_group,
 					bool sample_self);
 
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
