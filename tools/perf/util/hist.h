@@ -31,6 +31,7 @@ enum hist_column {
 	HISTC_THREAD,
 	HISTC_COMM,
 	HISTC_CGROUP_ID,
+	HISTC_RDT_GROUP,
 	HISTC_PARENT,
 	HISTC_CPU,
 	HISTC_SOCKET,
@@ -105,14 +106,16 @@ struct hist_entry_iter {
 	int curr;
 
 	bool hide_unresolved;
-	int max_stack;
+	int  max_stack;
 
-	struct hists *hists;
-	struct perf_evsel *evsel;
-	struct perf_sample *sample;
-	struct hist_entry *he;
-	struct symbol *parent;
-	void *priv;
+	struct hists		*hists;
+	struct perf_evsel	*evsel;
+	struct perf_sample	*sample;
+	struct perf_session	*session;
+	struct hist_entry	*he;
+	struct symbol		*parent;
+	struct rdt_group	*rdt_group;
+	void			*priv;
 
 	const struct hist_iter_ops *ops;
 	/* user-defined callback function (optional) */
@@ -131,6 +134,7 @@ struct hist_entry *hists__add_entry(struct hists *hists,
 				    struct branch_info *bi,
 				    struct mem_info *mi,
 				    struct perf_sample *sample,
+				    struct rdt_group *rdt_group,
 				    bool sample_self);
 
 struct hist_entry *hists__add_entry_ops(struct hists *hists,
@@ -140,6 +144,7 @@ struct hist_entry *hists__add_entry_ops(struct hists *hists,
 					struct branch_info *bi,
 					struct mem_info *mi,
 					struct perf_sample *sample,
+					struct rdt_group *rdt_group,
 					bool sample_self);
 
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
@@ -271,6 +276,7 @@ struct perf_hpp_list {
 	int socket;
 	int thread;
 	int comm;
+	int rdt_group;
 };
 
 extern struct perf_hpp_list perf_hpp_list;
