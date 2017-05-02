@@ -162,6 +162,7 @@ static int process_sample_event(struct perf_tool *tool,
 	struct hist_entry_iter iter = {
 		.evsel 			= evsel,
 		.sample 		= sample,
+		.session		= rep->session,
 		.hide_unresolved 	= symbol_conf.hide_unresolved,
 		.add_entry_cb 		= hist_iter__report_callback,
 	};

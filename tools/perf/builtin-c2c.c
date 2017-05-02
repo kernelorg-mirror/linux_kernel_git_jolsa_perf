@@ -247,7 +247,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 				  &al, NULL, NULL, mi,
-				  sample, true);
+				  sample, NULL, true);
 	if (he == NULL)
 		goto free_mi_dup;
 
@@ -284,7 +284,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 		he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
 					  &al, NULL, NULL, mi,
-					  sample, true);
+					  sample, NULL, true);
 		if (he == NULL)
 			goto free_mi_dup;
 
