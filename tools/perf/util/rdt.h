@@ -46,5 +46,6 @@ struct rdt_data {
 
 int rdt_dump(FILE *file);
 int rdt_parse(struct rdt_data *data, char *str);
+struct rdt_group *rdt_group__find(struct perf_session *session, u32 closid);
 
 #endif /* __PERF_RDT_H */
