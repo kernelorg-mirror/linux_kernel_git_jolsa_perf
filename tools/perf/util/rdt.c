@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <api/fs/fs.h>
+#include <asm/bug.h>
 #include "cpumap.h"
 #include "util.h"
 #include "rdt.h"
@@ -11,6 +12,8 @@
 #include "header.h"
 #include "string2.h"
 #include "json.h"
+#include "session.h"
+#include "header.h"
 
 static const char *rdt_name[RDT_NUM_RESOURCES] = {
 	"L3", "L3DATA", "L3CODE", "L2",
@@ -711,3 +714,22 @@ int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
 }
 
 #undef P
+
+struct rdt_group *rdt_group__find(struct perf_session *session, u32 closid)
+{
+	struct rdt_data *data;
+	struct rdt_group *group;
+
+	if (!perf_header__has_feat(&session->header, HEADER_RDT))
+		return NULL;
+
+	data = &session->header.env.rdt_data;
+
+	list_for_each_entry(group, &data->groups, list) {
+		if ((u32) group->id == closid)
+			return group;
+	}
+
+	WARN_ONCE(1, "group not found for id %d\n", closid);
+	return NULL;
+}
