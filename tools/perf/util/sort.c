@@ -586,6 +586,32 @@ struct sort_entry sort_cgroup_id = {
 	.se_width_idx	= HISTC_CGROUP_ID,
 };
 
+/* --sort rdt_group */
+
+static int64_t
+sort__rdt_group_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return right->rdt_group && left->rdt_group ?
+	       (int64_t) right->rdt_group->id - (int64_t) left->rdt_group->id : 0;
+}
+
+static int hist_entry__rdt_group_snprintf(struct hist_entry *he,
+					  char *bf, size_t size,
+					  unsigned int width __maybe_unused)
+{
+	struct rdt_group *group = he->rdt_group;
+
+	return group ? repsep_snprintf(bf, size, "%*s:%u", width - 4, group->name, group->id) :
+		       repsep_snprintf(bf, size, "N/A");
+}
+
+struct sort_entry sort_rdt_group = {
+	.se_header      = "rdt group:id ",
+	.se_cmp	        = sort__rdt_group_cmp,
+	.se_snprintf    = hist_entry__rdt_group_snprintf,
+	.se_width_idx	= HISTC_RDT_GROUP,
+};
+
 /* --sort socket */
 
 static int64_t
@@ -1515,6 +1541,7 @@ static struct sort_dimension common_sort_dimensions[] = {
 	DIM(SORT_TRACE, "trace", sort_trace),
 	DIM(SORT_SYM_SIZE, "symbol_size", sort_sym_size),
 	DIM(SORT_CGROUP_ID, "cgroup_id", sort_cgroup_id),
+	DIM(SORT_RDT_GROUP, "rdt_group", sort_rdt_group),
 };
 
 #undef DIM
@@ -2446,6 +2473,8 @@ int sort_dimension__add(struct perf_hpp_list *list, const char *tok,
 			list->thread = 1;
 		} else if (sd->entry == &sort_comm) {
 			list->comm = 1;
+		} else if (sd->entry == &sort_rdt_group) {
+			list->rdt_group = 1;
 		}
 
 		return __sort_dimension__add(sd, list, level);

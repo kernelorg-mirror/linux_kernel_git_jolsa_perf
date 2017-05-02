@@ -338,7 +338,7 @@ static int diff__process_sample_event(struct perf_tool *tool __maybe_unused,
 		return -1;
 	}
 
-	if (!hists__add_entry(hists, &al, NULL, NULL, NULL, sample, true)) {
+	if (!hists__add_entry(hists, &al, NULL, NULL, NULL, sample, NULL, true)) {
 		pr_warning("problem incrementing symbol period, skipping event\n");
 		goto out_put;
 	}

@@ -163,6 +163,7 @@ static int process_sample_event(struct perf_tool *tool,
 		.evsel 			= evsel,
 		.hists 			= evsel__hists(evsel),
 		.sample 		= sample,
+		.session		= rep->session,
 		.hide_unresolved 	= symbol_conf.hide_unresolved,
 		.add_entry_cb 		= hist_iter__report_callback,
 	};
