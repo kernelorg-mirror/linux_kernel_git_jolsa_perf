@@ -1017,9 +1017,6 @@ static void intel_cqm_setup_event(struct perf_event *event,
 	else
 		rmid = __get_rmid();
 
-	if (is_mbm_event(event->attr.config) && __rmid_valid(rmid))
-		init_mbm_sample(rmid, event->attr.config);
-
 	event->hw.cqm_rmid = rmid;
 }
 
@@ -1337,12 +1334,15 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 		mbm_stop_timers();
 
 	mutex_unlock(&cache_mutex);
+
+	if (event->attr.config1)
+		atomic_dec(&rdt_mirror_closid);
 }
 
 static int intel_cqm_event_init(struct perf_event *event)
 {
 	struct perf_event *group = NULL;
-	bool rotate = false;
+	bool rotate = false, rmid_config = true;
 	unsigned long flags;
 
 	if (event->attr.type != intel_cqm_pmu.type)
@@ -1355,6 +1355,15 @@ static int intel_cqm_event_init(struct perf_event *event)
 	if ((is_cqm_event(event->attr.config) && !cqm_enabled) ||
 	    (is_mbm_event(event->attr.config) && !mbm_enabled))
 		return -EINVAL;
+
+	if (event->attr.config1) {
+		if (event->attr.config1 >= rdt_max_closid)
+			return -EINVAL;
+
+		rmid_config = false;
+		event->hw.cqm_rmid = event->attr.config1;
+		atomic_inc(&rdt_mirror_closid);
+	}
 
 	/* unsupported modes and filters */
 	if (event->attr.exclude_user   ||
@@ -1379,34 +1388,45 @@ static int intel_cqm_event_init(struct perf_event *event)
 	if (mbm_enabled && list_empty(&cache_groups))
 		mbm_start_timers();
 
-	/* Will also set rmid */
-	intel_cqm_setup_event(event, &group);
-
-	/*
-	* Hold the cache_lock as mbm timer handlers be
-	* scanning the list of events.
-	*/
-	raw_spin_lock_irqsave(&cache_lock, flags);
-
-	if (group) {
-		list_add_tail(&event->hw.cqm_group_entry,
-			      &group->hw.cqm_group_entry);
-	} else {
-		list_add_tail(&event->hw.cqm_groups_entry,
-			      &cache_groups);
+	if (rmid_config) {
+		/* Will also set rmid */
+		intel_cqm_setup_event(event, &group);
 
 		/*
-		 * All RMIDs are either in use or have recently been
-		 * used. Kick the rotation worker to clean/free some.
-		 *
-		 * We only do this for the group leader, rather than for
-		 * every event in a group to save on needless work.
-		 */
-		if (!__rmid_valid(event->hw.cqm_rmid))
-			rotate = true;
+		* Hold the cache_lock as mbm timer handlers be
+		* scanning the list of events.
+		*/
+		raw_spin_lock_irqsave(&cache_lock, flags);
+
+		if (group) {
+			list_add_tail(&event->hw.cqm_group_entry,
+				      &group->hw.cqm_group_entry);
+		} else {
+			list_add_tail(&event->hw.cqm_groups_entry,
+				      &cache_groups);
+
+			/*
+			 * All RMIDs are either in use or have recently been
+			 * used. Kick the rotation worker to clean/free some.
+			 *
+			 * We only do this for the group leader, rather than for
+			 * every event in a group to save on needless work.
+			 */
+			if (!__rmid_valid(event->hw.cqm_rmid))
+				rotate = true;
+		}
+
+		raw_spin_unlock_irqrestore(&cache_lock, flags);
+	} else {
+		raw_spin_lock_irqsave(&cache_lock, flags);
+		list_add_tail(&event->hw.cqm_groups_entry,
+			      &cache_groups);
+		raw_spin_unlock_irqrestore(&cache_lock, flags);
 	}
 
-	raw_spin_unlock_irqrestore(&cache_lock, flags);
+	if (is_mbm_event(event->attr.config) && __rmid_valid(event->hw.cqm_rmid))
+		init_mbm_sample(event->hw.cqm_rmid, event->attr.config);
+
 	mutex_unlock(&cache_mutex);
 
 	if (rotate)
