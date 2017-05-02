@@ -3,6 +3,7 @@
 
 #include <linux/types.h>
 #include "cpumap.h"
+#include "rdt.h"
 
 struct cpu_topology_map {
 	int	socket_id;
@@ -54,6 +55,7 @@ struct perf_env {
 	struct cpu_cache_level	*caches;
 	int			 caches_cnt;
 	struct numa_node	*numa_nodes;
+	struct rdt_data		 rdt_data;
 };
 
 extern struct perf_env perf_env;
