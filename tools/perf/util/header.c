@@ -35,6 +35,7 @@
 #include "asm/bug.h"
 
 #include "sane_ctype.h"
+#include "rdt.h"
 
 /*
  * magic2 = "PERFILE2"
@@ -1084,6 +1085,46 @@ out:
 	return ret;
 }
 
+static int write_rdt(int fd, struct perf_header *h __maybe_unused,
+		     struct perf_evlist *evlist __maybe_unused)
+{
+	static char temp[] = "/tmp/perf-rdt-XXXXXX";
+	char *buf;
+	size_t size;
+	FILE *file;
+	int temp_fd, ret = -1;
+
+	temp_fd = mkstemp(temp);
+	if (temp_fd < 0) {
+		perror("mkstemp failed");
+		return -1;
+	}
+
+	file = fdopen(temp_fd, "w+");
+	if (!file) {
+		perror("fdopen failed");
+		goto out;
+	}
+
+	ret = rdt_dump(file);
+	fclose(file);
+
+	if (ret)
+		goto out;
+
+	if (filename__read_str(temp, &buf, &size))
+		goto out;
+
+	buf[size] = 0;
+
+	ret = do_write_string(fd, (const char *) buf);
+	free(buf);
+
+out:
+	unlink(temp);
+	return ret;
+}
+
 static int write_stat(int fd __maybe_unused,
 		      struct perf_header *h __maybe_unused,
 		      struct perf_evlist *evlist __maybe_unused)
@@ -1375,6 +1416,12 @@ static void print_cache(struct perf_header *ph __maybe_unused,
 		fprintf(fp, "#  ");
 		cpu_cache_level__fprintf(fp, &ph->env.caches[i]);
 	}
+}
+
+static void print_rdt(struct perf_header *ph, int fd __maybe_unused, FILE *fp)
+{
+	fprintf(fp, "# RDT configuration\n");
+	rdt_display(fp, &ph->env.rdt_data, true);
 }
 
 static void print_pmu_mappings(struct perf_header *ph, int fd __maybe_unused,
@@ -2198,6 +2245,22 @@ out_free_caches:
 	return -1;
 }
 
+static int process_rdt(struct perf_file_section *section __maybe_unused,
+		       struct perf_header *ph __maybe_unused, int fd __maybe_unused,
+		       void *data __maybe_unused)
+{
+	char *buf;
+	int ret = -1;
+
+	buf = do_read_string(fd, ph);
+	if (buf) {
+		ret = rdt_parse_map(&ph->env.rdt_data, buf);
+		free(buf);
+	}
+
+	return ret;
+}
+
 struct feature_ops {
 	int (*write)(int fd, struct perf_header *h, struct perf_evlist *evlist);
 	void (*print)(struct perf_header *h, int fd, FILE *fp);
@@ -2241,6 +2304,7 @@ static const struct feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPP(HEADER_AUXTRACE,	auxtrace),
 	FEAT_OPA(HEADER_STAT,		stat),
 	FEAT_OPF(HEADER_CACHE,		cache),
+	FEAT_OPF(HEADER_RDT,		rdt),
 };
 
 struct header_print_data {
