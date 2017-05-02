@@ -586,6 +586,30 @@ struct sort_entry sort_cgroup_id = {
 	.se_width_idx	= HISTC_CGROUP_ID,
 };
 
+/* --sort rdt_group */
+
+static int64_t
+sort__rdt_group_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->rdt_group->id - right->rdt_group->id;
+}
+
+static int hist_entry__rdt_group_snprintf(struct hist_entry *he,
+					  char *bf, size_t size,
+					  unsigned int width __maybe_unused)
+{
+	struct rdt_group *group = he->rdt_group;
+
+	return repsep_snprintf(bf, size, "%s/%u", group->name, group->id);
+}
+
+struct sort_entry sort_rdt_group = {
+	.se_header      = "rdt group",
+	.se_cmp	        = sort__rdt_group_cmp,
+	.se_snprintf    = hist_entry__rdt_group_snprintf,
+	.se_width_idx	= HISTC_RDT_GROUP,
+};
+
 /* --sort socket */
 
 static int64_t
@@ -1515,6 +1539,7 @@ static struct sort_dimension common_sort_dimensions[] = {
 	DIM(SORT_TRACE, "trace", sort_trace),
 	DIM(SORT_SYM_SIZE, "symbol_size", sort_sym_size),
 	DIM(SORT_CGROUP_ID, "cgroup_id", sort_cgroup_id),
+	DIM(SORT_RDT_GROUP, "rdt_group", sort_rdt_group),
 };
 
 #undef DIM
