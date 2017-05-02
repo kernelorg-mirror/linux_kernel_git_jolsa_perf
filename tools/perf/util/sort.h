@@ -140,6 +140,7 @@ struct hist_entry {
 	struct perf_hpp_list	*hpp_list;
 	struct hist_entry	*parent_he;
 	struct hist_entry_ops	*ops;
+	struct rdt_group	*rdt_group;
 	union {
 		/* this is for hierarchical entry structure */
 		struct {
@@ -221,6 +222,7 @@ enum sort_type {
 	SORT_TRACE,
 	SORT_SYM_SIZE,
 	SORT_CGROUP_ID,
+	SORT_RDT_GROUP,
 
 	/* branch stack specific sort keys */
 	__SORT_BRANCH_STACK,
