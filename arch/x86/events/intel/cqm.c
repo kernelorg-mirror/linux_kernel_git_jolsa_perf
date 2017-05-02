@@ -1017,9 +1017,6 @@ static void intel_cqm_setup_event(struct perf_event *event,
 	else
 		rmid = __get_rmid();
 
-	if (is_mbm_event(event->attr.config) && __rmid_valid(rmid))
-		init_mbm_sample(rmid, event->attr.config);
-
 	event->hw.cqm_rmid = rmid;
 }
 
@@ -1238,6 +1235,9 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
+	if (atomic_read(&rdt_mirror_closid))
+		return;
+
 	if (state->rmid_usecnt++) {
 		if (!WARN_ON_ONCE(state->rmid != rmid))
 			return;
@@ -1259,6 +1259,9 @@ static void intel_cqm_event_stop(struct perf_event *event, int mode)
 	event->hw.cqm_state |= PERF_HES_STOPPED;
 
 	intel_cqm_event_read(event);
+
+	if (atomic_read(&rdt_mirror_closid))
+		return;
 
 	if (!--state->rmid_usecnt) {
 		state->rmid = 0;
@@ -1289,6 +1292,7 @@ static int intel_cqm_event_add(struct perf_event *event, int mode)
 static void intel_cqm_event_destroy(struct perf_event *event)
 {
 	struct perf_event *group_other = NULL;
+	bool mirror = !!event->attr.config1;
 	unsigned long flags;
 
 	mutex_lock(&cache_mutex);
@@ -1322,7 +1326,7 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 		} else {
 			u32 rmid = event->hw.cqm_rmid;
 
-			if (__rmid_valid(rmid))
+			if (!mirror && __rmid_valid(rmid))
 				__put_rmid(rmid);
 			list_del(&event->hw.cqm_groups_entry);
 		}
@@ -1336,14 +1340,18 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 	if (mbm_enabled && list_empty(&cache_groups))
 		mbm_stop_timers();
 
+	if (mirror)
+		atomic_dec(&rdt_mirror_closid);
+
 	mutex_unlock(&cache_mutex);
 }
 
 static int intel_cqm_event_init(struct perf_event *event)
 {
 	struct perf_event *group = NULL;
-	bool rotate = false;
+	bool rotate = false, mirror = !!event->attr.config1;
 	unsigned long flags;
+	int ret = -EINVAL;
 
 	if (event->attr.type != intel_cqm_pmu.type)
 		return -ENOENT;
@@ -1373,46 +1381,69 @@ static int intel_cqm_event_init(struct perf_event *event)
 
 	mutex_lock(&cache_mutex);
 
+	if (mirror) {
+		if (!atomic_read(&rdt_mirror_closid) && list_empty(&cache_groups))
+			goto out_unlock;
+
+		if (event->attr.config1 >= rdt_max_closid)
+			goto out_unlock;
+
+		event->hw.cqm_rmid = event->attr.config1;
+		atomic_inc(&rdt_mirror_closid);
+	}
+
 	/*
 	 * Start the mbm overflow timers when the first event is created.
 	*/
 	if (mbm_enabled && list_empty(&cache_groups))
 		mbm_start_timers();
 
-	/* Will also set rmid */
-	intel_cqm_setup_event(event, &group);
-
-	/*
-	* Hold the cache_lock as mbm timer handlers be
-	* scanning the list of events.
-	*/
-	raw_spin_lock_irqsave(&cache_lock, flags);
-
-	if (group) {
-		list_add_tail(&event->hw.cqm_group_entry,
-			      &group->hw.cqm_group_entry);
-	} else {
+	if (mirror) {
+		raw_spin_lock_irqsave(&cache_lock, flags);
 		list_add_tail(&event->hw.cqm_groups_entry,
 			      &cache_groups);
+		raw_spin_unlock_irqrestore(&cache_lock, flags);
+	} else {
+		/* Will also set rmid */
+		intel_cqm_setup_event(event, &group);
 
 		/*
-		 * All RMIDs are either in use or have recently been
-		 * used. Kick the rotation worker to clean/free some.
-		 *
-		 * We only do this for the group leader, rather than for
-		 * every event in a group to save on needless work.
-		 */
-		if (!__rmid_valid(event->hw.cqm_rmid))
-			rotate = true;
+		* Hold the cache_lock as mbm timer handlers be
+		* scanning the list of events.
+		*/
+		raw_spin_lock_irqsave(&cache_lock, flags);
+
+		if (group) {
+			list_add_tail(&event->hw.cqm_group_entry,
+				      &group->hw.cqm_group_entry);
+		} else {
+			list_add_tail(&event->hw.cqm_groups_entry,
+				      &cache_groups);
+
+			/*
+			 * All RMIDs are either in use or have recently been
+			 * used. Kick the rotation worker to clean/free some.
+			 *
+			 * We only do this for the group leader, rather than for
+			 * every event in a group to save on needless work.
+			 */
+			if (!__rmid_valid(event->hw.cqm_rmid))
+				rotate = true;
+		}
+
+		raw_spin_unlock_irqrestore(&cache_lock, flags);
 	}
 
-	raw_spin_unlock_irqrestore(&cache_lock, flags);
+	if (is_mbm_event(event->attr.config) && __rmid_valid(event->hw.cqm_rmid))
+		init_mbm_sample(event->hw.cqm_rmid, event->attr.config);
+
+out_unlock:
 	mutex_unlock(&cache_mutex);
 
 	if (rotate)
 		schedule_delayed_work(&intel_cqm_rmid_work, 0);
 
-	return 0;
+	return ret;
 }
 
 EVENT_ATTR_STR(llc_occupancy, intel_cqm_llc, "event=0x01");

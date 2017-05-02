@@ -94,6 +94,8 @@ static int cbm_idx(struct rdt_resource *r, int closid)
 	return closid * r->cbm_idx_multi + r->cbm_idx_offset;
 }
 
+atomic_t rdt_mirror_closid;
+
 /*
  * cache_alloc_hsw_probe() - Have to probe for Intel haswell server CPUs
  * as they do not have CPUID enumeration support for Cache allocation.
