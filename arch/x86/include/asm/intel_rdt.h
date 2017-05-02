@@ -131,6 +131,7 @@ struct msr_param {
 
 extern struct mutex rdtgroup_mutex;
 
+extern int rdt_max_closid;
 extern struct rdt_resource rdt_resources_all[];
 extern struct rdtgroup rdtgroup_default;
 DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
