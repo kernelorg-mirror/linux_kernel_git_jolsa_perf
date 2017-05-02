@@ -12,6 +12,7 @@
 #include "util/build-id.h"
 #include "util/util.h"
 #include <subcmd/parse-options.h>
+#include <api/fs/fs.h>
 #include "util/parse-events.h"
 #include "util/config.h"
 
@@ -633,6 +634,9 @@ static void record__init_features(struct record *rec)
 
 	if (!rec->opts.full_auxtrace)
 		perf_header__clear_feat(&session->header, HEADER_AUXTRACE);
+
+	if (!resctrlfs__mount())
+		perf_header__clear_feat(&session->header, HEADER_RDT);
 
 	perf_header__clear_feat(&session->header, HEADER_STAT);
 }
