@@ -661,3 +661,53 @@ int rdt_parse(struct rdt_data *rdt, char *file)
 
 	return parse(&data);
 }
+
+#define P(fmt, ...)				\
+	fprintf(file, hash ? "# " : "");	\
+	fprintf(file, fmt, ##__VA_ARGS__);
+
+
+static int display_resource(FILE *file, struct rdt_resource *res,
+			    bool hash)
+{
+	P("    cbm_mask       = %lu\n", res->cache.cbm_mask);
+	P("    min_cbm_bits   = %lu\n", res->cache.min_cbm_bits);
+	P("    num_closids    = %lu\n", res->num_closids);
+	return 0;
+}
+
+static int display_group(FILE *file, struct rdt_group *group, bool hash)
+{
+	P("    id = %d\n", group->id);
+	return 0;
+}
+
+int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
+{
+	struct rdt_group *group;
+	int i;
+
+	P("Resources:\n");
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		struct rdt_resource *res = &rdt->resource[i];
+
+		if (!res->enabled)
+			continue;
+
+		P("  %s {\n", res->name);
+		display_resource(file, res, hash);
+		P("  }\n");
+	}
+
+	P("Groups:\n");
+
+	list_for_each_entry(group, &rdt->groups, list) {
+		P("  %s {\n", group->name);
+		display_group(file, group, hash);
+		P("  }\n");
+	}
+
+	return 0;
+}
+
+#undef P
