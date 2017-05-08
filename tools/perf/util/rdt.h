@@ -10,6 +10,7 @@ enum {
 	RDT_RESOURCE_L3DATA,
 	RDT_RESOURCE_L3CODE,
 	RDT_RESOURCE_L2,
+	RDT_RESOURCE_MBA,
 	RDT_NUM_RESOURCES,
 };
 
@@ -28,11 +29,18 @@ struct rdt_cache {
 	u64	 min_cbm_bits;
 };
 
+struct rdt_membw {
+	u64	 bandwidth_gran;
+	u64	 delay_linear;
+	u64	 min_bandwidth;
+};
+
 struct rdt_resource {
 	const char		*name;
 	bool			 enabled;
 	u64			 num_closids;
 	struct rdt_cache	 cache;
+	struct rdt_membw	 membw;
 };
 
 struct rdt_group {

@@ -16,7 +16,7 @@
 #include "header.h"
 
 static const char *rdt_name[RDT_NUM_RESOURCES] = {
-	"L3", "L3DATA", "L3CODE", "L2",
+	"L3", "L3DATA", "L3CODE", "L2", "MB",
 };
 
 static int rdt_name_idx(const char *res)
@@ -34,7 +34,7 @@ static int rdt_name_idx(const char *res)
 static int dump_ids(FILE *file, int res)
 {
 	static u32 level[RDT_NUM_RESOURCES] = {
-		3, 3, 3, 2,
+		3, 3, 3, 2, 3,
 	};
 	struct cpu_cache_level caches[1000], *c;
 	u32 cnt, i;
@@ -63,7 +63,7 @@ static int dump_ids(FILE *file, int res)
 #define DUMP_ASS(prefix, name, val, fmt, comma) \
 	fprintf(file, prefix "\"%s\" : \"" fmt "\"%s\n", name, val, comma)
 
-static int dump_resource(FILE *file, int res, const char *name, char *base)
+static int dump_resource_cache(FILE *file, int res, const char *name, char *base)
 {
 	unsigned long long val;
 	char path[PATH_MAX];
@@ -100,6 +100,51 @@ static int dump_resource(FILE *file, int res, const char *name, char *base)
 	return 0;
 }
 
+static int dump_resource_bw(FILE *file, int res, const char *name, char *base)
+{
+	unsigned long long val;
+	char path[PATH_MAX];
+
+	DUMP_ASS("\t\t\t", "name", name, "%s", ",");
+
+	scnprintf(path, PATH_MAX, "%s/bandwidth_gran", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read bandwidth_gran for %s\n", name);
+		return -1;
+	}
+
+	DUMP_ASS("\t\t\t", "bandwidth_gran", val, "%llx", ",");
+
+	scnprintf(path, PATH_MAX, "%s/delay_linear", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read delay_linear for %s\n", name);
+		return -1;
+	}
+
+	DUMP_ASS("\t\t\t", "delay_linear", val, "%llu", ",");
+
+	scnprintf(path, PATH_MAX, "%s/min_bandwidth", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read min_bandwidth for %s\n", name);
+		return -1;
+	}
+
+	DUMP_ASS("\t\t\t", "min_bandwidth", val, "%llu", ",");
+
+	scnprintf(path, PATH_MAX, "%s/num_closids", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read num_closids for %s\n", name);
+		return -1;
+	}
+
+	DUMP_ASS("\t\t\t", "num_closids", val, "%llu", ",");
+
+	fprintf(file, "\t\t\t\"ids\" : [\n");
+	dump_ids(file, res);
+	fprintf(file, "\t\t\t ]\n");
+	return 0;
+}
+
 static int dump_resources(FILE *file)
 {
 	int i;
@@ -118,7 +163,11 @@ static int dump_resources(FILE *file)
 			fprintf(file, "\t\t},\n");
 
 		fprintf(file, "\t\t{\n");
-		dump_resource(file, i, rdt_name[i], path);
+
+		if (i == RDT_RESOURCE_MBA)
+			dump_resource_bw(file, i, rdt_name[i], path);
+		else
+			dump_resource_cache(file, i, rdt_name[i], path);
 	}
 
 	fprintf(file, "\t\t}\n");
@@ -451,6 +500,15 @@ static int parse_resource(struct parse_data *data)
 		} else if (!strcmp(data->str, "num_closids")) {
 			EXPECT(JSMN_STRING, val_dec);
 			res.num_closids = data->val;
+		} else if (!strcmp(data->str, "bandwidth_gran")) {
+			EXPECT(JSMN_STRING, val_dec);
+			res.membw.bandwidth_gran = data->val;
+		} else if (!strcmp(data->str, "delay_linear")) {
+			EXPECT(JSMN_STRING, val_dec);
+			res.membw.delay_linear = data->val;
+		} else if (!strcmp(data->str, "min_bandwidth")) {
+			EXPECT(JSMN_STRING, val_dec);
+			res.membw.min_bandwidth = data->val;
 		} else if (!strcmp(data->str, "ids")) {
 			EXPECT(JSMN_ARRAY, ids);
 		}
@@ -671,10 +729,17 @@ int rdt_parse(struct rdt_data *rdt, char *file)
 
 
 static int display_resource(FILE *file, struct rdt_resource *res,
-			    bool hash)
+			    bool hash, bool mbw)
 {
-	P("    cbm_mask       = %lu\n", res->cache.cbm_mask);
-	P("    min_cbm_bits   = %lu\n", res->cache.min_cbm_bits);
+	if (mbw) {
+		P("    bandwidth_gran = %lu\n", res->membw.bandwidth_gran);
+		P("    delay_linear   = %lu\n", res->membw.delay_linear);
+		P("    min_bandwidth  = %lu\n", res->membw.min_bandwidth);
+	} else {
+		P("    cbm_mask       = %lu\n", res->cache.cbm_mask);
+		P("    min_cbm_bits   = %lu\n", res->cache.min_cbm_bits);
+	}
+
 	P("    num_closids    = %lu\n", res->num_closids);
 	return 0;
 }
@@ -698,7 +763,7 @@ int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
 			continue;
 
 		P("  %s {\n", res->name);
-		display_resource(file, res, hash);
+		display_resource(file, res, hash, i == RDT_RESOURCE_MBA);
 		P("  }\n");
 	}
 
