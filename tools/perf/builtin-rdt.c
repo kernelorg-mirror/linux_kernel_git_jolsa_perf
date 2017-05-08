@@ -50,23 +50,69 @@ static int setup_resctrl(void)
 	return 0;
 }
 
+static int dump_display(FILE *file, char *path)
+{
+	struct rdt_data data;
+
+	if (rdt_parse(&data, path))
+		return -1;
+
+	return rdt_display(file, &data, false);
+}
+
 static int perf_rdt__dump(int argc, const char **argv)
 {
+	const char * const dump_usage[] = {
+		"perf rdt dump [<options>] [file]",
+		NULL
+	};
+	bool json = false;
+	const struct option dump_options[] = {
+	OPT_BOOLEAN('j', "json", &json, "Dump json data."),
+	OPT_END()
+	};
+	char tmp_path[PATH_MAX];
 	bool close_file = false;
+	FILE *file_dump;
 	FILE *file_out = stdout;
-	int ret;
+	int ret, fd_dump;
 
-	setup_pager();
+	argc = parse_options(argc, argv, dump_options, dump_usage,
+			     PARSE_OPT_STOP_AT_NON_OPTION);
 
-	if (argc == 2) {
+	if (argc == 1) {
 		file_out = fopen(argv[1], "w+");
 		if (!file_out)
 			return -1;
 		close_file = true;
 	}
 
-	ret = rdt_dump(file_out);
+	setup_pager();
 
+	if (json) {
+		file_dump = file_out;
+	} else {
+		scnprintf(tmp_path, PATH_MAX, "/tmp/perf-rdt-dump-XXXXXX");
+
+		fd_dump = mkstemp(tmp_path);
+		if (fd_dump < 0)
+			return -1;
+
+		file_dump = fdopen(fd_dump, "r+");
+		if (!file_dump)
+			return -1;
+	}
+
+	ret = rdt_dump(file_dump);
+	if (ret)
+		goto out;
+
+	if (!json) {
+		fclose(file_dump);
+		ret = dump_display(file_out, tmp_path);
+	}
+
+out:
 	if (close_file)
 		fclose(file_out);
 	return ret;
