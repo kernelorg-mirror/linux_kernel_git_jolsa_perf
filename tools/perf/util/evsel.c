@@ -1248,6 +1248,8 @@ int perf_evsel__read(struct perf_evsel *evsel, int cpu, int thread,
 	if (FD(evsel, cpu, thread) < 0)
 		return -EINVAL;
 
+	fprintf(stderr, "cpu %d FD %d\n", cpu, FD(evsel, cpu, thread));
+
 	if (readn(FD(evsel, cpu, thread), count, sizeof(*count)) <= 0)
 		return -errno;
 

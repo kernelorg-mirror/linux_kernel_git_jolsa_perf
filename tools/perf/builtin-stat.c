@@ -338,9 +338,9 @@ static int read_counter(struct perf_evsel *counter)
 
 			if (verbose > 1) {
 				fprintf(stat_config.output,
-					"%s: %d: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+					"%s: %d(%d): %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
 						perf_evsel__name(counter),
-						cpu,
+						cpu, perf_evsel__cpus(counter)->map[cpu],
 						count->val, count->ena, count->run);
 			}
 		}
