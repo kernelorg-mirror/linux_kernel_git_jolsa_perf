@@ -146,6 +146,7 @@ struct symbol_conf {
 	struct intlist	*pid_list,
 			*tid_list;
 	const char	*symfs;
+	const char	*symbols_maps;
 };
 
 extern struct symbol_conf symbol_conf;

@@ -102,6 +102,10 @@ static int report__config(const char *var, const char *value, void *cb)
 		default_sort_order = strdup(value);
 		return 0;
 	}
+	if (!strcmp(var, "report.symbol-maps")) {
+		symbol_conf.symbols_maps = value;
+		return 0;
+	}
 
 	return 0;
 }
@@ -854,6 +858,8 @@ int cmd_report(int argc, const char **argv)
 		   "Time span of interest (start,stop)"),
 	OPT_BOOLEAN(0, "inline", &symbol_conf.inline_name,
 		    "Show inline function"),
+	OPT_STRING(0, "symbol-maps", &,symbol_conf.symbols_maps "path",
+		   "Path to directory with symbol maps"),
 	OPT_END()
 	};
 	struct perf_data_file file = {

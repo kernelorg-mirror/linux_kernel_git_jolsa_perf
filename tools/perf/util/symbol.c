@@ -1395,6 +1395,7 @@ static bool dso__is_compatible_symtab_type(struct dso *dso, bool kmod,
 {
 	switch (type) {
 	case DSO_BINARY_TYPE__JAVA_JIT:
+	case DSO_BINARY_TYPE__SYMBOL_MAP:
 	case DSO_BINARY_TYPE__DEBUGLINK:
 	case DSO_BINARY_TYPE__SYSTEM_PATH_DSO:
 	case DSO_BINARY_TYPE__FEDORA_DEBUGINFO:
@@ -1430,6 +1431,31 @@ static bool dso__is_compatible_symtab_type(struct dso *dso, bool kmod,
 	default:
 		return false;
 	}
+}
+
+static int load_symbol_maps(struct dso *dso, struct map *map)
+{
+	char path[PATH_MAX];
+	struct stat st;
+	FILE *file;
+	int ret;
+
+	scnprintf(path, PATH_MAX, "%s/%s", symbol_conf.symbols_maps,
+		  dso->short_name);
+
+	if (stat(path, &st))
+		return 0;
+
+	file = fopen(path, "r");
+	if (!file) {
+		pr_err("failed to open symbol map file: %s\n", dso->short_name);
+		return -1;
+	}
+
+	ret = load_symbol_map(file, dso, map);
+
+	fclose(file);
+	return ret;
 }
 
 int dso__load(struct dso *dso, struct map *map)
@@ -1468,6 +1494,14 @@ int dso__load(struct dso *dso, struct map *map)
 		machine = NULL;
 
 	dso->adjust_symbols = 0;
+
+	if (symbol_conf.symbols_maps) {
+		ret = load_symbol_maps(dso, map);
+		dso->symtab_type = ret > 0 ? DSO_BINARY_TYPE__SYMBOL_MAP :
+					     DSO_BINARY_TYPE__NOT_FOUND;
+		if (ret > 0)
+			goto out;
+	}
 
 	if (strncmp(dso->name, "/tmp/perf-", 10) == 0) {
 		struct stat st;
