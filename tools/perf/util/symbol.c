@@ -1325,16 +1325,11 @@ int dso__load_kallsyms(struct dso *dso, const char *filename,
 	return __dso__load_kallsyms(dso, filename, map, false);
 }
 
-static int dso__load_perf_map(struct dso *dso, struct map *map)
+static int load_symbol_map(FILE *file, struct dso *dso, struct map *map)
 {
 	char *line = NULL;
 	size_t n;
-	FILE *file;
 	int nr_syms = 0;
-
-	file = fopen(dso->long_name, "r");
-	if (file == NULL)
-		goto out_failure;
 
 	while (!feof(file)) {
 		u64 start, size;
@@ -1372,14 +1367,27 @@ static int dso__load_perf_map(struct dso *dso, struct map *map)
 	}
 
 	free(line);
-	fclose(file);
-
 	return nr_syms;
 
 out_delete_line:
 	free(line);
 out_failure:
 	return -1;
+}
+
+static int dso__load_perf_map(struct dso *dso, struct map *map)
+{
+	FILE *file;
+	int ret = -1;
+
+	file = fopen(dso->long_name, "r");
+	if (file == NULL)
+		return -1;
+
+	ret = load_symbol_map(file, dso, map);
+
+	fclose(file);
+	return ret;
 }
 
 static bool dso__is_compatible_symtab_type(struct dso *dso, bool kmod,
