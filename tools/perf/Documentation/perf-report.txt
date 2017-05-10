@@ -435,6 +435,18 @@ include::itrace.txt[]
 	If a callgraph address belongs to an inlined function, the inline stack
 	will be printed. Each entry is function name or file/line.
 
+--symbol-maps=<path>::
+	Path to directory with symbol maps.
+
+	Symbol maps allow user to overload symbols for specific shared object
+	or executable (DSO). The --symbol-maps=<path> option tells perf where
+	to look for symbol maps. Each file in this directory represents single
+	DSO with specific symbols map with following format for each line:
+
+		address size name
+
+	The name of the file needs to match the base name of the DSO.
+
 include::callchain-overhead-calculation.txt[]
 
 SEE ALSO
