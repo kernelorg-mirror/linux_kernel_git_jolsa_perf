@@ -258,6 +258,10 @@ static struct test generic_tests[] = {
 		.func = test__unit_number__scnprint,
 	},
 	{
+		.desc = "RDT event",
+		.func = test__rdt_event,
+	},
+	{
 		.func = NULL,
 	},
 };
