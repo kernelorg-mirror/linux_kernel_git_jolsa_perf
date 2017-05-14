@@ -244,6 +244,7 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_STAT_ROUND			= 77,
 	PERF_RECORD_EVENT_UPDATE		= 78,
 	PERF_RECORD_TIME_CONV			= 79,
+	PERF_RECORD_RDT				= 80,
 	PERF_RECORD_HEADER_MAX
 };
 

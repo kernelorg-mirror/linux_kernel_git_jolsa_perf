@@ -36,7 +36,7 @@ struct rdt_resource {
 };
 
 struct rdt_group {
-	int			 id;
+	u32			 id;
 	const char		*name;
 	struct rdt_schemata	 schemata[RDT_NUM_RESOURCES];
 	struct cpu_map		*cpus;
@@ -49,5 +49,12 @@ struct rdt_data {
 };
 
 int rdt_dump(FILE *file);
+int rdt_display(FILE *file, struct rdt_data *rdt, bool hash);
 
+int perf_event__process_rdt(struct perf_tool *tool,
+			    union perf_event *event,
+			    struct perf_sample *sample,
+			    struct machine *machine);
+
+struct rdt_group *rdt_group__find(struct rdt_data *data, u32 closid);
 #endif /* __PERF_RDT_H */
