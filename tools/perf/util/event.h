@@ -244,6 +244,7 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_STAT_ROUND			= 77,
 	PERF_RECORD_EVENT_UPDATE		= 78,
 	PERF_RECORD_TIME_CONV			= 79,
+	PERF_RECORD_RDT				= 80,
 	PERF_RECORD_HEADER_MAX
 };
 
@@ -492,6 +493,55 @@ struct time_conv_event {
 	u64 time_zero;
 };
 
+enum {
+	PERF_RDT_ID_VERSION_1			= 1,
+};
+
+enum {
+	PERF_RDT_ID_TYPE__GROUP_NAME		= 0,
+	PERF_RDT_ID_TYPE__GROUP_CPUS		= 1,
+	PERF_RDT_ID_TYPE__GROUP_TASKS		= 2,
+	PERF_RDT_ID_TYPE__GROUP_SCHEMATA	= 3,
+	PERF_RDT_ID_TYPE__RESOURCE_CACHE	= 4,
+};
+
+struct rdt_id {
+	u32	val;
+	u32	version;
+	u32	type;
+};
+
+struct rdt_resource_cache {
+	u64	num_closids;
+	u64	cbm_mask;
+	u64	min_cbm_bits;
+};
+
+struct rdt_group_name {
+	char	name[PATH_MAX];
+};
+
+struct rdt_group_cpus {
+	struct cpu_map_data cpus;
+};
+
+struct rdt_group_cbm {
+	u64	id;
+	u64	val;
+};
+
+struct rdt_group_schemata {
+	u32			id;
+	u32			cnt;
+	struct rdt_group_cbm	cbm[];
+};
+
+struct rdt_event {
+	struct perf_event_header	header;
+	struct rdt_id			id;
+	char				data[];
+};
+
 union perf_event {
 	struct perf_event_header	header;
 	struct mmap_event		mmap;
@@ -522,6 +572,7 @@ union perf_event {
 	struct stat_event		stat;
 	struct stat_round_event		stat_round;
 	struct time_conv_event		time_conv;
+	struct rdt_event		rdt;
 };
 
 void perf_event__print_totals(void);

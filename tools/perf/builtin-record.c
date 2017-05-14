@@ -40,6 +40,7 @@
 #include "util/perf-hooks.h"
 #include "util/time-utils.h"
 #include "util/units.h"
+#include "util/rdt.h"
 #include "asm/bug.h"
 
 #include <errno.h>
@@ -52,6 +53,7 @@
 #include <sys/wait.h>
 #include <asm/bug.h>
 #include <linux/time64.h>
+#include <api/fs/fs.h>
 
 struct switch_output {
 	bool		 enabled;
@@ -823,6 +825,13 @@ static int record__synthesize(struct record *rec, bool tail)
 			}
 			rec->bytes_written += err;
 		}
+	}
+
+	if (resctrlfs__mount()) {
+		err = perf_event__synthesize_rdt(tool, process_synthesized_event,
+						 resctrlfs__mountpoint());
+		if (err)
+			goto out;
 	}
 
 	err = perf_event__synth_time_conv(record__pick_pc(rec), tool,
