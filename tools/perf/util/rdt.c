@@ -262,18 +262,79 @@ static int dump_groups(FILE *file)
 	return 0;
 }
 
-int rdt_dump(FILE *file)
+struct rdt_tool {
+	struct perf_tool	 tool;
+	struct rdt_data		 data;
+	struct rdt_group	*last;
+};
+
+static struct rdt_group *rdt_tool__group(struct rdt_data *data, struct rdt_id *id)
 {
+	struct rdt_group *group = data->last;
+
+	if (group && group->id == id->val)
+		return group;
+
+	group = zalloc(sizeof(*group));
+	if (group)
+		group->id = id->val;
+
+	return group;
+}
+
+static int process_rdt(struct perf_tool *tool,
+			union perf_event *event,
+			struct perf_sample *sample,
+			struct machine *machine);
+{
+	struct rdt_tool		*rdt_tool = container_of(tool, struct rdt_tool, tool);
+	struct rdt_data		*data     = &rdt_tool->data;;
+	struct rdt_id		*id       = &rdt_event->rdt.id;
+	struct rdt_group	*group;
+
+	switch (id->type) {
+	case PERF_RDT_ID_TYPE__GROUP_NAME: {
+		struct rdt_group_name *name = event->rdt.data;
+
+		group = rdt_tool__group(data, id);
+		if (!group)
+			return -ENOMEM;
+
+		strcpy(group->name, name->str);
+		break;
+	}
+	case PERF_RDT_ID_TYPE__GROUP_CPUS: {
+		struct rdt_group_cpus *cpus;
+
+		group = rdt_tool__group(data, id);
+		if (!group)
+			return -ENOMEM;
+
+		break;
+	}
+	case PERF_RDT_ID_TYPE__GROUP_TASKS:
+	case PERF_RDT_ID_TYPE__GROUP_SCHEMATA:
+	default:
+	}
+}
+
+static int
+perf_event__synthesize_rdt(struct perf_tool *tool,
+			   perf_event__handler_t process,
+			   const char *path)
+{
+}
+
+int rdt_dump(FILE *file, const char *resctrl)
+{
+	struct rdt_tool rdt_tool;
+	struct rdt_data *data = &rdt_tool.data;
 	int ret;
 
-	fprintf(file, "{\n");
-	fprintf(file, "\t\"resources\" : [\n");
-	ret = dump_resources(file);
-	fprintf(file, "\t],\n");
-
-	fprintf(file, "\t\"groups\" : [\n");
-	ret = dump_groups(file);
-	fprintf(file, "\t]\n");
-	fprintf(file, "}\n");
+	ret = perf_event__synthesize_rdt(&rdt_tool.tool, process_rdt, resctrl);
+	if (!ret) {
+		ret += dump_resources(file, data);
+		ret += dump_groups(file, data);
+	}
 	return ret;
 }

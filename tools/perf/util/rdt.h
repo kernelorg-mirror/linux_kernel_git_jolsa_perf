@@ -36,7 +36,7 @@ struct rdt_resource {
 };
 
 struct rdt_group {
-	int			 id;
+	u32			 id;
 	const char		*name;
 	struct rdt_schemata	 schemata[RDT_NUM_RESOURCES];
 	struct cpu_map		*cpus;
