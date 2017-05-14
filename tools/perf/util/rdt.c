@@ -1,0 +1,390 @@
+#include <linux/compiler.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <api/fs/fs.h>
+#include <asm/bug.h>
+#include "cpumap.h"
+#include "util.h"
+#include "rdt.h"
+#include "env.h"
+#include "header.h"
+#include "string2.h"
+#include "machine.h"
+#include "session.h"
+#include "thread_map.h"
+
+static const char *rdt_resource_name[RDT_NUM_RESOURCES] = {
+	"L3", "L3DATA", "L3CODE", "L2",
+};
+
+static const char *rdt_name(unsigned idx)
+{
+	return idx < RDT_NUM_RESOURCES ? rdt_resource_name[idx] : NULL;
+}
+
+static int rdt_index(const char *name)
+{
+	int i;
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		if (!strcmp(rdt_resource_name[i], name))
+			return i;
+	}
+
+	return -1;
+}
+
+#define RDT_EVENT_SIZE (0xff00)
+
+struct synth {
+	struct perf_tool	*tool;
+	perf_event__handler_t	 process;
+	const char		*resctrlfs;
+	union perf_event	*event;
+};
+
+static int group_id(struct rdt_id *id, const char *base)
+{
+	char path[PATH_MAX];
+	int err;
+
+	scnprintf(path, PATH_MAX, "%s/id", base);
+	err = filename__read_int(path, (int *) &id->val);
+	if (err)
+		return err == ENOENT ? 0 : err;
+	return 0;
+}
+
+static int resource_id(struct rdt_id *id, u32 rid)
+{
+	id->val = rid;
+	return 0;
+}
+
+static struct cpu_map *group_cpus(const char *base)
+{
+	struct cpu_map *map = NULL;
+	char path[PATH_MAX];
+	FILE *file;
+
+	scnprintf(path, PATH_MAX, "%s/cpus", base);
+
+	file = fopen(path, "r");
+	if (file)
+		map = cpu_map__read(file);
+
+	fclose(file);
+	return map;
+}
+
+static int synthesize_group_name(struct synth *s, const char *name)
+{
+	union perf_event *event = s->event;
+	struct rdt_group_name *data = (struct rdt_group_name *) event->rdt.data;
+	int len;
+
+	len = scnprintf(data->name, PATH_MAX, "%s", name);
+	len = PERF_ALIGN(len, sizeof(u64));
+
+	event->rdt.header.size = sizeof(struct rdt_event) + len;
+	event->rdt.id.type     = PERF_RDT_ID_TYPE__GROUP_NAME;
+	return s->process(s->tool, event, NULL, NULL);
+}
+
+static int synthesize_group_cpus(struct synth *s, const char *base)
+{
+	union perf_event *event;
+	struct cpu_map *map;
+	size_t size;
+	int err = -EINVAL, max;
+	u16 type;
+
+	map = group_cpus(base);
+	if (!map)
+		return -EINVAL;
+
+	size = sizeof(struct rdt_event) +
+	       sizeof(struct cpu_map_data);
+
+	event = cpu_map_data__alloc(map, &size, &type, &max);
+	if (!event)
+		goto out_map;
+
+	event->rdt.id      = s->event->rdt.id;
+	event->rdt.id.type = PERF_RDT_ID_TYPE__GROUP_CPUS;
+	event->rdt.header.size = size;
+	event->rdt.header.type = PERF_RECORD_RDT;
+
+	cpu_map_data__synthesize((struct cpu_map_data *) event->rdt.data,
+				 map, type, max);
+	err = s->process(s->tool, event, NULL, NULL);
+	free(event);
+out_map:
+	free(map);
+	return err;
+}
+
+static int synthesize_group_tasks(struct synth *s, const char *base)
+{
+	union perf_event *event = s->event;
+	struct thread_map_data *data = (struct thread_map_data *) event->rdt.data;
+	struct thread_map *threads;
+	char path[PATH_MAX];
+	int ret = -EINVAL;
+	u16 size;
+
+	scnprintf(path, PATH_MAX, "%s/tasks", base);
+
+	threads = thread_map__new_file(path);
+	if (!threads)
+		return -1;
+
+	size  = sizeof(struct rdt_event);
+	size += sizeof(struct thread_map_data);
+	size += sizeof(data->entries[0]) * threads->nr;
+
+	if (WARN_ONCE(size >= RDT_EVENT_SIZE,
+		      "tasks crossed the event size limit"))
+		goto out;
+
+	thread_map_data__synthesize(data, threads);
+	event->rdt.header.size = size;
+	event->rdt.id.type     = PERF_RDT_ID_TYPE__GROUP_TASKS;
+	ret = s->process(s->tool, event, NULL, NULL);
+out:
+	thread_map__put(threads);
+	return ret;
+}
+
+static int synthesize_resource_cbm(struct synth *s, char *name,
+				   struct rdt_group_cbm *cbm, int cnt)
+{
+	union perf_event *event = s->event;
+	struct rdt_group_schemata *data = (struct rdt_group_schemata *) event->rdt.data;
+	int id;
+	u16 size;
+
+	size  = sizeof(struct rdt_event);
+	size += sizeof(struct rdt_group_schemata);
+	size += sizeof(*cbm) * cnt;
+
+	if (WARN_ONCE(size >= RDT_EVENT_SIZE,
+		      "cbm crossed the event size limit"))
+		return -EINVAL;
+
+	id = rdt_index(name);
+	if (id < 0)
+		return -EINVAL;
+
+	data->id  = id;
+	data->cnt = cnt;
+	memcpy(data->cbm, cbm, sizeof(*cbm) * cnt);
+
+	event->rdt.header.size = size;
+	event->rdt.id.type     = PERF_RDT_ID_TYPE__GROUP_SCHEMATA;
+	return s->process(s->tool, event, NULL, NULL);
+}
+
+static int group_schemata_line(struct synth *s, char *line)
+{
+#define CBM_MAX 500
+	struct rdt_group_cbm cbm[CBM_MAX];
+	int cnt = 0;
+	char *p, *next = NULL, *name;
+
+	line = name = trim(line);
+
+	p = strchr(line, ':');
+	if (!p)
+		return -1;
+
+	*p++ = 0;
+
+	p = strtok_r(p, ";", &next);
+	while (p) {
+		char *t;
+
+		t = strchr(p, '=');
+		if (!t)
+			return -1;
+
+		*t++ = 0;
+
+		cbm[cnt].id  = strtoull(p, NULL, 10);
+		cbm[cnt].val = strtoull(t, NULL, 16);
+
+		cnt++;
+		p = strtok_r(NULL, ";", &next);
+	}
+
+	return synthesize_resource_cbm(s, name, cbm, cnt);
+}
+
+static int synthesize_group_schemata(struct synth *s, const char *base)
+{
+	char path[PATH_MAX], buf[1000];
+	FILE *schemata;
+
+	scnprintf(path, PATH_MAX, "%s/schemata", base);
+	schemata = fopen(path, "r");
+	if (!schemata)
+		return -EINVAL;
+
+	while (fgets(buf, sizeof(buf), schemata)) {
+		group_schemata_line(s, buf);
+	};
+
+	fclose(schemata);
+	return 0;
+}
+
+static int synthesize_group(struct synth *s, const char *name, const char *base)
+{
+	union perf_event *event = s->event;
+
+	if (group_id(&event->rdt.id, base))
+		return -1;
+
+	pr_debug("synthesize group %s\n", name);
+
+	return synthesize_group_name(s, name) ||
+	       synthesize_group_cpus(s, base) ||
+	       synthesize_group_tasks(s, base) ||
+	       synthesize_group_schemata(s, base);
+}
+
+static int synthesize_groups(struct synth *s)
+{
+	struct dirent *entry;
+	DIR *dir;
+	int err;
+
+	dir = opendir(s->resctrlfs);
+	if (!dir)
+		return -1;
+
+	err = synthesize_group(s, "default", s->resctrlfs);
+
+	while (!err && (entry = readdir(dir))) {
+		char path[PATH_MAX];
+
+		if (entry->d_type != DT_DIR)
+			continue;
+
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0 ||
+		    strcmp(entry->d_name, "info") == 0)
+			continue;
+
+		scnprintf(path, PATH_MAX, "%s/%s", s->resctrlfs, entry->d_name);
+		err = synthesize_group(s, entry->d_name, path);
+	}
+
+	closedir(dir);
+	return err;
+}
+
+static int get_cache(struct rdt_resource_cache *cache,
+		     const char *base)
+{
+	unsigned long long val;
+	char path[PATH_MAX];
+
+	scnprintf(path, PATH_MAX, "%s/cbm_mask", base);
+	if (filename__read_xll(path, &val)) {
+		pr_err("failed: read cbm_mask for %s\n", base);
+		return -1;
+	}
+
+	cache->cbm_mask = val;
+
+	scnprintf(path, PATH_MAX, "%s/min_cbm_bits", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read min_cbm_bits for %s\n", base);
+		return -1;
+	}
+
+	cache->min_cbm_bits = val;
+
+	scnprintf(path, PATH_MAX, "%s/num_closids", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read num_closids for %s\n", base);
+		return -1;
+	}
+
+	cache->num_closids = val;
+	return 0;
+}
+
+static int synthesize_resource(struct synth *s, const char *base, int rid)
+{
+	union perf_event *event = s->event;
+	struct rdt_resource_cache *data = (struct rdt_resource_cache *) event->rdt.data;
+	u16 size;
+
+	size  = sizeof(struct rdt_event);
+	size += sizeof(struct rdt_resource_cache);
+
+	if (WARN_ONCE(size >= RDT_EVENT_SIZE,
+		      "cbm crossed the event size limit"))
+		return -EINVAL;
+
+	if (get_cache(data, base))
+		return -1;
+
+	resource_id(&event->rdt.id, rid);
+
+	event->rdt.header.size = size;
+	event->rdt.id.type     = PERF_RDT_ID_TYPE__RESOURCE_CACHE;
+	return s->process(s->tool, event, NULL, NULL);
+}
+
+static int synthesize_resources(struct synth *s)
+{
+	int i;
+
+	for (i = 0; i < RDT_NUM_RESOURCES; i++) {
+		char path[PATH_MAX];
+		struct stat st;
+
+		scnprintf(path, PATH_MAX, "%s/info/%s",
+			  s->resctrlfs, rdt_name(i));
+
+		if (stat(path, &st))
+			continue;
+
+		if (synthesize_resource(s, path, i))
+			return -1;
+	}
+
+	return 0;
+}
+
+int
+perf_event__synthesize_rdt(struct perf_tool *tool,
+			   perf_event__handler_t process,
+			   const char *resctrlfs)
+{
+	struct synth s = {
+		.tool      = tool,
+		.process   = process,
+		.resctrlfs = resctrlfs,
+	};
+	int ret;
+
+	s.event = zalloc(RDT_EVENT_SIZE);
+	if (!s.event)
+		return -ENOMEM;
+
+	/* invariants */
+	s.event->header.type    = PERF_RECORD_RDT;
+	s.event->rdt.id.version = PERF_RDT_ID_VERSION_1;
+
+	ret = synthesize_groups(&s) ||
+	      synthesize_resources(&s);
+
+	free(s.event);
+	return ret;
+}
