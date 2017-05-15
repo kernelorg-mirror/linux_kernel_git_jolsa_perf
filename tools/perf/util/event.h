@@ -521,13 +521,16 @@ struct rdt_group_name {
 	char	name[PATH_MAX];
 };
 
-struct rdt_group_cpus {
-	struct cpu_map_data cpus;
+#define TASK_COMM_LEN	16
+
+struct rdt_group_task {
+	u64	pid;
+	char	comm[TASK_COMM_LEN];
 };
 
 struct rdt_group_tasks {
-	u64	nr;
-	u64	pids[];
+	u64			nr;
+	struct rdt_group_task	task[];
 };
 
 struct rdt_group_cbm {

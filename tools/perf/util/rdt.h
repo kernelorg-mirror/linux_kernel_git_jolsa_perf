@@ -40,6 +40,7 @@ struct rdt_group {
 	const char		*name;
 	struct rdt_schemata	 schemata[RDT_NUM_RESOURCES];
 	struct cpu_map		*cpus;
+	struct thread_map	*threads;
 	struct list_head	 list;
 };
 
