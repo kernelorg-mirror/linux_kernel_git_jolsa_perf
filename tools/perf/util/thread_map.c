@@ -472,3 +472,57 @@ int thread_map__remove(struct thread_map *threads, int idx)
 	threads->nr--;
 	return 0;
 }
+
+static pid_t *load_pids(const char *filename, int *nrp)
+{
+	char buf[50];
+	FILE *file;
+	pid_t *pids;
+	int nr = 0;
+
+	file = fopen(filename, "r");
+	if (!file)
+		return NULL;
+
+	while (fgets(buf, sizeof(buf), file)) {
+		nr++;
+	};
+
+	pids = malloc(sizeof(pid_t) * nr);
+	if (!pids)
+		goto out;
+
+	fseek(file, 0L, SEEK_SET);
+
+	nr = 0;
+	while (fgets(buf, sizeof(buf), file)) {
+		pids[nr++] = (pid_t) strtoul(buf, NULL, 10);
+	};
+
+	*nrp = nr;
+
+out:
+	fclose(file);
+	return pids;
+}
+
+struct thread_map *thread_map__new_file(const char *filename)
+{
+	struct thread_map *threads;
+	pid_t *pids;
+	int nr;
+
+	pids = load_pids(filename, &nr);
+	if (!pids)
+		return NULL;
+
+	threads = thread_map__alloc(nr);
+	if (threads) {
+		refcount_set(&threads->refcnt, 1);
+		threads->nr = nr;
+		for (nr = 0; nr < threads->nr; nr++)
+			threads->map[nr].pid = pids[nr];
+	}
+	free(pids);
+	return threads;
+}
