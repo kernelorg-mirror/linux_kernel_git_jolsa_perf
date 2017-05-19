@@ -349,6 +349,19 @@ void thread_map__put(struct thread_map *map)
 		thread_map__delete(map);
 }
 
+size_t thread_map__snprint(struct thread_map *threads, char *buf, size_t size)
+{
+	size_t printed = 0;
+	int i;
+
+	for (i = 0; i < threads->nr; i++) {
+		printed += scnprintf(buf + printed, size - printed, "%s%d",
+				     i ? "," : "", thread_map__pid(threads, i));
+	}
+
+	return printed;
+}
+
 size_t thread_map__fprintf(struct thread_map *threads, FILE *fp)
 {
 	int i;
