@@ -838,13 +838,32 @@ int perf_event__synthesize_kernel_mmap(struct perf_tool *tool,
 	return err;
 }
 
+void thread_map_data__synthesize(struct thread_map_data *data,
+				 struct thread_map *threads)
+{
+	int i;
+
+	for (i = 0; i < threads->nr; i++) {
+		struct thread_map_event_entry *entry = &data->entries[i];
+		char *comm = thread_map__comm(threads, i);
+
+		if (!comm)
+			comm = (char *) "";
+
+		entry->pid = thread_map__pid(threads, i);
+		memcpy(&entry->comm, comm, sizeof(entry->comm));
+	}
+
+	data->nr = threads->nr;
+}
+
 int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 				      struct thread_map *threads,
 				      perf_event__handler_t process,
 				      struct machine *machine)
 {
 	union perf_event *event;
-	int i, err, size;
+	int err, size;
 
 	size  = sizeof(event->thread_map);
 	size +=	threads->nr * sizeof(event->thread_map.data.entries[0]);
@@ -855,19 +874,7 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 
 	event->header.type = PERF_RECORD_THREAD_MAP;
 	event->header.size = size;
-	event->thread_map.data.nr = threads->nr;
-
-	for (i = 0; i < threads->nr; i++) {
-		struct thread_map_event_entry *entry = &event->thread_map.data.entries[i];
-		char *comm = thread_map__comm(threads, i);
-
-		if (!comm)
-			comm = (char *) "";
-
-		entry->pid = thread_map__pid(threads, i);
-		strncpy((char *) &entry->comm, comm, sizeof(entry->comm));
-	}
-
+	thread_map_data__synthesize(&event->thread_map.data, threads);
 	err = process(tool, event, NULL, machine);
 	free(event);
 	return err;
