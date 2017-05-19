@@ -2369,7 +2369,7 @@ int process_thread_map_event(struct perf_tool *tool,
 		return 0;
 	}
 
-	st->threads = thread_map__new_event(&event->thread_map);
+	st->threads = thread_map__new_event(&event->thread_map.data);
 	if (!st->threads)
 		return -ENOMEM;
 

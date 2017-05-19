@@ -1233,7 +1233,7 @@ size_t perf_event__fprintf_mmap2(union perf_event *event, FILE *fp)
 
 size_t perf_event__fprintf_thread_map(union perf_event *event, FILE *fp)
 {
-	struct thread_map *threads = thread_map__new_event(&event->thread_map);
+	struct thread_map *threads = thread_map__new_event(&event->thread_map.data);
 	size_t ret;
 
 	ret = fprintf(fp, " nr: ");
