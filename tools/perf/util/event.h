@@ -429,10 +429,14 @@ struct thread_map_event_entry {
 	char	comm[16];
 };
 
-struct thread_map_event {
-	struct perf_event_header	header;
+struct thread_map_data {
 	u64				nr;
 	struct thread_map_event_entry	entries[];
+};
+
+struct thread_map_event {
+	struct perf_event_header	header;
+	struct thread_map_data		data;
 };
 
 enum {
