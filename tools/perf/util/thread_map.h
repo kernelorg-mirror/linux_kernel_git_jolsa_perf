@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <linux/refcount.h>
 
-struct thread_map_data {
+struct thread_map_pid {
 	pid_t    pid;
 	char	*comm;
 };
@@ -13,7 +13,7 @@ struct thread_map_data {
 struct thread_map {
 	refcount_t refcnt;
 	int nr;
-	struct thread_map_data map[];
+	struct thread_map_pid map[];
 };
 
 struct thread_map_event;
