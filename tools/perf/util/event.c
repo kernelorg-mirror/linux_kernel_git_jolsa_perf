@@ -847,7 +847,7 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 	int i, err, size;
 
 	size  = sizeof(event->thread_map);
-	size +=	threads->nr * sizeof(event->thread_map.entries[0]);
+	size +=	threads->nr * sizeof(event->thread_map.data.entries[0]);
 
 	event = zalloc(size);
 	if (!event)
@@ -855,10 +855,10 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 
 	event->header.type = PERF_RECORD_THREAD_MAP;
 	event->header.size = size;
-	event->thread_map.nr = threads->nr;
+	event->thread_map.data.nr = threads->nr;
 
 	for (i = 0; i < threads->nr; i++) {
-		struct thread_map_event_entry *entry = &event->thread_map.entries[i];
+		struct thread_map_event_entry *entry = &event->thread_map.data.entries[i];
 		char *comm = thread_map__comm(threads, i);
 
 		if (!comm)
@@ -869,7 +869,6 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 	}
 
 	err = process(tool, event, NULL, machine);
-
 	free(event);
 	return err;
 }
