@@ -61,7 +61,7 @@ static int process_event(struct perf_tool *tool __maybe_unused,
 	TEST_ASSERT_VAL("wrong pid",  data->entries[0].pid == (u64) getpid());
 	TEST_ASSERT_VAL("wrong comm", !strcmp(data->entries[0].comm, NAME));
 
-	threads = thread_map__new_event(&event->thread_map);
+	threads = thread_map__new_event(&event->thread_map.data);
 	TEST_ASSERT_VAL("failed to alloc map", threads);
 
 	TEST_ASSERT_VAL("wrong nr", threads->nr == 1);
