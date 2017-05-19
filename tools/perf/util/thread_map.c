@@ -416,13 +416,14 @@ void thread_map__read_comms(struct thread_map *threads)
 static void thread_map__copy_event(struct thread_map *threads,
 				   struct thread_map_event *event)
 {
+	struct thread_map_data *data = &event->data;
 	unsigned i;
 
-	threads->nr = (int) event->nr;
+	threads->nr = (int) data->nr;
 
-	for (i = 0; i < event->nr; i++) {
-		thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
-		threads->map[i].comm = strndup(event->entries[i].comm, 16);
+	for (i = 0; i < data->nr; i++) {
+		thread_map__set_pid(threads, i, (pid_t) data->entries[i].pid);
+		threads->map[i].comm = strndup(data->entries[i].comm, 16);
 	}
 
 	refcount_set(&threads->refcnt, 1);
@@ -432,7 +433,7 @@ struct thread_map *thread_map__new_event(struct thread_map_event *event)
 {
 	struct thread_map *threads;
 
-	threads = thread_map__alloc(event->nr);
+	threads = thread_map__alloc(event->data.nr);
 	if (threads)
 		thread_map__copy_event(threads, event);
 

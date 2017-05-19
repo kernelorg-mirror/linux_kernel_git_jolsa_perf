@@ -710,12 +710,13 @@ static void perf_event__auxtrace_error_swap(union perf_event *event,
 static void perf_event__thread_map_swap(union perf_event *event,
 					bool sample_id_all __maybe_unused)
 {
+	struct thread_map_data *data = &event->thread_map.data;
 	unsigned i;
 
-	event->thread_map.nr = bswap_64(event->thread_map.nr);
+	data->nr = bswap_64(data->nr);
 
-	for (i = 0; i < event->thread_map.nr; i++)
-		event->thread_map.entries[i].pid = bswap_64(event->thread_map.entries[i].pid);
+	for (i = 0; i < data->nr; i++)
+		data->entries[i].pid = bswap_64(data->entries[i].pid);
 }
 
 static void perf_event__cpu_map_swap(union perf_event *event,
