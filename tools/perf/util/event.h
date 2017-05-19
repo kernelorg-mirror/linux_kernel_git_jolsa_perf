@@ -685,6 +685,8 @@ int kallsyms__get_function_start(const char *kallsyms_filename,
 void *cpu_map_data__alloc(struct cpu_map *map, size_t *size, u16 *type, int *max);
 void  cpu_map_data__synthesize(struct cpu_map_data *data, struct cpu_map *map,
 			       u16 type, int max);
+void thread_map_data__synthesize(struct thread_map_data *data,
+				 struct thread_map *threads);
 
 void event_attr_init(struct perf_event_attr *attr);
 
