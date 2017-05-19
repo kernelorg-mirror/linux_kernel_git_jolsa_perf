@@ -35,6 +35,7 @@ struct thread_map *thread_map__new_str(const char *pid,
 struct thread_map *thread_map__new_by_tid_str(const char *tid_str);
 
 size_t thread_map__fprintf(struct thread_map *threads, FILE *fp);
+size_t thread_map__snprint(struct thread_map *threads, char *buf, size_t size);
 
 static inline int thread_map__nr(struct thread_map *threads)
 {
