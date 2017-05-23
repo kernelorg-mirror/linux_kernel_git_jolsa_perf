@@ -30,6 +30,14 @@ static int rdt_test(char *path)
 	TEST_ASSERT_VAL("wrong cbm_mask",     res->cache.cbm_mask == 0x7ff);
 	TEST_ASSERT_VAL("wrong min_cbm_bits", res->cache.min_cbm_bits == 1);
 
+	/* resource L3 */
+	res = &data.resource[RDT_RESOURCE_MBA];
+	TEST_ASSERT_VAL("wrong enabled",        res->enabled == true);
+	TEST_ASSERT_VAL("wrong num_closids",    res->num_closids == 8);
+	TEST_ASSERT_VAL("wrong bandwidth_gran", res->membw.bandwidth_gran == 10);
+	TEST_ASSERT_VAL("wrong delay_linear",   res->membw.delay_linear == 1);
+	TEST_ASSERT_VAL("wrong min_bandwidth",  res->membw.min_bandwidth == 10);
+
 	/* group default */
 	group = rdt_group__find(&data, 0);
 	TEST_ASSERT_VAL("group not found",   group);
@@ -51,6 +59,17 @@ static int rdt_test(char *path)
 	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[2].val == 0x7ff);
 	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[3].id  == 3);
 	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[3].val == 0x7ff);
+
+	schemata = &group->schemata[RDT_RESOURCE_MBA];
+	TEST_ASSERT_VAL("wrong cnt", schemata->cnt == 4);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[0].id  == 0);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[0].val == 100);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[1].id  == 1);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[1].val == 100);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[2].id  == 2);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[2].val == 100);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[3].id  == 3);
+	TEST_ASSERT_VAL("wrong cbm", schemata->cbm[3].val == 100);
 
 	/* group krava2 */
 	group = rdt_group__find(&data, 2);
