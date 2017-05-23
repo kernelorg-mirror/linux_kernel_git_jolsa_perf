@@ -17,7 +17,7 @@
 #include "rdt.h"
 
 static const char *rdt_resource_name[RDT_NUM_RESOURCES] = {
-	"L3", "L3DATA", "L3CODE", "L2",
+	"L3", "L3DATA", "L3CODE", "L2", "MB",
 };
 
 static const char *rdt_name(unsigned idx)
@@ -186,6 +186,26 @@ static int process_rdt(struct rdt_data *rdt, union perf_event *event)
 		res->num_closids	= data->num_closids;
 		res->cache.cbm_mask	= data->cbm_mask;
 		res->cache.min_cbm_bits	= data->min_cbm_bits;
+		break;
+	}
+	case PERF_RDT_ID_TYPE__RESOURCE_MBA: {
+		struct rdt_resource_membw *data = (struct rdt_resource_membw *) event->rdt.data;
+		struct rdt_resource *res;
+
+		if (WARN_ONCE(id->val >= RDT_NUM_RESOURCES, "corrupted RDT info"))
+			return -EINVAL;
+
+		res = &rdt->resource[id->val];
+
+		if (WARN_ONCE(res->enabled, "corrupted RDT info"))
+			return -EINVAL;
+
+		res->enabled		  = true;
+		res->name		  = rdt_name(id->val);
+		res->num_closids	  = data->num_closids;
+		res->membw.bandwidth_gran = data->bandwidth_gran;
+		res->membw.delay_linear	  = data->delay_linear;
+		res->membw.min_bandwidth  = data->min_bandwidth;
 		break;
 	}
 	default:
@@ -372,7 +392,7 @@ static int group_schemata_line(struct synth *s, char *line)
 {
 #define CBM_MAX 500
 	struct rdt_group_cbm cbm[CBM_MAX];
-	int cnt = 0;
+	int cnt = 0, base = 16;
 	char *p, *next = NULL, *name;
 
 	line = name = trim(line);
@@ -382,6 +402,9 @@ static int group_schemata_line(struct synth *s, char *line)
 		return -1;
 
 	*p++ = 0;
+
+	if (!strcmp(name, "MB"))
+		base = 10;
 
 	p = strtok_r(p, ";", &next);
 	while (p) {
@@ -394,7 +417,7 @@ static int group_schemata_line(struct synth *s, char *line)
 		*t++ = 0;
 
 		cbm[cnt].id  = strtoull(p, NULL, 10);
-		cbm[cnt].val = strtoull(t, NULL, 16);
+		cbm[cnt].val = strtoull(t, NULL, base);
 
 		cnt++;
 		p = strtok_r(NULL, ";", &next);
@@ -499,11 +522,51 @@ static int get_cache(struct rdt_resource_cache *cache,
 	return 0;
 }
 
+static int get_membw(struct rdt_resource_membw *cache,
+		     const char *base)
+{
+	unsigned long long val;
+	char path[PATH_MAX];
+
+	scnprintf(path, PATH_MAX, "%s/bandwidth_gran", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read bandwidth_gran for %s\n", base);
+		return -1;
+	}
+
+	cache->bandwidth_gran = val;
+
+	scnprintf(path, PATH_MAX, "%s/delay_linear", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read delay_linear for %s\n", base);
+		return -1;
+	}
+
+	cache->delay_linear = val;
+
+	scnprintf(path, PATH_MAX, "%s/min_bandwidth", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read min_bandwidth for %s\n", base);
+		return -1;
+	}
+
+	cache->min_bandwidth = val;
+
+	scnprintf(path, PATH_MAX, "%s/num_closids", base);
+	if (filename__read_ull(path, &val)) {
+		pr_err("failed: read num_closids for %s\n", base);
+		return -1;
+	}
+
+	cache->num_closids = val;
+	return 0;
+}
+
 static int synthesize_resource(struct synth *s, const char *base, int rid)
 {
 	union perf_event *event = s->event;
-	struct rdt_resource_cache *data = (struct rdt_resource_cache *) event->rdt.data;
 	u16 size;
+	u32 type;
 
 	size  = sizeof(struct rdt_event);
 	size += sizeof(struct rdt_resource_cache);
@@ -512,13 +575,20 @@ static int synthesize_resource(struct synth *s, const char *base, int rid)
 		      "cbm crossed the event size limit"))
 		return -EINVAL;
 
-	if (get_cache(data, base))
-		return -1;
+	if (rid == RDT_RESOURCE_MBA) {
+		if (get_membw((struct rdt_resource_membw *) event->rdt.data, base))
+			return -1;
+		type = PERF_RDT_ID_TYPE__RESOURCE_MBA;
+	} else {
+		if (get_cache((struct rdt_resource_cache *) event->rdt.data, base))
+			return -1;
+		type = PERF_RDT_ID_TYPE__RESOURCE_CACHE;
+	}
 
 	resource_id(&event->rdt.id, rid);
 
 	event->rdt.header.size = size;
-	event->rdt.id.type     = PERF_RDT_ID_TYPE__RESOURCE_CACHE;
+	event->rdt.id.type     = type;
 	return s->process(s->tool, event, NULL, NULL);
 }
 
@@ -587,11 +657,21 @@ int rdt_load(struct rdt_data *data, const char *resctrl)
 	fprintf(file, fmt, ##__VA_ARGS__);
 
 
-static int display_resource(FILE *file, struct rdt_resource *res,
-			    bool hash)
+static int display_resource_cache(FILE *file, struct rdt_resource *res,
+				  bool hash)
 {
 	P("    cbm_mask       = %lx\n", res->cache.cbm_mask);
 	P("    min_cbm_bits   = %lx\n", res->cache.min_cbm_bits);
+	P("    num_closids    = %lu\n", res->num_closids);
+	return 0;
+}
+
+static int display_resource_membw(FILE *file, struct rdt_resource *res,
+				  bool hash)
+{
+	P("    bandwidth_gran = %lu\n", res->membw.bandwidth_gran);
+	P("    delay_linear   = %lu\n", res->membw.delay_linear);
+	P("    min_bandwidth  = %lu\n", res->membw.min_bandwidth);
 	P("    num_closids    = %lu\n", res->num_closids);
 	return 0;
 }
@@ -643,7 +723,10 @@ int rdt_display(FILE *file, struct rdt_data *rdt, bool hash)
 			continue;
 
 		P("  %s {\n", res->name);
-		display_resource(file, res, hash);
+		if (i == RDT_RESOURCE_MBA)
+			display_resource_membw(file, res, hash);
+		else
+			display_resource_cache(file, res, hash);
 		P("  }\n");
 	}
 

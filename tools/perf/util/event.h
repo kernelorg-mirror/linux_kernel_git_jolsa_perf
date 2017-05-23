@@ -503,6 +503,7 @@ enum {
 	PERF_RDT_ID_TYPE__GROUP_TASKS		= 2,
 	PERF_RDT_ID_TYPE__GROUP_SCHEMATA	= 3,
 	PERF_RDT_ID_TYPE__RESOURCE_CACHE	= 4,
+	PERF_RDT_ID_TYPE__RESOURCE_MBA		= 5,
 };
 
 struct rdt_id {
@@ -515,6 +516,13 @@ struct rdt_resource_cache {
 	u64	num_closids;
 	u64	cbm_mask;
 	u64	min_cbm_bits;
+};
+
+struct rdt_resource_membw {
+	u64	num_closids;
+	u64	bandwidth_gran;
+	u64	delay_linear;
+	u64	min_bandwidth;
 };
 
 struct rdt_group_name {
