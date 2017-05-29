@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 static int move_task(int pid, const char *group)
 {
@@ -118,6 +119,37 @@ out:
 	return ret;
 }
 
+#define STRDUP_FAIL_EXIT(s)		\
+	({	char *_p = strdup(s);	\
+		if (!_p)		\
+			return -ENOMEM;	\
+		_p;			\
+	})
+
+static int perf_rdt__stat(int argc, const char **argv)
+{
+	const char * const stat_args[] = {
+		"stat",
+		"-e intel_cqm/llc_occupancy/,intel_cqm/local_bytes/,intel_cqm/total_bytes/",
+	};
+	const char **stat_argv;
+	unsigned int i, j, stat_argc;
+
+	stat_argc = ARRAY_SIZE(stat_args) + argc;
+
+        stat_argv = calloc(stat_argc + 1, sizeof(char *));
+	if (!stat_argv)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(stat_args); i++)
+		stat_argv[i] = STRDUP_FAIL_EXIT(stat_args[i]);
+
+	for (j = 1; j < (unsigned int)argc; j++, i++)
+		stat_argv[i] = argv[j];
+
+	return cmd_stat(i, stat_argv);
+}
+
 int cmd_rdt(int argc, const char **argv)
 {
 	const char * const rdt_usage[] = {
@@ -157,6 +189,8 @@ int cmd_rdt(int argc, const char **argv)
 		wait(&status);
 	} else if (!strncmp(argv[0], "dump", 4)) {
 		return perf_rdt__dump(argc, argv);
+	} else if (!strncmp(argv[0], "stat", 4)) {
+		return perf_rdt__stat(argc, argv);
 	} else {
                 usage_with_options(rdt_usage, rdt_options);
 	}
