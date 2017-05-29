@@ -174,6 +174,30 @@ static int perf_rdt__record(int argc, const char **argv)
 	return cmd_record(i, record_argv);
 }
 
+static int perf_rdt__report(int argc, const char **argv)
+{
+	const char * const report_args[] = {
+		"report",
+		"-s rdt_group",
+	};
+	const char **report_argv;
+	unsigned int i, j, report_argc;
+
+	report_argc = ARRAY_SIZE(report_args) + argc;
+
+        report_argv = calloc(report_argc + 1, sizeof(char *));
+	if (!report_argv)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(report_args); i++)
+		report_argv[i] = STRDUP_FAIL_EXIT(report_args[i]);
+
+	for (j = 1; j < (unsigned int)argc; j++, i++)
+		report_argv[i] = argv[j];
+
+	return cmd_report(i, report_argv);
+}
+
 int cmd_rdt(int argc, const char **argv)
 {
 	const char * const rdt_usage[] = {
@@ -217,6 +241,8 @@ int cmd_rdt(int argc, const char **argv)
 		return perf_rdt__stat(argc, argv);
 	} else if (!strncmp(argv[0], "record", 4)) {
 		return perf_rdt__record(argc, argv);
+	} else if (!strncmp(argv[0], "report", 4)) {
+		return perf_rdt__report(argc, argv);
 	} else {
                 usage_with_options(rdt_usage, rdt_options);
 	}
