@@ -40,6 +40,8 @@ DEFINE_MUTEX(rdtgroup_mutex);
 
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_closid);
 
+atomic_t rdt_mirror_closid;
+
 /*
  * Used to store the max resource name width and max resource data width
  * to display the schemata in a tabular format

@@ -26,4 +26,6 @@ DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
 
 extern int rdt_max_closid;
 
+extern atomic_t rdt_mirror_closid;
+
 #endif /* _ASM_X86_INTEL_RDT_COMMON_H */
