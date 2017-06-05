@@ -24,6 +24,8 @@ static unsigned int cqm_l3_scale; /* supposedly cacheline size */
 static bool cqm_enabled, mbm_enabled;
 unsigned int mbm_socket_max;
 
+static atomic_t events;
+
 /*
  * The cached intel_pqr_state is strictly per CPU and can never be
  * updated from a remote CPU. Both functions which modify the state
@@ -1331,9 +1333,9 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 	raw_spin_unlock_irqrestore(&cache_lock, flags);
 
 	/*
-	 * Stop the mbm overflow timers when the last event is destroyed.
+	 * Stop the mbm overflow timers when the last MBM event is destroyed.
 	*/
-	if (mbm_enabled && list_empty(&cache_groups))
+	if (mbm_enabled && atomic_dec_and_test(&events))
 		mbm_stop_timers();
 
 	mutex_unlock(&cache_mutex);
@@ -1371,13 +1373,13 @@ static int intel_cqm_event_init(struct perf_event *event)
 
 	event->destroy = intel_cqm_event_destroy;
 
-	mutex_lock(&cache_mutex);
-
 	/*
-	 * Start the mbm overflow timers when the first event is created.
-	*/
-	if (mbm_enabled && list_empty(&cache_groups))
+	 * Start the mbm overflow timers when the first MBM event is created.
+	 */
+	if (mbm_enabled && atomic_inc_and_test(&events))
 		mbm_start_timers();
+
+	mutex_lock(&cache_mutex);
 
 	/* Will also set rmid */
 	intel_cqm_setup_event(event, &group);
