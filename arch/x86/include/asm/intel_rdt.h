@@ -261,7 +261,7 @@ static inline void intel_rdt_sched_in(void)
 {
 	if (static_branch_likely(&rdt_enable_key)) {
 		struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
-		int closid;
+		int closid, rmid = state->rmid;
 
 		/*
 		 * If this task has a closid assigned, use it.
@@ -271,9 +271,12 @@ static inline void intel_rdt_sched_in(void)
 		if (closid == 0)
 			closid = this_cpu_read(cpu_closid);
 
+		if (atomic_read(&rdt_mirror_closid))
+			rmid = closid;
+
 		if (closid != state->closid) {
 			state->closid = closid;
-			wrmsr(MSR_IA32_PQR_ASSOC, state->rmid, closid);
+			wrmsr(MSR_IA32_PQR_ASSOC, rmid, closid);
 		}
 	}
 }

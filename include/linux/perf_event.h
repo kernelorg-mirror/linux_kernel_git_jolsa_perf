@@ -146,6 +146,7 @@ struct hw_perf_event {
 			struct list_head	cqm_events_entry;
 			struct list_head	cqm_groups_entry;
 			struct list_head	cqm_group_entry;
+			int			cqm_mirror_event;
 		};
 		struct { /* itrace */
 			int			itrace_started;

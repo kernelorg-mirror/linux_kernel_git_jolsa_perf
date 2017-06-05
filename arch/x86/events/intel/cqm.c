@@ -82,6 +82,14 @@ static LIST_HEAD(cache_groups);
  */
 static cpumask_t cqm_cpumask;
 
+/*
+ * RMID type counter (cache/mirorr)
+ * > 0 RMID cache type
+ * < 0 RMID mirror type
+ */
+static DEFINE_MUTEX(type_mutex);
+static int type_counter;
+
 #define RMID_VAL_ERROR		(1ULL << 63)
 #define RMID_VAL_UNAVAIL	(1ULL << 62)
 
@@ -1027,14 +1035,15 @@ static void intel_cqm_setup_event(struct perf_event *event,
 
 static void intel_cqm_event_read(struct perf_event *event)
 {
+	bool mirror = event->hw.cqm_mirror_event;
 	unsigned long flags;
 	u32 rmid;
 	u64 val;
 
 	/*
-	 * Task events are handled by intel_cqm_event_count().
+	 * Task and mirror events are handled by intel_cqm_event_count().
 	 */
-	if (event->cpu == -1)
+	if (mirror || event->cpu == -1)
 		return;
 
 	raw_spin_lock_irqsave(&cache_lock, flags);
@@ -1166,21 +1175,10 @@ static void mbm_hrtimer_init(void)
 	}
 }
 
-static u64 intel_cqm_event_count(struct perf_event *event)
+static u64 event_count_rmid_cache(struct perf_event *event,
+				  struct rmid_read *rr)
 {
 	unsigned long flags;
-	struct rmid_read rr = {
-		.evt_type = event->attr.config,
-		.value = ATOMIC64_INIT(0),
-	};
-
-	/*
-	 * We only need to worry about task events. System-wide events
-	 * are handled like usual, i.e. entirely with
-	 * intel_cqm_event_read().
-	 */
-	if (event->cpu != -1)
-		return __perf_event_count(event);
 
 	/*
 	 * Only the group leader gets to report values except in case of
@@ -1197,14 +1195,6 @@ static u64 intel_cqm_event_count(struct perf_event *event)
 		return 0;
 
 	/*
-	 * Getting up-to-date values requires an SMP IPI which is not
-	 * possible if we're being called in interrupt context. Return
-	 * the cached values instead.
-	 */
-	if (unlikely(in_interrupt()))
-		goto out;
-
-	/*
 	 * Notice that we don't perform the reading of an RMID
 	 * atomically, because we can't hold a spin lock across the
 	 * IPIs.
@@ -1215,19 +1205,56 @@ static u64 intel_cqm_event_count(struct perf_event *event)
 	 * check @event's RMID afterwards, and if it has changed,
 	 * discard the result of the read.
 	 */
-	rr.rmid = ACCESS_ONCE(event->hw.cqm_rmid);
+	rr->rmid = ACCESS_ONCE(event->hw.cqm_rmid);
 
-	if (!__rmid_valid(rr.rmid))
+	if (!__rmid_valid(rr->rmid))
 		goto out;
 
-	cqm_mask_call(&rr);
+	cqm_mask_call(rr);
 
 	raw_spin_lock_irqsave(&cache_lock, flags);
-	if (event->hw.cqm_rmid == rr.rmid)
-		local64_set(&event->count, atomic64_read(&rr.value));
+	if (event->hw.cqm_rmid == rr->rmid)
+		local64_set(&event->count, atomic64_read(&rr->value));
 	raw_spin_unlock_irqrestore(&cache_lock, flags);
 out:
 	return __perf_event_count(event);
+}
+
+static u64 event_count_rmid_mirror(struct perf_event *event,
+				   struct rmid_read *rr)
+{
+	rr->rmid = ACCESS_ONCE(event->hw.cqm_rmid);
+	cqm_mask_call(rr);
+	local64_set(&event->count, atomic64_read(&rr->value));
+	return __perf_event_count(event);
+}
+
+static u64 intel_cqm_event_count(struct perf_event *event)
+{
+	bool mirror = event->hw.cqm_mirror_event;
+	struct rmid_read rr = {
+		.evt_type = event->attr.config,
+		.value = ATOMIC64_INIT(0),
+	};
+
+	/*
+	 * We only need to worry about task and mirror events.
+	 * System-wide events are handled like usual, i.e. entirely with
+	 * intel_cqm_event_read().
+	 */
+	if (!mirror && event->cpu != -1)
+		return __perf_event_count(event);
+
+	/*
+	 * Getting up-to-date values requires an SMP IPI which is not
+	 * possible if we're being called in interrupt context. Return
+	 * the cached values instead.
+	 */
+	if (unlikely(in_interrupt()))
+		return __perf_event_count(event);
+
+	return mirror ? event_count_rmid_mirror(event, &rr) :
+			event_count_rmid_cache(event, &rr);
 }
 
 static void intel_cqm_event_start(struct perf_event *event, int mode)
@@ -1240,6 +1267,13 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
+	if (event->hw.cqm_mirror_event) {
+		if (rmid == state->closid)
+			return;
+		rmid = state->closid;
+		goto set;
+	}
+
 	if (state->rmid_usecnt++) {
 		if (!WARN_ON_ONCE(state->rmid != rmid))
 			return;
@@ -1248,6 +1282,7 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 	}
 
 	state->rmid = rmid;
+set:
 	wrmsr(MSR_IA32_PQR_ASSOC, rmid, state->closid);
 }
 
@@ -1259,6 +1294,9 @@ static void intel_cqm_event_stop(struct perf_event *event, int mode)
 		return;
 
 	event->hw.cqm_state |= PERF_HES_STOPPED;
+
+	if (event->hw.cqm_mirror_event)
+		return;
 
 	intel_cqm_event_read(event);
 
@@ -1286,6 +1324,35 @@ static int intel_cqm_event_add(struct perf_event *event, int mode)
 	raw_spin_unlock_irqrestore(&cache_lock, flags);
 
 	return 0;
+}
+
+static int add_event_type(struct perf_event *event)
+{
+	bool valid = false, mirror = event->attr.config1;
+
+	mutex_lock(&type_mutex);
+	if (mirror && type_counter <= 0) {
+		type_counter--;
+		valid = true;
+	}
+	if (!mirror && type_counter >= 0) {
+		type_counter++;
+		valid = true;
+	}
+	mutex_unlock(&type_mutex);
+	return valid ? 0 : -1;
+}
+
+static void remove_event_type(struct perf_event *event)
+{
+	bool mirror = event->attr.config1;
+
+	mutex_lock(&type_mutex);
+	if (mirror)
+		type_counter++;
+	else
+		type_counter--;
+	mutex_unlock(&type_mutex);
 }
 
 static void intel_cqm_event_destroy(struct perf_event *event)
@@ -1340,46 +1407,15 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 		mbm_stop_timers();
 
 	mutex_unlock(&cache_mutex);
+
+	remove_event_type(event);
 }
 
-static int intel_cqm_event_init(struct perf_event *event)
+static void event_init_rmid_cache(struct perf_event *event)
 {
 	struct perf_event *group = NULL;
-	bool rotate = false;
 	unsigned long flags;
-
-	if (event->attr.type != intel_cqm_pmu.type)
-		return -ENOENT;
-
-	if ((event->attr.config < QOS_L3_OCCUP_EVENT_ID) ||
-	     (event->attr.config > QOS_MBM_LOCAL_EVENT_ID))
-		return -EINVAL;
-
-	if ((is_cqm_event(event->attr.config) && !cqm_enabled) ||
-	    (is_mbm_event(event->attr.config) && !mbm_enabled))
-		return -EINVAL;
-
-	/* unsupported modes and filters */
-	if (event->attr.exclude_user   ||
-	    event->attr.exclude_kernel ||
-	    event->attr.exclude_hv     ||
-	    event->attr.exclude_idle   ||
-	    event->attr.exclude_host   ||
-	    event->attr.exclude_guest  ||
-	    event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
-	INIT_LIST_HEAD(&event->hw.cqm_group_entry);
-	INIT_LIST_HEAD(&event->hw.cqm_groups_entry);
-
-	event->destroy = intel_cqm_event_destroy;
-
-	/*
-	 * Start the mbm overflow timers when the first MBM event is created.
-	 */
-	if (mbm_enabled && is_mbm_event(event->attr.config) &&
-	    atomic_inc_and_test(&mbm_events))
-		mbm_start_timers();
+	bool rotate = false;
 
 	mutex_lock(&cache_mutex);
 
@@ -1415,6 +1451,62 @@ static int intel_cqm_event_init(struct perf_event *event)
 
 	if (rotate)
 		schedule_delayed_work(&intel_cqm_rmid_work, 0);
+}
+
+static void event_init_rmid_mirror(struct perf_event *event)
+{
+	event->hw.cqm_rmid         = event->attr.config1;
+	event->hw.cqm_mirror_event = 1;
+	atomic_inc(&rdt_mirror_closid);
+}
+
+static int intel_cqm_event_init(struct perf_event *event)
+{
+	u64 mirror = event->attr.config1;
+
+	if (event->attr.type != intel_cqm_pmu.type)
+		return -ENOENT;
+
+	if ((event->attr.config < QOS_L3_OCCUP_EVENT_ID) ||
+	     (event->attr.config > QOS_MBM_LOCAL_EVENT_ID))
+		return -EINVAL;
+
+	if ((is_cqm_event(event->attr.config) && !cqm_enabled) ||
+	    (is_mbm_event(event->attr.config) && !mbm_enabled))
+		return -EINVAL;
+
+	/* unsupported modes and filters */
+	if (event->attr.exclude_user   ||
+	    event->attr.exclude_kernel ||
+	    event->attr.exclude_hv     ||
+	    event->attr.exclude_idle   ||
+	    event->attr.exclude_host   ||
+	    event->attr.exclude_guest  ||
+	    event->attr.sample_period) /* no sampling */
+		return -EINVAL;
+
+	if (mirror && mirror > (u64) rdt_max_closid)
+		return -EINVAL;
+
+	if (add_event_type(event))
+		return -EINVAL;
+
+	INIT_LIST_HEAD(&event->hw.cqm_group_entry);
+	INIT_LIST_HEAD(&event->hw.cqm_groups_entry);
+
+	event->destroy = intel_cqm_event_destroy;
+
+	/*
+	 * Start the mbm overflow timers when the first MBM event is created.
+	 */
+	if (mbm_enabled && is_mbm_event(event->attr.config) &&
+	    atomic_inc_and_test(&mbm_events))
+		mbm_start_timers();
+
+	if (mirror)
+		event_init_rmid_mirror(event);
+	else
+		event_init_rmid_cache(event);
 
 	return 0;
 }
