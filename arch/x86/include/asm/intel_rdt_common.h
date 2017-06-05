@@ -24,4 +24,6 @@ struct intel_pqr_state {
 
 DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
 
+extern int rdt_max_closid;
+
 #endif /* _ASM_X86_INTEL_RDT_COMMON_H */
