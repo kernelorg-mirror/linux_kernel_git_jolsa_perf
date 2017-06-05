@@ -60,19 +60,23 @@ static struct kernfs_node *kn_info;
  */
 static int closid_free_map;
 
+int rdt_max_closid = 0;
+
 static void closid_init(void)
 {
 	struct rdt_resource *r;
-	int rdt_min_closid = 32;
+	int max_closid = 32;
 
 	/* Compute rdt_min_closid across all resources */
 	for_each_enabled_rdt_resource(r)
-		rdt_min_closid = min(rdt_min_closid, r->num_closid);
+		max_closid = min(max_closid, r->num_closid);
 
-	closid_free_map = BIT_MASK(rdt_min_closid) - 1;
+	closid_free_map = BIT_MASK(max_closid) - 1;
 
 	/* CLOSID 0 is always reserved for the default group */
 	closid_free_map &= ~1;
+
+	rdt_max_closid = max_closid;
 }
 
 int closid_alloc(void)
