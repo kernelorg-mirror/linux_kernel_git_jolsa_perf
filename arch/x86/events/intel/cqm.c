@@ -24,7 +24,7 @@ static unsigned int cqm_l3_scale; /* supposedly cacheline size */
 static bool cqm_enabled, mbm_enabled;
 unsigned int mbm_socket_max;
 
-static atomic_t events;
+static atomic_t mbm_events;
 
 /*
  * The cached intel_pqr_state is strictly per CPU and can never be
@@ -1335,7 +1335,8 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 	/*
 	 * Stop the mbm overflow timers when the last MBM event is destroyed.
 	*/
-	if (mbm_enabled && atomic_dec_and_test(&events))
+	if (mbm_enabled && is_mbm_event(event->attr.config) &&
+	    atomic_dec_and_test(&mbm_events))
 		mbm_stop_timers();
 
 	mutex_unlock(&cache_mutex);
@@ -1376,7 +1377,8 @@ static int intel_cqm_event_init(struct perf_event *event)
 	/*
 	 * Start the mbm overflow timers when the first MBM event is created.
 	 */
-	if (mbm_enabled && atomic_inc_and_test(&events))
+	if (mbm_enabled && is_mbm_event(event->attr.config) &&
+	    atomic_inc_and_test(&mbm_events))
 		mbm_start_timers();
 
 	mutex_lock(&cache_mutex);
