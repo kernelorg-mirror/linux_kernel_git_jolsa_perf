@@ -243,6 +243,7 @@ ssize_t rdtgroup_schemata_write(struct kernfs_open_file *of,
 				char *buf, size_t nbytes, loff_t off);
 int rdtgroup_schemata_show(struct kernfs_open_file *of,
 			   struct seq_file *s, void *v);
+int intel_cql_mirror_rmid(int closid);
 
 /*
  * intel_rdt_sched_in() - Writes the task's CLOSid to IA32_PQR_MSR
@@ -272,7 +273,7 @@ static inline void intel_rdt_sched_in(void)
 			closid = this_cpu_read(cpu_closid);
 
 		if (atomic_read(&rdt_mirror_closid))
-			rmid = closid;
+			rmid = intel_cql_mirror_rmid(closid);
 
 		if (closid != state->closid) {
 			state->closid = closid;

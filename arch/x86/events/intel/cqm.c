@@ -1355,6 +1355,62 @@ static void remove_event_type(struct perf_event *event)
 	mutex_unlock(&type_mutex);
 }
 
+struct rmid_mirror {
+	int      rmid;
+	int      last;
+	atomic_t refcnt;
+};
+
+static unsigned long mirror_bitmask;
+
+static struct rmid_mirror mirror[50];
+
+int intel_cql_mirror_rmid(int closid)
+{
+	return mirror[closid].rmid;
+}
+
+static void __attach_mirror_rmid(struct rmid_mirror *m)
+{
+	int bit;
+
+	bit = find_first_zero_bit(&mirror_bitmask, rdt_max_closid);
+	if (WARN_ON(bit == rdt_max_closid))
+		bit = 0;
+
+	set_bit(bit, &mirror_bitmask);
+	m->last = m->rmid;
+	m->rmid = bit;
+}
+
+static void __detach_mirror_rmid(struct rmid_mirror *m)
+{
+	clear_bit(m->rmid, &mirror_bitmask);
+	m->last = m->rmid;
+}
+
+static void attach_mirror_rmid(int closid)
+{
+	struct rmid_mirror *m = &mirror[closid];
+
+	if (atomic_inc_and_test(&m->refcnt))
+		__attach_mirror_rmid(m);
+}
+
+static void detach_mirror_rmid(int closid)
+{
+	struct rmid_mirror *m = &mirror[closid];
+
+	if (atomic_dec_and_test(&m->refcnt))
+		__detach_mirror_rmid(m);
+}
+
+static void setup_mirror_rmid(void)
+{
+	WARN_ON(rdt_max_closid >= 50);
+	set_bit(0, &mirror_bitmask);
+}
+
 static void intel_cqm_event_destroy(struct perf_event *event)
 {
 	struct perf_event *group_other = NULL;
@@ -1409,6 +1465,10 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 	mutex_unlock(&cache_mutex);
 
 	remove_event_type(event);
+	if (event->hw.cqm_mirror_event)
+		atomic_dec(&rdt_mirror_closid);
+
+	detach_mirror_rmid(event->hw.cqm_rmid);
 }
 
 static void event_init_rmid_cache(struct perf_event *event)
@@ -1457,7 +1517,9 @@ static void event_init_rmid_mirror(struct perf_event *event)
 {
 	event->hw.cqm_rmid         = event->attr.config1;
 	event->hw.cqm_mirror_event = 1;
+
 	atomic_inc(&rdt_mirror_closid);
+	attach_mirror_rmid(event->hw.cqm_rmid);
 }
 
 static int intel_cqm_event_init(struct perf_event *event)
@@ -1837,6 +1899,8 @@ static int __init intel_cqm_init(void)
 		pr_info("Intel CQM monitoring enabled\n");
 	if (mbm_enabled)
 		pr_info("Intel MBM enabled\n");
+
+	setup_mirror_rmid();
 
 	/*
 	 * Setup the hot cpu notifier once we are sure cqm
