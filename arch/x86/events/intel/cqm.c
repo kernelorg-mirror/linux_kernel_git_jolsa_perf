@@ -1231,27 +1231,31 @@ out:
 static void intel_cqm_event_start(struct perf_event *event, int mode)
 {
 	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
-	u32 rmid = event->hw.cqm_rmid;
+	struct intel_pqr_rmid *rmid;
+	u32 val = event->hw.cqm_rmid;
 
 	if (!(event->hw.cqm_state & PERF_HES_STOPPED))
 		return;
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
-	if (state->rmid_usecnt++) {
-		if (!WARN_ON_ONCE(state->rmid != rmid))
+	rmid = &state->rmid;
+
+	if (rmid->usecnt++) {
+		if (!WARN_ON_ONCE(rmid->val != val))
 			return;
 	} else {
-		WARN_ON_ONCE(state->rmid);
+		WARN_ON_ONCE(rmid->val);
 	}
 
-	state->rmid = rmid;
-	wrmsr(MSR_IA32_PQR_ASSOC, rmid, state->closid);
+	rmid->val = val;
+	wrmsr(MSR_IA32_PQR_ASSOC, val, state->closid);
 }
 
 static void intel_cqm_event_stop(struct perf_event *event, int mode)
 {
 	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
+	struct intel_pqr_rmid *rmid;
 
 	if (event->hw.cqm_state & PERF_HES_STOPPED)
 		return;
@@ -1260,11 +1264,13 @@ static void intel_cqm_event_stop(struct perf_event *event, int mode)
 
 	intel_cqm_event_read(event);
 
-	if (!--state->rmid_usecnt) {
-		state->rmid = 0;
+	rmid = &state->rmid;
+
+	if (!--rmid->usecnt) {
+		rmid->val = 0;
 		wrmsr(MSR_IA32_PQR_ASSOC, 0, state->closid);
 	} else {
-		WARN_ON_ONCE(!state->rmid);
+		WARN_ON_ONCE(!rmid->val);
 	}
 }
 
@@ -1595,9 +1601,9 @@ static int intel_cqm_cpu_starting(unsigned int cpu)
 	struct intel_pqr_state *state = &per_cpu(pqr_state, cpu);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	state->rmid = 0;
-	state->closid = 0;
-	state->rmid_usecnt = 0;
+	state->closid      = 0;
+	state->rmid.usecnt = 0;
+	state->rmid.val    = 0;
 
 	WARN_ON(c->x86_cache_max_rmid != cqm_max_rmid);
 	WARN_ON(c->x86_cache_occ_scale != cqm_l3_scale);
