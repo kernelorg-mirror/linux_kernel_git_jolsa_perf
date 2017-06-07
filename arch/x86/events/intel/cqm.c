@@ -1241,12 +1241,11 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
 	if (state->rmid_usecnt++) {
-		if (!WARN_ON_ONCE(state->rmid != rmid))
-			return;
-	} else {
-		WARN_ON_ONCE(state->rmid);
+		WARN_ON_ONCE(state->rmid != rmid);
+		return;
 	}
 
+	WARN_ON_ONCE(state->rmid);
 	state->rmid = rmid;
 	wrmsr(MSR_IA32_PQR_ASSOC, rmid, state->closid);
 }
