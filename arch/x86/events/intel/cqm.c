@@ -294,6 +294,11 @@ fail:
 	return -ENOMEM;
 }
 
+static bool is_closid_event(struct perf_event *event)
+{
+	return event->attr.config1 != 0;
+}
+
 /*
  * Determine if @a and @b measure the same set of tasks.
  *
@@ -459,11 +464,6 @@ static bool is_cqm_event(int e)
 static bool is_mbm_event(int e)
 {
 	return (e >= QOS_MBM_TOTAL_EVENT_ID && e <= QOS_MBM_LOCAL_EVENT_ID);
-}
-
-static bool is_closid_event(struct perf_event *event)
-{
-	return event->attr.config1 != 0;
 }
 
 static void cqm_mask_call(struct rmid_read *rr)
@@ -1245,29 +1245,67 @@ out:
 	return __perf_event_count(event);
 }
 
+static struct intel_pqr_rmid*
+rmid_get(struct intel_pqr_state *state, struct perf_event *event)
+{
+	struct intel_pqr_rmid *rmid = &state->rmid;
+
+	if (is_closid_event(event)) {
+		rmid = &state->rmid_map[event->attr.config1];
+		state->usemap++;
+	}
+
+	return rmid;
+}
+
+static struct intel_pqr_rmid*
+rmid_put(struct intel_pqr_state *state, struct perf_event *event)
+{
+	struct intel_pqr_rmid *rmid = &state->rmid;
+
+	if (is_closid_event(event)) {
+		rmid = &state->rmid_map[event->attr.config1];
+		state->usemap--;
+	}
+
+	return rmid;
+}
+
+static bool should_update_msr(struct intel_pqr_state *state,
+			      struct perf_event *event)
+{
+	return !is_closid_event(event) || event->attr.config1 == state->closid;
+}
+
 static void intel_cqm_event_start(struct perf_event *event, int mode)
 {
 	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
-	u32 rmid = event->hw.cqm_rmid;
+	struct intel_pqr_rmid *rmid;
+	u32 val = event->hw.cqm_rmid;
 
 	if (!(event->hw.cqm_state & PERF_HES_STOPPED))
 		return;
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
-	if (state->rmid.usecnt++) {
-		WARN_ON_ONCE(state->rmid.val != rmid);
+	rmid = rmid_get(state, event);
+
+	if (rmid->usecnt++) {
+		WARN_ON_ONCE(rmid->val != val);
 		return;
 	}
 
-	WARN_ON_ONCE(state->rmid.val);
-	state->rmid.val = rmid;
-	wrmsr(MSR_IA32_PQR_ASSOC, rmid, state->closid);
+	WARN_ON_ONCE(rmid->val);
+	rmid->val = val;
+
+	if (should_update_msr(state, event))
+		wrmsr(MSR_IA32_PQR_ASSOC, rmid->val, state->closid);
 }
 
 static void intel_cqm_event_stop(struct perf_event *event, int mode)
 {
 	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
+	struct intel_pqr_rmid *rmid;
 
 	if (event->hw.cqm_state & PERF_HES_STOPPED)
 		return;
@@ -1276,9 +1314,12 @@ static void intel_cqm_event_stop(struct perf_event *event, int mode)
 
 	intel_cqm_event_read(event);
 
-	if (!--state->rmid.usecnt) {
-		state->rmid.val = 0;
-		wrmsr(MSR_IA32_PQR_ASSOC, 0, state->closid);
+	rmid = rmid_put(state, event);
+
+	if (!--rmid->usecnt) {
+		rmid->val = 0;
+		if (should_update_msr(state, event))
+			wrmsr(MSR_IA32_PQR_ASSOC, 0, state->closid);
 	} else {
 		WARN_ON_ONCE(!state->rmid.val);
 	}

@@ -273,7 +273,7 @@ static inline void intel_rdt_sched_in(void)
 
 		if (closid != state->closid) {
 			state->closid = closid;
-			wrmsr(MSR_IA32_PQR_ASSOC, state->rmid, closid);
+			wrmsr(MSR_IA32_PQR_ASSOC, intel_pqr_state_rmid(state), closid);
 		}
 	}
 }

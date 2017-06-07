@@ -28,10 +28,18 @@ struct intel_pqr_rmid {
 struct intel_pqr_state {
 	struct intel_pqr_rmid	rmid;
 	u32			closid;
+	struct intel_pqr_rmid	rmid_map[50];
+	u32			usemap;
 };
 
 DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
 
 extern int rdt_max_closid;
+
+static inline int intel_pqr_state_rmid(struct intel_pqr_state *state)
+{
+	return state->usemap ? state->rmid_map[state->closid].val :
+			       state->rmid.val;
+}
 
 #endif /* _ASM_X86_INTEL_RDT_COMMON_H */
