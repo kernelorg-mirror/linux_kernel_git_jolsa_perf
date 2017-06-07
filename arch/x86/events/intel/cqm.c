@@ -302,6 +302,13 @@ fail:
  */
 static bool __match_event(struct perf_event *a, struct perf_event *b)
 {
+	/* CLOSID event do not match with any other event. */
+	if (is_closid_event(a) != is_closid_event(b))
+		return false;
+
+	if (is_closid_event(a))
+		return a->attr.config1 == b->attr.config1;
+
 	/* Per-cpu and task events don't mix */
 	if ((a->attach_state & PERF_ATTACH_TASK) !=
 	    (b->attach_state & PERF_ATTACH_TASK))
@@ -361,6 +368,9 @@ static inline struct perf_cgroup *event_to_cgroup(struct perf_event *event)
  */
 static bool __conflict_event(struct perf_event *a, struct perf_event *b)
 {
+	if (is_closid_event(a) != is_closid_event(b))
+		return true;
+
 #ifdef CONFIG_CGROUP_PERF
 	/*
 	 * We can have any number of cgroups but only one system-wide
@@ -449,6 +459,11 @@ static bool is_cqm_event(int e)
 static bool is_mbm_event(int e)
 {
 	return (e >= QOS_MBM_TOTAL_EVENT_ID && e <= QOS_MBM_LOCAL_EVENT_ID);
+}
+
+static bool is_closid_event(struct perf_event *event)
+{
+	return event->attr.config1 != 0;
 }
 
 static void cqm_mask_call(struct rmid_read *rr)
