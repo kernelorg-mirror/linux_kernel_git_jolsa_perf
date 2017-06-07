@@ -80,6 +80,8 @@ static LIST_HEAD(cache_groups);
  */
 static cpumask_t cqm_cpumask;
 
+static int cqm_min_closid;
+
 #define RMID_VAL_ERROR		(1ULL << 63)
 #define RMID_VAL_UNAVAIL	(1ULL << 62)
 
@@ -292,6 +294,11 @@ fail:
 	return -ENOMEM;
 }
 
+static bool is_closid_event(struct perf_event *event)
+{
+	return event->attr.config1 != 0;
+}
+
 /*
  * Determine if @a and @b measure the same set of tasks.
  *
@@ -300,6 +307,13 @@ fail:
  */
 static bool __match_event(struct perf_event *a, struct perf_event *b)
 {
+	/* CLOSID event do not match with any other event. */
+	if (is_closid_event(a) != is_closid_event(b))
+		return false;
+
+	if (is_closid_event(a))
+		return a->attr.config1 == b->attr.config1;
+
 	/* Per-cpu and task events don't mix */
 	if ((a->attach_state & PERF_ATTACH_TASK) !=
 	    (b->attach_state & PERF_ATTACH_TASK))
@@ -359,6 +373,9 @@ static inline struct perf_cgroup *event_to_cgroup(struct perf_event *event)
  */
 static bool __conflict_event(struct perf_event *a, struct perf_event *b)
 {
+	if (is_closid_event(a) != is_closid_event(b))
+		return true;
+
 #ifdef CONFIG_CGROUP_PERF
 	/*
 	 * We can have any number of cgroups but only one system-wide
@@ -1228,6 +1245,43 @@ out:
 	return __perf_event_count(event);
 }
 
+static struct intel_pqr_rmid*
+rmid_get(struct intel_pqr_state *state, struct perf_event *event)
+{
+	struct intel_pqr_rmid *rmid = &state->rmid;
+
+	if (is_closid_event(event)) {
+		rmid = &state->closid_map[event->attr.config1];
+		state->closid_map_cnt++;
+	}
+
+	return rmid;
+}
+
+static struct intel_pqr_rmid*
+rmid_put(struct intel_pqr_state *state, struct perf_event *event)
+{
+	struct intel_pqr_rmid *rmid = &state->rmid;
+
+	if (is_closid_event(event)) {
+		rmid = &state->closid_map[event->attr.config1];
+		state->closid_map_cnt--;
+	}
+
+	return rmid;
+}
+
+static void update_msr(struct intel_pqr_state *state,
+		       struct intel_pqr_rmid *rmid,
+		       struct perf_event *event)
+{
+	bool update = !is_closid_event(event) ||
+		       event->attr.config1 == state->closid;
+
+	if (update)
+		wrmsr(MSR_IA32_PQR_ASSOC, rmid->val, state->closid);
+}
+
 static void intel_cqm_event_start(struct perf_event *event, int mode)
 {
 	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
@@ -1239,7 +1293,7 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
-	rmid = &state->rmid;
+	rmid = rmid_get(state, event);
 
 	if (rmid->usecnt++) {
 		if (!WARN_ON_ONCE(rmid->val != val))
@@ -1249,7 +1303,7 @@ static void intel_cqm_event_start(struct perf_event *event, int mode)
 	}
 
 	rmid->val = val;
-	wrmsr(MSR_IA32_PQR_ASSOC, val, state->closid);
+	update_msr(state, rmid, event);
 }
 
 static void intel_cqm_event_stop(struct perf_event *event, int mode)
@@ -1264,11 +1318,11 @@ static void intel_cqm_event_stop(struct perf_event *event, int mode)
 
 	intel_cqm_event_read(event);
 
-	rmid = &state->rmid;
+	rmid = rmid_put(state, event);
 
 	if (!--rmid->usecnt) {
 		rmid->val = 0;
-		wrmsr(MSR_IA32_PQR_ASSOC, 0, state->closid);
+		update_msr(state, rmid, event);
 	} else {
 		WARN_ON_ONCE(!rmid->val);
 	}
@@ -1396,6 +1450,10 @@ static int intel_cqm_event_init(struct perf_event *event)
 	    event->attr.exclude_host   ||
 	    event->attr.exclude_guest  ||
 	    event->attr.sample_period) /* no sampling */
+		return -EINVAL;
+
+	if (is_closid_event(event) &&
+	    (event->attr.config1 >= (u64) cqm_min_closid))
 		return -EINVAL;
 
 	INIT_LIST_HEAD(&event->hw.cqm_group_entry);

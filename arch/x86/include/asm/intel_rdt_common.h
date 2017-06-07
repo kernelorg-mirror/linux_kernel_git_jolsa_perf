@@ -29,10 +29,17 @@ struct intel_pqr_state {
 	struct intel_pqr_rmid	 rmid;
 	u32			 closid;
 	struct intel_pqr_rmid	*closid_map;
+	u32			 closid_map_cnt;
 };
 
 DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
 
 extern void cqm_closid_init(int min_closid);
+
+static inline int intel_pqr_state_rmid(struct intel_pqr_state *state)
+{
+	return state->closid_map_cnt ? state->closid_map[state->closid].val :
+				       state->rmid.val;
+}
 
 #endif /* _ASM_X86_INTEL_RDT_COMMON_H */
