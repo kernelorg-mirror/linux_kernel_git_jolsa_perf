@@ -458,7 +458,7 @@ static void clear_closid(int cpu)
 
 	per_cpu(cpu_closid, cpu) = 0;
 	state->closid = 0;
-	wrmsr(MSR_IA32_PQR_ASSOC, state->rmid, 0);
+	wrmsr(MSR_IA32_PQR_ASSOC, intel_pqr_state_rmid(state), 0);
 }
 
 static int intel_rdt_online_cpu(unsigned int cpu)
