@@ -1286,6 +1286,35 @@ static int intel_cqm_event_add(struct perf_event *event, int mode)
 	return 0;
 }
 
+/* Guarded with cache_mutex. */
+static int mbm_events;
+
+/*
+ * Start the mbm overflow timers when the first MBM event is created.
+ */
+static bool should_start_mbm_timers(struct perf_event *event)
+{
+	if (mbm_enabled && is_mbm_event(event->attr.config)) {
+		mbm_events++;
+		return mbm_events == 1;
+	}
+
+	return false;
+}
+
+/*
+ * Stop the mbm overflow timers when the last MBM event is destroyed.
+ */
+static bool should_stop_mbm_timers(struct perf_event *event)
+{
+	if (mbm_enabled && is_mbm_event(event->attr.config)) {
+		mbm_events--;
+		return mbm_events == 0;
+	}
+
+	return false;
+}
+
 static void intel_cqm_event_destroy(struct perf_event *event)
 {
 	struct perf_event *group_other = NULL;
@@ -1330,10 +1359,7 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 
 	raw_spin_unlock_irqrestore(&cache_lock, flags);
 
-	/*
-	 * Stop the mbm overflow timers when the last event is destroyed.
-	*/
-	if (mbm_enabled && list_empty(&cache_groups))
+	if (should_stop_mbm_timers(event))
 		mbm_stop_timers();
 
 	mutex_unlock(&cache_mutex);
@@ -1373,10 +1399,7 @@ static int intel_cqm_event_init(struct perf_event *event)
 
 	mutex_lock(&cache_mutex);
 
-	/*
-	 * Start the mbm overflow timers when the first event is created.
-	*/
-	if (mbm_enabled && list_empty(&cache_groups))
+	if (should_start_mbm_timers(event))
 		mbm_start_timers();
 
 	/* Will also set rmid */
