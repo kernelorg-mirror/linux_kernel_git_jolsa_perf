@@ -73,6 +73,8 @@ static void closid_init(void)
 
 	/* CLOSID 0 is always reserved for the default group */
 	closid_free_map &= ~1;
+
+	cqm_closid_init(rdt_min_closid);
 }
 
 int closid_alloc(void)

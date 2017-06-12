@@ -1708,6 +1708,17 @@ out:
 	return ret;
 }
 
+void cqm_closid_init(int min_closid)
+{
+	if (min_closid != cqm_min_closid) {
+		int cpu;
+
+		cqm_min_closid = min_closid;
+		for_each_possible_cpu(cpu)
+			pqr_state_init(&per_cpu(pqr_state, cpu));
+	}
+}
+
 static int __init intel_cqm_init(void)
 {
 	char *str = NULL, scale[20];

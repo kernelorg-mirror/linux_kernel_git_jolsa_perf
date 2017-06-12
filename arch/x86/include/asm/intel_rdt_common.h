@@ -33,4 +33,6 @@ struct intel_pqr_state {
 
 DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
 
+extern void cqm_closid_init(int min_closid);
+
 #endif /* _ASM_X86_INTEL_RDT_COMMON_H */
