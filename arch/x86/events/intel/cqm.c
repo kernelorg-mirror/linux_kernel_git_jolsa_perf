@@ -1596,14 +1596,35 @@ static inline void cqm_pick_event_reader(int cpu)
 		cpumask_set_cpu(cpu, &cqm_cpumask);
 }
 
+static void pqr_state_init(struct intel_pqr_state *state)
+{
+	state->closid      = 0;
+	state->rmid.usecnt = 0;
+	state->rmid.val    = 0;
+
+	if (cqm_min_closid) {
+		struct intel_pqr_rmid *map;
+
+		map = kzalloc(sizeof(*map) * cqm_min_closid, GFP_KERNEL);
+		if (WARN_ON(map == NULL))
+			return;
+
+		state->closid_map = map;
+	}
+}
+
+static void pqr_state_exit(struct intel_pqr_state *state)
+{
+	if (cqm_min_closid)
+		kfree(state->closid_map);
+}
+
 static int intel_cqm_cpu_starting(unsigned int cpu)
 {
 	struct intel_pqr_state *state = &per_cpu(pqr_state, cpu);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	state->closid      = 0;
-	state->rmid.usecnt = 0;
-	state->rmid.val    = 0;
+	pqr_state_init(state);
 
 	WARN_ON(c->x86_cache_max_rmid != cqm_max_rmid);
 	WARN_ON(c->x86_cache_occ_scale != cqm_l3_scale);
@@ -1614,6 +1635,7 @@ static int intel_cqm_cpu_starting(unsigned int cpu)
 
 static int intel_cqm_cpu_exit(unsigned int cpu)
 {
+	struct intel_pqr_state *state = &per_cpu(pqr_state, cpu);
 	int target;
 
 	/* Is @cpu the current cqm reader for this package ? */
@@ -1626,6 +1648,7 @@ static int intel_cqm_cpu_exit(unsigned int cpu)
 	if (target < nr_cpu_ids)
 		cpumask_set_cpu(target, &cqm_cpumask);
 
+	pqr_state_exit(state);
 	return 0;
 }
 

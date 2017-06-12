@@ -26,8 +26,9 @@ struct intel_pqr_rmid {
  * not change.
  */
 struct intel_pqr_state {
-	struct intel_pqr_rmid	rmid;
-	u32			closid;
+	struct intel_pqr_rmid	 rmid;
+	u32			 closid;
+	struct intel_pqr_rmid	*closid_map;
 };
 
 DECLARE_PER_CPU(struct intel_pqr_state, pqr_state);
