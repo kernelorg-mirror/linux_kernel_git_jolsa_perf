@@ -40,6 +40,17 @@ DEFINE_MUTEX(rdtgroup_mutex);
 
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_closid);
 
+DEFINE_PER_CPU_READ_MOSTLY(struct rdt_irq_cpu, rdt_irq);
+
+/* Mutex to protect rdt_irq_desc access. */
+DEFINE_MUTEX(rdtirq_mutex);
+
+int rdt_irq_cnt;
+
+struct rdt_irq_desc rdt_irq_desc[RDT_IRQ_MAX] = {
+	[RDT_IRQ_PERF_NMI]	= { .name = "PerfNmi", },
+};
+
 /*
  * Used to store the max resource name width and max resource data width
  * to display the schemata in a tabular format
@@ -545,6 +556,12 @@ static __init bool get_rdt_resources(void)
 	return ret;
 }
 
+static int __init rdt_irq_init(void)
+{
+	rdt_irq_cnt = RDT_IRQ_FREE;
+	return 0;
+}
+
 static int __init intel_rdt_late_init(void)
 {
 	struct rdt_resource *r;
@@ -554,6 +571,10 @@ static int __init intel_rdt_late_init(void)
 		return -ENODEV;
 
 	rdt_init_padding();
+
+	ret = rdt_irq_init();
+	if (ret < 0)
+		return ret;
 
 	state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 				  "x86/rdt/cat:online:",

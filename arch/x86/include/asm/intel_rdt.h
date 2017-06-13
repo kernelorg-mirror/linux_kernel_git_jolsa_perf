@@ -16,6 +16,8 @@
 
 #define L3_QOS_CDP_ENABLE	0x01ULL
 
+struct rdt_irq_desc;
+
 /**
  * struct rdtgroup - store rdtgroup's data in resctrl file system.
  * @kn:				kernfs node
@@ -33,6 +35,7 @@ struct rdtgroup {
 	struct cpumask		cpu_mask;
 	int			flags;
 	atomic_t		waitcount;
+	struct rdt_irq_desc	*irq;
 };
 
 /* rdtgroup.flags */
@@ -176,6 +179,34 @@ struct rdt_resource {
 				 struct rdt_domain *d);
 };
 
+enum {
+	RDT_IRQ_PERF_NMI	= 0,
+	RDT_IRQ_FREE		= 1,
+	RDT_IRQ_MAX		= 50,
+};
+
+struct rdt_irq_desc {
+	const char		*name;
+	bool			 avail;
+};
+
+struct rdt_irq {
+	struct rdt_irq_desc	*desc;
+	struct cpumask		 cpu_mask;
+	int			 closid;
+	int			 rmid;
+};
+
+struct rdt_irq_cpu {
+	struct rdt_irq		 irq[RDT_IRQ_MAX];
+	int			 saved_closid;
+	int			 saved_rmid;
+};
+
+extern struct rdt_irq_desc rdt_irq_desc[RDT_IRQ_MAX];
+DECLARE_PER_CPU_READ_MOSTLY(struct rdt_irq_cpu, rdt_irq);
+extern struct mutex rdtirq_mutex;
+extern int rdt_irq_cnt;
 void rdt_get_cache_infofile(struct rdt_resource *r);
 void rdt_get_mba_infofile(struct rdt_resource *r);
 int parse_cbm(char *buf, struct rdt_resource *r, struct rdt_domain *d);

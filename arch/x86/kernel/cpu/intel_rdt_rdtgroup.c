@@ -497,22 +497,44 @@ static int rdtgroup_id_show(struct kernfs_open_file *of,
 static int rdtgroup_irq_avail_show(struct kernfs_open_file *of,
 				   struct seq_file *s, void *v)
 {
-	seq_printf(s, "NONE\n");
+	int i;
+
+	mutex_lock(&rdtirq_mutex);
+	for (i = 0; i < rdt_irq_cnt; i++) {
+		if (rdt_irq_desc[i].avail)
+			seq_printf(s, "%s\n", rdt_irq_desc[i].name);
+	}
+	mutex_unlock(&rdtirq_mutex);
 	return 0;
 }
 
 static int rdtgroup_irq_show(struct kernfs_open_file *of,
 			     struct seq_file *s, void *v)
 {
-	seq_printf(s, "NONE\n");
+	struct rdtgroup *rdtgrp;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+
+	seq_printf(s, "%s\n", rdtgrp->irq ? rdtgrp->irq->name : "NONE");
+
+	rdtgroup_kn_unlock(of->kn);
 	return 0;
+}
+
+void rdtgroup_irq_update(struct rdtgroup *rdtgrp)
+{
 }
 
 ssize_t rdtgroup_irq_write(struct kernfs_open_file *of,
 			   char *buf, size_t nbytes, loff_t off)
 {
+	struct rdt_irq_desc *irq = NULL;
 	struct rdtgroup *rdtgrp;
-	int closid, ret = 0;
+	int i, ret = 0;
 
 	/* Valid input requires a trailing newline */
 	if (nbytes == 0 || buf[nbytes - 1] != '\n')
@@ -525,7 +547,44 @@ ssize_t rdtgroup_irq_write(struct kernfs_open_file *of,
 		return -ENOENT;
 	}
 
-	closid = rdtgrp->closid;
+	mutex_lock(&rdtirq_mutex);
+
+	if (!*buf) {
+		if (rdtgrp->irq) {
+			rdtgrp->irq->avail = true;
+			rdtgrp->irq = NULL;
+		}
+		goto out;
+	}
+
+        for (i = 0; i < rdt_irq_cnt; i++) {
+		irq = &rdt_irq_desc[i];
+
+                if (!strcmp(buf, irq->name))
+			break;
+        }
+
+	ret = -EINVAL;
+
+	if (i == rdt_irq_cnt)
+		goto out;
+
+	if (!irq->avail) {
+		struct rdtgroup *r;
+
+		list_for_each_entry(r, &rdt_all_groups, rdtgroup_list) {
+			if (r == rdtgrp || r->irq != irq)
+				continue;
+			r->irq = NULL;
+		}
+	} else
+		irq->avail = false;
+
+	rdtgrp->irq = irq;
+	rdtgroup_irq_update(rdtgrp);
+
+out:
+        mutex_unlock(&rdtirq_mutex);
 	rdtgroup_kn_unlock(of->kn);
 	return ret ?: nbytes;
 }
