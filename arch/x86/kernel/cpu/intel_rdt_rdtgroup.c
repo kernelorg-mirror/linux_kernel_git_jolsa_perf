@@ -494,6 +494,13 @@ static int rdtgroup_id_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static int rdtgroup_irq_avail_show(struct kernfs_open_file *of,
+				   struct seq_file *s, void *v)
+{
+	seq_printf(s, "NONE\n");
+	return 0;
+}
+
 /* Files in each rdtgroup */
 static struct rftype rdtgroup_base_files[] = {
 	{
@@ -530,6 +537,12 @@ static struct rftype rdtgroup_base_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdtgroup_id_show,
+	},
+	{
+		.name		= "irq_avail",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdtgroup_irq_avail_show,
 	},
 };
 
