@@ -501,6 +501,35 @@ static int rdtgroup_irq_avail_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static int rdtgroup_irq_show(struct kernfs_open_file *of,
+			     struct seq_file *s, void *v)
+{
+	seq_printf(s, "NONE\n");
+	return 0;
+}
+
+ssize_t rdtgroup_irq_write(struct kernfs_open_file *of,
+			   char *buf, size_t nbytes, loff_t off)
+{
+	struct rdtgroup *rdtgrp;
+	int closid, ret = 0;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+	buf[nbytes - 1] = '\0';
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		rdtgroup_kn_unlock(of->kn);
+		return -ENOENT;
+	}
+
+	closid = rdtgrp->closid;
+	rdtgroup_kn_unlock(of->kn);
+	return ret ?: nbytes;
+}
+
 /* Files in each rdtgroup */
 static struct rftype rdtgroup_base_files[] = {
 	{
@@ -543,6 +572,13 @@ static struct rftype rdtgroup_base_files[] = {
 		.mode		= 0444,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdtgroup_irq_avail_show,
+	},
+	{
+		.name		= "irq",
+		.mode		= 0644,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.write		= rdtgroup_irq_write,
+		.seq_show	= rdtgroup_irq_show,
 	},
 };
 
