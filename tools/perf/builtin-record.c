@@ -64,6 +64,15 @@ struct switch_output {
 	bool		 set;
 };
 
+struct record_thread {
+	struct perf_mmap	**mmap;
+	int			  mmap_nr;
+	struct perf_mmap	**bkw_mmap;
+	int			  bkw_mmap_nr;
+	struct fdarray		  pollfd;
+	struct record		 *rec;
+};
+
 struct record {
 	struct perf_tool	tool;
 	struct record_opts	opts;
@@ -82,6 +91,8 @@ struct record {
 	bool			timestamp_filename;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
+	struct record_thread	*threads;
+	int			threads_cnt;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -978,6 +989,216 @@ out:
 	return err;
 }
 
+static void
+record_thread__clean(struct record_thread *th)
+{
+	free(th->mmap);
+	free(th->bkw_mmap);
+}
+
+static void
+record__threads_clean(struct record *rec)
+{
+	struct record_thread *threads = rec->threads;
+
+	if (threads) {
+		int i;
+
+		for (i = 0; i < rec->threads_cnt; i++)
+			record_thread__clean(threads + i);
+	}
+}
+
+static void record_thread__init(struct record_thread *th, struct record *rec)
+{
+	memset(th, 0, sizeof(*th));
+	fdarray__init(&th->pollfd, 64);
+	th->rec = rec;
+}
+
+static int
+record_thread__mmap(struct record_thread *th, int nr)
+{
+	struct perf_mmap **mmap;
+
+	mmap = zalloc(sizeof(*mmap) * nr);
+	if (!mmap)
+		return -ENOMEM;
+
+	th->mmap    = mmap;
+	th->mmap_nr = nr;
+	return 0;
+}
+
+static int
+record__threads_assign(struct record *rec)
+{
+	struct record_thread *threads = rec->threads;
+	struct record_thread *thread0 = threads;
+	int cnt = rec->threads_cnt;
+	struct perf_mmap **mmap, **mmap_list = NULL;
+	struct perf_evlist *evlist = rec->evlist;
+	int i, j, t, nr, nr0, nr_bkw, nr_trk, nr_thr, nr_mod;
+	int ret = -ENOMEM;
+
+	nr     = evlist->mmap          ? evlist->nr_mmaps : 0;
+	nr_trk = evlist->track_mmap    ? evlist->nr_mmaps : 0;
+	nr_bkw = evlist->backward_mmap ? evlist->nr_mmaps : 0;
+
+	if (nr_bkw) {
+		mmap = zalloc(sizeof(*mmap) * nr_bkw);
+		if (!mmap)
+			goto out_error;
+
+		thread0->bkw_mmap    = mmap;
+		thread0->bkw_mmap_nr = nr_bkw;
+	}
+
+	nr0 = nr_trk;
+
+	if (cnt == 1)
+		nr0 += nr;
+
+	if (record_thread__mmap(thread0, nr0))
+		goto out_error;
+
+	for (i = 0; i < nr_trk; i++)
+		thread0->mmap[i] = &evlist->track_mmap[i];
+
+	/*
+	 * If there's just a single thread,
+	 * assign the rest of the maps.
+	 */
+	if (cnt == 1) {
+		for (j = 0; i < nr0 && j < nr; i++, j++)
+			thread0->mmap[i] = &evlist->mmap[j];
+
+		goto out;
+	}
+
+	nr_thr = nr / (cnt - 1);
+	nr_mod = nr % (cnt - 1);
+
+	/*
+	 * Create threads' mmaps first..
+	 */
+	for (t = 1; t < cnt; t++) {
+		struct record_thread *th = threads + t;
+		int n = nr_thr;
+
+		/* evenly spread the remainder of threads */
+		n += (nr_mod-- > 0) ? 1 : 0;
+
+		if (record_thread__mmap(th, n))
+			goto out_error;
+	}
+
+	/*
+	 *  ... and assign mmaps separatelly.
+	 */
+
+	j = 0; /* mmap in evlist->mmap */
+	i = 0; /* mmap in thread    */
+
+	while (1) {
+		for (t = 1; t < cnt; t++) {
+			struct record_thread *th = threads + t;
+
+			if (i == th->mmap_nr)
+				continue;
+
+			th->mmap[i] = &evlist->mmap[j++];
+
+			if (j == nr)
+				goto out;
+		}
+		i++;
+	}
+out:
+	ret = 0;
+
+out_error:
+	if (ret)
+		free(mmap_list);
+	return ret;
+}
+
+static int
+record_thread__create_poll(struct record_thread *th,
+			   struct perf_evlist *evlist)
+{
+	struct fdarray *fda = &evlist->pollfd;
+	struct perf_mmap *mmap;
+	int i, j;
+
+	for (i = 0; i < th->mmap_nr; i++) {
+		mmap = th->mmap[i];
+
+		for (j = 0; j < fda->nr; j++) {
+			if (mmap != fda->priv[j].ptr)
+				continue;
+
+			if (fdarray__add_clone(&th->pollfd, j, fda) < 0)
+				return -ENOMEM;
+
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int
+record__threads_create_poll(struct record *rec)
+{
+	struct record_thread *threads = rec->threads;
+	int ret = 0, i;
+
+	for (i = 0; !ret && (i < rec->threads_cnt); i++)
+		ret = record_thread__create_poll(threads + i, rec->evlist);
+
+	return ret;
+}
+
+static int
+record__threads_create(struct record *rec)
+{
+	struct record_thread *threads;
+	int i, cnt = rec->threads_cnt;
+
+	threads = zalloc(sizeof(*threads) * cnt);
+	if (threads) {
+		for (i = 0; i < cnt; i++)
+			record_thread__init(threads + i, rec);
+
+		rec->threads = threads;
+	}
+
+	return threads ? 0 : -ENOMEM;
+}
+
+static int
+record__threads_config(struct record *rec)
+{
+	int ret;
+
+	ret = record__threads_create(rec);
+	if (ret)
+		goto out;
+
+	ret = record__threads_assign(rec);
+	if (ret)
+		goto out;
+
+	ret = record__threads_create_poll(rec);
+
+out:
+	if (ret)
+		record__threads_clean(rec);
+
+	return ret;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -1045,6 +1266,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 
 	if (record__open(rec) != 0) {
+		err = -1;
+		goto out_child;
+	}
+
+	if (record__threads_config(rec)) {
 		err = -1;
 		goto out_child;
 	}
@@ -1325,6 +1551,8 @@ out_child:
 	}
 
 	perf_hooks__invoke_record_end();
+
+	record__threads_clean(rec);
 
 	if (!err && !quiet) {
 		char samples[128];
@@ -1667,6 +1895,7 @@ static struct record record = {
 		.mmap2		= perf_event__process_mmap2,
 		.ordered_events	= true,
 	},
+	.threads_cnt	= 1,
 };
 
 const char record_callchain_help[] = CALLCHAIN_RECORD_HELP
