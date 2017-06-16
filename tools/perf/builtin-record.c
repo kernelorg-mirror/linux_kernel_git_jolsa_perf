@@ -76,6 +76,23 @@ struct switch_output {
 	int		 cur_file;
 };
 
+enum {
+	RECORD__THREADS_TYPE_ONE,
+};
+
+struct thread_obj {
+	struct mmap		**mmap;
+	int			  mmap_nr;
+	struct mmap		**ovw_mmap;
+	int			  ovw_mmap_nr;
+	struct fdarray		  pollfd;
+	struct record		 *rec;
+};
+
+struct thread_cfg {
+	struct perf_cpu_map	*monitor;
+};
+
 struct record {
 	struct perf_tool	tool;
 	struct record_opts	opts;
@@ -97,6 +114,13 @@ struct record {
 	unsigned long long	samples;
 	struct mmap_cpu_mask	affinity_mask;
 	unsigned long		output_max_size;	/* = 0: unlimited */
+
+	struct {
+		struct thread_obj	*objs;
+		struct thread_cfg	*cfgs;
+		int			 cnt;
+		int			 type;
+	} threads;
 };
 
 static volatile int done;
@@ -1451,6 +1475,213 @@ out:
 	return err;
 }
 
+static void
+thread_obj__clean(struct thread_obj *th)
+{
+	free(th->mmap);
+	free(th->ovw_mmap);
+}
+
+static void
+thread_cfg__clean(struct thread_cfg *cfg)
+{
+	perf_cpu_map__put(cfg->monitor);
+}
+
+static void
+record__threads_clean(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	struct thread_cfg *cfgs = rec->threads.cfgs;
+	int i;
+
+	for (i = 0; i < rec->threads.cnt; i++) {
+		if (objs)
+			thread_obj__clean(objs + i);
+		if (cfgs)
+			thread_cfg__clean(cfgs + i);
+	}
+
+	free(objs);
+	free(cfgs);
+}
+
+static void thread_obj__init(struct thread_obj *th, struct record *rec)
+{
+	memset(th, 0, sizeof(*th));
+	fdarray__init(&th->pollfd, 64);
+	th->rec = rec;
+}
+
+static int
+thread_obj__create_mmap(struct thread_obj *th, int nr, int nr_ovw)
+{
+	struct mmap **mmap;
+
+	mmap = zalloc(sizeof(*mmap) * nr);
+	if (!mmap)
+		return -ENOMEM;
+
+	th->mmap    = mmap;
+	th->mmap_nr = nr;
+
+	if (nr_ovw) {
+		mmap = zalloc(sizeof(*mmap) * nr_ovw);
+		if (!mmap)
+			return -ENOMEM;
+
+		th->ovw_mmap    = mmap;
+		th->ovw_mmap_nr = nr;
+	}
+
+	return 0;
+}
+
+static int thread_obj__assign(struct thread_obj *th, struct thread_cfg *cfg,
+			      struct record *rec)
+{
+	struct evlist *evlist = rec->evlist;
+	struct perf_cpu_map *monitor = cfg->monitor;
+	int i, nr, nr_ovw = 0;
+
+	nr = monitor->nr;
+
+	if (rec->threads.type == RECORD__THREADS_TYPE_ONE)
+		nr_ovw = evlist->overwrite_mmap ? evlist->core.nr_mmaps : 0;
+
+	if (thread_obj__create_mmap(th, nr, nr_ovw))
+		return -ENOMEM;
+
+	for (i = 0; i < nr; i++) {
+		int cpu = monitor->map[i];
+
+		th->mmap[i] = &evlist->mmap[cpu];
+	}
+
+	for (i = 0; i < nr_ovw; i++)
+		th->ovw_mmap[i] = &evlist->overwrite_mmap[i];
+
+	return 0;
+}
+
+static int
+record__threads_assign(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	struct thread_cfg *cfgs = rec->threads.cfgs;
+	int i;
+
+	for (i = 0; i < rec->threads.cnt; i++) {
+		if (thread_obj__assign(objs + i, cfgs + i, rec))
+			return -1;
+	}
+
+	return 0;
+}
+
+static int thread_obj__create_poll(struct thread_obj *th,
+				   struct evlist *evlist)
+{
+	struct fdarray *fda = &evlist->core.pollfd;
+	struct mmap *mmap;
+	int i, j;
+
+	for (i = 0; i < th->mmap_nr; i++) {
+		mmap = th->mmap[i];
+
+		for (j = 0; j < fda->nr; j++) {
+			if (mmap != fda->priv[j].ptr)
+				continue;
+
+			if (fdarray__add_clone(&th->pollfd, j, fda) < 0)
+				return -ENOMEM;
+
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int
+record__threads_create_poll(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	int ret = 0, i;
+
+	for (i = 0; !ret && (i < rec->threads.cnt); i++)
+		ret = thread_obj__create_poll(objs + i, rec->evlist);
+
+	return ret;
+}
+
+static int
+record__threads_create(struct record *rec)
+{
+	struct thread_obj *objs;
+	int i, cnt = rec->threads.cnt;
+
+	objs = zalloc(sizeof(*objs) * cnt);
+	if (objs) {
+		for (i = 0; i < cnt; i++)
+			thread_obj__init(objs + i, rec);
+
+		rec->threads.objs = objs;
+	}
+
+	return objs ? 0 : -ENOMEM;
+}
+
+static int
+record__threads_type_one(struct record *rec)
+{
+	struct evlist *evlist = rec->evlist;
+	struct thread_cfg *config;
+
+	config = zalloc(sizeof(*config));
+	if (!config)
+		return -ENOMEM;
+
+	config->monitor = perf_cpu_map__get(evlist->core.cpus);
+	if (!config->monitor) {
+		free(config);
+		return -ENOMEM;
+	}
+
+	rec->threads.cfgs = config;
+	rec->threads.cnt = 1;
+	return 0;
+}
+
+static int
+record__threads_type(struct record *rec)
+{
+	if (rec->threads.type == RECORD__THREADS_TYPE_ONE)
+		return record__threads_type_one(rec);
+
+	return -1;
+}
+
+static int
+record__threads_config(struct record *rec)
+{
+	int ret;
+
+	ret = record__threads_type(rec);
+	if (ret)
+		return ret;
+
+	ret = record__threads_create(rec);
+	if (ret)
+		return ret;
+
+	ret = record__threads_assign(rec);
+	if (ret)
+		return ret;
+
+	return record__threads_create_poll(rec);
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -1552,6 +1783,10 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			goto out_child;
 		}
 	}
+
+	err = record__threads_config(rec);
+	if (err)
+		goto out_child;
 
 	if (perf_data__is_dir(data)) {
 		err = record__mmap_dir_data(rec);
@@ -1848,6 +2083,8 @@ out_child:
 	}
 
 	perf_hooks__invoke_record_end();
+
+	record__threads_clean(rec);
 
 	if (!err && !quiet) {
 		char samples[128];
@@ -2288,6 +2525,7 @@ static struct record record = {
 		.mmap2		= build_id__process_mmap2,
 		.ordered_events	= true,
 	},
+	.threads.type = RECORD__THREADS_TYPE_ONE,
 };
 
 const char record_callchain_help[] = CALLCHAIN_RECORD_HELP
