@@ -84,6 +84,15 @@ struct record {
 	unsigned long long	samples;
 };
 
+struct record_thread {
+	struct perf_mmap	**mmap;
+	int			  mmap_nr;
+	struct perf_mmap	**bkw_mmap;
+	int			  bkw_mmap_nr;
+	struct fdarray		  pollfd;
+	struct record		 *rec;
+};
+
 static volatile int auxtrace_record__snapshot_started;
 static DEFINE_TRIGGER(auxtrace_snapshot_trigger);
 static DEFINE_TRIGGER(switch_output_trigger);
@@ -980,9 +989,185 @@ out:
 	return err;
 }
 
+static void
+__record_thread__clean(struct record_thread *thread)
+{
+	free(thread->mmap);
+	free(thread->bkw_mmap);
+}
+
+static void
+record_thread__clean(struct record_thread *thread, int cnt)
+{
+	int i;
+
+	for (i = 0; i < cnt; i++)
+		__record_thread__clean(thread + i);
+}
+
+static void record_thread__init(struct record_thread *thread, struct record *rec)
+{
+	memset(thread, 0, sizeof(*thread));
+	fdarray__init(&thread->pollfd, 64);
+	thread->rec = rec;
+}
+
+static int
+record_thread__assign(struct record_thread *thread, int cnt,
+		      struct perf_evlist *evlist)
+{
+	struct perf_mmap **mmap, **mmap_list = NULL;
+	int i, j, t, nr, nr_bkw, nr_trk, nr_thr, nr_list, nr_mod;
+	int ret = -ENOMEM;
+
+	nr     = evlist->mmap          ? evlist->nr_mmaps : 0;
+	nr_trk = evlist->track_mmap    ? evlist->nr_mmaps : 0;
+	nr_bkw = evlist->backward_mmap ? evlist->nr_mmaps : 0;
+
+	if (nr_bkw) {
+		struct record_thread *thread0 = thread;
+
+		mmap = zalloc(sizeof(*mmap) * nr_bkw);
+		if (!mmap)
+			goto out;
+
+		thread0->bkw_mmap    = mmap;
+		thread0->bkw_mmap_nr = nr_bkw;
+	}
+
+	nr_list = nr + nr_trk;
+
+	mmap_list = zalloc(sizeof(*mmap_list) * nr_list);
+	if (!mmap_list)
+		return -ENOMEM;
+
+	for (i = 0, j = 0; i < nr_trk; i++, j++)
+		mmap_list[j] = &evlist->track_mmap[i];
+
+	for (i = 0; i < nr; i++, j++)
+		mmap_list[j] = &evlist->mmap[i];
+
+	nr_thr = nr_list / cnt;
+	nr_mod = nr_list % cnt;
+	j = 0;
+
+	for (t = 0; t < cnt; t++) {
+		struct record_thread *th = thread + t;
+		int n = nr_thr;
+
+		/* Add the rest to the first thread */
+		n += !t ? nr_mod : 0;
+
+		mmap = zalloc(sizeof(*mmap) * n);
+		if (!mmap)
+			return -ENOMEM;
+
+		for (i = 0; i < n && j < nr_list; i++, j++)
+			mmap[i] = mmap_list[j];
+
+		th->mmap    = mmap;
+		th->mmap_nr = n;
+	}
+
+	ret = 0;
+out:
+	if (ret)
+		free(mmap_list);
+	return ret;
+}
+
+static int
+__record_thread__create_poll(struct record_thread *thread,
+			     struct perf_evlist *evlist)
+{
+	struct fdarray *fda = &evlist->pollfd;
+	struct perf_mmap *mmap;
+	int i, j;
+
+	for (i = 0; i < thread->mmap_nr; i++) {
+		mmap = thread->mmap[i];
+
+		for (j = 0; j < fda->nr; j++) {
+			if (mmap != fda->priv[j].ptr)
+				continue;
+
+			if (fdarray__add_clone(&thread->pollfd, j, fda) < 0)
+				return -ENOMEM;
+
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int
+record_thread__create_poll(struct record_thread *thread, int cnt,
+			   struct record *rec)
+{
+	int ret = 0, i;
+
+	for (i = 0; !ret && (i < cnt); i++)
+		ret = __record_thread__create_poll(thread + i, rec->evlist);
+
+	return ret;
+}
+
+static void record_thread__cnt(struct record *rec __maybe_unused, int *cnt)
+{
+	*cnt = 1;
+}
+
+static int
+record_thread__create(struct record_thread **threadp, int *cnt,
+		      struct record *rec)
+{
+	struct record_thread *thread;
+	int i;
+
+	record_thread__cnt(rec, cnt);
+
+	thread = zalloc(sizeof(*thread) * (*cnt));
+	if (thread) {
+		for (i = 0; i < *cnt; i++)
+			record_thread__init(thread + i, rec);
+
+		*threadp = thread;
+	}
+
+	return thread ? 0 : -ENOMEM;
+}
+
+static int
+record_thread__config(struct record_thread **thread, int *cnt,
+		      struct record *rec)
+{
+	struct perf_evlist *evlist = rec->evlist;
+	int ret;
+
+	ret = record_thread__create(thread, cnt, rec);
+	if (ret)
+		goto out;
+
+	ret = record_thread__assign(*thread, *cnt, evlist);
+	if (ret)
+		goto out;
+
+	ret = record_thread__create_poll(*thread, *cnt, rec);
+	if (ret)
+		goto out;
+
+out:
+	if (ret)
+		record_thread__clean(*thread, *cnt);
+
+	return ret;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
-	int err;
+	struct record_thread *threads = NULL;
+	int err, cnt = 0;
 	int status = 0;
 	unsigned long waking = 0;
 	const bool forks = argc > 0;
@@ -1047,6 +1232,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 
 	if (record__open(rec) != 0) {
+		err = -1;
+		goto out_child;
+	}
+
+	if (record_thread__config(&threads, &cnt, rec)) {
 		err = -1;
 		goto out_child;
 	}
@@ -1321,6 +1511,8 @@ out_child:
 	}
 
 	perf_hooks__invoke_record_end();
+
+	record_thread__clean(threads, cnt);
 
 	if (!err && !quiet) {
 		char samples[128];
