@@ -608,27 +608,27 @@ static struct perf_event_header finished_round_event = {
 };
 
 static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evlist,
-				    bool backward)
+				    struct record_thread *thread, bool backward)
 {
 	u64 bytes_written = rec->bytes_written;
-	int i;
+	int i, nr;
 	int rc = 0;
-	struct perf_mmap *maps;
+	struct perf_mmap **maps;
 
 	if (!evlist)
 		return 0;
 
-	maps = backward ? evlist->backward_mmap : evlist->mmap;
+	maps = backward ? thread->bkw_mmap : thread->mmap;
 	if (!maps)
 		return 0;
 
 	if (backward && evlist->bkw_mmap_state != BKW_MMAP_DATA_PENDING)
 		return 0;
 
-	for (i = 0; i < evlist->nr_mmaps; i++) {
-		struct perf_mmap *map = &maps[i];
-		struct perf_mmap *track_map =  evlist->track_mmap ?
-					      &evlist->track_mmap[i] : NULL;
+	nr = backward ? thread->bkw_mmap_nr : thread->mmap_nr;
+
+	for (i = 0; i < nr; i++) {
+		struct perf_mmap *map = maps[i];
 
 		if (map->base) {
 			if (record__mmap_read(rec, map, evlist->overwrite,
@@ -642,14 +642,6 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 		    record__auxtrace_mmap_read(rec, map) != 0) {
 			rc = -1;
 			goto out;
-		}
-
-		if (track_map && track_map->base) {
-			if (record__mmap_read(rec, track_map, evlist->overwrite,
-					      false) != 0) {
-				rc = -1;
-				goto out;
-			}
 		}
 	}
 
@@ -666,15 +658,15 @@ out:
 	return rc;
 }
 
-static int record__mmap_read_all(struct record *rec)
+static int record__mmap_read_all(struct record *rec, struct record_thread *thread)
 {
 	int err;
 
-	err = record__mmap_read_evlist(rec, rec->evlist, false);
+	err = record__mmap_read_evlist(rec, rec->evlist, thread, false);
 	if (err)
 		return err;
 
-	return record__mmap_read_evlist(rec, rec->evlist, true);
+	return record__mmap_read_evlist(rec, rec->evlist, thread, true);
 }
 
 static void record__init_features(struct record *rec)
@@ -1166,7 +1158,7 @@ out:
 
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
-	struct record_thread *threads = NULL;
+	struct record_thread *threads = NULL, *thread0;
 	int err, cnt = 0;
 	int status = 0;
 	unsigned long waking = 0;
@@ -1298,6 +1290,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		}
 	}
 
+	thread0 = &threads[0];
+
 	/*
 	 * When perf is starting the traced process, all the events
 	 * (apart from group members) have enable_on_exec=1 set,
@@ -1376,7 +1370,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (trigger_is_hit(&switch_output_trigger) || done || draining)
 			perf_evlist__toggle_bkw_mmap(rec->evlist, BKW_MMAP_DATA_PENDING);
 
-		if (record__mmap_read_all(rec) < 0) {
+		if (record__mmap_read_all(rec, thread0) < 0) {
 			trigger_error(&auxtrace_snapshot_trigger);
 			trigger_error(&switch_output_trigger);
 			err = -1;
@@ -1435,7 +1429,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (hits == rec->samples) {
 			if (done || draining)
 				break;
-			err = perf_evlist__poll(rec->evlist, -1);
+			err = fdarray__poll(&thread0->pollfd, -1);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
