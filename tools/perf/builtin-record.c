@@ -95,6 +95,8 @@ struct record {
 	int			threads_cnt;
 };
 
+static __thread struct record_thread *thread;
+
 static volatile int auxtrace_record__snapshot_started;
 static DEFINE_TRIGGER(auxtrace_snapshot_trigger);
 static DEFINE_TRIGGER(switch_output_trigger);
@@ -528,24 +530,24 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 				    bool overwrite)
 {
 	u64 bytes_written = rec->bytes_written;
-	int i;
+	int i, nr;
 	int rc = 0;
-	struct perf_mmap *maps;
+	struct perf_mmap **maps;
 
 	if (!evlist)
 		return 0;
 
-	maps = overwrite ? evlist->overwrite_mmap : evlist->mmap;
+	maps = overwrite ? thread->bkw_mmap : thread->mmap;
 	if (!maps)
 		return 0;
 
 	if (overwrite && evlist->bkw_mmap_state != BKW_MMAP_DATA_PENDING)
 		return 0;
 
-	for (i = 0; i < evlist->nr_mmaps; i++) {
-		struct perf_mmap *map = &maps[i];
-		struct perf_mmap *track_map =  evlist->track_mmap ?
-					      &evlist->track_mmap[i] : NULL;
+	nr = overwrite ? thread->bkw_mmap_nr : thread->mmap_nr;
+
+	for (i = 0; i < nr; i++) {
+		struct perf_mmap *map = maps[i];
 
 		if (map->base) {
 			if (perf_mmap__push(map, overwrite, rec, record__pushfn) != 0) {
@@ -559,21 +561,20 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 			rc = -1;
 			goto out;
 		}
-
-		if (track_map && track_map->base) {
-			if (perf_mmap__push(track_map, overwrite, rec, record__pushfn) != 0) {
-				rc = -1;
-				goto out;
-			}
-		}
 	}
 
 	/*
 	 * Mark the round finished in case we wrote
 	 * at least one event.
 	 */
-	if (bytes_written != rec->bytes_written)
-		rc = record__write(rec, NULL, &finished_round_event, sizeof(finished_round_event));
+	if (bytes_written != rec->bytes_written) {
+		/*
+		 * All maps of the threads point to a single file,
+		 * so we can just pick first one.
+		 */
+		rc = record__write(rec, thread->mmap[0], &finished_round_event,
+				   sizeof(finished_round_event));
+	}
 
 	if (overwrite)
 		perf_evlist__toggle_bkw_mmap(evlist, BKW_MMAP_EMPTY);
@@ -993,9 +994,9 @@ record__threads_assign(struct record *rec)
 	int i, j, t, nr, nr0, nr_bkw, nr_trk, nr_thr, nr_mod;
 	int ret = -ENOMEM;
 
-	nr     = evlist->mmap          ? evlist->nr_mmaps : 0;
-	nr_trk = evlist->track_mmap    ? evlist->nr_mmaps : 0;
-	nr_bkw = evlist->backward_mmap ? evlist->nr_mmaps : 0;
+	nr     = evlist->mmap           ? evlist->nr_mmaps : 0;
+	nr_trk = evlist->track_mmap     ? evlist->nr_mmaps : 0;
+	nr_bkw = evlist->overwrite_mmap ? evlist->nr_mmaps : 0;
 
 	if (nr_bkw) {
 		mmap = zalloc(sizeof(*mmap) * nr_bkw);
@@ -1229,6 +1230,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			goto out_child;
 	}
 
+	thread = &rec->threads[0];
+
 	err = bpf__apply_obj_config();
 	if (err) {
 		char errbuf[BUFSIZ];
@@ -1423,7 +1426,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (hits == rec->samples) {
 			if (done || draining)
 				break;
-			err = perf_evlist__poll(rec->evlist, -1);
+			err = fdarray__poll(&thread->pollfd, -1);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
