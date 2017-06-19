@@ -123,6 +123,8 @@ struct record {
 	} threads;
 };
 
+static __thread struct thread_obj *thread;
+
 static volatile int done;
 
 static volatile int auxtrace_record__snapshot_started;
@@ -1066,16 +1068,16 @@ static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 				    bool overwrite, bool synch)
 {
 	u64 bytes_written = rec->bytes_written;
-	int i;
+	int i, nr;
 	int rc = 0;
-	struct mmap *maps;
+	struct mmap **maps;
 	int trace_fd = rec->data.file.fd;
 	off_t off = 0;
 
 	if (!evlist)
 		return 0;
 
-	maps = overwrite ? evlist->overwrite_mmap : evlist->mmap;
+	maps = overwrite ? thread->ovw_mmap : thread->mmap;
 	if (!maps)
 		return 0;
 
@@ -1085,9 +1087,11 @@ static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 	if (record__aio_enabled(rec))
 		off = record__aio_get_pos(trace_fd);
 
-	for (i = 0; i < evlist->core.nr_mmaps; i++) {
+	nr = overwrite ? thread->ovw_mmap_nr : thread->mmap_nr;
+
+	for (i = 0; i < nr; i++) {
 		u64 flush = 0;
-		struct mmap *map = &maps[i];
+		struct mmap *map = maps[i];
 
 		if (map->core.base) {
 			record__adjust_affinity(rec, map);
@@ -1554,8 +1558,9 @@ static int thread_obj__assign(struct thread_obj *th, struct thread_cfg *cfg,
 
 	for (i = 0; i < nr; i++) {
 		int cpu = monitor->map[i];
+		int idx = perf_cpu_map__idx(evlist->core.cpus, cpu);
 
-		th->mmap[i] = &evlist->mmap[cpu];
+		th->mmap[i] = &evlist->mmap[idx];
 	}
 
 	for (i = 0; i < nr_ovw; i++)
@@ -1794,6 +1799,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			goto out_child;
 	}
 
+	thread = &rec->threads.objs[0];
+
 	err = bpf__apply_obj_config();
 	if (err) {
 		char errbuf[BUFSIZ];
@@ -1995,7 +2002,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (hits == rec->samples) {
 			if (done || draining)
 				break;
-			err = evlist__poll(rec->evlist, -1);
+			err = fdarray__poll(&thread->pollfd, -1);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
