@@ -85,6 +85,11 @@ struct record {
 	unsigned long		waking;
 };
 
+enum {
+	RECORD_THREAD__RUNNING	= 0,
+	RECORD_THREAD__STOP	= 1,
+};
+
 struct record_thread {
 	struct perf_mmap	**mmap;
 	int			  mmap_nr;
@@ -93,6 +98,8 @@ struct record_thread {
 	struct fdarray		  pollfd;
 	struct record		 *rec;
 	unsigned long long	  samples;
+	pthread_t		  pt;
+	int			  state;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -1158,6 +1165,71 @@ out:
 	return ret;
 }
 
+static void*
+record_thread__process(struct record_thread *thread)
+{
+	struct record *rec = thread->rec;
+
+	thread->state = RECORD_THREAD__RUNNING;
+
+	while (thread->state != RECORD_THREAD__STOP) {
+		unsigned long long hits = thread->samples;
+		int err;
+
+		if (record__mmap_read_all(thread->rec, thread) < 0)
+			break;
+
+		if (hits == thread->samples) {
+			err = fdarray__poll(&thread->pollfd, 500);
+			/*
+			 * Propagate error, only if there's any. Ignore positive
+			 * number of returned events and interrupt error.
+			 */
+			if (err > 0 || (err < 0 && errno == EINTR))
+				err = 0;
+			rec->waking++;
+
+			if (fdarray__filter(&thread->pollfd, POLLERR|POLLHUP,
+					    perf_mmap__put_filtered, NULL) == 0)
+				break;
+		}
+	}
+
+	return NULL;
+}
+
+static void* worker(void *arg)
+{
+	return record_thread__process(arg);
+}
+
+static int record_thread__start(struct record_thread *thread, int cnt)
+{
+	int i, err = 0;
+
+	for (i = 1; !err && i < cnt; i++) {
+		struct record_thread *t = thread + i;
+
+		err = pthread_create(&t->pt, NULL, worker, t);
+	}
+
+	return err;
+}
+
+static int record_thread__stop(struct record_thread *thread, int cnt)
+{
+	int i, err = 0;
+
+	for (i = 1; !err && i < cnt; i++) {
+		struct record_thread *t = thread + i;
+
+		t->state = RECORD_THREAD__STOP;
+		err = pthread_join(t->pt, NULL);
+	}
+
+	return err;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	struct record_thread *threads = NULL, *thread0;
@@ -1290,6 +1362,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			goto out_child;
 		}
 	}
+
+	record_thread__start(threads, cnt);
 
 	thread0 = &threads[0];
 
@@ -1456,6 +1530,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 	trigger_off(&auxtrace_snapshot_trigger);
 	trigger_off(&switch_output_trigger);
+
+	record_thread__stop(threads, cnt);
 
 	if (forks && workload_exec_errno) {
 		char msg[STRERR_BUFSIZE];
