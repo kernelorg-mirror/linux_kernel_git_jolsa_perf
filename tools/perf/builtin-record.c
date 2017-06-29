@@ -80,6 +80,11 @@ enum {
 	RECORD__THREADS_TYPE_ONE,
 };
 
+enum {
+	RECORD_THREAD__RUNNING	= 0,
+	RECORD_THREAD__STOP	= 1,
+};
+
 struct thread_obj {
 	struct mmap		**mmap;
 	int			  mmap_nr;
@@ -89,6 +94,8 @@ struct thread_obj {
 	struct record		 *rec;
 	unsigned long long	  samples;
 	u64			  bytes_written;
+	pthread_t		  pt;
+	int			  state;
 };
 
 struct thread_cfg {
@@ -1688,6 +1695,89 @@ record__threads_config(struct record *rec)
 	return record__threads_create_poll(rec);
 }
 
+static void fdarray__munmap_filtered(struct fdarray *fda, int fd,
+				     void *arg __maybe_unused)
+{
+	struct perf_mmap *map = fda->priv[fd].ptr;
+
+	if (map)
+		perf_mmap__put(map);
+}
+
+static void*
+thread_obj__process(struct record *rec)
+{
+	while (thread->state != RECORD_THREAD__STOP) {
+		unsigned long long hits = thread->samples;
+		int err;
+
+		if (record__mmap_read_all(thread->rec, false) < 0)
+			break;
+
+		if (hits == thread->samples) {
+			err = fdarray__poll(&thread->pollfd, 500);
+			/*
+			 * Propagate error, only if there's any. Ignore positive
+			 * number of returned events and interrupt error.
+			 */
+			if (err > 0 || (err < 0 && errno == EINTR))
+				err = 0;
+			rec->waking++;
+
+			if (fdarray__filter(&thread->pollfd, POLLERR|POLLHUP,
+					    fdarray__munmap_filtered, NULL) == 0)
+				break;
+		}
+	}
+
+	return NULL;
+}
+
+static void *worker(void *arg)
+{
+	struct thread_obj *th = arg;
+	struct record *rec = th->rec;
+
+	thread        = th;
+	thread->state = RECORD_THREAD__RUNNING;
+
+	return thread_obj__process(rec);
+}
+
+static int record__threads_start(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	int i, err = 0;
+
+	for (i = 1; !err && i < rec->threads.cnt; i++) {
+		struct thread_obj *th = objs + i;
+
+		err = pthread_create(&th->pt, NULL, worker, th);
+	}
+
+	return err;
+}
+
+static int record__threads_stop(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	int i, err = 0;
+
+	for (i = 1; i < rec->threads.cnt; i++) {
+		struct thread_obj *th = objs + i;
+
+		th->state = RECORD_THREAD__STOP;
+	}
+
+	for (i = 1; !err && i < rec->threads.cnt; i++) {
+		struct thread_obj *th = objs + i;
+
+		err = pthread_join(th->pt, NULL);
+	}
+
+	return err;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -1848,6 +1938,14 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		pr_debug("Couldn't start the BPF side band thread:\nBPF programs starting from now on won't be annotatable\n");
 		opts->no_bpf_event = true;
 	}
+
+	/*
+	 * We need to call this before record__synthesize, so in case we
+	 * sample system wide perf threads get synthesized as well.
+	 */
+	err = record__threads_start(rec);
+	if (err < 0)
+		goto out_child;
 
 	err = record__synthesize(rec, false);
 	if (err < 0)
@@ -2032,6 +2130,9 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 
 	if (opts->auxtrace_snapshot_on_exit)
 		record__auxtrace_snapshot_exit(rec);
+
+	if (record__threads_stop(rec))
+		pr_err("failed to stop threads\n");
 
 	if (forks && workload_exec_errno) {
 		char msg[STRERR_BUFSIZE];
