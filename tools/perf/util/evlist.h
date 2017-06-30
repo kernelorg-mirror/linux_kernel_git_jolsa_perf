@@ -384,4 +384,5 @@ perf_evlist__find_evsel_by_str(struct perf_evlist *evlist, const char *str);
 
 struct perf_evsel *perf_evlist__event2evsel(struct perf_evlist *evlist,
 					    union perf_event *event);
+void perf_mmap__put_filtered(struct fdarray *fda, int fd, void *arg);
 #endif /* __PERF_EVLIST_H */
