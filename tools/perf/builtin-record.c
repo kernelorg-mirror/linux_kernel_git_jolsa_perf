@@ -71,6 +71,7 @@ struct record_thread {
 	int			  bkw_mmap_nr;
 	struct fdarray		  pollfd;
 	struct record		 *rec;
+	unsigned long long	  samples;
 };
 
 struct record {
@@ -158,7 +159,7 @@ static int record__pushfn(struct perf_mmap *map, void *to, void *bf, size_t size
 {
 	struct record *rec = to;
 
-	rec->samples++;
+	thread->samples++;
 	return record__write(rec, map, bf, size);
 }
 
@@ -242,7 +243,7 @@ static int record__auxtrace_mmap_read(struct record *rec,
 		return ret;
 
 	if (ret)
-		rec->samples++;
+		thread->samples++;
 
 	return 0;
 }
@@ -259,7 +260,7 @@ static int record__auxtrace_mmap_read_snapshot(struct record *rec,
 		return ret;
 
 	if (ret)
-		rec->samples++;
+		thread->samples++;
 
 	return 0;
 }
@@ -1354,7 +1355,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	trigger_ready(&switch_output_trigger);
 	perf_hooks__invoke_record_start();
 	for (;;) {
-		unsigned long long hits = rec->samples;
+		unsigned long long hits = thread->samples;
 
 		/*
 		 * rec->evlist->bkw_mmap_state is possible to be
@@ -1423,7 +1424,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 				alarm(rec->switch_output.time);
 		}
 
-		if (hits == rec->samples) {
+		if (hits == thread->samples) {
 			if (done || draining)
 				break;
 			err = fdarray__poll(&thread->pollfd, -1);
