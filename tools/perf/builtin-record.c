@@ -83,6 +83,8 @@ struct record {
 	struct switch_output	switch_output;
 	unsigned long long	samples;
 	unsigned long		waking;
+	bool			threads;
+	int			threads_cnt;
 };
 
 enum {
@@ -1114,9 +1116,30 @@ record_thread__create_poll(struct record_thread *thread, int cnt,
 	return ret;
 }
 
-static void record_thread__cnt(struct record *rec __maybe_unused, int *cnt)
+static void record_thread__cnt(struct record *rec, int *cnt)
 {
-	*cnt = 1;
+	struct perf_evlist *evlist = rec->evlist;
+
+	if (rec->threads) {
+		if (rec->threads_cnt) {
+			*cnt = rec->threads_cnt;
+		} else {
+			/*
+			 * If not set by user, pick some reasonable
+			 * number.. like 3 ;-)
+			 */
+			*cnt = 2;
+		}
+
+		/*
+		 * Can't do threads with backward mmap ATM.
+		 */
+		if (evlist->backward_mmap)
+			*cnt = 1;
+
+	} else {
+		*cnt = 1;
+	}
 }
 
 static int
@@ -2064,6 +2087,8 @@ static struct option __record_options[] = {
 		    "Parse options then exit"),
 	OPT_BOOLEAN(0, "index", &record.opts.index,
 		    "make index for sample data to speed-up processing"),
+	OPT_INTEGER_OPTARG_SET(0, "threads", &record.threads_cnt, &record.threads,
+			       "count", "Enabled threads (count)", 0),
 	OPT_END()
 };
 
@@ -2220,6 +2245,12 @@ int cmd_record(int argc, const char **argv)
 		pr_err("Not enough memory for event selector list\n");
 		goto out;
 	}
+
+	/*
+	 * Threads need index data file.
+	 */
+	if (record.threads)
+		record.opts.index = true;
 
 	if (rec->opts.index) {
 		if (!rec->opts.sample_time) {
