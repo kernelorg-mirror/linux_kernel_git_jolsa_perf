@@ -114,6 +114,7 @@ struct record {
 	unsigned long long	samples;
 	struct mmap_cpu_mask	affinity_mask;
 	unsigned long		output_max_size;	/* = 0: unlimited */
+	unsigned long		waking;
 
 	struct {
 		struct thread_obj	*objs;
@@ -1691,7 +1692,6 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
 	int status = 0;
-	unsigned long waking = 0;
 	const bool forks = argc > 0;
 	struct perf_tool *tool = &rec->tool;
 	struct record_opts *opts = &rec->opts;
@@ -1984,8 +1984,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 
 			if (!quiet)
 				fprintf(stderr, "[ perf record: dump data: Woken up %ld times ]\n",
-					waking);
-			waking = 0;
+					rec->waking);
+			rec->waking = 0;
 			fd = record__switch_output(rec, false);
 			if (fd < 0) {
 				pr_err("Failed to switch to new file\n");
@@ -2009,7 +2009,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			 */
 			if (err > 0 || (err < 0 && errno == EINTR))
 				err = 0;
-			waking++;
+			rec->waking++;
 
 			if (evlist__filter_pollfd(rec->evlist, POLLERR | POLLHUP) == 0)
 				draining = true;
@@ -2042,7 +2042,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 
 	if (!quiet)
-		fprintf(stderr, "[ perf record: Woken up %ld times to write data ]\n", waking);
+		fprintf(stderr, "[ perf record: Woken up %ld times to write data ]\n", rec->waking);
 
 	if (target__none(&rec->opts.target))
 		record__synthesize_workload(rec, true);
