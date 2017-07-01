@@ -101,6 +101,7 @@ struct record {
 	unsigned long long	samples;
 	struct record_thread	*threads;
 	int			threads_cnt;
+	bool			threads_set;
 	unsigned long		waking;
 };
 
@@ -1252,10 +1253,53 @@ record__threads_create(struct record *rec)
 	return threads ? 0 : -ENOMEM;
 }
 
+static void record__threads_cnt(struct record *rec)
+{
+	struct perf_evlist *evlist = rec->evlist;
+	int cnt;
+
+	if (rec->threads_set) {
+		int nr;
+
+		if (rec->threads_cnt) {
+			cnt = rec->threads_cnt;
+		} else {
+			/*
+			 * If the number of threads is not set by user,
+			 * pick some reasonable number.. like 2 ;-)
+			 */
+			cnt = 2;
+		}
+
+		/*
+		 * Can't do threads with backward mmap ATM.
+		 */
+		if (evlist->backward_mmap)
+			cnt = 1;
+
+		/*
+		 * Can't create more threads than there's work to do.
+		 */
+		nr = evlist->nr_mmaps + 1;
+
+		if (cnt > nr) {
+			pr_warning("WARNING: There's no job for %d threads, cutting it down to %d\n",
+				   cnt, nr);
+			cnt = nr;
+		}
+	} else {
+		cnt = 1;
+	}
+
+	rec->threads_cnt   = cnt;
+}
+
 static int
 record__threads_config(struct record *rec)
 {
 	int ret;
+
+	record__threads_cnt(rec);
 
 	ret = record__threads_create(rec);
 	if (ret)
@@ -2185,6 +2229,8 @@ static struct option __record_options[] = {
 		    "Parse options then exit"),
 	OPT_BOOLEAN(0, "index", &record.opts.index,
 		    "make index for sample data to speed-up processing"),
+	OPT_INTEGER_OPTARG_SET(0, "threads", &record.threads_cnt, &record.threads_set,
+			       "count", "Enabled threads (count)", 0),
 	OPT_END()
 };
 
@@ -2358,6 +2404,12 @@ int cmd_record(int argc, const char **argv)
 		if (err)
 			goto out;
 	}
+
+	/*
+	 * Threads need index data file.
+	 */
+	if (record.threads_set)
+		record.opts.index = true;
 
 	if (rec->opts.index) {
 		if (!rec->opts.sample_time) {
