@@ -92,6 +92,7 @@ struct record_thread {
 	int			  bkw_mmap_nr;
 	struct fdarray		  pollfd;
 	struct record		 *rec;
+	unsigned long long	  samples;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -199,7 +200,7 @@ rb_find_range(void *data, int mask, u64 head, u64 old,
 
 static int
 record__mmap_read(struct record *rec, struct perf_mmap *md,
-		  bool overwrite, bool backward)
+		  struct record_thread *thread, bool overwrite, bool backward)
 {
 	u64 head = perf_mmap__read_head(md);
 	u64 old = md->prev;
@@ -216,7 +217,7 @@ record__mmap_read(struct record *rec, struct perf_mmap *md,
 	if (start == end)
 		return 0;
 
-	rec->samples++;
+	thread->samples++;
 
 	size = end - start;
 	if (size > (unsigned long)(md->mask) + 1) {
@@ -632,7 +633,7 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 		struct perf_mmap *map = maps[i];
 
 		if (map->base) {
-			if (record__mmap_read(rec, map, evlist->overwrite,
+			if (record__mmap_read(rec, map, thread, evlist->overwrite,
 					      backward) != 0) {
 				rc = -1;
 				goto out;
