@@ -72,12 +72,12 @@ struct record_thread {
 	struct fdarray		  pollfd;
 	struct record		 *rec;
 	unsigned long long	  samples;
+	u64			  bytes_written;
 };
 
 struct record {
 	struct perf_tool	tool;
 	struct record_opts	opts;
-	u64			bytes_written;
 	struct perf_data	data;
 	struct auxtrace_record	*itr;
 	struct perf_evlist	*evlist;
@@ -113,7 +113,7 @@ static bool switch_output_size(struct record *rec)
 {
 	return rec->switch_output.size &&
 	       trigger_is_ready(&switch_output_trigger) &&
-	       (rec->bytes_written >= rec->switch_output.size);
+	       (thread->bytes_written >= rec->switch_output.size);
 }
 
 static bool switch_output_time(struct record *rec)
@@ -137,7 +137,7 @@ static int record__write(struct record *rec, struct perf_mmap *map,
 		return -1;
 	}
 
-	rec->bytes_written += size;
+	thread->bytes_written += size;
 
 	if (switch_output_size(rec))
 		trigger_hit(&switch_output_trigger);
@@ -531,7 +531,7 @@ static struct perf_event_header finished_round_event = {
 static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evlist,
 				    bool overwrite)
 {
-	u64 bytes_written = rec->bytes_written;
+	u64 bytes_written = thread->bytes_written;
 	int i, nr;
 	int rc = 0;
 	struct perf_mmap **maps;
@@ -569,7 +569,7 @@ static int record__mmap_read_evlist(struct record *rec, struct perf_evlist *evli
 	 * Mark the round finished in case we wrote
 	 * at least one event.
 	 */
-	if (bytes_written != rec->bytes_written) {
+	if (bytes_written != thread->bytes_written) {
 		/*
 		 * All maps of the threads point to a single file,
 		 * so we can just pick first one.
@@ -668,6 +668,7 @@ static int record__merge_index(struct record *rec)
 			goto out_close;
 
 		pr_debug(" ok\n");
+		rec->session->header.data_size += idx[i].size;
 	}
 
 	session->header.index = idx;
@@ -694,7 +695,7 @@ record__finish_output(struct record *rec)
 	if (data->is_pipe)
 		return;
 
-	rec->session->header.data_size += rec->bytes_written;
+	rec->session->header.data_size += thread->bytes_written;
 
 	if (rec->opts.index)
 		record__merge_index(rec);
@@ -760,7 +761,7 @@ record__switch_output(struct record *rec, bool at_exit)
 				    rec->session->header.data_offset,
 				    at_exit);
 	if (fd >= 0 && !at_exit) {
-		rec->bytes_written = 0;
+		thread->bytes_written = 0;
 		rec->session->header.data_size = 0;
 	}
 
@@ -880,7 +881,6 @@ static int record__synthesize(struct record *rec, bool tail)
 				pr_err("Couldn't record tracing data.\n");
 				goto out;
 			}
-			rec->bytes_written += err;
 		}
 	}
 
