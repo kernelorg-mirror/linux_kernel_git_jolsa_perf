@@ -88,6 +88,7 @@ struct thread_obj {
 	struct fdarray		  pollfd;
 	struct record		 *rec;
 	unsigned long long	  samples;
+	u64			  bytes_written;
 };
 
 struct thread_cfg {
@@ -97,7 +98,6 @@ struct thread_cfg {
 struct record {
 	struct perf_tool	tool;
 	struct record_opts	opts;
-	u64			bytes_written;
 	struct perf_data	data;
 	struct auxtrace_record	*itr;
 	struct evlist	*evlist;
@@ -147,7 +147,7 @@ static bool switch_output_size(struct record *rec)
 {
 	return rec->switch_output.size &&
 	       trigger_is_ready(&switch_output_trigger) &&
-	       (rec->bytes_written >= rec->switch_output.size);
+	       (thread->bytes_written >= rec->switch_output.size);
 }
 
 static bool switch_output_time(struct record *rec)
@@ -159,7 +159,7 @@ static bool switch_output_time(struct record *rec)
 static bool record__output_max_size_exceeded(struct record *rec)
 {
 	return rec->output_max_size &&
-	       (rec->bytes_written >= rec->output_max_size);
+	       (thread->bytes_written >= rec->output_max_size);
 }
 
 static int record__write(struct record *rec, struct mmap *map,
@@ -175,7 +175,7 @@ static int record__write(struct record *rec, struct mmap *map,
 		return -1;
 	}
 
-	rec->bytes_written += size;
+	thread->bytes_written += size;
 
 	/*
 	 * Update header file size manualy, data files size are
@@ -189,7 +189,7 @@ static int record__write(struct record *rec, struct mmap *map,
 	if (record__output_max_size_exceeded(rec) && !done) {
 		fprintf(stderr, "[ perf record: perf size limit reached (%" PRIu64 " KB),"
 				" stopping session ]\n",
-				rec->bytes_written >> 10);
+				thread->bytes_written >> 10);
 		done = 1;
 	}
 
@@ -383,7 +383,7 @@ static int record__aio_push(struct record *rec, struct mmap *map, off_t *off)
 	ret = record__aio_write(&(map->aio.cblocks[idx]), trace_fd, aio.data, aio.size, *off);
 	if (!ret) {
 		*off += aio.size;
-		rec->bytes_written += aio.size;
+		thread->bytes_written += aio.size;
 		rec->session->header.data_size += aio.size;
 		if (switch_output_size(rec))
 			trigger_hit(&switch_output_trigger);
@@ -1069,7 +1069,7 @@ static size_t zstd_compress(struct perf_session *session, void *dst, size_t dst_
 static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 				    bool overwrite, bool synch)
 {
-	u64 bytes_written = rec->bytes_written;
+	u64 bytes_written = thread->bytes_written;
 	int i, nr;
 	int rc = 0;
 	struct mmap **maps;
@@ -1140,7 +1140,7 @@ static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 	 * because per-cpu files/maps have sorted data
 	 * from kernel.
 	 */
-	if (!perf_data__is_dir(&rec->data) && bytes_written != rec->bytes_written)
+	if (!perf_data__is_dir(&rec->data) && bytes_written != thread->bytes_written)
 		rc = record__write(rec, NULL, &finished_round_event, sizeof(finished_round_event));
 
 	if (overwrite)
@@ -1267,7 +1267,7 @@ record__switch_output(struct record *rec, bool at_exit)
 				    rec->session->header.data_offset,
 				    at_exit, &new_filename);
 	if (fd >= 0 && !at_exit) {
-		rec->bytes_written = 0;
+		thread->bytes_written = 0;
 		rec->session->header.data_size = 0;
 	}
 
@@ -1403,7 +1403,6 @@ static int record__synthesize(struct record *rec, bool tail)
 				pr_err("Couldn't record tracing data.\n");
 				goto out;
 			}
-			rec->bytes_written += err;
 		}
 	}
 
