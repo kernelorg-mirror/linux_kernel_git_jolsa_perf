@@ -444,28 +444,93 @@ static int record__mmap_evlist(struct record *rec,
 	return 0;
 }
 
-static int record__mmap_index(struct record *rec)
+static void record__index_single(struct record *rec)
 {
 	struct perf_evlist *evlist = rec->evlist;
 	struct perf_data *data = &rec->data;
-	int i, ret, nr = evlist->nr_mmaps;
+	int i;
 
-	ret = perf_data__create_index(data, nr);
-	if (ret)
-		return ret;
+	BUG_ON(data->index_nr != evlist->nr_mmaps);
 
-	for (i = 0; i < nr; i++) {
+	for (i = 0; i < evlist->nr_mmaps; i++) {
 		struct perf_mmap *map = &evlist->mmap[i];
 
 		map->file = &data->index[i];
 	}
 
-	for (i = 0; i < nr; i++) {
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		struct perf_mmap *map = &evlist->track_mmap[i];
+
+		map->file = &data->file;
+	}
+}
+
+static void record__index_threads(struct record *rec,
+				  struct record_thread *threads)
+{
+	struct perf_evlist *evlist =  rec->evlist;
+	struct perf_data     *data = &rec->data;
+	int i, t;
+
+	BUG_ON(data->index_nr != rec->threads_cnt - 1);
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
 		struct perf_mmap *map = &evlist->track_mmap[i];
 
 		map->file = &data->file;
 	}
 
+	for (t = 1; t < rec->threads_cnt; t++) {
+		struct record_thread *th = threads + t;
+
+		for (i = 0; i < th->mmap_nr; i++) {
+			struct perf_mmap *map = th->mmap[i];
+
+			map->file = &data->index[t - 1];
+		}
+	}
+}
+
+static void record__threads_display(struct record *rec)
+{
+	struct record_thread *threads =  rec->threads;
+	int i, t;
+
+	for (t = 0; t < rec->threads_cnt; t++) {
+		struct record_thread *th = threads + t;
+
+		pr_info("thread %d:\n", t);
+
+		for (i = 0; i < th->mmap_nr; i++) {
+			struct perf_mmap *map = th->mmap[i];
+
+			pr_info("  map %d [fd %3d], %s [fd %d]\n", i, map->fd, map->file->path, map->file->fd);
+		}
+	}
+}
+
+static int record__mmap_index(struct record *rec)
+{
+	struct record_thread *threads =  rec->threads;
+	bool             have_threads =  rec->threads_cnt != 1;
+	struct perf_evlist    *evlist =  rec->evlist;
+	struct perf_data        *data = &rec->data;
+	int ret, nr = evlist->nr_mmaps;
+
+	if (have_threads)
+		nr = rec->threads_cnt - 1;
+
+	ret = perf_data__create_index(data, nr);
+	if (ret)
+		return ret;
+
+	if (have_threads)
+		record__index_threads(rec, threads);
+	else
+		record__index_single(rec);
+
+	if (verbose)
+		record__threads_display(rec);
 	return 0;
 }
 
