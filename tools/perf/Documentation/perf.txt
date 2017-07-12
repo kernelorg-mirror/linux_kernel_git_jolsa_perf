@@ -26,6 +26,7 @@ OPTIONS
 	                     in browser mode
 	  perf-event-open  - Print perf_event_open() arguments and
 			     return value
+	  threads          - threads debug/stats messages
 
 --buildid-dir::
 	Setup buildid cache directory. It has higher priority than
