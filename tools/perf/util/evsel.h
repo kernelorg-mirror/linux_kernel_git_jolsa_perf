@@ -354,11 +354,24 @@ static inline bool perf_evsel__is_group_leader(const struct perf_evsel *evsel)
 }
 
 /**
- * perf_evsel__is_group_event - Return whether given evsel is a group event
+ * __perf_evsel__is_group_event - Return whether given evsel is a group event
  *
  * @evsel - evsel selector to be tested
  *
- * Return %true iff event group view is enabled and @evsel is a actual group
+ * Return %true if @evsel is a actual group leader which has other members in the group
+ */
+static inline bool __perf_evsel__is_group_event(struct perf_evsel *evsel)
+{
+	return perf_evsel__is_group_leader(evsel) && evsel->nr_members > 1;
+}
+
+/**
+ * perf_evsel__is_group_event - Return whether given evsel is a group event
+ *                              event group view is enabled.
+ *
+ * @evsel - evsel selector to be tested
+ *
+ * Return %true if event group view is enabled and @evsel is a actual group
  * leader which has other members in the group
  */
 static inline bool perf_evsel__is_group_event(struct perf_evsel *evsel)
@@ -366,7 +379,7 @@ static inline bool perf_evsel__is_group_event(struct perf_evsel *evsel)
 	if (!symbol_conf.event_group)
 		return false;
 
-	return perf_evsel__is_group_leader(evsel) && evsel->nr_members > 1;
+	return __perf_evsel__is_group_event(evsel);
 }
 
 bool perf_evsel__is_function_event(struct perf_evsel *evsel);
