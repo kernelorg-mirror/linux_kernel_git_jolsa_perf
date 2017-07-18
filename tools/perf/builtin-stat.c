@@ -214,10 +214,6 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 
-	if (stat_config.scale)
-		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
-				    PERF_FORMAT_TOTAL_TIME_RUNNING;
-
 	attr->inherit = !no_inherit;
 
 	/*
@@ -559,6 +555,20 @@ static int store_counter_ids(struct perf_evsel *counter)
 	return __store_counter_ids(counter, cpus, threads);
 }
 
+static void perf_evlist__config_read(struct perf_evlist *evlist)
+{
+	struct perf_evsel *counter;
+
+	evlist__for_each_entry(evlist, counter) {
+		struct perf_event_attr *attr = &counter->attr;
+
+		if (stat_config.scale) {
+			attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
+					    PERF_FORMAT_TOTAL_TIME_RUNNING;
+		}
+	}
+}
+
 static int __run_perf_stat(int argc, const char **argv)
 {
 	int interval = stat_config.interval;
@@ -591,6 +601,8 @@ static int __run_perf_stat(int argc, const char **argv)
 
 	if (group)
 		perf_evlist__set_leader(evsel_list);
+
+	perf_evlist__config_read(evsel_list);
 
 	evlist__for_each_entry(evsel_list, counter) {
 try_again:
