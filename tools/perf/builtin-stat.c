@@ -329,12 +329,20 @@ static int read_counter(struct perf_evsel *counter)
 			struct perf_counts_values *count;
 
 			count = perf_counts(counter->counts, cpu, thread);
-			if (perf_evsel__read(counter, cpu, thread, count)) {
+
+			/*
+			 * The leaders group read loads data into its
+			 * members, and sets count->loaded.
+			 */
+			if (!count->loaded &&
+			    perf_evsel__read_counter(counter, cpu, thread)) {
 				counter->counts->scaled = -1;
 				perf_counts(counter->counts, cpu, thread)->ena = 0;
 				perf_counts(counter->counts, cpu, thread)->run = 0;
 				return -1;
 			}
+
+			count->loaded = false;
 
 			if (STAT_RECORD) {
 				if (perf_evsel__write_stat_event(counter, cpu, thread, count)) {
@@ -561,12 +569,23 @@ static void perf_evlist__config_read(struct perf_evlist *evlist)
 
 	evlist__for_each_entry(evlist, counter) {
 		struct perf_event_attr *attr = &counter->attr;
+		struct perf_evsel *leader = counter->leader;
 
 		if (stat_config.scale) {
 			attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 					    PERF_FORMAT_TOTAL_TIME_RUNNING;
 		}
+
+		if (!__perf_evsel__is_group_event(leader))
+			continue;
+
+		attr->read_format |= PERF_FORMAT_ID|PERF_FORMAT_GROUP;
 	}
+}
+
+static bool perf_evsel__should_store_id(struct perf_evsel *counter)
+{
+	return STAT_RECORD || counter->attr.read_format & PERF_FORMAT_ID;
 }
 
 static int __run_perf_stat(int argc, const char **argv)
@@ -643,7 +662,8 @@ try_again:
 		if (l > unit_width)
 			unit_width = l;
 
-		if (STAT_RECORD && store_counter_ids(counter))
+		if (perf_evsel__should_store_id(counter) &&
+		    store_counter_ids(counter))
 			return -1;
 	}
 
