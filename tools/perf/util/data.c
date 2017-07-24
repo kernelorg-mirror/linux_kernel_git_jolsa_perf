@@ -96,7 +96,8 @@ static int open_file_write(struct perf_data_file *file)
 	if (check_backup(file))
 		return -1;
 
-	fd = open(file->path, O_CREAT|O_RDWR|O_TRUNC, S_IRUSR|S_IWUSR);
+	fd = open(file->path, O_CREAT|O_RDWR|O_TRUNC|O_CLOEXEC,
+		  S_IRUSR|S_IWUSR);
 
 	if (fd < 0)
 		pr_err("failed to open %s : %s\n", file->path,
