@@ -2385,6 +2385,12 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_GET_FP_MODE:
 		error = GET_FP_MODE(me);
 		break;
+	case PR_TASK_PERF_EVENTS_DATA_USER:
+		if (!PAGE_ALIGNED(arg3))
+			return -EINVAL;
+		me->perf_data_user_ptr  = (void *)       arg2;
+		me->perf_data_user_size = (unsigned int) arg3;
+		break;
 	default:
 		error = -EINVAL;
 		break;

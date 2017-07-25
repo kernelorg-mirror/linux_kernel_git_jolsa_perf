@@ -197,4 +197,6 @@ struct prctl_mm_map {
 # define PR_CAP_AMBIENT_LOWER		3
 # define PR_CAP_AMBIENT_CLEAR_ALL	4
 
+#define PR_TASK_PERF_EVENTS_DATA_USER	48
+
 #endif /* _LINUX_PRCTL_H */
