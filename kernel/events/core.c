@@ -1570,6 +1570,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 	if (sample_type & PERF_SAMPLE_TRANSACTION)
 		size += sizeof(data->txn);
 
+	if (sample_type & PERF_SAMPLE_DATA_USER)
+		size += PAGE_SIZE;
+
 	event->header_size = size;
 }
 
@@ -5631,6 +5634,15 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 	}
 }
 
+static void
+perf_output_sample_data_user(struct perf_output_handle *handle, void *ptr)
+{
+	unsigned int rem;
+
+	rem = __output_copy_user(handle, ptr, PAGE_SIZE);
+	perf_output_skip(handle, rem);
+}
+
 static void __perf_event_header__init_id(struct perf_event_header *header,
 					 struct perf_sample_data *data,
 					 struct perf_event *event)
@@ -5954,6 +5966,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 		}
 	}
 
+	if (sample_type & PERF_SAMPLE_DATA_USER)
+		perf_output_sample_data_user(handle, (void *) data->data_user);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -6087,6 +6102,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 		header->size += size;
 	}
+
+	if (sample_type & PERF_SAMPLE_DATA_USER)
+		data->data_user = current->perf_user_data;
 }
 
 static void __always_inline
