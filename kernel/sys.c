@@ -2295,6 +2295,9 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_GET_FP_MODE:
 		error = GET_FP_MODE(me);
 		break;
+	case PR_TASK_PERF_EVENTS_DATA:
+		me->perf_user_data = (void *) arg2;
+		break;
 	default:
 		error = -EINVAL;
 		break;
