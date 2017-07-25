@@ -53,6 +53,9 @@
 #include <asm/bug.h>
 #include <linux/time64.h>
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 struct switch_output {
 	bool		 enabled;
 	bool		 signal;
@@ -80,6 +83,8 @@ struct record {
 	bool			timestamp_filename;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
+	const char		*script_str;
+	bool			 script_set;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -914,6 +919,9 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 
 	record__init_features(rec);
 
+	if (rec->script_set)
+		rec->opts.data_user = true;
+
 	if (forks) {
 		err = perf_evlist__prepare_workload(rec->evlist, &opts->target,
 						    argv, file->is_pipe,
@@ -1676,6 +1684,8 @@ static struct option __record_options[] = {
 			  "signal"),
 	OPT_BOOLEAN(0, "dry-run", &dry_run,
 		    "Parse options then exit"),
+	OPT_STRING_OPTARG_SET(0, "script", &record.script_str, &record.script_set,
+			      "python,perl", "krava", "python"),
 	OPT_END()
 };
 
