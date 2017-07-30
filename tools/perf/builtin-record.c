@@ -80,6 +80,8 @@ struct record {
 	bool			timestamp_filename;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
+	const char		*script_str;
+	bool			 script_set;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -539,7 +541,9 @@ static void record__init_features(struct record *rec)
 		perf_header__clear_feat(&session->header, HEADER_AUXTRACE);
 
 	perf_header__clear_feat(&session->header, HEADER_STAT);
-	perf_header__clear_feat(&session->header, HEADER_PYTHON_STACK);
+
+	if (!rec->script_set)
+		perf_header__clear_feat(&session->header, HEADER_PYTHON_STACK);
 }
 
 static void
@@ -773,6 +777,31 @@ out:
 	return err;
 }
 
+static int setup_script(struct record *rec)
+{
+	char dir[PATH_MAX];
+
+	snprintf(dir, PATH_MAX, "/tmp/perf-record-XXXXXX");
+	if (!mkdtemp(dir))
+		return -1;
+
+	symbol_conf.record_script = strdup(dir);
+	if (!symbol_conf.record_script)
+		return -ENOMEM;
+
+	setenv("PERFSAMPLE_DIR", dir, 1);
+
+	if (verbose) {
+		char buf[5];
+
+		scnprintf(buf, 5, "%d", verbose);
+		setenv("PERFSAMPLE_VERBOSE", buf, 1);
+	}
+
+	rec->opts.data_user = true;
+	return 0;
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -818,6 +847,12 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	rec->session = session;
 
 	record__init_features(rec);
+
+	if (rec->script_set && setup_script(rec)) {
+		pr_err("Failed to setup script option.\n");
+		status = -1;
+		goto out_delete_session;
+	}
 
 	if (forks) {
 		err = perf_evlist__prepare_workload(rec->evlist, &opts->target,
@@ -1586,6 +1621,8 @@ static struct option __record_options[] = {
 			  "signal"),
 	OPT_BOOLEAN(0, "dry-run", &dry_run,
 		    "Parse options then exit"),
+	OPT_STRING_OPTARG_SET(0, "script", &record.script_str, &record.script_set,
+			      "python,perl", "krava", "python"),
 	OPT_END()
 };
 
