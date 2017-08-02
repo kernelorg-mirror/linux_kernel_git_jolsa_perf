@@ -12,6 +12,7 @@
 #include "map.h"
 #include "namespaces.h"
 #include "build-id.h"
+#include "script-sample.h"
 
 enum dso_binary_type {
 	DSO_BINARY_TYPE__KALLSYMS = 0,
@@ -191,6 +192,7 @@ struct dso {
 		u64	 db_id;
 	};
 	struct nsinfo	*nsinfo;
+	struct ssinfo	 ssinfo;
 	refcount_t	 refcnt;
 	char		 name[0];
 };

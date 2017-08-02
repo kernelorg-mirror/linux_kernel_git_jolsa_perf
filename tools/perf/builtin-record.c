@@ -539,6 +539,7 @@ static void record__init_features(struct record *rec)
 		perf_header__clear_feat(&session->header, HEADER_AUXTRACE);
 
 	perf_header__clear_feat(&session->header, HEADER_STAT);
+	perf_header__clear_feat(&session->header, HEADER_PYTHON_STACK);
 }
 
 static void
