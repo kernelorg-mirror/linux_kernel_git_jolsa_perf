@@ -634,6 +634,9 @@ static void record__init_features(struct record *rec)
 	if (!rec->opts.full_auxtrace)
 		perf_header__clear_feat(&session->header, HEADER_AUXTRACE);
 
+	if (!rec->script_set)
+		perf_header__clear_feat(&session->header, HEADER_PYTHON_STACK);
+
 	perf_header__clear_feat(&session->header, HEADER_STAT);
 }
 
