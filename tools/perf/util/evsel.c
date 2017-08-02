@@ -183,6 +183,12 @@ void perf_evsel__calc_id_pos(struct perf_evsel *evsel)
 	evsel->is_pos = __perf_evsel__calc_is_pos(evsel->attr.sample_type);
 }
 
+bool __perf_evsel__is_sample_bit(struct perf_evsel *evsel,
+				 enum perf_event_sample_format bit)
+{
+	return evsel->attr.sample_type & bit;
+}
+
 void __perf_evsel__set_sample_bit(struct perf_evsel *evsel,
 				  enum perf_event_sample_format bit)
 {
