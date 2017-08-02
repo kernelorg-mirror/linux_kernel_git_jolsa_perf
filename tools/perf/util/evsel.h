@@ -230,10 +230,15 @@ int perf_evsel__group_desc(struct perf_evsel *evsel, char *buf, size_t size);
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
 void perf_evsel__close_fd(struct perf_evsel *evsel);
 
+bool __perf_evsel__is_sample_bit(struct perf_evsel *evsel,
+				 enum perf_event_sample_format bit);
 void __perf_evsel__set_sample_bit(struct perf_evsel *evsel,
 				  enum perf_event_sample_format bit);
 void __perf_evsel__reset_sample_bit(struct perf_evsel *evsel,
 				    enum perf_event_sample_format bit);
+
+#define perf_evsel__is_sample_bit(evsel, bit) \
+	__perf_evsel__is_sample_bit(evsel, PERF_SAMPLE_##bit)
 
 #define perf_evsel__set_sample_bit(evsel, bit) \
 	__perf_evsel__set_sample_bit(evsel, PERF_SAMPLE_##bit)
