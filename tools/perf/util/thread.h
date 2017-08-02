@@ -42,6 +42,7 @@ struct thread {
 	void				*addr_space;
 	struct unwind_libunwind_ops	*unwind_libunwind_ops;
 #endif
+	struct map		*user_map;
 };
 
 struct machine;
