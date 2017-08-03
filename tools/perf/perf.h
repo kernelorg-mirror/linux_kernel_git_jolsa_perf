@@ -42,6 +42,7 @@ struct record_opts {
 	bool	     no_inherit;
 	bool	     no_inherit_set;
 	bool	     no_samples;
+	bool	     no_user_data;
 	bool	     raw_samples;
 	bool	     sample_address;
 	bool	     sample_phys_addr;
