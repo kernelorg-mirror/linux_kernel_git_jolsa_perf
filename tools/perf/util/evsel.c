@@ -1483,7 +1483,7 @@ static void __p_sample_type(char *buf, size_t size, u64 value)
 		bit_name(PERIOD), bit_name(STREAM_ID), bit_name(RAW),
 		bit_name(BRANCH_STACK), bit_name(REGS_USER), bit_name(STACK_USER),
 		bit_name(IDENTIFIER), bit_name(REGS_INTR), bit_name(DATA_SRC),
-		bit_name(WEIGHT), bit_name(PHYS_ADDR),
+		bit_name(WEIGHT), bit_name(PHYS_ADDR), bit_name(USER_DATA_ID),
 		{ .name = NULL, }
 	};
 #undef bit_name
@@ -1576,6 +1576,7 @@ int perf_event_attr__fprintf(FILE *fp, struct perf_event_attr *attr,
 	PRINT_ATTRf(use_clockid, p_unsigned);
 	PRINT_ATTRf(context_switch, p_unsigned);
 	PRINT_ATTRf(write_backward, p_unsigned);
+	PRINT_ATTRf(namespaces, p_unsigned);
 
 	PRINT_ATTRn("{ wakeup_events, wakeup_watermark }", wakeup_events, p_unsigned);
 	PRINT_ATTRf(bp_type, p_unsigned);
@@ -2228,6 +2229,12 @@ perf_sample__parse(struct perf_sample *data, struct parse_args *arg)
 		array++;
 	}
 
+	if (type & PERF_SAMPLE_USER_DATA_ID) {
+		OVERFLOW_CHECK_u64(array);
+		data->user_data_id = *array;
+		array++;
+	}
+
 	return 0;
 }
 
@@ -2252,7 +2259,15 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (event->header.type != PERF_RECORD_SAMPLE) {
 		if (!evsel->attr.sample_id_all)
 			return 0;
-		return perf_evsel__parse_id_sample(evsel, event, data);
+
+		perf_evsel__parse_id_sample(evsel, event, data);
+
+		if (event->header.type != PERF_RECORD_USER_DATA)
+			return 0;
+
+		arg.type  = event->user_data.type;
+		arg.array = event->user_data.array;
+		return perf_sample__parse(data, &arg);
 	}
 
 	if (perf_event__check_size(event, evsel->sample_size))

@@ -98,6 +98,13 @@ struct sample_event {
 	u64 array[];
 };
 
+struct user_data_event {
+	struct perf_event_header        header;
+	u64 id;
+	u64 type;
+	u64 array[];
+};
+
 struct regs_dump {
 	u64 abi;
 	u64 mask;
@@ -198,6 +205,7 @@ struct perf_sample {
 	u64 period;
 	u64 weight;
 	u64 transaction;
+	u64 user_data_id;
 	u32 cpu;
 	u32 raw_size;
 	u64 data_src;
@@ -631,6 +639,7 @@ union perf_event {
 	struct read_event		read;
 	struct throttle_event		throttle;
 	struct sample_event		sample;
+	struct user_data_event		user_data;
 	struct attr_event		attr;
 	struct event_update_event	event_update;
 	struct event_type_event		event_type;
