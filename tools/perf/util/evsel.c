@@ -1976,13 +1976,21 @@ perf_event__check_size(union perf_event *event, unsigned int sample_size)
 	return 0;
 }
 
+struct parse_args {
+	struct perf_evsel	*evsel;
+	union perf_event	*event;
+	const u64		*array;
+	u64			 type;
+};
+
 static int
-perf_sample__parse(struct perf_sample *data, struct perf_evsel *evsel,
-		   union perf_event *event)
+perf_sample__parse(struct perf_sample *data, struct parse_args *arg)
 {
-	u64 type = evsel->attr.sample_type;
+	struct perf_evsel *evsel = arg->evsel;
+	union  perf_event *event = arg->event;
+	u64 type                 = arg->type;
+	const u64 *array         = arg->array;
 	bool swapped = evsel->needs_swap;
-	const u64 *array;
 	u16 max_size = event->header.size;
 	const void *endp = (void *)event + max_size;
 	u64 sz;
@@ -1992,8 +2000,6 @@ perf_sample__parse(struct perf_sample *data, struct perf_evsel *evsel,
 	 * for why this goofiness is needed.
 	 */
 	union u64_swap u;
-
-	array = event->sample.array;
 
 	if (type & PERF_SAMPLE_IDENTIFIER) {
 		data->id = *array;
@@ -2228,6 +2234,13 @@ perf_sample__parse(struct perf_sample *data, struct perf_evsel *evsel,
 int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			     struct perf_sample *data)
 {
+	struct parse_args arg = {
+		.evsel = evsel,
+		.event = event,
+		.array = event->sample.array,
+		.type  = evsel->attr.sample_type,
+	};
+
 	memset(data, 0, sizeof(*data));
 	data->cpu = data->pid = data->tid = -1;
 	data->stream_id = data->id = data->time = -1ULL;
@@ -2245,7 +2258,7 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (perf_event__check_size(event, evsel->sample_size))
 		return -EFAULT;
 
-	return perf_sample__parse(data, evsel, event);
+	return perf_sample__parse(data, &arg);
 }
 
 int perf_evsel__parse_sample_timestamp(struct perf_evsel *evsel,
