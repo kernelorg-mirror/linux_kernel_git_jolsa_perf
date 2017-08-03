@@ -348,6 +348,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 {
 	if (tool->sample == NULL)
 		tool->sample = process_event_sample_stub;
+	if (tool->user_data == NULL)
+		tool->user_data = process_event_sample_stub;
 	if (tool->mmap == NULL)
 		tool->mmap = process_event_stub;
 	if (tool->mmap2 == NULL)
@@ -1212,12 +1214,12 @@ static int deliver_sample_group(struct perf_evlist *evlist,
 }
 
 static int
- perf_evlist__deliver_sample(struct perf_evlist *evlist,
-			     struct perf_tool *tool,
-			     union  perf_event *event,
-			     struct perf_sample *sample,
-			     struct perf_evsel *evsel,
-			     struct machine *machine)
+perf_evlist__deliver_sample(struct perf_evlist *evlist,
+			    struct perf_tool *tool,
+			    union  perf_event *event,
+			    struct perf_sample *sample,
+			    struct perf_evsel *evsel,
+			    struct machine *machine)
 {
 	/* We know evsel != NULL. */
 	u64 sample_type = evsel->attr.sample_type;
@@ -1263,6 +1265,8 @@ static int machines__deliver_event(struct machines *machines,
 			return 0;
 		}
 		return perf_evlist__deliver_sample(evlist, tool, event, sample, evsel, machine);
+	case PERF_RECORD_USER_DATA:
+		return tool->user_data(tool, event, sample, evsel, machine);
 	case PERF_RECORD_MMAP:
 		return tool->mmap(tool, event, sample, machine);
 	case PERF_RECORD_MMAP2:

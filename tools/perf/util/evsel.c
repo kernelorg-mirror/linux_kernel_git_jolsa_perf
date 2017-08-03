@@ -1576,6 +1576,7 @@ int perf_event_attr__fprintf(FILE *fp, struct perf_event_attr *attr,
 	PRINT_ATTRf(use_clockid, p_unsigned);
 	PRINT_ATTRf(context_switch, p_unsigned);
 	PRINT_ATTRf(write_backward, p_unsigned);
+	PRINT_ATTRf(namespaces, p_unsigned);
 
 	PRINT_ATTRn("{ wakeup_events, wakeup_watermark }", wakeup_events, p_unsigned);
 	PRINT_ATTRf(bp_type, p_unsigned);
@@ -2252,7 +2253,15 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (event->header.type != PERF_RECORD_SAMPLE) {
 		if (!evsel->attr.sample_id_all)
 			return 0;
-		return perf_evsel__parse_id_sample(evsel, event, data);
+
+		perf_evsel__parse_id_sample(evsel, event, data);
+
+		if (event->header.type != PERF_RECORD_USER_DATA)
+			return 0;
+
+		arg.type  = event->user_data.type;
+		arg.array = event->user_data.array;
+		return perf_sample__parse(data, &arg);
 	}
 
 	if (perf_event__check_size(event, evsel->sample_size))
