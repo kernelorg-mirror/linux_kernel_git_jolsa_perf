@@ -3050,10 +3050,10 @@ int perf_event__synthesize_features(struct perf_tool *tool,
 	return 0;
 }
 
-int perf_event__process_feature(struct perf_tool *tool,
-				union perf_event *event,
-				struct perf_session *session __maybe_unused)
+int perf_event__process_feature(struct perf_session *session,
+				union perf_event *event)
 {
+	struct perf_tool *tool = session->tool;
 	struct feat_fd ff = { .fd = 0 };
 	struct feature_event *fe = (struct feature_event *)event;
 	int type = fe->header.type;
@@ -3392,9 +3392,8 @@ int perf_event__synthesize_tracing_data(struct perf_tool *tool, int fd,
 	return aligned_size;
 }
 
-int perf_event__process_tracing_data(struct perf_tool *tool __maybe_unused,
-				     union perf_event *event,
-				     struct perf_session *session)
+int perf_event__process_tracing_data(struct perf_session *session,
+				     union perf_event *event)
 {
 	ssize_t size_read, padding, size = event->tracing_data.size;
 	int fd = perf_data_file__fd(session->file);
@@ -3460,9 +3459,8 @@ int perf_event__synthesize_build_id(struct perf_tool *tool,
 	return err;
 }
 
-int perf_event__process_build_id(struct perf_tool *tool __maybe_unused,
-				 union perf_event *event,
-				 struct perf_session *session)
+int perf_event__process_build_id(struct perf_session *session,
+				 union perf_event *event)
 {
 	__event_process_build_id(&event->build_id,
 				 event->build_id.filename,

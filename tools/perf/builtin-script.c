@@ -2639,9 +2639,8 @@ static void script__setup_sample_type(struct perf_script *script)
 	}
 }
 
-static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
-				    union perf_event *event,
-				    struct perf_session *session)
+static int process_stat_round_event(struct perf_session *session,
+				    union perf_event *event)
 {
 	struct stat_round_event *round = &event->stat_round;
 	struct perf_evsel *counter;
@@ -2655,9 +2654,8 @@ static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
-static int process_stat_config_event(struct perf_tool *tool __maybe_unused,
-				     union perf_event *event,
-				     struct perf_session *session __maybe_unused)
+static int process_stat_config_event(struct perf_session *session __maybe_unused,
+				     union perf_event *event)
 {
 	perf_event__read_stat_config(&stat_config, &event->stat_config);
 	return 0;
@@ -2683,10 +2681,10 @@ static int set_maps(struct perf_script *script)
 }
 
 static
-int process_thread_map_event(struct perf_tool *tool,
-			     union perf_event *event,
-			     struct perf_session *session __maybe_unused)
+int process_thread_map_event(struct perf_session *session,
+			     union perf_event *event)
 {
+	struct perf_tool *tool = session->tool;
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 
 	if (script->threads) {
@@ -2702,10 +2700,10 @@ int process_thread_map_event(struct perf_tool *tool,
 }
 
 static
-int process_cpu_map_event(struct perf_tool *tool __maybe_unused,
-			  union perf_event *event,
-			  struct perf_session *session __maybe_unused)
+int process_cpu_map_event(struct perf_session *session,
+			  union perf_event *event)
 {
+	struct perf_tool *tool = session->tool;
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 
 	if (script->cpus) {
