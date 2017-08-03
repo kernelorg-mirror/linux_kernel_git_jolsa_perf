@@ -1622,6 +1622,8 @@ static struct option __record_options[] = {
 		    "Record build-id of all DSOs regardless of hits"),
 	OPT_BOOLEAN(0, "timestamp-filename", &record.timestamp_filename,
 		    "append timestamp to output filename"),
+	OPT_BOOLEAN(0, "no-user-data", &record.opts.no_user_data,
+		    "disable user data events"),
 	OPT_STRING_OPTARG_SET(0, "switch-output", &record.switch_output.str,
 			  &record.switch_output.set, "signal,size,time",
 			  "Switch output when receive SIGUSR2 or cross size,time threshold",
