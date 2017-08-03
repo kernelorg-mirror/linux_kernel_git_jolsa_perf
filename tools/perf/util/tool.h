@@ -43,6 +43,7 @@ enum show_feature_header {
 
 struct perf_tool {
 	event_sample	sample,
+			user_data,
 			read;
 	event_op	mmap,
 			mmap2,
