@@ -51,6 +51,7 @@ static struct {
 	bool lbr_flags;
 	bool write_backward;
 	bool group_read;
+	bool user_data;
 } perf_missing_features;
 
 static clockid_t clockid;
@@ -1079,6 +1080,23 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 	apply_config_terms(evsel, opts, track);
 
 	evsel->ignore_missing_thread = opts->ignore_missing_thread;
+
+	/*
+	 * Enable delayed user data processing,
+	 * if it's allowed and if there's any.
+	 */
+	if (!opts->no_user_data) {
+		bool has_callchain = perf_evsel__is_sample_bit(evsel, CALLCHAIN);
+		bool user_data;
+
+		user_data  = !attr->exclude_kernel;
+		user_data &= (has_callchain && !attr->exclude_callchain_user);
+
+		if (user_data) {
+			attr->user_data = 1;
+			perf_evsel__set_sample_bit(evsel, USER_DATA_ID);
+		}
+	}
 }
 
 static int perf_evsel__alloc_fd(struct perf_evsel *evsel, int ncpus, int nthreads)
@@ -1762,6 +1780,10 @@ fallback_missing_features:
 				     PERF_SAMPLE_BRANCH_NO_CYCLES);
 	if (perf_missing_features.group_read && evsel->attr.inherit)
 		evsel->attr.read_format &= ~(PERF_FORMAT_GROUP|PERF_FORMAT_ID);
+	if (perf_missing_features.user_data) {
+		evsel->attr.user_data    = 0;
+		evsel->attr.sample_type &= ~PERF_SAMPLE_USER_DATA_ID;
+	}
 retry_sample_id:
 	if (perf_missing_features.sample_id_all)
 		evsel->attr.sample_id_all = 0;
@@ -1922,6 +1944,10 @@ try_fallback:
 		   (evsel->attr.read_format & PERF_FORMAT_GROUP)) {
 		perf_missing_features.group_read = true;
 		pr_debug2("switching off group read\n");
+		goto fallback_missing_features;
+	} else if (!perf_missing_features.user_data) {
+		perf_missing_features.user_data = true;
+		pr_debug2("switching off user data events\n");
 		goto fallback_missing_features;
 	}
 out_close:
