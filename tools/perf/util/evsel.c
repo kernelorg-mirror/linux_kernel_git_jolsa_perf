@@ -1976,8 +1976,9 @@ perf_event__check_size(union perf_event *event, unsigned int sample_size)
 	return 0;
 }
 
-int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
-			     struct perf_sample *data)
+static int
+perf_sample__parse(struct perf_sample *data, struct perf_evsel *evsel,
+		   union perf_event *event)
 {
 	u64 type = evsel->attr.sample_type;
 	bool swapped = evsel->needs_swap;
@@ -1992,24 +1993,7 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	 */
 	union u64_swap u;
 
-	memset(data, 0, sizeof(*data));
-	data->cpu = data->pid = data->tid = -1;
-	data->stream_id = data->id = data->time = -1ULL;
-	data->period = evsel->attr.sample_period;
-	data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
-	data->id = -1ULL;
-	data->data_src = PERF_MEM_DATA_SRC_NONE;
-
-	if (event->header.type != PERF_RECORD_SAMPLE) {
-		if (!evsel->attr.sample_id_all)
-			return 0;
-		return perf_evsel__parse_id_sample(evsel, event, data);
-	}
-
 	array = event->sample.array;
-
-	if (perf_event__check_size(event, evsel->sample_size))
-		return -EFAULT;
 
 	if (type & PERF_SAMPLE_IDENTIFIER) {
 		data->id = *array;
@@ -2239,6 +2223,29 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	}
 
 	return 0;
+}
+
+int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
+			     struct perf_sample *data)
+{
+	memset(data, 0, sizeof(*data));
+	data->cpu = data->pid = data->tid = -1;
+	data->stream_id = data->id = data->time = -1ULL;
+	data->period = evsel->attr.sample_period;
+	data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
+	data->id = -1ULL;
+	data->data_src = PERF_MEM_DATA_SRC_NONE;
+
+	if (event->header.type != PERF_RECORD_SAMPLE) {
+		if (!evsel->attr.sample_id_all)
+			return 0;
+		return perf_evsel__parse_id_sample(evsel, event, data);
+	}
+
+	if (perf_event__check_size(event, evsel->sample_size))
+		return -EFAULT;
+
+	return perf_sample__parse(data, evsel, event);
 }
 
 int perf_evsel__parse_sample_timestamp(struct perf_evsel *evsel,
