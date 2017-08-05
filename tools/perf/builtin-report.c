@@ -193,6 +193,81 @@ out:
 	return err;
 }
 
+static void perf_sample__free(struct perf_sample *sample)
+{
+	if (sample->copy) {
+		free(sample->callchain);
+		free(sample->raw_data);
+		free(sample->branch_stack);
+		free(sample->user_regs.regs);
+		free(sample->intr_regs.regs);
+		free(sample->user_stack.data);
+	}
+}
+
+static __maybe_unused int
+perf_sample__copy(struct perf_sample *dst, struct perf_sample *src)
+{
+	int ret = -1;
+	u64 size;
+
+	*dst = *src;
+
+	dst->callchain       = NULL;
+	dst->raw_data        = NULL;
+	dst->branch_stack    = NULL;
+	dst->user_regs.regs  = NULL;
+	dst->intr_regs.regs  = NULL;
+	dst->user_stack.data = NULL;
+
+#define DUP(__field, __size)					\
+	do {							\
+		dst->__field = memdup(src->__field, __size);	\
+		if (!dst->__field)				\
+			goto error;				\
+	} while (0)
+
+	if (src->callchain) {
+		size = (src->callchain->nr + 1) * sizeof(u64);
+		DUP(callchain, size);
+	}
+
+	if (src->raw_data)
+		DUP(raw_data, src->raw_size);
+
+	if (src->branch_stack) {
+		size  = sizeof(u64);
+		size += src->branch_stack->nr * sizeof(struct branch_entry);
+		DUP(branch_stack, size);
+	}
+
+	if (src->user_regs.regs) {
+		u64 mask = src->user_regs.mask;
+
+		size = hweight_long(mask) * sizeof(u64);
+		DUP(user_regs.regs, size);
+	}
+
+	if (src->intr_regs.regs) {
+		u64 mask = src->intr_regs.mask;
+
+		size = hweight_long(mask) * sizeof(u64);
+		DUP(intr_regs.regs, size);
+	}
+
+	if (src->user_stack.data)
+		DUP(user_stack.data, src->user_stack.size);
+
+#undef DUP
+	dst->copy = true;
+	ret = 0;
+
+error:
+	if (ret)
+		perf_sample__free(dst);
+	return ret;
+}
+
 static int
 perf_sample__process(struct perf_sample *sample, struct addr_location *al,
 		     struct perf_evsel *evsel, struct report *rep)
