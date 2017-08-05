@@ -188,6 +188,7 @@ enum {
 #define MAX_INSN 16
 
 struct perf_sample {
+	bool copy;
 	u64 ip;
 	u32 pid, tid;
 	u64 time;
