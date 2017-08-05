@@ -193,6 +193,31 @@ out:
 	return err;
 }
 
+static int
+perf_sample__process(struct perf_sample *sample, struct addr_location *al,
+		     struct perf_evsel *evsel, struct report *rep)
+{
+	struct hist_entry_iter iter = {
+		.evsel 			= evsel,
+		.sample 		= sample,
+		.hide_unresolved 	= symbol_conf.hide_unresolved,
+		.add_entry_cb 		= hist_iter__report_callback,
+	};
+
+	if (sort__mode == SORT_MODE__BRANCH) {
+		iter.add_entry_cb = hist_iter__branch_callback;
+		iter.ops = &hist_iter_branch;
+	} else if (rep->mem_mode) {
+		iter.ops = &hist_iter_mem;
+	} else if (symbol_conf.cumulate_callchain) {
+		iter.ops = &hist_iter_cumulative;
+	} else {
+		iter.ops = &hist_iter_normal;
+	}
+
+	return hist_entry_iter__add(&iter, al, rep->max_stack, rep);
+}
+
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -201,12 +226,6 @@ static int process_sample_event(struct perf_tool *tool,
 {
 	struct report *rep = container_of(tool, struct report, tool);
 	struct addr_location al;
-	struct hist_entry_iter iter = {
-		.evsel 			= evsel,
-		.sample 		= sample,
-		.hide_unresolved 	= symbol_conf.hide_unresolved,
-		.add_entry_cb 		= hist_iter__report_callback,
-	};
 	int ret = 0;
 
 	if (perf_time__ranges_skip_sample(rep->ptime_range, rep->range_num,
@@ -233,21 +252,12 @@ static int process_sample_event(struct perf_tool *tool,
 		 */
 		if (!sample->branch_stack)
 			goto out_put;
-
-		iter.add_entry_cb = hist_iter__branch_callback;
-		iter.ops = &hist_iter_branch;
-	} else if (rep->mem_mode) {
-		iter.ops = &hist_iter_mem;
-	} else if (symbol_conf.cumulate_callchain) {
-		iter.ops = &hist_iter_cumulative;
-	} else {
-		iter.ops = &hist_iter_normal;
 	}
 
 	if (al.map != NULL)
 		al.map->dso->hit = 1;
 
-	ret = hist_entry_iter__add(&iter, &al, rep->max_stack, rep);
+	ret = perf_sample__process(sample, &al, evsel, rep);
 	if (ret < 0)
 		pr_debug("problem adding hist entry, skipping event\n");
 out_put:
