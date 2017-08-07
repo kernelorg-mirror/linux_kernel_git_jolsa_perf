@@ -48,6 +48,7 @@ struct thread *thread__new(pid_t pid, pid_t tid)
 		INIT_LIST_HEAD(&thread->comm_list);
 		init_rwsem(&thread->namespaces_lock);
 		init_rwsem(&thread->comm_lock);
+		INIT_LIST_HEAD(&thread->user_data_list);
 
 		comm_str = malloc(32);
 		if (!comm_str)
