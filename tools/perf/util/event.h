@@ -195,6 +195,7 @@ enum {
 
 struct perf_sample {
 	bool copy;
+	bool copy_us;
 	u64 ip;
 	u32 pid, tid;
 	u64 time;

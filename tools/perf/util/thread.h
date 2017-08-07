@@ -14,6 +14,13 @@
 struct thread_stack;
 struct unwind_libunwind_ops;
 
+struct user_data {
+	struct perf_sample	 sample;
+	struct addr_location	 al;
+	struct list_head	 list;
+	struct perf_evsel	*evsel;
+};
+
 struct thread {
 	union {
 		struct rb_node	 rb_node;
@@ -33,6 +40,7 @@ struct thread {
 	struct rw_semaphore	namespaces_lock;
 	struct list_head	comm_list;
 	struct rw_semaphore	comm_lock;
+	struct list_head	user_data_list;
 	u64			db_id;
 
 	void			*priv;
