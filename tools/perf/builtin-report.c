@@ -177,7 +177,8 @@ static void perf_sample__free(struct perf_sample *sample)
 		free(sample->branch_stack);
 		free(sample->user_regs.regs);
 		free(sample->intr_regs.regs);
-		free(sample->user_stack.data);
+		if (sample->copy_us)
+			free(sample->user_stack.data);
 	}
 }
 
@@ -235,7 +236,7 @@ perf_sample__copy(struct perf_sample *dst, struct perf_sample *src)
 		DUP(user_stack.data, src->user_stack.size);
 
 #undef DUP
-	dst->copy = true;
+	dst->copy = dst->copy_us = true;
 	ret = 0;
 
 error:
@@ -267,6 +268,31 @@ perf_sample__process(struct perf_sample *sample, struct addr_location *al,
 	}
 
 	return hist_entry_iter__add(&iter, al, rep->max_stack, rep);
+}
+
+static int
+perf_thread__add_user_data(struct thread *thread,
+			   struct perf_sample *sample,
+			   struct addr_location *al,
+			   struct perf_evsel *evsel)
+{
+	struct user_data *entry;
+
+	entry = zalloc(sizeof(*entry));
+	if (!entry)
+		return -ENOMEM;
+
+	entry->al    = *al;
+	entry->evsel = evsel;
+	INIT_LIST_HEAD(&entry->list);
+
+	if (perf_sample__copy(&entry->sample, sample)) {
+		free(entry);
+		return -ENOMEM;
+	}
+
+	list_add_tail(&entry->list, &thread->user_data_list);
+	return 0;
 }
 
 static int process_sample_event(struct perf_tool *tool,
@@ -306,12 +332,136 @@ static int process_sample_event(struct perf_tool *tool,
 	if (al.map != NULL)
 		al.map->dso->hit = 1;
 
+	if (event->header.misc & PERF_RECORD_MISC_USER_DATA)
+		return perf_thread__add_user_data(al.thread, sample, &al, evsel);
+
 	ret = perf_sample__process(sample, &al, evsel, rep);
 	if (ret < 0)
 		pr_debug("problem adding hist entry, skipping event\n");
 out_put:
 	addr_location__put(&al);
 	return ret;
+}
+
+static int
+perf_sample__add_user_stack(struct perf_sample *sample,
+			    struct perf_sample *user)
+{
+	if (sample->copy_us)
+		free(sample->user_stack.data);
+
+	sample->user_stack = user->user_stack;
+	sample->copy_us = false;
+	return 0;
+}
+
+static int
+perf_sample__add_user_callchain(struct perf_sample *sample,
+				struct perf_sample *user)
+{
+	struct ip_callchain *sc = sample->callchain;
+	struct ip_callchain *uc = user->callchain;
+	struct ip_callchain *new;
+	u64 nr = 1 + sc->nr + uc->nr;
+
+	new = zalloc(nr * sizeof(u64));
+	if (!new)
+		return -ENOMEM;
+
+	new->nr = nr;
+	memcpy(new->ips,          sc->ips, sc->nr * sizeof(u64));
+	memcpy(new->ips + sc->nr, uc->ips, uc->nr * sizeof(u64));
+
+	free(sample->callchain);
+	sample->callchain = new;
+	return 0;
+}
+
+static int
+perf_sample__add_user_data(struct perf_sample *sample,
+			   struct perf_sample *user,
+			   u64 type)
+{
+	int ret = 0;
+
+	if (type & PERF_SAMPLE_CALLCHAIN)
+		ret = perf_sample__add_user_callchain(sample, user);
+	if (type & PERF_SAMPLE_STACK_USER)
+		ret = perf_sample__add_user_stack(sample, user);
+
+	return ret;
+}
+
+static int
+thread__flush_user_data(struct thread *thread,
+			struct user_data_event *event,
+			struct perf_sample *sample,
+			struct report *rep)
+{
+	struct user_data *entry, *p;
+	int ret = 0;
+
+	list_for_each_entry_safe(entry, p, &thread->user_data_list, list) {
+		if (event) {
+			if (entry->sample.user_data_id != event->id)
+				continue;
+
+			ret = perf_sample__add_user_data(&entry->sample, sample, event->type);
+			if (ret)
+				break;
+		}
+
+		ret = perf_sample__process(&entry->sample, &entry->al, entry->evsel, rep);
+		if (ret < 0) {
+			pr_debug("problem adding hist entry, skipping event\n");
+			break;
+		}
+
+		list_del(&entry->list);
+		perf_sample__free(&entry->sample);
+		free(entry);
+	}
+
+	return ret;
+}
+
+static int
+process_user_data_event(struct perf_tool *tool,
+			union perf_event *event,
+			struct perf_sample *sample,
+			struct perf_evsel *evsel __maybe_unused,
+			struct machine *machine)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+	struct thread *thread = machine__findnew_thread(machine, sample->pid,
+							sample->tid);
+
+	if (thread == NULL)
+		return -1;
+
+	return thread__flush_user_data(thread, (struct user_data_event*) event,
+					sample, rep);
+}
+
+static int
+process_exit_event(struct perf_tool *tool __maybe_unused,
+		   union perf_event *event,
+		   struct perf_sample *sample,
+		   struct machine *machine)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+	struct thread *thread = machine__findnew_thread(machine, sample->pid,
+							sample->tid);
+	int ret;
+
+	if (thread == NULL)
+		return -1;
+
+	ret = thread__flush_user_data(thread, NULL, NULL, rep);
+	if (ret)
+		return ret;
+
+	return machine__process_exit_event(machine, event, sample);
 }
 
 static int process_read_event(struct perf_tool *tool,
@@ -811,11 +961,12 @@ int cmd_report(int argc, const char **argv)
 	struct report report = {
 		.tool = {
 			.sample		 = process_sample_event,
+			.user_data	 = process_user_data_event,
 			.mmap		 = perf_event__process_mmap,
 			.mmap2		 = perf_event__process_mmap2,
 			.comm		 = perf_event__process_comm,
 			.namespaces	 = perf_event__process_namespaces,
-			.exit		 = perf_event__process_exit,
+			.exit		 = process_exit_event,
 			.fork		 = perf_event__process_fork,
 			.lost		 = perf_event__process_lost,
 			.read		 = process_read_event,
