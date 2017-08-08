@@ -706,6 +706,13 @@ struct perf_event {
 #endif /* CONFIG_PERF_EVENTS */
 };
 
+struct perf_user_data {
+	struct callback_head	work;
+	u64			id;
+	u64			type;
+	int			on;
+};
+
 /**
  * struct perf_event_context - event context structure
  *
@@ -757,6 +764,7 @@ struct perf_event_context {
 #endif
 	void				*task_ctx_data; /* pmu specific data */
 	struct rcu_head			rcu_head;
+	struct perf_user_data		user_data;
 };
 
 /*
@@ -932,6 +940,8 @@ struct perf_sample_data {
 	u64				stack_user_size;
 
 	u64				phys_addr;
+
+	u64				user_data_id;
 } ____cacheline_aligned;
 
 /* default value for data source */

@@ -50,6 +50,7 @@
 #include <linux/sched/mm.h>
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
+#include <linux/task_work.h>
 
 #include "internal.h"
 
@@ -1577,6 +1578,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		size += sizeof(data->phys_addr);
+
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		size += sizeof(data->user_data_id);
 
 	event->header_size = size;
 }
@@ -3792,6 +3796,9 @@ static int perf_event_read(struct perf_event *event, bool group)
 	return ret;
 }
 
+static void perf_user_data_work(struct callback_head *work);
+static atomic64_t user_data_id;
+
 /*
  * Initialize the perf_event context in a task_struct:
  */
@@ -3804,6 +3811,8 @@ static void __perf_event_init_context(struct perf_event_context *ctx)
 	INIT_LIST_HEAD(&ctx->flexible_groups);
 	INIT_LIST_HEAD(&ctx->event_list);
 	atomic_set(&ctx->refcount, 1);
+	ctx->user_data.id = atomic64_inc_return(&user_data_id);
+	init_task_work(&ctx->user_data.work, perf_user_data_work);
 }
 
 static struct perf_event_context *
@@ -6003,6 +6012,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		perf_output_put(handle, data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		perf_output_put(handle, data->user_data_id);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -6050,6 +6062,20 @@ static u64 perf_virt_to_phys(u64 virt)
 	return phys_addr;
 }
 
+struct user_data {
+	u64	type;
+	bool	allow;
+};
+
+static void
+user_data_init(struct user_data *ud, struct perf_event *event,
+	       struct pt_regs *regs)
+{
+	ud->allow = event->attr.user_data && !user_mode(regs) &&
+		    current->mm;
+	ud->type  = 0;
+}
+
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
 static struct perf_callchain_entry *
@@ -6074,7 +6100,11 @@ void perf_prepare_sample(struct perf_event_header *header,
 			 struct perf_event *event,
 			 struct pt_regs *regs)
 {
+	struct perf_event_context *ctx = event->ctx;
 	u64 sample_type = event->attr.sample_type;
+	struct user_data ud;
+
+	user_data_init(&ud, event, regs);
 
 	header->type = PERF_RECORD_SAMPLE;
 	header->size = sizeof(*header) + event->header_size;
@@ -6188,6 +6218,25 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		data->phys_addr = perf_virt_to_phys(data->addr);
+
+	if (ud.allow && ud.type) {
+		header->misc        |= PERF_RECORD_MISC_USER_DATA;
+		ctx->user_data.type |= ud.type;
+
+		if (cmpxchg(&ctx->user_data.on, 0, 1) == 0) {
+			/*
+			 * We cannot do set_notify_resume() from NMI context,
+			 * also, knowing we are already in an interrupted
+			 * context and will pass return to userspace, we can
+			 * simply set TIF_NOTIFY_RESUME.
+			 */
+			task_work_add(current, &ctx->user_data.work, false);
+			set_tsk_thread_flag(current, TIF_NOTIFY_RESUME);
+		}
+	}
+
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		data->user_data_id = ctx->user_data.id;
 }
 
 static void __always_inline
@@ -6360,6 +6409,75 @@ perf_iterate_sb(perf_iterate_f output, void *data,
 done:
 	preempt_enable();
 	rcu_read_unlock();
+}
+
+struct perf_user_data_event {
+	struct perf_event_header	header;
+	u64				id;
+	u64				type;
+};
+
+static void perf_user_data_output(struct perf_event *event, void *data)
+{
+	struct perf_event_context *ctx = event->ctx;
+	struct perf_user_data_event *user_data_event = data;
+	struct perf_output_handle handle;
+	struct perf_sample_data sample;
+	u16 header_size = user_data_event->header.size;
+
+	if (!event->attr.user_data_output)
+		return;
+
+	user_data_event->type = ctx->user_data.type & event->attr.sample_type;
+
+	perf_event_header__init_id(&user_data_event->header, &sample, event);
+
+	if (perf_output_begin(&handle, event, user_data_event->header.size))
+		goto out;
+
+	perf_output_put(&handle, *user_data_event);
+	perf_event__output_id_sample(event, &handle, &sample);
+	perf_output_end(&handle);
+out:
+	user_data_event->header.size = header_size;
+}
+
+static void perf_user_data_event(struct perf_event_context *ctx)
+{
+	struct perf_user_data_event event;
+
+	event = (struct perf_user_data_event) {
+		.header	= {
+			.type = PERF_RECORD_USER_DATA,
+			.misc = 0,
+			.size = sizeof(event),
+		},
+		.id	= ctx->user_data.id,
+	};
+
+	raw_spin_lock(&ctx->lock);
+	perf_pmu_disable(ctx->pmu);
+
+	perf_iterate_ctx(ctx, perf_user_data_output, &event, false);
+
+	/*
+	 * All ctx's events are stopped, so there's no
+	 * race and we can set new id and zero type.
+	 */
+	ctx->user_data.id   = atomic64_inc_return(&user_data_id);
+	ctx->user_data.type = 0;
+	ctx->user_data.on   = 0;
+
+	perf_pmu_enable(ctx->pmu);
+	raw_spin_unlock(&ctx->lock);
+}
+
+static void perf_user_data_work(struct callback_head *work)
+{
+	struct perf_event_context *ctx;
+
+	ctx = container_of(work, struct perf_event_context, user_data.work);
+	perf_user_data_event(ctx);
 }
 
 /*
@@ -10007,6 +10125,11 @@ SYSCALL_DEFINE5(perf_event_open,
 			err = PTR_ERR(task);
 			goto err_group_fd;
 		}
+	}
+
+	if (attr.user_data && !task) {
+		err = -EINVAL;
+		goto err_group_fd;
 	}
 
 	if (task && group_leader &&
