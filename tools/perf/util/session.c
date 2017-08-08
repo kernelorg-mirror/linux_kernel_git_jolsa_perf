@@ -1144,6 +1144,26 @@ static void dump_read(struct perf_evsel *evsel, union perf_event *event)
 		printf("... id           : %" PRIu64 "\n", read_event->id);
 }
 
+static void
+dump_user_data(union perf_event *event, struct perf_sample *sample)
+{
+	u64 type;
+
+	if (!dump_trace)
+		return;
+
+	printf(" %d/%d: type: %#" PRIx64 "\n",
+	       sample->pid, sample->tid, event->user_data.type);
+
+	type = event->user_data.type;
+
+	if (type & PERF_SAMPLE_CALLCHAIN)
+		callchain__printf(sample);
+
+	if (type & PERF_SAMPLE_STACK_USER)
+		stack_user__printf(&sample->user_stack);
+}
+
 static struct machine *machines__find_for_cpumode(struct machines *machines,
 					       union perf_event *event,
 					       struct perf_sample *sample)
@@ -1266,6 +1286,7 @@ static int machines__deliver_event(struct machines *machines,
 		}
 		return perf_evlist__deliver_sample(evlist, tool, event, sample, evsel, machine);
 	case PERF_RECORD_USER_DATA:
+		dump_user_data(event, sample);
 		return tool->user_data(tool, event, sample, evsel, machine);
 	case PERF_RECORD_MMAP:
 		return tool->mmap(tool, event, sample, machine);
