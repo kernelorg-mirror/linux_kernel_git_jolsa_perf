@@ -939,9 +939,12 @@ enum perf_event_type {
 	 *	# PERF_SAMPLE_* bits:
 	 *	#
 	 *	#   PERF_SAMPLE_USER_DATA_ID
+	 *	#   PERF_SAMPLE_CALLCHAIN
 	 *	#
 	 *	# and governs the data portion:
 	 *
+	 *	{ u64		nr,
+	 *	  u64		ips[nr];}      && PERF_SAMPLE_CALLCHAIN
 	 *	{ u64		user_data_id;} && PERF_SAMPLE_USER_DATA_ID
 	 *
 	 *	struct sample_id		sample_id;
