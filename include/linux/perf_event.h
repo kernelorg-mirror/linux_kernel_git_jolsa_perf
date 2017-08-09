@@ -692,6 +692,7 @@ struct perf_event {
 struct perf_user_data {
 	struct callback_head	work;
 	u64			type;
+	u16			max_stack;
 	bool			on;
 };
 
