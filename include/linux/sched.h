@@ -517,6 +517,7 @@ struct perf_user_data {
 	enum perf_user_data_state	 state;
 	u64				 type;
 	u64				 id;
+	u16				 max_stack;
 };
 
 enum perf_event_task_context {
