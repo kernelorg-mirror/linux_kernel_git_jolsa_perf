@@ -930,6 +930,17 @@ enum perf_event_type {
 	 *	struct perf_event_header	header;
 	 *	u64				id;
 	 *	u64				sample_type;
+	 *
+	 *      # The sample_type value could contain following
+	 *      # PERF_SAMPLE_* bits:
+	 *      #
+	 *      #   PERF_SAMPLE_CALLCHAIN
+	 *      #
+	 *      # and governs the data portion:
+	 *
+	 *	{ u64                   nr,
+	 *	  u64                   ips[nr];  } && PERF_SAMPLE_CALLCHAIN
+	 *
 	 *	struct sample_id		sample_id;
 	 * };
 	 */
