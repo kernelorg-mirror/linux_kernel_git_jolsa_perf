@@ -6056,7 +6056,8 @@ static void user_data(struct user_data *ud, struct perf_event *event)
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
 static struct perf_callchain_entry *
-perf_callchain(struct perf_event *event, struct pt_regs *regs)
+perf_callchain(struct perf_event *event, struct pt_regs *regs,
+	       struct user_data *ud)
 {
 	bool kernel = !event->attr.exclude_callchain_kernel;
 	bool user   = !event->attr.exclude_callchain_user;
@@ -6064,6 +6065,11 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	bool crosstask = event->ctx->task && event->ctx->task != current;
 	const u32 max_stack = event->attr.sample_max_stack;
 	struct perf_callchain_entry *callchain;
+
+	if (ud->allow && !crosstask) {
+		ud->type |= PERF_SAMPLE_CALLCHAIN;
+		user = false;
+	}
 
 	if (!kernel && !user)
 		return &__empty_callchain;
@@ -6096,7 +6102,7 @@ void perf_prepare_sample(struct perf_event_header *header,
 	if (sample_type & PERF_SAMPLE_CALLCHAIN) {
 		int size = 1;
 
-		data->callchain = perf_callchain(event, regs);
+		data->callchain = perf_callchain(event, regs, &ud);
 		size += data->callchain->nr;
 
 		header->size += size * sizeof(u64);
@@ -6200,6 +6206,8 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 		header->misc |= PERF_RECORD_MISC_USER_DATA;
 		user_data->type |= ud.type;
+		user_data->max_stack = max(user_data->max_stack,
+					   event->attr.sample_max_stack);
 
 		if (!user_data->state)
 			user_data->state = PERF_USER_DATA_STATE_ENABLE;
@@ -6394,11 +6402,28 @@ done:
 }
 
 struct perf_user_data_event {
+	struct perf_callchain_entry	*callchain;
+
 	struct {
 		struct perf_event_header	header;
 		u64				type;
 	} event_id;
 };
+
+static struct perf_callchain_entry * perf_user_callchain(u16 max_stack)
+{
+	struct perf_callchain_entry *callchain;
+
+	callchain = get_perf_callchain(task_pt_regs(current),
+					/* init_nr   */ 0,
+					/* kernel    */ false,
+					/* user      */ true,
+					max_stack,
+					/* crosstask */ false,
+					/* add_mark  */ true);
+
+	return callchain ?: &__empty_callchain;
+}
 
 static void perf_user_data_output(struct perf_event *event, void *data)
 {
@@ -6408,7 +6433,7 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
 	u16 header_size = user->event_id.header.size;
-	u64 type;
+	u64 type, nr;
 
 	if (!event->attr.user_data)
 		return;
@@ -6418,10 +6443,27 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&user->event_id.header, &sample, event);
 
+	if (type & PERF_SAMPLE_CALLCHAIN) {
+		int size = 1;
+
+		nr = user->callchain->nr;
+		nr = min((__u16) nr, event->attr.sample_max_stack);
+
+		size += nr;
+		size *= sizeof(u64);
+
+		user->event_id.header.size += size;
+	}
+
 	if (perf_output_begin(&handle, event, user->event_id.header.size))
 		goto out;
 
 	perf_output_put(&handle, user->event_id);
+
+	if (type & PERF_SAMPLE_CALLCHAIN) {
+		perf_output_put(&handle, nr);
+		__output_copy(&handle, user->callchain->ip, nr * sizeof(u64));
+	}
 
 	if (type & PERF_SAMPLE_USER_DATA_ID)
 		perf_output_put(&handle, user_data->id);
@@ -6436,6 +6478,7 @@ static void perf_user_data_event(struct perf_user_data *user_data)
 {
 	struct perf_event_context *ctx = user_data->ctx;
 	struct perf_user_data_event event;
+	u64 type = user_data->type;
 
 	event = (struct perf_user_data_event) {
 		.event_id = {
@@ -6449,6 +6492,9 @@ static void perf_user_data_event(struct perf_user_data *user_data)
 
 	raw_spin_lock_irq(&ctx->lock);
 	perf_pmu_disable(ctx->pmu);
+
+	if (type & PERF_SAMPLE_CALLCHAIN)
+		event.callchain = perf_user_callchain(user_data->max_stack);
 
 	perf_iterate_ctx(ctx, perf_user_data_output, &event, false);
 

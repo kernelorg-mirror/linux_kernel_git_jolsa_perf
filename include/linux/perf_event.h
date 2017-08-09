@@ -699,6 +699,7 @@ struct perf_user_data {
 	struct callback_head		 work;
 	u64				 type;
 	u64				 id;
+	u16				 max_stack;
 	enum perf_user_data_state	 state;
 	struct perf_event_context	*ctx;
 };
