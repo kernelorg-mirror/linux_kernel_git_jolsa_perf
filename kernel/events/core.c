@@ -5589,7 +5589,7 @@ perf_sample_ustack_size(u16 stack_size, u16 header_size,
 
 static void
 perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
-			  void *data)
+			  void *data, bool nmi)
 {
 	/* Case of a kernel thread, nothing to dump */
 	if (!data) {
@@ -5614,7 +5614,11 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 		perf_output_put(handle, dump_size);
 
 		/* Data. */
-		rem = __output_copy_user(handle, data, dump_size);
+		if (nmi)
+			rem = __output_copy_user(handle, data, dump_size);
+		else
+			rem = __output_copy(handle, data, dump_size);
+
 		dyn_size = dump_size - rem;
 
 		perf_output_skip(handle, rem);
@@ -5915,7 +5919,7 @@ void perf_output_sample(struct perf_output_handle *handle,
 
 		perf_output_sample_ustack(handle,
 					  data->stack_user_size,
-					  (void *) sp);
+					  (void *) sp, true);
 	}
 
 	if (sample_type & PERF_SAMPLE_WEIGHT)
@@ -6146,6 +6150,11 @@ void perf_prepare_sample(struct perf_event_header *header,
 		stack_size = perf_sample_ustack_size(stack_size, header->size,
 						     data->regs_user.regs);
 
+		if (ud.allow && stack_size) {
+			stack_size = 0;
+			ud.type |= PERF_SAMPLE_STACK_USER;
+		}
+
 		/*
 		 * If there is something to dump, add space for the dump
 		 * itself and for the field that tells the dynamic size,
@@ -6186,6 +6195,8 @@ void perf_prepare_sample(struct perf_event_header *header,
 		user_data->type |= ud.type;
 		user_data->max_stack = max(user_data->max_stack,
 					   event->attr.sample_max_stack);
+		user_data->stack_user = max(user_data->stack_user,
+					    (u64) event->attr.sample_stack_user);
 
 		if (!user_data->state)
 			user_data->state = PERF_USER_DATA_STATE_ENABLE;
@@ -6403,6 +6414,29 @@ static struct perf_callchain_entry * perf_user_callchain(u16 max_stack)
 	return callchain ?: &__empty_callchain;
 }
 
+static void perf_user_data_stack(struct task_struct *task)
+{
+	struct perf_user_data *ud = &task->perf_user_data;
+	struct pt_regs *regs;
+	unsigned long sp;
+	u32 stack_user;
+
+	if (WARN_ON_ONCE(!ud->stack))
+		return;
+
+	regs = task_pt_regs(current);
+	if (!regs) {
+		ud->stack_user = 0;
+		return;
+	}
+
+	sp = perf_user_stack_pointer(regs);
+
+	stack_user = copy_from_user(ud->stack, (void *) sp, ud->stack_user);
+	if (stack_user)
+		ud->stack_user -= stack_user;
+}
+
 static void perf_user_data_output(struct perf_event *event, void *data)
 {
 	struct perf_user_data *user_data = &current->perf_user_data;
@@ -6432,6 +6466,36 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 		user->event_id.header.size += size;
 	}
 
+	if (user->event_id.type & PERF_SAMPLE_STACK_USER) {
+		/*
+		 * Either we need PERF_SAMPLE_STACK_USER bit to be allways
+		 * processed as the last one or have additional check added
+		 * in case new sample type is added, because we could eat
+		 * up the rest of the sample size.
+		 */
+		u16 stack_size = event->attr.sample_stack_user;
+		u16 size = sizeof(u64);
+
+		sample.regs_user.regs = task_pt_regs(current);
+
+		stack_size = perf_sample_ustack_size(stack_size,
+						     user->event_id.header.size,
+						     sample.regs_user.regs);
+
+		stack_size = min(stack_size, (u16) user_data->stack_user);
+
+		/*
+		 * If there is something to dump, add space for the dump
+		 * itself and for the field that tells the dynamic size,
+		 * which is how many have been actually dumped.
+		 */
+		if (stack_size)
+			size += sizeof(u64) + stack_size;
+
+		sample.stack_user_size = stack_size;
+		user->event_id.header.size += size;
+	}
+
 	if (user->event_id.type & PERF_SAMPLE_USER_DATA_ID)
 		user->event_id.header.size += sizeof(u64);
 
@@ -6443,6 +6507,16 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 	if (user->event_id.type & PERF_SAMPLE_CALLCHAIN) {
 		perf_output_put(&handle, nr);
 		__output_copy(&handle, user->callchain->ip, nr * sizeof(u64));
+	}
+
+	if (user->event_id.type & PERF_SAMPLE_STACK_USER) {
+		void *stack = NULL;
+
+		if (user_data->stack_user)
+			stack = user_data->stack;
+
+		perf_output_sample_ustack(&handle, sample.stack_user_size,
+					  stack, false);
 	}
 
 	if (user->event_id.type & PERF_SAMPLE_USER_DATA_ID)
@@ -6470,6 +6544,9 @@ static void perf_user_data_event(struct perf_user_data *user_data)
 
 	if (user_data->type & PERF_SAMPLE_CALLCHAIN)
 		event.callchain = perf_user_callchain(user_data->max_stack);
+
+	if (user_data->type & PERF_SAMPLE_STACK_USER)
+		perf_user_data_stack(current);
 
 	perf_iterate_sb(perf_user_data_output, &event, NULL);
 
