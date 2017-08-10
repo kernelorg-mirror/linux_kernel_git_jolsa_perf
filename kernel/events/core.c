@@ -5576,7 +5576,7 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 			  struct pt_regs *regs)
 {
 	/* Case of a kernel thread, nothing to dump */
-	if (!regs) {
+	if (!regs || !dump_size) {
 		u64 size = 0;
 		perf_output_put(handle, size);
 	} else {
@@ -6106,6 +6106,11 @@ void perf_prepare_sample(struct perf_event_header *header,
 		stack_size = perf_sample_ustack_size(stack_size, header->size,
 						     data->regs_user.regs);
 
+		if (ud.allow && stack_size) {
+			stack_size = 0;
+			ud.type |= PERF_SAMPLE_STACK_USER;
+		}
+
 		/*
 		 * If there is something to dump, add space for the dump
 		 * itself and for the field that tells the dynamic size,
@@ -6376,6 +6381,34 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 		user_data_event->header.size += size;
 	}
 
+	if (type & PERF_SAMPLE_STACK_USER) {
+
+		/*
+		 * Either we need PERF_SAMPLE_STACK_USER bit to be allways
+		 * processed as the last one or have additional check added
+		 * in case new sample type is added, because we could eat
+		 * up the rest of the sample size.
+		 */
+		u16 stack_size = event->attr.sample_stack_user;
+		u16 size = sizeof(u64);
+
+		sample.regs_user.regs = task_pt_regs(current);
+
+		stack_size = perf_sample_ustack_size(stack_size, user_data_event->header.size,
+						     sample.regs_user.regs);
+
+		/*
+		 * If there is something to dump, add space for the dump
+		 * itself and for the field that tells the dynamic size,
+		 * which is how many have been actually dumped.
+		 */
+		if (stack_size)
+			size += sizeof(u64) + stack_size;
+
+		sample.stack_user_size = stack_size;
+		user_data_event->header.size += size;
+	}
+
 	if (perf_output_begin(&handle, event, user_data_event->header.size))
 		goto out;
 
@@ -6387,6 +6420,12 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 		size += sample.callchain->nr;
 		size *= sizeof(u64);
 		__output_copy(&handle, sample.callchain, size);
+	}
+
+	if (type & PERF_SAMPLE_STACK_USER) {
+		perf_output_sample_ustack(&handle,
+					  sample.stack_user_size,
+					  sample.regs_user.regs);
 	}
 
 	perf_event__output_id_sample(event, &handle, &sample);
