@@ -6112,6 +6112,8 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 	user_data_init(&ud, event, regs);
 
+trace_printk("perf_prepare_sample1 ctx %p, event %p, allow %d\n", ctx, event, ud.allow);
+
 	header->type = PERF_RECORD_SAMPLE;
 	header->size = sizeof(*header) + event->header_size;
 
@@ -6208,6 +6210,8 @@ void perf_prepare_sample(struct perf_event_header *header,
 		if (stack_size)
 			size += sizeof(u64) + stack_size;
 
+trace_printk("perf_prepare_sample10 stack_size %u, size %u\n", stack_size, size);
+
 		data->stack_user_size = stack_size;
 		header->size += size;
 	}
@@ -6234,7 +6238,11 @@ void perf_prepare_sample(struct perf_event_header *header,
 		header->misc        |= PERF_RECORD_MISC_USER_DATA;
 		ctx->user_data.type |= ud.type;
 
+trace_printk("perf_prepare_sample2 ctx %p, event %p, allow %d, ud.type %llx, id %llu\n",
+	ctx, event, ud.allow, ud.type, ctx->user_data.id);
+
 		if (cmpxchg(&ctx->user_data.on, 0, 1) == 0) {
+trace_printk("perf_prepare_sample3 ctx %p, event %p, on\n", ctx, event);
 			/*
 			 * We cannot do set_notify_resume() from NMI context,
 			 * also, knowing we are already in an interrupted
@@ -6453,6 +6461,9 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 	u16 header_size = user_data_event->header.size;
 	u64 type;
 
+trace_printk("perf_user_data_event event %p, user_data_output %d, type %llx\n",
+	event, event->attr.user_data_output, ctx->user_data.type & event->attr.sample_type);
+
 #define USER_TYPE (PERF_SAMPLE_CALLCHAIN)
 
 	if (!event->attr.user_data_output)
@@ -6537,6 +6548,8 @@ static void perf_user_data_event(struct perf_event_context *ctx)
 		},
 		.id	= ctx->user_data.id,
 	};
+
+trace_printk("perf_user_data_event ctx %p, id %llu\n", ctx, ctx->user_data.id);
 
 	raw_spin_lock(&ctx->lock);
 	perf_pmu_disable(ctx->pmu);
