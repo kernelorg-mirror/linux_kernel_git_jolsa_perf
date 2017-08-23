@@ -72,6 +72,8 @@ u64 x86_perf_event_update(struct perf_event *event)
 	int idx = hwc->idx;
 	u64 delta;
 
+	WARN_ON_ONCE(event->oncpu != smp_processor_id());
+
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
 		return 0;
 
