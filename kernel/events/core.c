@@ -1727,6 +1727,7 @@ static void perf_group_detach(struct perf_event *event)
 	if (event->group_leader != event) {
 		list_del_init(&event->group_entry);
 		event->group_leader->nr_siblings--;
+		event->group_leader = event;
 		goto out;
 	}
 
