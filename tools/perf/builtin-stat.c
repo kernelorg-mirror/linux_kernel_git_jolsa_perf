@@ -210,6 +210,23 @@ static void perf_stat__reset_stats(void)
 	perf_stat__reset_shadow_stats();
 }
 
+static void apply_stat_config_terms(struct perf_evsel *evsel)
+{
+	struct perf_evsel_config_term *term;
+	struct list_head *config_terms = &evsel->config_terms;
+	struct perf_event_attr *attr   = &evsel->attr;
+
+	list_for_each_entry(term, config_terms, list) {
+		switch (term->type) {
+		case PERF_EVSEL__CONFIG_TERM_INHERIT:
+			attr->inherit = term->val.inherit ? 1 : 0;
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 static int create_perf_stat_counter(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
@@ -263,6 +280,8 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 		if (target__none(&target) && !initial_delay)
 			attr->enable_on_exec = 1;
 	}
+
+	apply_stat_config_terms(evsel);
 
 	if (target__has_cpu(&target))
 		return perf_evsel__open_per_cpu(evsel, perf_evsel__cpus(evsel));
