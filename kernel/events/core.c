@@ -5760,6 +5760,11 @@ void perf_event__output_id_sample(struct perf_event *event,
 		__perf_event__output_id_sample(handle, sample);
 }
 
+static bool can_read(struct perf_event *event)
+{
+	return event->state == PERF_EVENT_STATE_ACTIVE;
+}
+
 static void perf_output_read_one(struct perf_output_handle *handle,
 				 struct perf_event *event,
 				 u64 enabled, u64 running)
@@ -5800,7 +5805,7 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
 		values[n++] = running;
 
-	if (leader != event)
+	if ((leader != event) && can_read(leader))
 		leader->pmu->read(leader);
 
 	values[n++] = perf_event_count(leader);
@@ -5812,8 +5817,7 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 	list_for_each_entry(sub, &leader->sibling_list, group_entry) {
 		n = 0;
 
-		if ((sub != event) &&
-		    (sub->state == PERF_EVENT_STATE_ACTIVE))
+		if ((sub != event) && can_read(sub))
 			sub->pmu->read(sub);
 
 		values[n++] = perf_event_count(sub);
