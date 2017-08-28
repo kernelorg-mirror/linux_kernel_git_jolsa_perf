@@ -119,7 +119,8 @@ struct symbol_conf {
 			hide_unresolved,
 			raw_trace,
 			report_hierarchy,
-			inline_name;
+			inline_name,
+			annotation_disabled;
 	const char	*vmlinux_name,
 			*kallsyms_name,
 			*source_prefix,
