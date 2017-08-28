@@ -39,6 +39,7 @@
 #include "util/auxtrace.h"
 #include "util/units.h"
 #include "util/branch.h"
+#include "util/script-sample.h"
 
 #include <dlfcn.h>
 #include <errno.h>
@@ -62,6 +63,7 @@ struct report {
 	bool			header;
 	bool			header_only;
 	bool			nonany_branch_mode;
+	bool			script;
 	int			max_stack;
 	struct perf_read_values	show_threads_values;
 	const char		*pretty_printing_style;
@@ -169,6 +171,61 @@ static int hist_iter__branch_callback(struct hist_entry_iter *iter,
 	return 0;
 }
 
+static int script_resolve(struct machine *machine, struct addr_location *al,
+			  struct perf_sample *sample)
+{
+	struct thread *thread = machine__findnew_thread(machine, sample->pid,
+							sample->tid);
+
+	if (thread == NULL)
+		return -1;
+
+	al->machine  = machine;
+	al->thread   = thread;
+	al->addr     = sample->script_stack.ip;
+	al->cpumode  = sample->cpumode;
+	al->filtered = 0;
+	al->level    = '.';
+	al->map      = thread->user_map;
+
+	if (thread__is_filtered(thread))
+		al->filtered |= (1 << HIST_FILTER__THREAD);
+
+	al->sym = NULL;
+	al->cpu = sample->cpu;
+	al->socket = -1;
+
+	if (al->cpu >= 0) {
+		struct perf_env *env = machine->env;
+
+		if (env && env->cpu)
+			al->socket = env->cpu[al->cpu].socket_id;
+	}
+
+	if (al->map) {
+		struct dso *dso = al->map->dso;
+
+		if (symbol_conf.dso_list &&
+		    (!dso || !(strlist__has_entry(symbol_conf.dso_list,
+						  dso->short_name) ||
+			       (dso->short_name != dso->long_name &&
+				strlist__has_entry(symbol_conf.dso_list,
+						   dso->long_name))))) {
+			al->filtered |= (1 << HIST_FILTER__DSO);
+		}
+
+		al->sym = map__find_symbol(al->map, al->addr);
+	}
+
+	if (symbol_conf.sym_list &&
+		(!al->sym || !strlist__has_entry(symbol_conf.sym_list,
+						al->sym->name))) {
+		al->filtered |= (1 << HIST_FILTER__SYMBOL);
+	}
+
+	return 0;
+}
+
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -188,10 +245,21 @@ static int process_sample_event(struct perf_tool *tool,
 	if (perf_time__skip_sample(&rep->ptime, sample->time))
 		return 0;
 
-	if (machine__resolve(machine, &al, sample) < 0) {
-		pr_debug("problem processing %d event, skipping it.\n",
-			 event->header.type);
-		return -1;
+	if (rep->script) {
+		if (!sample->script_stack.ip)
+			return 0;
+
+		if (script_resolve(machine, &al, sample) < 0) {
+			pr_debug("problem processing %d event, skipping it.\n",
+				 event->header.type);
+			return -1;
+		}
+	} else {
+		if (machine__resolve(machine, &al, sample) < 0) {
+			pr_debug("problem processing %d event, skipping it.\n",
+				 event->header.type);
+			return -1;
+		}
 	}
 
 	if (symbol_conf.hide_unresolved && al.sym == NULL)
@@ -870,6 +938,7 @@ int cmd_report(int argc, const char **argv)
 		    "Show raw trace event output (do not use print fmt or plugins)"),
 	OPT_BOOLEAN(0, "hierarchy", &symbol_conf.report_hierarchy,
 		    "Show entries in a hierarchy"),
+	OPT_BOOLEAN(0, "script", &report.script, "script mode"),
 	OPT_CALLBACK_DEFAULT(0, "stdio-color", NULL, "mode",
 			     "'always' (default), 'never' or 'auto' only applicable to --stdio mode",
 			     stdio__config_color, "always"),
@@ -916,6 +985,9 @@ int cmd_report(int argc, const char **argv)
 		pr_err("Invalid file: %s\n", symbol_conf.kallsyms_name);
 		return -EINVAL;
 	}
+
+	if (report.script)
+		symbol__script_init();
 
 	if (report.use_stdio)
 		use_browser = 0;
