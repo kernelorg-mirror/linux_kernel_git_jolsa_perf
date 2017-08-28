@@ -1971,5 +1971,5 @@ int symbol__tty_annotate(struct symbol *sym, struct map *map,
 
 bool ui__has_annotation(void)
 {
-	return use_browser == 1 && perf_hpp_list.sym;
+	return use_browser == 1 && perf_hpp_list.sym && !symbol_conf.annotation_disabled;
 }
