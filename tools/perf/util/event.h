@@ -211,6 +211,7 @@ struct perf_sample {
 	struct regs_dump  user_regs;
 	struct regs_dump  intr_regs;
 	struct stack_dump user_stack;
+	struct stack_dump user_data;
 	struct sample_read read;
 };
 
