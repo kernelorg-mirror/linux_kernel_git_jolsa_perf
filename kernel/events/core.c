@@ -5685,6 +5685,28 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 	}
 }
 
+static void
+perf_output_sample_data_user(struct perf_output_handle *handle,
+			     struct perf_sample_data *data)
+{
+	void *ptr = data->data_user_ptr;
+
+	if (!ptr) {
+		u64 size = 0;
+		perf_output_put(handle, size);
+	} else {
+		unsigned int rem;
+		u64 dump_size = (u64) data->data_user_size;
+		u64 dyn_size;
+
+		perf_output_put(handle, dump_size);
+		rem = __output_copy_user(handle, ptr, dump_size);
+		dyn_size = dump_size - rem;
+		perf_output_skip(handle, rem);
+		perf_output_put(handle, dyn_size);
+	}
+}
+
 static void __perf_event_header__init_id(struct perf_event_header *header,
 					 struct perf_sample_data *data,
 					 struct perf_event *event)
@@ -6011,6 +6033,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		perf_output_put(handle, data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_DATA_USER)
+		perf_output_sample_data_user(handle, data);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -6179,6 +6204,18 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		data->phys_addr = perf_virt_to_phys(data->addr);
+
+	if (sample_type & PERF_SAMPLE_DATA_USER) {
+		int size = sizeof(u64);
+
+		data->data_user_ptr  = current->perf_data_user_ptr;
+		data->data_user_size = current->perf_data_user_size;
+
+		if (data->data_user_ptr)
+			size += PAGE_SIZE + sizeof(u64);
+
+		header->size += size;
+	}
 }
 
 static void __always_inline
