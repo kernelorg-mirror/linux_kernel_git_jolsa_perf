@@ -1041,6 +1041,11 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 		attr->exclude_user   = 1;
 	}
 
+	if (opts->data_user) {
+		perf_evsel__set_sample_bit(evsel, DATA_USER);
+		attr->mmap_data = track;
+	}
+
 	/*
 	 * Apply event specific term settings,
 	 * it overloads any global configuration.
@@ -1477,7 +1482,7 @@ static void __p_sample_type(char *buf, size_t size, u64 value)
 		bit_name(PERIOD), bit_name(STREAM_ID), bit_name(RAW),
 		bit_name(BRANCH_STACK), bit_name(REGS_USER), bit_name(STACK_USER),
 		bit_name(IDENTIFIER), bit_name(REGS_INTR), bit_name(DATA_SRC),
-		bit_name(WEIGHT), bit_name(PHYS_ADDR),
+		bit_name(WEIGHT), bit_name(PHYS_ADDR), bit_name(DATA_USER),
 		{ .name = NULL, }
 	};
 #undef bit_name
@@ -2223,6 +2228,28 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (type & PERF_SAMPLE_PHYS_ADDR) {
 		data->phys_addr = *array;
 		array++;
+	}
+
+	if (type & PERF_SAMPLE_DATA_USER) {
+               OVERFLOW_CHECK_u64(array);
+               sz = *array++;
+
+		data->user_data.offset = ((char *)(array - 1)
+					  - (char *) event);
+
+		if (!sz) {
+			data->user_data.size = 0;
+			data->user_data.data = NULL;
+		} else {
+			OVERFLOW_CHECK(array, sz, max_size);
+			data->user_data.data = (char *)array;
+			array = (void *)array + sz;
+			OVERFLOW_CHECK_u64(array);
+			data->user_data.size = *array++;
+			if (WARN_ONCE(data->user_data.size > sz,
+				      "user stack dump failure\n"))
+				return -EFAULT;
+		}
 	}
 
 	return 0;
