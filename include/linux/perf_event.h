@@ -932,6 +932,9 @@ struct perf_sample_data {
 	u64				stack_user_size;
 
 	u64				phys_addr;
+
+	char				*data_user_ptr;
+	unsigned int			 data_user_size;
 } ____cacheline_aligned;
 
 /* default value for data source */
