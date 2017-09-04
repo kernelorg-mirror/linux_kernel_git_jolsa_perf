@@ -938,10 +938,21 @@ static void callchain__printf(struct perf_evsel *evsel,
 		       i, callchain->ips[i]);
 }
 
-static void data_user__printf(struct stack_dump *dump)
+static void data_user__printf(struct stack_dump *dump,
+			      struct script_stack *stack)
 {
+	unsigned int i;
+
 	printf("... udata: size %" PRIu64 ", offset 0x%x\n",
 	       dump->size, dump->offset);
+
+	printf("... script stack (ip: 0x%" PRIx64 ", nr %" PRIu64 ")\n",
+	       stack->ip, stack->nr);
+
+	for (i = 0; i < stack->nr; i++) {
+		printf("..... %2d: %016" PRIx64 "\n",
+		       i, stack->data[i]);
+	}
 }
 
 static void branch_stack__printf(struct perf_sample *sample)
@@ -1136,7 +1147,7 @@ static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
 		sample_read__printf(sample, evsel->attr.read_format);
 
 	if (sample_type & PERF_SAMPLE_DATA_USER)
-		data_user__printf(&sample->user_data);
+		data_user__printf(&sample->user_data, &sample->script_stack);
 }
 
 static void dump_read(struct perf_evsel *evsel, union perf_event *event)
