@@ -1961,6 +1961,15 @@ static inline bool overflow(const void *endp, u16 max_size, const void *offset,
 #define OVERFLOW_CHECK_u64(offset) \
 	OVERFLOW_CHECK(offset, sizeof(u64), sizeof(u64))
 
+static void parse_sample__script_stack(struct perf_sample *data)
+{
+	u64 *ptr = (u64 *) data->user_data.data;
+
+	data->script_stack.nr   = *(u64 *) ptr++;
+	data->script_stack.data = ptr;
+	data->script_stack.ip   = *(ptr + (data->script_stack.nr - 1));
+}
+
 int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			     struct perf_sample *data)
 {
@@ -2249,6 +2258,8 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			if (WARN_ONCE(data->user_data.size > sz,
 				      "user stack dump failure\n"))
 				return -EFAULT;
+
+			parse_sample__script_stack(data);
 		}
 	}
 
