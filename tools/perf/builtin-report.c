@@ -988,6 +988,7 @@ int cmd_report(int argc, const char **argv)
 
 	if (report.script) {
 		symbol_conf.annotation_disabled = true;
+		sort__mode = SORT_MODE__SCRIPT;
 		script_symbol__init();
 	}
 
