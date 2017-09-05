@@ -986,8 +986,10 @@ int cmd_report(int argc, const char **argv)
 		return -EINVAL;
 	}
 
-	if (report.script)
+	if (report.script) {
+		sort__mode = SORT_MODE__SCRIPT;
 		symbol__script_init();
+	}
 
 	if (report.use_stdio)
 		use_browser = 0;
