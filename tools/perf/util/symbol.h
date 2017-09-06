@@ -121,7 +121,8 @@ struct symbol_conf {
 			raw_trace,
 			report_hierarchy,
 			inline_name,
-			has_script;
+			has_script,
+			report_script;
 	const char	*vmlinux_name,
 			*kallsyms_name,
 			*source_prefix,
