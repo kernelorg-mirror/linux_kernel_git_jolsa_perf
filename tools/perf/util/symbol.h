@@ -120,7 +120,8 @@ struct symbol_conf {
 			raw_trace,
 			report_hierarchy,
 			inline_name,
-			annotation_disabled;
+			annotation_disabled,
+			report_script;
 	const char	*vmlinux_name,
 			*kallsyms_name,
 			*source_prefix,
