@@ -89,6 +89,7 @@ struct intlist;
 struct symbol_conf {
 	unsigned short	priv_size;
 	unsigned short	nr_events;
+	unsigned short  script_off;
 	bool		try_vmlinux_path,
 			init_annotation,
 			force,
@@ -120,7 +121,8 @@ struct symbol_conf {
 			hide_unresolved,
 			raw_trace,
 			report_hierarchy,
-			inline_name;
+			inline_name,
+			has_script;
 	const char	*vmlinux_name,
 			*kallsyms_name,
 			*source_prefix,
@@ -285,6 +287,7 @@ int symbol__init(struct perf_env *env);
 void symbol__exit(void);
 void symbol__elf_init(void);
 int symbol__annotation_init(void);
+int symbol__script_init(void);
 
 struct symbol *symbol__new(u64 start, u64 len, u8 binding, const char *name);
 size_t __symbol__fprintf_symname_offs(const struct symbol *sym,
