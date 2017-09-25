@@ -1062,14 +1062,29 @@ static void annotate__branch_printf(struct block_range *br, u64 addr)
 }
 
 
-static int disasm_line__print(struct disasm_line *dl, struct symbol *sym, u64 start,
-		      struct perf_evsel *evsel, u64 len, int min_pcnt, int printed,
-		      int max_lines, struct disasm_line *queue)
+static int disasm_line__print(struct disasm_line *dl, u64 start)
 {
+	s64 offset = dl->al.offset;
+	const u64 addr = start + offset;
+	struct block_range *br;
+
+	br = block_range__find(addr);
+	color_fprintf(stdout, annotate__address_color(br), "  %" PRIx64 ":", addr);
+	color_fprintf(stdout, annotate__asm_color(br), "%s", dl->al.line);
+	annotate__branch_printf(br, addr);
+	return 0;
+}
+
+static int
+annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start,
+		       struct perf_evsel *evsel, u64 len, int min_pcnt, int printed,
+		       int max_lines, struct annotation_line *queue)
+{
+	struct disasm_line *dl = container_of(al, struct disasm_line, al);
 	static const char *prev_line;
 	static const char *prev_color;
 
-	if (dl->al.offset != -1) {
+	if (al->offset != -1) {
 		const char *path = NULL;
 		double percent, max_percent = 0.0;
 		double *ppercents = &percent;
@@ -1078,12 +1093,10 @@ static int disasm_line__print(struct disasm_line *dl, struct symbol *sym, u64 st
 		int i, nr_percent = 1;
 		const char *color;
 		struct annotation *notes = symbol__annotation(sym);
-		s64 offset = dl->al.offset;
-		const u64 addr = start + offset;
+		s64 offset = al->offset;
 		struct annotation_line *next;
-		struct block_range *br;
 
-		next = annotation_line__next(&dl->al, &notes->src->source);
+		next = annotation_line__next(al, &notes->src->source);
 
 		if (perf_evsel__is_group_event(evsel)) {
 			nr_percent = evsel->nr_members;
@@ -1114,11 +1127,11 @@ static int disasm_line__print(struct disasm_line *dl, struct symbol *sym, u64 st
 			return 1;
 
 		if (queue != NULL) {
-			list_for_each_entry_from(queue, &notes->src->source, al.node) {
-				if (queue == dl)
+			list_for_each_entry_from(queue, &notes->src->source, node) {
+				if (queue == al)
 					break;
-				disasm_line__print(queue, sym, start, evsel, len,
-						    0, 0, 1, NULL);
+				annotation_line__print(queue, sym, start, evsel, len,
+						       0, 0, 1, NULL);
 			}
 		}
 
@@ -1155,10 +1168,7 @@ static int disasm_line__print(struct disasm_line *dl, struct symbol *sym, u64 st
 
 		printf(" :	");
 
-		br = block_range__find(addr);
-		color_fprintf(stdout, annotate__address_color(br), "  %" PRIx64 ":", addr);
-		color_fprintf(stdout, annotate__asm_color(br), "%s", dl->al.line);
-		annotate__branch_printf(br, addr);
+		disasm_line__print(dl, start);
 		printf("\n");
 
 		if (ppercents != &percent)
@@ -1178,25 +1188,13 @@ static int disasm_line__print(struct disasm_line *dl, struct symbol *sym, u64 st
 		if (perf_evsel__is_group_event(evsel))
 			width *= evsel->nr_members;
 
-		if (!*dl->al.line)
+		if (!*al->line)
 			printf(" %*s:\n", width, " ");
 		else
-			printf(" %*s:	%s\n", width, " ", dl->al.line);
+			printf(" %*s:	%s\n", width, " ", al->line);
 	}
 
 	return 0;
-}
-
-static int
-annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start,
-		       struct perf_evsel *evsel, u64 len, int min_pcnt, int printed,
-		       int max_lines, struct annotation_line *aq)
-{
-	struct disasm_line *dl    = container_of(al, struct disasm_line, al);
-	struct disasm_line *queue = container_of(aq, struct disasm_line, al);
-
-	return disasm_line__print(dl, sym, start, evsel, len, min_pcnt, printed,
-				  max_lines, queue);
 }
 
 /*
