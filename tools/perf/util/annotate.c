@@ -1908,6 +1908,12 @@ int symbol__annotate_printf(struct symbol *sym, struct map *map,
 				  symbol_conf.show_nr_samples ? "Samples" : "Percent",
 				  d_filename, evsel_name, h->nr_samples);
 
+	if (symbol_conf.has_script) {
+		struct script_symbol *ssym = symbol__script_symbol(sym);
+
+		printf(" [%s %s] \n", sym->name, ssym->file);
+	}
+
 	printf("%-*.*s----\n",
 	       graph_dotted_len, graph_dotted_len, graph_dotted_line);
 
