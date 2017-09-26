@@ -1422,6 +1422,71 @@ static const char *annotate__norm_arch(const char *arch_name)
 	return normalize_arch((char *)arch_name);
 }
 
+static int symbol_script__annotate(struct symbol *sym, struct annotate_args *args)
+{
+	struct script_symbol *ssym = symbol__script_symbol(sym);
+	struct annotation *notes = symbol__annotation(sym);
+	FILE *file;
+	int line_nr = 0;
+	int ltab_i = 0;
+	int lskip = 0;
+	char loff_addr = 0, loff_line = 0;
+	u64 offset = sym->start;
+
+	file = fopen(ssym->file, "r");
+	if (!file)
+		return 0;
+
+	while (!feof(file)) {
+		struct annotation_line *al;
+		char *line = NULL;
+		size_t line_len;
+
+		if (getline(&line, &line_len, file) < 0)
+			break;
+
+		if (!line)
+			break;
+
+		if (line_nr < ssym->line)
+			goto next;
+
+
+		if (!lskip) {
+			loff_addr = ssym->lnotab[ltab_i];
+			loff_line = ssym->lnotab[ltab_i + 1];
+			lskip     = loff_line - 1;
+		} else {
+			lskip--;
+		}
+
+		if (lskip) {
+			args->offset = -1;
+		} else {
+			offset += loff_addr;
+			args->offset = offset - sym->start;
+			ltab_i += 2;
+		}
+
+		args->line    = rtrim(line);
+		args->line_nr = line_nr;
+
+		al = annotation_line__new(args);
+		if (!al)
+			return -ENOMEM;
+
+		if (offset >= sym->end || ltab_i >= ssym->lnotab_size)
+			break;
+
+		annotation_line__add(al, &notes->src->source);
+	next:
+		line_nr++;
+	}
+
+	fclose(file);
+	return 0;
+}
+
 static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 {
 	struct map *map = args->map;
@@ -1650,7 +1715,11 @@ int symbol__annotate(struct symbol *sym, struct map *map,
 		}
 	}
 
-	err = symbol__disassemble(sym, &args);
+	if (symbol_conf.has_script)
+		err = symbol_script__annotate(sym, &args);
+	else
+		err = symbol__disassemble(sym, &args);
+
 	if (err)
 		return err;
 
@@ -1906,7 +1975,12 @@ void annotated_source__purge(struct annotated_source *as)
 
 	list_for_each_entry_safe(al, n, &as->source, node) {
 		list_del(&al->node);
-		disasm_line__free(disasm_line(al));
+
+		if (symbol_conf.has_script) {
+			annotation_line__free(al);
+		} else {
+			disasm_line__free(disasm_line(al));
+		}
 	}
 }
 
