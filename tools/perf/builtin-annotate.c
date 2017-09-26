@@ -43,6 +43,7 @@ struct perf_annotate {
 	bool	   full_paths;
 	bool	   print_line;
 	bool	   skip_missing;
+	bool	   script;
 	const char *sym_hist_filter;
 	const char *cpu_list;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
@@ -186,6 +187,61 @@ static int perf_evsel__add_sample(struct perf_evsel *evsel,
 	return ret;
 }
 
+static int script_resolve(struct machine *machine, struct addr_location *al,
+			  struct perf_sample *sample)
+{
+	struct thread *thread = machine__findnew_thread(machine, sample->pid,
+							sample->tid);
+
+	if (thread == NULL)
+		return -1;
+
+	al->machine  = machine;
+	al->thread   = thread;
+	al->addr     = sample->script_stack.ip;
+	al->cpumode  = sample->cpumode;
+	al->filtered = 0;
+	al->level    = '.';
+	al->map      = thread->user_map;
+
+	if (thread__is_filtered(thread))
+		al->filtered |= (1 << HIST_FILTER__THREAD);
+
+	al->sym = NULL;
+	al->cpu = sample->cpu;
+	al->socket = -1;
+
+	if (al->cpu >= 0) {
+		struct perf_env *env = machine->env;
+
+		if (env && env->cpu)
+			al->socket = env->cpu[al->cpu].socket_id;
+	}
+
+	if (al->map) {
+		struct dso *dso = al->map->dso;
+
+		if (symbol_conf.dso_list &&
+		    (!dso || !(strlist__has_entry(symbol_conf.dso_list,
+						  dso->short_name) ||
+			       (dso->short_name != dso->long_name &&
+				strlist__has_entry(symbol_conf.dso_list,
+						   dso->long_name))))) {
+			al->filtered |= (1 << HIST_FILTER__DSO);
+		}
+
+		al->sym = map__find_symbol(al->map, al->addr);
+	}
+
+	if (symbol_conf.sym_list &&
+		(!al->sym || !strlist__has_entry(symbol_conf.sym_list,
+						al->sym->name))) {
+		al->filtered |= (1 << HIST_FILTER__SYMBOL);
+	}
+
+	return 0;
+}
+
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -196,10 +252,21 @@ static int process_sample_event(struct perf_tool *tool,
 	struct addr_location al;
 	int ret = 0;
 
-	if (machine__resolve(machine, &al, sample) < 0) {
-		pr_warning("problem processing %d event, skipping it.\n",
-			   event->header.type);
-		return -1;
+	if (ann->script) {
+		if (!sample->script_stack.ip)
+			return 0;
+
+		if (script_resolve(machine, &al, sample) < 0) {
+			pr_debug("problem processing %d event, skipping it.\n",
+				 event->header.type);
+			return -1;
+		}
+	} else {
+		if (machine__resolve(machine, &al, sample) < 0) {
+			pr_warning("problem processing %d event, skipping it.\n",
+				   event->header.type);
+			return -1;
+		}
 	}
 
 	if (ann->cpu_list && !test_bit(sample->cpu, ann->cpu_bitmap))
@@ -447,6 +514,7 @@ int cmd_annotate(int argc, const char **argv)
 		    "Show a column with the sum of periods"),
 	OPT_BOOLEAN('n', "show-nr-samples", &symbol_conf.show_nr_samples,
 		    "Show a column with the number of samples"),
+	OPT_BOOLEAN(0, "script", &annotate.script, "script mode"),
 	OPT_CALLBACK_DEFAULT(0, "stdio-color", NULL, "mode",
 			     "'always' (default), 'never' or 'auto' only applicable to --stdio mode",
 			     stdio__config_color, "always"),
@@ -491,6 +559,13 @@ int cmd_annotate(int argc, const char **argv)
 	ret = symbol__annotation_init();
 	if (ret < 0)
 		goto out_delete;
+
+	if (annotate.script) {
+		symbol_conf.report_script = true;
+		ret = symbol__script_init();
+		if (ret < 0)
+			goto out_delete;
+	}
 
 	symbol_conf.try_vmlinux_path = true;
 
