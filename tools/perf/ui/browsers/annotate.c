@@ -143,6 +143,11 @@ static void disasm_line__write(struct disasm_line *dl, struct ui_browser *browse
 	disasm_line__scnprintf(dl, bf, size, !annotate_browser__opts.use_offset);
 }
 
+static int script_line__scnprintf(struct annotation_line *al, char *bf, size_t size)
+{
+	return scnprintf(bf, size, "%5d: %s", al->line_nr, al->line);
+}
+
 static void annotate_browser__write(struct ui_browser *browser, void *entry, int row)
 {
 	struct annotate_browser *ab = container_of(browser, struct annotate_browser, b);
@@ -269,7 +274,10 @@ static void annotate_browser__write(struct ui_browser *browser, void *entry, int
 		if (change_color)
 			ui_browser__set_color(browser, color);
 
-		disasm_line__write(disasm_line(al), browser, bf, sizeof(bf));
+		if (symbol_conf.has_script)
+			script_line__scnprintf(al, bf, sizeof(bf));
+		else
+			disasm_line__write(disasm_line(al), browser, bf, sizeof(bf));
 
 		ui_browser__write_nstring(browser, bf, width - pcnt_width - cycles_width - 3 - printed);
 	}
