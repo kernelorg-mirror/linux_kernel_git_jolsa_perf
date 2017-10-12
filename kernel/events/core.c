@@ -5699,6 +5699,22 @@ perf_output_sample_data_user(struct perf_output_handle *handle,
 		u64 dump_size = (u64) data->data_user_size;
 		u64 dyn_size;
 
+		rem = arch_perf_out_copy_user(&dyn_size, ptr, sizeof(u64));
+		if (!rem) {
+			/* Copy the count into output buffer. */
+			perf_output_put(handle, dyn_size);
+			ptr       += sizeof(u64);
+			dump_size -= sizeof(u64);
+
+			/*
+			 * Get the size from count and check it fits
+			 * in the defined size.
+			 */
+			dyn_size *= sizeof(u64);
+			if (dyn_size < dump_size)
+				dump_size = dyn_size;
+		}
+
 		perf_output_put(handle, dump_size);
 		rem = __output_copy_user(handle, ptr, dump_size);
 		dyn_size = dump_size - rem;
