@@ -24,6 +24,7 @@
 #include "util/string2.h"
 #include "util/thread-stack.h"
 #include "util/time-utils.h"
+#include "util/units.h"
 #include "print_binary.h"
 #include <linux/bitmap.h>
 #include <linux/kernel.h>
@@ -498,6 +499,88 @@ static int perf_session__check_output_opt(struct perf_session *session)
 
 out:
 	return 0;
+}
+
+struct perf_script_evsel {
+	char		*name;
+	FILE		*dump;
+	unsigned long	 samples;
+};
+
+static int alloc_dump(struct perf_session *session, struct perf_evsel *evsel)
+{
+	struct perf_script_evsel *ps = evsel->priv;
+
+	if (asprintf(&ps->name, "%s-script-dump-%s.txt",
+		     session->file->path,
+		     evsel->name))
+		return -ENOMEM;
+
+	ps->dump = fopen(ps->name, "a+");
+	if (!ps->dump)
+		fprintf(stderr, "Failed to create dump file '%s'\n", ps->name);
+
+	return ps->dump ? 0 : -1;
+}
+
+static void free_dump(struct perf_script_evsel *ps)
+{
+	struct stat st;
+	char buf[20];
+
+	BUG_ON(!ps->dump);
+	fclose(ps->dump);
+
+	stat(ps->name, &st);
+	unit_number__scnprintf(buf, 20, (u64) st.st_size);
+
+	fprintf(stderr, "[ perf script: Wrote %s MB %s (%" PRIu64 " samples) ]\n",
+		buf, ps->name, ps->samples);
+
+	free(ps->name);
+}
+
+static int perf_evsel__alloc_script_priv(struct perf_session *session,
+					 struct perf_evsel *evsel)
+{
+	evsel->priv = zalloc(sizeof(struct perf_stat_evsel));
+
+	if (evsel->priv == NULL)
+		return -ENOMEM;
+	return alloc_dump(session, evsel);
+}
+
+static void perf_evsel__free_script_priv(struct perf_evsel *evsel)
+{
+	struct perf_script_evsel *ps = evsel->priv;
+
+	free_dump(ps);
+	zfree(&evsel->priv);
+}
+
+static void perf_evlist__free_script(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each_entry(evlist, evsel)
+		perf_evsel__free_script_priv(evsel);
+}
+
+static int perf_session__alloc_script(struct perf_session *session)
+{
+	struct perf_evlist *evlist = session->evlist;
+	struct perf_evsel *evsel;
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (perf_evsel__alloc_script_priv(session, evsel))
+			goto out_free;
+	}
+
+	return 0;
+
+out_free:
+	perf_evlist__free_script(evlist);
+	return -1;
 }
 
 static void fprint_sample_iregs(struct perf_sample *sample,
@@ -2738,6 +2821,7 @@ int cmd_script(int argc, const char **argv)
 			.cpu_map	 = process_cpu_map_event,
 			.ordered_events	 = true,
 			.ordering_requires_timestamps = true,
+			.per_event_dump	 = false,
 		},
 	};
 	struct perf_data_file file = {
@@ -2808,6 +2892,8 @@ int cmd_script(int argc, const char **argv)
 		    "Show context switch events (if recorded)"),
 	OPT_BOOLEAN('\0', "show-namespace-events", &script.show_namespace_events,
 		    "Show namespace events (if recorded)"),
+	OPT_BOOLEAN('\0', "per-event-dump", &script.tool.per_event_dump,
+		    "print trace output to files named by the monitored events"),
 	OPT_BOOLEAN('f', "force", &symbol_conf.force, "don't complain, do it"),
 	OPT_INTEGER(0, "max-blocks", &max_blocks,
 		    "Maximum number of code blocks to dump with brstackinsn"),
@@ -3017,6 +3103,16 @@ int cmd_script(int argc, const char **argv)
 	if (session == NULL)
 		return -1;
 
+	if (script.tool.per_event_dump) {
+		if (perf_header__has_feat(&session->header, HEADER_STAT)) {
+			fprintf(stderr,
+				"Can't mix --per-event-dump option with stat data\n");
+			return -1;
+		}
+
+		perf_session__alloc_script(session);
+	}
+
 	if (header || header_only) {
 		script.tool.show_feat_hdr = SHOW_FEAT_HEADER;
 		perf_session__fprintf_info(session, stdout, show_full_info);
@@ -3122,6 +3218,9 @@ int cmd_script(int argc, const char **argv)
 	flush_scripting();
 
 out_delete:
+	if (script.tool.per_event_dump)
+		perf_evlist__free_script(session->evlist);
+
 	perf_evlist__free_stats(session->evlist);
 	perf_session__delete(session);
 
