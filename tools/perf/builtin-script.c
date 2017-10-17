@@ -1497,6 +1497,18 @@ static size_t data_src__fprintf(u64 data_src, FILE *fp)
 	return fprintf(fp, "%-*s", maxlen, out);
 }
 
+static FILE *get_fp(struct perf_script *script, struct perf_evsel *evsel)
+{
+	if (script->tool.per_event_dump) {
+		struct perf_script_evsel *ps = evsel->priv;
+
+		BUG_ON(!ps->dump);
+		return ps->dump;
+	}
+
+	return stdout;
+}
+
 static void process_event(struct perf_script *script,
 			  struct perf_sample *sample, struct perf_evsel *evsel,
 			  struct addr_location *al,
@@ -1656,6 +1668,7 @@ static int process_sample_event(struct perf_tool *tool,
 				struct machine *machine)
 {
 	struct perf_script *scr = container_of(tool, struct perf_script, tool);
+	FILE *fp = get_fp(scr, evsel);
 	struct addr_location al;
 
 	if (perf_time__skip_sample(&scr->ptime, sample->time))
@@ -1687,7 +1700,7 @@ static int process_sample_event(struct perf_tool *tool,
 	if (scripting_ops)
 		scripting_ops->process_event(event, sample, evsel, &al);
 	else
-		process_event(scr, sample, evsel, &al, machine, stdout);
+		process_event(scr, sample, evsel, &al, machine, fp);
 
 out_put:
 	addr_location__put(&al);
@@ -1735,6 +1748,7 @@ static int process_comm_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 	int ret = -1;
 
 	thread = machine__findnew_thread(machine, event->comm.pid, event->comm.tid);
@@ -1752,8 +1766,8 @@ static int process_comm_event(struct perf_tool *tool,
 		sample->tid = event->comm.tid;
 		sample->pid = event->comm.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	ret = 0;
 out:
 	thread__put(thread);
@@ -1769,6 +1783,7 @@ static int process_namespaces_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 	int ret = -1;
 
 	thread = machine__findnew_thread(machine, event->namespaces.pid,
@@ -1787,8 +1802,8 @@ static int process_namespaces_event(struct perf_tool *tool,
 		sample->tid = event->namespaces.tid;
 		sample->pid = event->namespaces.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	ret = 0;
 out:
 	thread__put(thread);
@@ -1804,6 +1819,7 @@ static int process_fork_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 
 	if (perf_event__process_fork(tool, event, sample, machine) < 0)
 		return -1;
@@ -1820,8 +1836,8 @@ static int process_fork_event(struct perf_tool *tool,
 		sample->tid = event->fork.tid;
 		sample->pid = event->fork.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	thread__put(thread);
 
 	return 0;
@@ -1836,6 +1852,7 @@ static int process_exit_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 
 	thread = machine__findnew_thread(machine, event->fork.pid, event->fork.tid);
 	if (thread == NULL) {
@@ -1849,8 +1866,8 @@ static int process_exit_event(struct perf_tool *tool,
 		sample->tid = event->fork.tid;
 		sample->pid = event->fork.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 
 	if (perf_event__process_exit(tool, event, sample, machine) < 0)
 		err = -1;
@@ -1868,6 +1885,7 @@ static int process_mmap_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 
 	if (perf_event__process_mmap(tool, event, sample, machine) < 0)
 		return -1;
@@ -1884,8 +1902,8 @@ static int process_mmap_event(struct perf_tool *tool,
 		sample->tid = event->mmap.tid;
 		sample->pid = event->mmap.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	thread__put(thread);
 	return 0;
 }
@@ -1899,6 +1917,7 @@ static int process_mmap2_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 
 	if (perf_event__process_mmap2(tool, event, sample, machine) < 0)
 		return -1;
@@ -1915,8 +1934,8 @@ static int process_mmap2_event(struct perf_tool *tool,
 		sample->tid = event->mmap2.tid;
 		sample->pid = event->mmap2.pid;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	thread__put(thread);
 	return 0;
 }
@@ -1930,6 +1949,7 @@ static int process_switch_event(struct perf_tool *tool,
 	struct perf_script *script = container_of(tool, struct perf_script, tool);
 	struct perf_session *session = script->session;
 	struct perf_evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+	FILE *fp = get_fp(script, evsel);
 
 	if (perf_event__process_switch(tool, event, sample, machine) < 0)
 		return -1;
@@ -1940,8 +1960,8 @@ static int process_switch_event(struct perf_tool *tool,
 		pr_debug("problem processing SWITCH event, skipping it.\n");
 		return -1;
 	}
-	fprint_sample_start(sample, thread, evsel, stdout);
-	perf_event__fprintf(event, stdout);
+	fprint_sample_start(sample, thread, evsel, fp);
+	perf_event__fprintf(event, fp);
 	thread__put(thread);
 	return 0;
 }
