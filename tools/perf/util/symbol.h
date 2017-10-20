@@ -135,7 +135,8 @@ struct symbol_conf {
 			*tid_list_str,
 			*sym_list_str,
 			*col_width_list_str,
-			*bt_stop_list_str;
+			*bt_stop_list_str,
+			*equal_pids_list_str;
        struct strlist	*dso_list,
 			*comm_list,
 			*sym_list,
@@ -145,7 +146,8 @@ struct symbol_conf {
 			*sym_to_list,
 			*bt_stop_list;
 	struct intlist	*pid_list,
-			*tid_list;
+			*tid_list,
+			*equal_pids_list;
 	const char	*symfs;
 };
 

@@ -848,6 +848,8 @@ static const struct option options[] = {
 	OPT_UINTEGER('o', "order", &sort_compute, "Specify compute sorting."),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
 		     "How to display percentage of filtered entries", parse_filter_percentage),
+	OPT_STRING(0, "equal-pids", &symbol_conf.equal_pids_list_str, "pid,pid[,pid...]",
+		   "make these pids equal"),
 	OPT_END()
 };
 

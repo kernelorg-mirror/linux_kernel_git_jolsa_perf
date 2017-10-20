@@ -2142,6 +2142,10 @@ int symbol__init(struct perf_env *env)
 		       symbol_conf.tid_list_str, "tid") < 0)
 		goto out_free_pid_list;
 
+	if (setup_intlist(&symbol_conf.equal_pids_list,
+		       symbol_conf.equal_pids_list_str, "equal_pids") < 0)
+		goto out_free_equal_pids_list;
+
 	if (setup_list(&symbol_conf.sym_list,
 		       symbol_conf.sym_list_str, "symbol") < 0)
 		goto out_free_tid_list;
@@ -2169,6 +2173,8 @@ int symbol__init(struct perf_env *env)
 
 out_free_sym_list:
 	strlist__delete(symbol_conf.sym_list);
+out_free_equal_pids_list:
+	intlist__delete(symbol_conf.equal_pids_list);
 out_free_tid_list:
 	intlist__delete(symbol_conf.tid_list);
 out_free_pid_list:

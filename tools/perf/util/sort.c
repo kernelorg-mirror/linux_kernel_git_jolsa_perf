@@ -77,6 +77,18 @@ static int64_t cmp_null(const void *l, const void *r)
 static int64_t
 sort__thread_cmp(struct hist_entry *left, struct hist_entry *right)
 {
+	if (symbol_conf.equal_pids_list) {
+		bool left_in, right_in;
+
+		left_in  = intlist__has_entry(symbol_conf.equal_pids_list,
+					      left->thread->tid);
+		right_in = intlist__has_entry(symbol_conf.equal_pids_list,
+					      right->thread->tid);
+
+		if (left_in && right_in)
+			return 0;
+	}
+
 	return right->thread->tid - left->thread->tid;
 }
 
@@ -113,6 +125,18 @@ struct sort_entry sort_thread = {
 static int64_t
 sort__comm_cmp(struct hist_entry *left, struct hist_entry *right)
 {
+	if (symbol_conf.equal_pids_list) {
+		bool left_in, right_in;
+
+		left_in  = intlist__has_entry(symbol_conf.equal_pids_list,
+					      left->thread->tid);
+		right_in = intlist__has_entry(symbol_conf.equal_pids_list,
+					      right->thread->tid);
+
+		if (left_in && right_in)
+			return 0;
+	}
+
 	/* Compare the addr that should be unique among comm */
 	return strcmp(comm__str(right->comm), comm__str(left->comm));
 }
