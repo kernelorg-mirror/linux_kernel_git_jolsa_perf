@@ -689,7 +689,16 @@ struct perf_event {
 #endif /* CONFIG_PERF_EVENTS */
 };
 
+enum perf_user_data_state {
+	PERF_USER_DATA_STATE_OFF	= 0,
+	PERF_USER_DATA_STATE_ENABLE	= 1,
+	PERF_USER_DATA_STATE_ON		= 2,
+};
+
 struct perf_user_data {
+	struct callback_head		 work;
+	u64				 type;
+	enum perf_user_data_state	 state;
 	struct perf_event_context	*ctx;
 };
 
@@ -952,6 +961,7 @@ extern void perf_prepare_sample(struct perf_event_header *header,
 				struct perf_sample_data *data,
 				struct perf_event *event,
 				struct pt_regs *regs);
+void perf_prepare_sample_fallback(struct perf_event *event);
 
 extern int perf_event_overflow(struct perf_event *event,
 				 struct perf_sample_data *data,
