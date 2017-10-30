@@ -77,6 +77,9 @@ static long syscall_trace_enter(struct pt_regs *regs)
 
 	work = READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY;
 
+	if (unlikely(work & _TIF_PERF_USER_DATA))
+		current->perf_user_data_allowed = 1;
+
 	if (unlikely(work & _TIF_SYSCALL_EMU))
 		emulated = true;
 
@@ -190,6 +193,9 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 	lockdep_sys_exit();
 
 	cached_flags = READ_ONCE(ti->flags);
+
+	if (unlikely(cached_flags & _TIF_PERF_USER_DATA))
+		current->perf_user_data_allowed = 0;
 
 	if (unlikely(cached_flags & EXIT_TO_USERMODE_LOOP_FLAGS))
 		exit_to_usermode_loop(regs, cached_flags);
