@@ -653,6 +653,9 @@ struct task_struct {
 	/* disallow userland-initiated cgroup migration */
 	unsigned			no_cgroup_migration:1;
 #endif
+#ifdef CONFIG_PERF_EVENTS
+	unsigned			perf_user_data_allowed:1;
+#endif
 
 	unsigned long			atomic_flags; /* Flags requiring atomic access. */
 
