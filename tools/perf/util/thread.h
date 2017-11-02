@@ -27,7 +27,8 @@ struct thread {
 	char			shortname[3];
 	bool			comm_set;
 	int			comm_len;
-	bool			dead; /* if set thread has exited */
+	bool			exited;	/* if set thread has exited */
+	bool			dead;	/* if set thread is in dead tree */
 	struct list_head	namespaces_list;
 	struct rw_semaphore	namespaces_lock;
 	struct list_head	comm_list;
@@ -65,7 +66,7 @@ static inline void __thread__zput(struct thread **thread)
 
 static inline void thread__exited(struct thread *thread)
 {
-	thread->dead = true;
+	thread->exited = true;
 }
 
 struct namespaces *thread__namespaces(const struct thread *thread);
