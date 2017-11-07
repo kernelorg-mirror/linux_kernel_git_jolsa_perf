@@ -18,6 +18,7 @@ struct perf_mmap {
 	void			 *base;
 	int			 mask;
 	int			 fd;
+	int			 cpu;
 	refcount_t		 refcnt;
 	u64			 prev;
 	struct auxtrace_mmap	 auxtrace_mmap;
@@ -59,7 +60,7 @@ struct mmap_params {
 	bool track_mmap;
 };
 
-int perf_mmap__mmap(struct perf_mmap *map, struct mmap_params *mp, int fd);
+int perf_mmap__mmap(struct perf_mmap *map, struct mmap_params *mp, int fd, int cpu);
 void perf_mmap__munmap(struct perf_mmap *map);
 
 void perf_mmap__get(struct perf_mmap *map);
