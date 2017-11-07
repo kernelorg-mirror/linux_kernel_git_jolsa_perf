@@ -110,6 +110,7 @@ struct record {
 	struct record_thread	*threads;
 	int			threads_cnt;
 	bool			threads_set;
+	bool			threads_spread;
 	unsigned long		waking;
 };
 
@@ -387,14 +388,15 @@ static void record__index_single(struct record *rec)
 	}
 }
 
-static void record__index_threads(struct record *rec,
-				  struct record_thread *threads)
+static void record__index_spread(struct record *rec,
+				 struct record_thread *threads)
 {
-	struct perf_evlist *evlist =  rec->evlist;
+	struct perf_evlist *evlist = rec->evlist;
 	struct perf_data     *data = &rec->data;
+	struct record_thread *thread0 = threads;
 	int i, t;
 
-	BUG_ON(data->index_nr != rec->threads_cnt - 1);
+	BUG_ON(data->index_nr != rec->threads_cnt);
 
 	for (i = 0; i < evlist->nr_mmaps; i++) {
 		struct perf_mmap *map = &evlist->track_mmap[i];
@@ -402,13 +404,46 @@ static void record__index_threads(struct record *rec,
 		map->file = &data->file;
 	}
 
+	thread0->mmap[0]->file = &data->index[0];
+
 	for (t = 1; t < rec->threads_cnt; t++) {
 		struct record_thread *th = threads + t;
 
 		for (i = 0; i < th->mmap_nr; i++) {
 			struct perf_mmap *map = th->mmap[i];
 
-			map->file = &data->index[t - 1];
+			map->file = &data->index[t];
+		}
+	}
+}
+
+static void record__index_threads(struct record *rec,
+				  struct record_thread *threads)
+{
+	struct perf_evlist *evlist =  rec->evlist;
+	struct perf_data     *data = &rec->data;
+	int i, t;
+
+	if (rec->threads_spread) {
+		record__index_spread(rec, threads);
+		return;
+	}
+
+	BUG_ON(data->index_nr != rec->threads_cnt);
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		struct perf_mmap *map = &evlist->track_mmap[i];
+
+		map->file = &data->file;
+	}
+
+	for (t = 0; t < rec->threads_cnt; t++) {
+		struct record_thread *th = threads + t;
+
+		for (i = 0; i < th->mmap_nr; i++) {
+			struct perf_mmap *map = th->mmap[i];
+
+			map->file = &data->index[t];
 		}
 	}
 }
@@ -441,7 +476,7 @@ static int record__mmap_index(struct record *rec)
 	int ret, nr = evlist->nr_mmaps;
 
 	if (have_threads)
-		nr = rec->threads_cnt - 1;
+		nr = rec->threads_cnt;
 
 	ret = perf_data__create_index(data, nr);
 	if (ret)
@@ -1069,6 +1104,45 @@ record_thread__mmap(struct record_thread *th, int nr)
 }
 
 static int
+record__threads_spread(struct record *rec)
+{
+	struct perf_evlist *evlist = rec->evlist;
+	struct record_thread *threads = rec->threads;
+	struct record_thread *thread0 = threads;
+	int cnt = rec->threads_cnt;
+	int i, t, nr, nr0, nr_bkw, nr_trk;
+	int nr_cpus = cpu__max_present_cpu();
+
+	nr     = evlist->mmap           ? evlist->nr_mmaps : 0;
+	nr_trk = evlist->track_mmap     ? evlist->nr_mmaps : 0;
+	nr_bkw = evlist->overwrite_mmap ? evlist->nr_mmaps : 0;
+
+	BUG_ON(nr_bkw);
+	BUG_ON(nr_cpus != nr || nr_cpus != nr);
+
+	nr0 = 1 + nr_trk;
+
+	if (record_thread__mmap(thread0, nr0))
+		return -ENOMEM;
+
+	thread0->mmap[0] = &evlist->mmap[0];
+
+	for (i = 0; i < nr_trk; i++)
+		thread0->mmap[i + 1] = &evlist->track_mmap[i];
+
+	for (t = 1; t < cnt; t++) {
+		struct record_thread *th = threads + t;
+
+		if (record_thread__mmap(th, 1))
+			return -ENOMEM;
+
+		th->mmap[0] = &evlist->mmap[t];
+	}
+
+	return 0;
+}
+
+static int
 record__threads_assign(struct record *rec)
 {
 	struct record_thread *threads = rec->threads;
@@ -1078,6 +1152,9 @@ record__threads_assign(struct record *rec)
 	struct perf_evlist *evlist = rec->evlist;
 	int i, j, t, nr, nr0, nr_bkw, nr_trk, nr_thr, nr_mod;
 	int ret = -ENOMEM;
+
+	if (rec->threads_spread)
+		return record__threads_spread(rec);
 
 	nr     = evlist->mmap           ? evlist->nr_mmaps : 0;
 	nr_trk = evlist->track_mmap     ? evlist->nr_mmaps : 0;
@@ -1218,6 +1295,7 @@ record__threads_create(struct record *rec)
 static void record__threads_cnt(struct record *rec)
 {
 	struct perf_evlist *evlist = rec->evlist;
+	bool spread = false;
 	int cnt;
 
 	if (rec->threads_set) {
@@ -1226,18 +1304,17 @@ static void record__threads_cnt(struct record *rec)
 		if (rec->threads_cnt) {
 			cnt = rec->threads_cnt;
 		} else {
-			/*
-			 * If the number of threads is not set by user,
-			 * pick some reasonable number.. like 2 ;-)
-			 */
-			cnt = 2;
+			cnt    = cpu__max_present_cpu();
+			spread = true;
 		}
 
 		/*
 		 * Can't do threads with backward mmap ATM.
 		 */
-		if (evlist->backward_mmap)
-			cnt = 1;
+		if (evlist->overwrite_mmap) {
+			cnt    = 1;
+			spread = false;
+		}
 
 		/*
 		 * Can't create more threads than there's work to do.
@@ -1253,7 +1330,8 @@ static void record__threads_cnt(struct record *rec)
 		cnt = 1;
 	}
 
-	rec->threads_cnt   = cnt;
+	rec->threads_cnt    = cnt;
+	rec->threads_spread = spread;
 }
 
 static int
@@ -1285,10 +1363,23 @@ static inline pid_t gettid(void)
 	return (pid_t) syscall(__NR_gettid);
 }
 
+static int set_affinity(int cpu)
+{
+	cpu_set_t mask;
+
+	CPU_ZERO(&mask);
+	CPU_SET(cpu, &mask);
+	return sched_setaffinity(0, sizeof(mask), &mask);
+}
+
 static void*
 record_thread__process(struct record_thread *th)
 {
 	struct record *rec = th->rec;
+	struct perf_mmap *m0 = th->mmap[0];
+
+	if (set_affinity(m0->cpu))
+		pr_err("failed to set affinity for cpu %d\n", m0->cpu);
 
 	thread = th;
 	thread->pid   = gettid();
@@ -1338,6 +1429,14 @@ static int record__threads_start(struct record *rec)
 		struct record_thread *th = threads + i;
 
 		err = pthread_create(&th->pt, NULL, worker, th);
+	}
+
+	if (rec->threads_spread) {
+		struct record_thread *thread0 = rec->threads;
+		struct perf_mmap *m0 = thread0->mmap[0];
+
+		if (set_affinity(m0->cpu))
+			pr_err("failed to set affinity for cpu %d\n", m0->cpu);
 	}
 
 	return err;
