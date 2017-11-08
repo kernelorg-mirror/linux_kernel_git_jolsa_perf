@@ -391,7 +391,7 @@ int dbg_release_bp_slot(struct perf_event *bp)
 	return 0;
 }
 
-static int validate_hw_breakpoint(struct perf_event *bp)
+int validate_hw_breakpoint(struct perf_event *bp)
 {
 	int ret;
 
@@ -447,7 +447,7 @@ register_user_hw_breakpoint(struct perf_event_attr *attr,
 }
 EXPORT_SYMBOL_GPL(register_user_hw_breakpoint);
 
-static int __modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
+int __modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
 {
 	u64 old_addr = bp->attr.bp_addr;
 	u64 old_len = bp->attr.bp_len;
