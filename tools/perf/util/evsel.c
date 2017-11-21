@@ -1674,6 +1674,11 @@ int perf_evsel__open(struct perf_evsel *evsel, struct cpu_map *cpus,
 		pid = evsel->cgrp->fd;
 	}
 
+	if (evsel->idle) {
+		flags |= PERF_FLAG_PID_IDLE;
+		pid    = 0;
+	}
+
 fallback_missing_features:
 	if (perf_missing_features.clockid_wrong)
 		evsel->attr.clockid = CLOCK_MONOTONIC; /* should always work */
@@ -1708,7 +1713,7 @@ retry_sample_id:
 		for (thread = 0; thread < nthreads; thread++) {
 			int fd, group_fd;
 
-			if (!evsel->cgrp && !evsel->system_wide)
+			if (!evsel->cgrp && !evsel->system_wide && !evsel->idle)
 				pid = thread_map__pid(threads, thread);
 
 			group_fd = get_group_fd(evsel, cpu, thread);

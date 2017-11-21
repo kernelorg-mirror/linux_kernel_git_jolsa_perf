@@ -1189,7 +1189,7 @@ static void printout(int id, int nr, struct perf_evsel *counter, double uval,
 		if (counter->cgrp)
 			os.nfields++;
 	}
-	if (run == 0 || ena == 0 || counter->counts->scaled == -1) {
+	if (!counter->idle && (run == 0 || ena == 0 || counter->counts->scaled == -1)) {
 		if (metric_only) {
 			pm(&os, NULL, "", "", 0);
 			return;
