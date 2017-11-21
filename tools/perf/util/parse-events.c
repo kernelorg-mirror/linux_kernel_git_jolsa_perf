@@ -1377,6 +1377,7 @@ struct event_modifier {
 	int sample_read;
 	int pinned;
 	int weak;
+	int idle;
 };
 
 static int get_event_modifier(struct event_modifier *mod, char *str,
@@ -1396,6 +1397,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	int exclude = eu | ek | eh;
 	int exclude_GH = evsel ? evsel->exclude_GH : 0;
 	int weak = 0;
+	int idle = 0;
 
 	memset(mod, 0, sizeof(*mod));
 
@@ -1435,6 +1437,8 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 			pinned = 1;
 		} else if (*str == 'W') {
 			weak = 1;
+		} else if (*str == 'i') {
+			idle = 1;
 		} else
 			break;
 
@@ -1466,6 +1470,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	mod->sample_read = sample_read;
 	mod->pinned = pinned;
 	mod->weak = weak;
+	mod->idle = idle;
 
 	return 0;
 }
@@ -1479,7 +1484,7 @@ static int check_modifier(char *str)
 	char *p = str;
 
 	/* The sizeof includes 0 byte as well. */
-	if (strlen(str) > (sizeof("ukhGHpppPSDIW") - 1))
+	if (strlen(str) > (sizeof("ukhGHpppPSDIiW") - 1))
 		return -1;
 
 	while (*p) {
@@ -1519,7 +1524,8 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->exclude_GH          = mod.exclude_GH;
 		evsel->sample_read         = mod.sample_read;
 		evsel->precise_max         = mod.precise_max;
-		evsel->weak_group	   = mod.weak;
+		evsel->weak_group           = mod.weak;
+		evsel->idle                = mod.idle;
 
 		if (perf_evsel__is_group_leader(evsel))
 			evsel->attr.pinned = mod.pinned;
