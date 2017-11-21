@@ -346,7 +346,8 @@ unlock:
 #define PERF_FLAG_ALL (PERF_FLAG_FD_NO_GROUP |\
 		       PERF_FLAG_FD_OUTPUT  |\
 		       PERF_FLAG_PID_CGROUP |\
-		       PERF_FLAG_FD_CLOEXEC)
+		       PERF_FLAG_FD_CLOEXEC |\
+		       PERF_FLAG_PID_IDLE)
 
 /*
  * branch priv levels that need permission checks
@@ -9898,6 +9899,9 @@ SYSCALL_DEFINE5(perf_event_open,
 	if ((flags & PERF_FLAG_PID_CGROUP) && (pid == -1 || cpu == -1))
 		return -EINVAL;
 
+	if ((flags & PERF_FLAG_PID_IDLE) && (pid == -1 || cpu == -1))
+		return -EINVAL;
+
 	if (flags & PERF_FLAG_FD_CLOEXEC)
 		f_flags |= O_CLOEXEC;
 
@@ -9917,7 +9921,13 @@ SYSCALL_DEFINE5(perf_event_open,
 	}
 
 	if (pid != -1 && !(flags & PERF_FLAG_PID_CGROUP)) {
-		task = find_lively_task_by_vpid(pid);
+		if (flags & PERF_FLAG_PID_IDLE) {
+			task = idle_task(cpu);
+			get_task_struct(task);
+		} else {
+			task = find_lively_task_by_vpid(pid);
+		}
+
 		if (IS_ERR(task)) {
 			err = PTR_ERR(task);
 			goto err_group_fd;
