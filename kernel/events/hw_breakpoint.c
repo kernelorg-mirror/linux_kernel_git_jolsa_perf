@@ -284,6 +284,8 @@ static int __reserve_bp_slot(struct perf_event *bp, u64 bp_type)
 	enum bp_type_idx type;
 	int weight;
 
+trace_printk("__reserve_bp_slot1 bp %p, %llu\n", bp, bp_type);
+
 	/* We couldn't initialize breakpoint constraints on boot */
 	if (!constraints_initialized)
 		return -ENOMEM;
@@ -296,18 +298,33 @@ static int __reserve_bp_slot(struct perf_event *bp, u64 bp_type)
 	type = find_slot_idx(bp_type);
 	weight = hw_breakpoint_weight(bp);
 
+trace_printk("__reserve_bp_slot2 bp %p, type %d, weight %d\n", bp, type, weight);
+
 	fetch_bp_busy_slots(&slots, bp, type);
+
+trace_printk("__reserve_bp_slot3 bp %p, slots.flexible %d, slots.pinned %d cpumask %*pbl\n",
+		bp, slots.flexible, slots.pinned, cpumask_pr_args(cpumask_of_bp(bp)));
+
 	/*
 	 * Simulate the addition of this breakpoint to the constraints
 	 * and see the result.
 	 */
 	fetch_this_slot(&slots, weight);
 
+trace_printk("__reserve_bp_slot4 bp %p, slots.flexible %d, slots.pinned %d cpumask %*pbl\n",
+		bp, slots.flexible, slots.pinned, cpumask_pr_args(cpumask_of_bp(bp)));
+
 	/* Flexible counters need to keep at least one slot */
 	if (slots.pinned + (!!slots.flexible) > nr_slots[type])
 		return -ENOSPC;
 
 	toggle_bp_slot(bp, true, type, weight);
+
+	slots.flexible = slots.pinned = 0;
+	fetch_bp_busy_slots(&slots, bp, type);
+
+trace_printk("__reserve_bp_slot5 bp %p, slots.flexible %d, slots.pinned %d cpumask %*pbl\n",
+		bp, slots.flexible, slots.pinned, cpumask_pr_args(cpumask_of_bp(bp)));
 
 	return 0;
 }
@@ -327,12 +344,25 @@ int reserve_bp_slot(struct perf_event *bp)
 
 static void __release_bp_slot(struct perf_event *bp, u64 bp_type)
 {
+	struct bp_busy_slots slots = {0};
 	enum bp_type_idx type;
 	int weight;
 
+	trace_printk("__release_bp_slot bp %p, %llu\n", bp, bp_type);
+
 	type = find_slot_idx(bp_type);
 	weight = hw_breakpoint_weight(bp);
+
+	trace_printk("__release_bp_slot bp %p, type %d, weight %d\n", bp, type, weight);
 	toggle_bp_slot(bp, false, type, weight);
+
+	slots.flexible = slots.pinned = 0;
+	fetch_bp_busy_slots(&slots, bp, type);
+
+	trace_printk("__release_bp_slot bp %p, slots.flexible %d, slots.pinned %d cpumask %*pbl\n",
+		       bp, slots.flexible, slots.pinned, cpumask_pr_args(cpumask_of_bp(bp)));
+
+
 }
 
 void release_bp_slot(struct perf_event *bp)
@@ -349,9 +379,13 @@ static int __modify_bp_slot(struct perf_event *bp, u64 old_type)
 {
 	int err;
 
+	trace_printk("__modify_bp_slot bp %p, bp->attr.bp_type %u, old_type %llu\n",
+			bp, bp->attr.bp_type, old_type);
+
 	__release_bp_slot(bp, old_type);
 
 	err = __reserve_bp_slot(bp, bp->attr.bp_type);
+	trace_printk("__modify_bp_slot bp %p, err %d\n", bp, err);
 	if (err)
 		WARN_ON(__reserve_bp_slot(bp, old_type));
 
@@ -417,6 +451,8 @@ int register_perf_hw_breakpoint(struct perf_event *bp)
 {
 	int ret;
 
+trace_printk("register_perf_hw_breakpoint bp %p\n", bp);
+
 	ret = reserve_bp_slot(bp);
 	if (ret)
 		return ret;
@@ -452,16 +488,23 @@ int __modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *a
 	u64 old_addr = bp->attr.bp_addr;
 	u64 old_len = bp->attr.bp_len;
 	int old_type = bp->attr.bp_type;
-	bool modify = attr->bp_type == old_type;
+	bool modify = attr->bp_type != old_type;
 	int err = 0;
+
+	trace_printk("__modify_user_hw_breakpoint1 bp %p, modify %d\n", bp, modify);
 
 	bp->attr.bp_addr = attr->bp_addr;
 	bp->attr.bp_type = attr->bp_type;
 	bp->attr.bp_len = attr->bp_len;
 
 	err = validate_hw_breakpoint(bp);
+
+	trace_printk("__modify_user_hw_breakpoint2 bp %p, err %d\n", bp, err);
+
 	if (!err && modify)
 		err = modify_bp_slot(bp, old_type);
+
+	trace_printk("__modify_user_hw_breakpoint3 bp %p, err %d\n", bp, err);
 
 	if (err) {
 		bp->attr.bp_addr = old_addr;
@@ -586,6 +629,7 @@ static struct notifier_block hw_breakpoint_exceptions_nb = {
 
 static void bp_perf_event_destroy(struct perf_event *event)
 {
+trace_printk("bp_perf_event_destroy bp %p\n", event);
 	release_bp_slot(event);
 }
 
