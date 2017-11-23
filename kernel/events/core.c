@@ -9402,19 +9402,33 @@ static void perf_swevent_init_hrtimer(struct perf_event *event)
  * Software event: cpu wall time clock
  */
 
+static u64 cpu_clock_count(struct perf_event *event)
+{
+	u64 now = local_clock();
+
+	if (event->attr.exclude_idle)
+		now -= idle_task(event->oncpu)->se.sum_exec_runtime;
+
+	return now;
+}
+
 static void cpu_clock_event_update(struct perf_event *event)
 {
-	s64 prev;
+	s64 prev, delta;
 	u64 now;
 
-	now = local_clock();
+	now = cpu_clock_count(event);
 	prev = local64_xchg(&event->hw.prev_count, now);
-	local64_add(now - prev, &event->count);
+	delta = now - prev;
+	if (delta > 0)
+		local64_add(delta, &event->count);
 }
 
 static void cpu_clock_event_start(struct perf_event *event, int flags)
 {
-	local64_set(&event->hw.prev_count, local_clock());
+	u64 now = cpu_clock_count(event);
+
+	local64_set(&event->hw.prev_count, now);
 	perf_swevent_start_hrtimer(event);
 }
 

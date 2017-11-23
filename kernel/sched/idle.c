@@ -391,9 +391,12 @@ static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int fl
 static struct task_struct *
 pick_next_task_idle(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
+	struct task_struct *idle = rq->idle;
+
 	put_prev_task(rq, prev);
 	update_idle_core(rq);
 	schedstat_inc(rq->sched_goidle);
+	idle->se.exec_start = rq_clock_task(rq);
 
 	return rq->idle;
 }
@@ -413,6 +416,14 @@ dequeue_task_idle(struct rq *rq, struct task_struct *p, int flags)
 
 static void put_prev_task_idle(struct rq *rq, struct task_struct *prev)
 {
+	struct task_struct *idle = rq->idle;
+	u64 delta, now;
+
+	now = rq_clock_task(rq);
+	delta = now - idle->se.exec_start;
+	if (likely((s64)delta > 0))
+		idle->se.sum_exec_runtime += delta;
+	idle->se.exec_start = now;
 }
 
 /*
@@ -429,6 +440,9 @@ static void task_tick_idle(struct rq *rq, struct task_struct *curr, int queued)
 
 static void set_curr_task_idle(struct rq *rq)
 {
+	struct task_struct *idle = rq->idle;
+
+	idle->se.exec_start = rq_clock_task(rq);
 }
 
 static void switched_to_idle(struct rq *rq, struct task_struct *p)
