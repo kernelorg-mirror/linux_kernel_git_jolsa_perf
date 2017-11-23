@@ -51,6 +51,7 @@
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
 #include <linux/task_work.h>
+#include <linux/debugfs.h>
 
 #include "internal.h"
 
@@ -553,6 +554,52 @@ void perf_sample_event_took(u64 sample_len_ns)
 			     sysctl_perf_event_sample_rate);
 	}
 }
+
+static int get_sample_length(void *data, u64 *val)
+{
+        unsigned long cpu = (unsigned long) data;
+
+        *val = per_cpu(running_sample_length, cpu);
+        return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(sample_length_fops, get_sample_length, NULL, "%llu\n");
+
+static __init int init_perf_debugfs(void)
+{
+	struct dentry *root, *irq, *icpu, *file;
+	int cpu, ret = 0;
+
+	root = debugfs_create_dir("perf", NULL);
+	if (!root)
+		return -1;
+
+	irq = debugfs_create_dir("irq", root);
+	if (!irq)
+		return -1;
+
+	for_each_possible_cpu(cpu) {
+		char buf[50];
+
+		snprintf(buf, sizeof(buf), "cpu%d", cpu);
+
+		icpu = debugfs_create_dir(buf, irq);
+		if (!icpu)
+			return -1;
+
+		file = debugfs_create_file("sample_length", 0444, icpu,
+					   (void *)(unsigned long) cpu,
+					   &sample_length_fops);
+		if (!file) {
+			ret = -1;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+late_initcall(init_perf_debugfs);
 
 static atomic64_t perf_event_id;
 
