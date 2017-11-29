@@ -92,6 +92,7 @@ enum perf_output_field {
 	PERF_OUTPUT_PHYS_ADDR       = 1U << 26,
 	PERF_OUTPUT_UREGS	    = 1U << 27,
 	PERF_OUTPUT_METRIC	    = 1U << 28,
+	PERF_OUTPUT_MISC            = 1U << 29,
 };
 
 struct output_option {
@@ -127,6 +128,7 @@ struct output_option {
 	{.str = "synth", .field = PERF_OUTPUT_SYNTH},
 	{.str = "phys_addr", .field = PERF_OUTPUT_PHYS_ADDR},
 	{.str = "metric", .field = PERF_OUTPUT_METRIC},
+	{.str = "misc", .field = PERF_OUTPUT_MISC},
 };
 
 enum {
@@ -621,6 +623,24 @@ static int perf_sample__fprintf_start(struct perf_sample *sample,
 			printed += fprintf(fp, "%3d ", sample->cpu);
 		else
 			printed += fprintf(fp, "[%03d] ", sample->cpu);
+	}
+
+	if (PRINT_FIELD(MISC)) {
+		int ret = 0;
+
+		#define has(m) (sample->misc & PERF_RECORD_MISC_##m) == PERF_RECORD_MISC_##m
+
+		if (has(KERNEL))       ret += fprintf(fp, "K");
+		if (has(USER))         ret += fprintf(fp, "U");
+		if (has(HYPERVISOR))   ret += fprintf(fp, "H");
+		if (has(GUEST_KERNEL)) ret += fprintf(fp, "G");
+		if (has(GUEST_USER))   ret += fprintf(fp, "g");
+		if (has(USER_DATA))    ret += fprintf(fp, "D");
+
+		#undef has
+
+		ret += fprintf(fp, "%*s", 6 - ret, " ");
+		printed += ret;
 	}
 
 	if (PRINT_FIELD(TIME)) {
