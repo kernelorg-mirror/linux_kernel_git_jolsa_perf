@@ -141,8 +141,9 @@ enum perf_event_sample_format {
 	PERF_SAMPLE_TRANSACTION			= 1U << 17,
 	PERF_SAMPLE_REGS_INTR			= 1U << 18,
 	PERF_SAMPLE_PHYS_ADDR			= 1U << 19,
+	PERF_SAMPLE_USER_DATA_ID		= 1U << 20,
 
-	PERF_SAMPLE_MAX = 1U << 20,		/* non-ABI */
+	PERF_SAMPLE_MAX = 1U << 21,		/* non-ABI */
 };
 
 /*
@@ -931,9 +932,10 @@ enum perf_event_type {
 	 *
 	 * struct {
 	 *	struct perf_event_header	header;
-	 *	u64				sample_type;
+	 *	u64				type;
+	 *	u64				id;
 	 *
-	 *      # The sample_type value could contain following
+	 *      # The type value could contain following
 	 *      # PERF_SAMPLE_* bits:
 	 *      #
 	 *      #   PERF_SAMPLE_CALLCHAIN

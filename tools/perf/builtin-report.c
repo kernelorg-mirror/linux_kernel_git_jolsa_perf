@@ -394,6 +394,19 @@ perf_sample__add_user_data(struct perf_sample *sample,
 }
 
 static int
+user_data__process(struct user_data *entry, struct perf_sample *sample,
+		   struct user_data_event *event, struct report *rep)
+{
+	int ret;
+
+	ret = perf_sample__add_user_data(&entry->sample, sample, event->type);
+	if (ret)
+		return ret;
+
+	return perf_sample__process(&entry->sample, &entry->al, entry->evsel, rep);
+}
+
+static int
 thread__flush_user_data(struct thread *thread,
 			struct user_data_event *event,
 			struct perf_sample *sample,
@@ -403,14 +416,10 @@ thread__flush_user_data(struct thread *thread,
 	int ret = 0;
 
 	list_for_each_entry_safe(entry, p, &thread->user_data_list, list) {
-		ret = perf_sample__add_user_data(&entry->sample, sample, event->type);
-		if (ret)
-			break;
-
-		ret = perf_sample__process(&entry->sample, &entry->al, entry->evsel, rep);
-		if (ret < 0) {
-			pr_debug("problem adding hist entry, skipping event\n");
-			break;
+		if (entry->sample.user_data_id == event->id) {
+			ret = user_data__process(entry, sample, event, rep);
+			if (ret)
+				pr_debug("problem adding hist entry, skipping event\n");
 		}
 
 		list_del(&entry->list);

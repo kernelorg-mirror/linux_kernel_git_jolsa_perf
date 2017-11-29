@@ -1613,6 +1613,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		size += sizeof(data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		size += sizeof(data->user_data_id);
+
 	event->header_size = size;
 }
 
@@ -5982,6 +5985,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		perf_output_put(handle, data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		perf_output_put(handle, data->user_data_id);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -6219,6 +6225,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		data->phys_addr = perf_virt_to_phys(data->addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		data->user_data_id = event->ctx->user_data.id;
+
 	if (ud.allow && ud.type) {
 		struct perf_event_context *ctx = event->ctx;
 
@@ -6423,6 +6432,7 @@ struct perf_user_data_event {
 	struct {
 		struct perf_event_header	header;
 		u64				type;
+		u64				id;
 	} event_id;
 };
 
@@ -6534,6 +6544,7 @@ static void perf_user_data_event(struct perf_event_context *ctx)
 				.misc = 0,
 				.size = sizeof(event.event_id),
 			},
+			.id = ctx->user_data.id,
 		},
 	};
 
@@ -6551,6 +6562,7 @@ static void perf_user_data_event(struct perf_event_context *ctx)
 	 */
 	ctx->user_data.type  = 0;
 	ctx->user_data.state = PERF_USER_DATA_STATE_OFF;
+	ctx->user_data.id++;
 
 	perf_pmu_enable(ctx->pmu);
 	raw_spin_unlock_irq(&ctx->lock);

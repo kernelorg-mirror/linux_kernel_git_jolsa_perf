@@ -102,6 +102,7 @@ struct sample_event {
 struct user_data_event {
 	struct perf_event_header        header;
 	u64 type;
+	u64 id;
 	u64 array[];
 };
 
@@ -210,6 +211,7 @@ struct perf_sample {
 	u32 raw_size;
 	u64 data_src;
 	u64 phys_addr;
+	u64 user_data_id;
 	u32 flags;
 	u16 insn_len;
 	u8  cpumode;

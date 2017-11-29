@@ -1074,7 +1074,10 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 		user_data  = !attr->exclude_kernel;
 		user_data &= (has_callchain && !attr->exclude_callchain_user) || has_ustack;
 
-		attr->user_data = user_data;
+		if (user_data) {
+			attr->user_data = 1;
+			perf_evsel__set_sample_bit(evsel, USER_DATA_ID);
+		}
 	}
 }
 
@@ -2258,6 +2261,10 @@ perf_sample__parse(struct perf_sample *data, struct parse_args *arg)
 		array++;
 	}
 
+	if (type & PERF_SAMPLE_USER_DATA_ID) {
+		data->user_data_id = *array;
+		array++;
+	}
 	return 0;
 }
 
