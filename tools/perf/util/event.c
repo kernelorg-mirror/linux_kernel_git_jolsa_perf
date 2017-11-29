@@ -1436,6 +1436,28 @@ size_t perf_event__fprintf_switch(union perf_event *event, FILE *fp)
 		       event->context_switch.next_prev_tid);
 }
 
+static size_t perf_event__fprintf_user_data(union perf_event *event, FILE *fp)
+{
+	u64 type = event->user_data.type;
+	bool single = true;
+	size_t printed =0;
+
+	printed += fprintf(fp, " type 0x%lx", event->user_data.type);
+	printed += fprintf(fp, " (");
+
+	if (type & PERF_SAMPLE_CALLCHAIN) {
+		printed += fprintf(fp, "callchain");
+		single = false;
+	}
+
+	if (type & PERF_SAMPLE_STACK_USER)
+		printed += fprintf(fp, "%sstack", single ? "," : "");
+
+	printed += fprintf(fp, ")\n");
+
+	return printed;
+}
+
 size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 {
 	size_t ret = fprintf(fp, "PERF_RECORD_%s",
@@ -1467,6 +1489,9 @@ size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 	case PERF_RECORD_SWITCH:
 	case PERF_RECORD_SWITCH_CPU_WIDE:
 		ret += perf_event__fprintf_switch(event, fp);
+		break;
+	case PERF_RECORD_USER_DATA:
+		ret += perf_event__fprintf_user_data(event, fp);
 		break;
 	default:
 		ret += fprintf(fp, "\n");
