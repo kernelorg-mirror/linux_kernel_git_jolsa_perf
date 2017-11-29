@@ -1458,6 +1458,11 @@ static size_t perf_event__fprintf_user_data(union perf_event *event, FILE *fp)
 	return printed;
 }
 
+static size_t perf_event__fprintf_lost(union perf_event *event, FILE *fp)
+{
+	return fprintf(fp, " lost %lu\n", event->lost.lost);
+}
+
 size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 {
 	size_t ret = fprintf(fp, "PERF_RECORD_%s",
@@ -1492,6 +1497,9 @@ size_t perf_event__fprintf(union perf_event *event, FILE *fp)
 		break;
 	case PERF_RECORD_USER_DATA:
 		ret += perf_event__fprintf_user_data(event, fp);
+		break;
+	case PERF_RECORD_LOST:
+		ret += perf_event__fprintf_lost(event, fp);
 		break;
 	default:
 		ret += fprintf(fp, "\n");
