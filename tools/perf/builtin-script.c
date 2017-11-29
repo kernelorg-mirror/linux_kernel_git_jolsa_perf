@@ -1488,6 +1488,7 @@ struct perf_script {
 	bool			show_switch_events;
 	bool			show_namespace_events;
 	bool			show_lost_events;
+	bool			show_userdata_events;
 	bool			allocated;
 	bool			per_event_dump;
 	struct cpu_map		*cpus;
@@ -2103,6 +2104,85 @@ process_lost_event(struct perf_tool *tool,
 	return 0;
 }
 
+static size_t
+perf_event__fprintf_user_data(union perf_event *event,
+			      struct perf_sample *sample,
+			      struct perf_evsel *evsel,
+			      struct perf_script *script,
+			      FILE *fp)
+{
+	const char *evname = perf_evsel__name(evsel);
+	u64 type = event->user_data.type;
+	bool single = true;
+	size_t printed = 0;
+
+	printed += fprintf(fp, "PERF_RECORD_%s ",
+			   perf_event__name(event->header.type));
+
+	if (!script->name_width)
+		script->name_width = perf_evlist__max_name_len(script->session->evlist);
+
+	printed += fprintf(fp, "%*s: ", script->name_width, evname ?: "[unknown]");
+
+	printed += fprintf(fp, " id %lu, type 0x%lx (",
+			   sample->user_data_id, event->user_data.type);
+
+	if (type & PERF_SAMPLE_CALLCHAIN) {
+		printed += fprintf(fp, "callchain");
+		single = false;
+	}
+
+	if (type & PERF_SAMPLE_STACK_USER) {
+		printed += fprintf(fp, "%sstack", !single ? "," : "");
+		single = false;
+	}
+
+	if (type & PERF_SAMPLE_USER_DATA_ID)
+		printed += fprintf(fp, "%sid", !single ? "," : "");
+
+	printed += fprintf(fp, ")\n");
+	return printed;
+}
+
+static int
+process_user_data_event(struct perf_tool *tool __maybe_unused,
+			union perf_event *event __maybe_unused,
+			struct perf_sample *sample,
+			struct perf_evsel *evsel,
+			struct machine *machine)
+{
+	struct perf_script *script = container_of(tool, struct perf_script, tool);
+	struct perf_event_attr *attr = &evsel->attr;
+	unsigned int type = output_type(attr->type);
+	struct thread *thread;
+
+	thread = machine__findnew_thread(machine, sample->pid,
+					 sample->tid);
+	if (thread == NULL)
+		return -1;
+
+	perf_sample__fprintf_start(sample, thread, evsel,
+				   PERF_RECORD_SAMPLE, stdout);
+	perf_event__fprintf_user_data(event, sample, evsel, script, stdout);
+
+	if (PRINT_FIELD(IP)) {
+		struct callchain_cursor *cursor = NULL;
+
+		if (symbol_conf.use_callchain && sample->callchain &&
+		    thread__resolve_callchain(thread, &callchain_cursor, evsel,
+					      sample, NULL, NULL, scripting_max_stack) == 0)
+			cursor = &callchain_cursor;
+
+		if (cursor) {
+			sample__fprintf_callchain(sample, 0, output[type].print_ip_opts, cursor, stdout);
+			fprintf(stdout, "\n");
+		}
+	}
+
+	thread__put(thread);
+	return 0;
+}
+
 static void sig_handler(int sig __maybe_unused)
 {
 	session_done = 1;
@@ -2199,6 +2279,9 @@ static int __cmd_script(struct perf_script *script)
 		script->tool.namespaces = process_namespaces_event;
 	if (script->show_lost_events)
 		script->tool.lost = process_lost_event;
+	if (script->show_userdata_events)
+		script->tool.user_data = process_user_data_event;
+
 
 	if (perf_script__setup_per_event_dump(script)) {
 		pr_err("Couldn't create the per event dump files\n");
@@ -3138,6 +3221,8 @@ int cmd_script(int argc, const char **argv)
 		    "Show namespace events (if recorded)"),
 	OPT_BOOLEAN('\0', "show-lost-events", &script.show_lost_events,
 		    "Show lost events (if recorded)"),
+	OPT_BOOLEAN('\0', "show-userdata-events", &script.show_userdata_events,
+		    "Show userdata events (if recorded)"),
 	OPT_BOOLEAN('\0', "per-event-dump", &script.per_event_dump,
 		    "Dump trace output to files named by the monitored events"),
 	OPT_BOOLEAN('f', "force", &symbol_conf.force, "don't complain, do it"),
