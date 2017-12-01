@@ -141,8 +141,9 @@ enum perf_event_sample_format {
 	PERF_SAMPLE_TRANSACTION			= 1U << 17,
 	PERF_SAMPLE_REGS_INTR			= 1U << 18,
 	PERF_SAMPLE_PHYS_ADDR			= 1U << 19,
+	PERF_SAMPLE_USER_DATA_ID		= 1U << 20,
 
-	PERF_SAMPLE_MAX = 1U << 20,		/* non-ABI */
+	PERF_SAMPLE_MAX = 1U << 21,		/* non-ABI */
 };
 
 /*
@@ -823,6 +824,7 @@ enum perf_event_type {
 	 *	{ u64			abi; # enum perf_sample_regs_abi
 	 *	  u64			regs[weight(mask)]; } && PERF_SAMPLE_REGS_INTR
 	 *	{ u64			phys_addr;} && PERF_SAMPLE_PHYS_ADDR
+	 *	{ u64			user_data_id;} && PERF_SAMPLE_USER_DATA_ID
 	 * };
 	 */
 	PERF_RECORD_SAMPLE			= 9,
@@ -932,6 +934,16 @@ enum perf_event_type {
 	 * struct {
 	 *	struct perf_event_header	header;
 	 *	u64				sample_type;
+	 *
+	 *	# The sample_type value could contain following
+	 *	# PERF_SAMPLE_* bits:
+	 *	#
+	 *	#   PERF_SAMPLE_USER_DATA_ID
+	 *	#
+	 *	# and governs the data portion:
+	 *
+	 *	{ u64		user_data_id;} && PERF_SAMPLE_USER_DATA_ID
+	 *
 	 *	struct sample_id		sample_id;
 	 * };
 	 */
