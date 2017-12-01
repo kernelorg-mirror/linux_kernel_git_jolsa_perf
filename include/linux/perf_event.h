@@ -583,6 +583,13 @@ struct perf_event {
 	local64_t			count;
 	atomic64_t			child_count;
 
+	struct list_head		active_event_entry;
+
+	struct perf_event		*dup_master;
+	struct list_head		dup_list;
+	u64				dup_base_count;
+	u64				dup_base_child_count;
+
 	/*
 	 * These are the total time in nanoseconds that the event
 	 * has been enabled (i.e. eligible to run, and the task has
