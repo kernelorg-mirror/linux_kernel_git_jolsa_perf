@@ -1567,6 +1567,9 @@ static void __perf_event_header_size(struct perf_event *event, u64 sample_type)
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		size += sizeof(data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		size += sizeof(data->user_data_id);
+
 	event->header_size = size;
 }
 
@@ -5967,6 +5970,9 @@ void perf_output_sample(struct perf_output_handle *handle,
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		perf_output_put(handle, data->phys_addr);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID)
+		perf_output_put(handle, data->user_data_id);
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -6044,7 +6050,7 @@ static void user_data(struct user_data *ud, struct perf_event *event)
 		    current->perf_user_data_allowed &&	/* is in allowed area	*/
 		    current->mm &&			/* is normal task	*/
 		    !(current->flags & PF_EXITING);	/* is not exiting task	*/
-	ud->type  = 0;
+	ud->type  = event->attr.sample_type & PERF_SAMPLE_USER_DATA_ID;
 }
 
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
@@ -6197,6 +6203,8 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 		if (!user_data->state)
 			user_data->state = PERF_USER_DATA_STATE_ENABLE;
+
+		data->user_data_id = user_data->id;
 	}
 }
 
@@ -6400,11 +6408,13 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
 	u16 header_size = user->event_id.header.size;
+	u64 type;
 
 	if (!event->attr.user_data)
 		return;
 
 	user->event_id.type = user_data->type & event->attr.sample_type;
+	type = user->event_id.type;
 
 	perf_event_header__init_id(&user->event_id.header, &sample, event);
 
@@ -6412,6 +6422,10 @@ static void perf_user_data_output(struct perf_event *event, void *data)
 		goto out;
 
 	perf_output_put(&handle, user->event_id);
+
+	if (type & PERF_SAMPLE_USER_DATA_ID)
+		perf_output_put(&handle, user_data->id);
+
 	perf_event__output_id_sample(event, &handle, &sample);
 	perf_output_end(&handle);
 out:
@@ -6444,6 +6458,7 @@ static void perf_user_data_event(struct perf_user_data *user_data)
 	 */
 	user_data->type  = 0;
 	user_data->state = PERF_USER_DATA_STATE_OFF;
+	user_data->id++;
 
 	perf_pmu_enable(ctx->pmu);
 	raw_spin_unlock_irq(&ctx->lock);

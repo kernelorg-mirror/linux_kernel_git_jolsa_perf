@@ -698,6 +698,7 @@ enum perf_user_data_state {
 struct perf_user_data {
 	struct callback_head		 work;
 	u64				 type;
+	u64				 id;
 	enum perf_user_data_state	 state;
 	struct perf_event_context	*ctx;
 };
@@ -931,6 +932,8 @@ struct perf_sample_data {
 	u64				stack_user_size;
 
 	u64				phys_addr;
+
+	u64				user_data_id;
 } ____cacheline_aligned;
 
 /* default value for data source */
