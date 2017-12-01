@@ -518,6 +518,7 @@ struct perf_user_data {
 	u64				 type;
 	int				 enabled_count;
 	struct mutex			 enabled_mutex;
+	u64				 id;
 };
 
 enum perf_event_task_context {
