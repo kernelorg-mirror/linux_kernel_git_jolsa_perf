@@ -516,6 +516,7 @@ struct perf_user_data {
 	struct callback_head		 work;
 	enum perf_user_data_state	 state;
 	u64				 type;
+	u64				 id;
 };
 
 enum perf_event_task_context {
