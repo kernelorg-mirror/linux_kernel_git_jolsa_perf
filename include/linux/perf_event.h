@@ -689,6 +689,10 @@ struct perf_event {
 #endif /* CONFIG_PERF_EVENTS */
 };
 
+struct perf_user_data {
+	struct perf_event_context	*ctx;
+};
+
 /**
  * struct perf_event_context - event context structure
  *
@@ -740,6 +744,7 @@ struct perf_event_context {
 #endif
 	void				*task_ctx_data; /* pmu specific data */
 	struct rcu_head			rcu_head;
+	struct perf_user_data		*user_data;
 };
 
 /*

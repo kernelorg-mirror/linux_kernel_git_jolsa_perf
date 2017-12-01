@@ -1156,6 +1156,7 @@ static void free_ctx(struct rcu_head *head)
 	struct perf_event_context *ctx;
 
 	ctx = container_of(head, struct perf_event_context, rcu_head);
+	kfree(ctx->user_data);
 	kfree(ctx->task_ctx_data);
 	kfree(ctx);
 }
@@ -2809,6 +2810,13 @@ static void perf_event_sync_stat(struct perf_event_context *ctx,
 	}
 }
 
+static void user_data_link(struct perf_user_data *user_data,
+			   struct perf_event_context *ctx)
+{
+	user_data->ctx = ctx;
+	ctx->user_data = user_data;
+}
+
 static void perf_event_context_sched_out(struct task_struct *task, int ctxn,
 					 struct task_struct *next)
 {
@@ -2854,6 +2862,9 @@ static void perf_event_context_sched_out(struct task_struct *task, int ctxn,
 			WRITE_ONCE(next_ctx->task, task);
 
 			swap(ctx->task_ctx_data, next_ctx->task_ctx_data);
+
+			user_data_link(ctx->user_data, next_ctx);
+			user_data_link(next_ctx->user_data, ctx);
 
 			/*
 			 * RCU_INIT_POINTER here is safe because we've not
@@ -3766,6 +3777,7 @@ find_get_context(struct pmu *pmu, struct task_struct *task,
 {
 	struct perf_event_context *ctx, *clone_ctx = NULL;
 	struct perf_cpu_context *cpuctx;
+	struct perf_user_data *user_data = NULL;
 	void *task_ctx_data = NULL;
 	unsigned long flags;
 	int ctxn, err;
@@ -3797,6 +3809,14 @@ find_get_context(struct pmu *pmu, struct task_struct *task,
 		}
 	}
 
+	if (event->attr.user_data) {
+		user_data = kzalloc(sizeof(*user_data), GFP_KERNEL);
+		if (!user_data) {
+			err = -ENOMEM;
+			goto errout;
+		}
+	}
+
 retry:
 	ctx = perf_lock_task_context(task, ctxn, &flags);
 	if (ctx) {
@@ -3806,6 +3826,11 @@ retry:
 		if (task_ctx_data && !ctx->task_ctx_data) {
 			ctx->task_ctx_data = task_ctx_data;
 			task_ctx_data = NULL;
+		}
+
+		if (user_data && !ctx->user_data) {
+			user_data_link(user_data, ctx);
+			user_data = NULL;
 		}
 		raw_spin_unlock_irqrestore(&ctx->lock, flags);
 
@@ -3820,6 +3845,11 @@ retry:
 		if (task_ctx_data) {
 			ctx->task_ctx_data = task_ctx_data;
 			task_ctx_data = NULL;
+		}
+
+		if (user_data) {
+			user_data_link(user_data, ctx);
+			user_data = NULL;
 		}
 
 		err = 0;
@@ -3848,10 +3878,12 @@ retry:
 		}
 	}
 
+	kfree(user_data);
 	kfree(task_ctx_data);
 	return ctx;
 
 errout:
+	kfree(user_data);
 	kfree(task_ctx_data);
 	return ERR_PTR(err);
 }
@@ -10707,6 +10739,7 @@ inherit_event(struct perf_event *parent_event,
 	      struct perf_event_context *child_ctx)
 {
 	enum perf_event_state parent_state = parent_event->state;
+	struct perf_user_data *user_data;
 	struct perf_event *child_event;
 	unsigned long flags;
 
@@ -10726,6 +10759,16 @@ inherit_event(struct perf_event *parent_event,
 					   NULL, NULL, -1);
 	if (IS_ERR(child_event))
 		return child_event;
+
+	if (child_event->attr.user_data && !child_ctx->user_data) {
+		user_data = kzalloc(sizeof(*user_data), GFP_KERNEL);
+		if (!user_data) {
+			free_event(child_event);
+			return NULL;
+		}
+
+		user_data_link(user_data, child_ctx);
+	}
 
 	/*
 	 * is_orphaned_event() and list_add_tail(&parent_event->child_list)
