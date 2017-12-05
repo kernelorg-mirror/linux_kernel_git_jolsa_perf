@@ -173,7 +173,7 @@ static inline struct rapl_pmu *cpu_to_rapl_pmu(unsigned int cpu)
 static inline u64 rapl_read_counter(struct perf_event *event)
 {
 	u64 raw;
-	rdmsrl(event->hw.event_base, raw);
+	rdmsrl(event->hw.cpu.event_base, raw);
 	return raw;
 }
 
@@ -201,7 +201,7 @@ static u64 rapl_event_update(struct perf_event *event)
 
 again:
 	prev_raw_count = local64_read(&hwc->prev_count);
-	rdmsrl(event->hw.event_base, new_raw_count);
+	rdmsrl(event->hw.cpu.event_base, new_raw_count);
 
 	if (local64_cmpxchg(&hwc->prev_count, prev_raw_count,
 			    new_raw_count) != prev_raw_count) {
@@ -220,7 +220,7 @@ again:
 	delta = (new_raw_count << shift) - (prev_raw_count << shift);
 	delta >>= shift;
 
-	sdelta = rapl_scale(delta, event->hw.config);
+	sdelta = rapl_scale(delta, event->hw.cpu.config);
 
 	local64_add(sdelta, &event->count);
 
@@ -412,9 +412,9 @@ static int rapl_pmu_event_init(struct perf_event *event)
 		return -EINVAL;
 	event->cpu = pmu->cpu;
 	event->pmu_private = pmu;
-	event->hw.event_base = msr;
-	event->hw.config = cfg;
-	event->hw.idx = bit;
+	event->hw.cpu.event_base = msr;
+	event->hw.cpu.config = cfg;
+	event->hw.cpu.idx = bit;
 
 	return ret;
 }

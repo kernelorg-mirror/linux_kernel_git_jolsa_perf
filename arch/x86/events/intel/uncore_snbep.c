@@ -426,7 +426,7 @@ static void snbep_uncore_pci_enable_event(struct intel_uncore_box *box, struct p
 	struct pci_dev *pdev = box->pci_dev;
 	struct hw_perf_event *hwc = &event->hw;
 
-	pci_write_config_dword(pdev, hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	pci_write_config_dword(pdev, hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static void snbep_uncore_pci_disable_event(struct intel_uncore_box *box, struct perf_event *event)
@@ -434,7 +434,7 @@ static void snbep_uncore_pci_disable_event(struct intel_uncore_box *box, struct 
 	struct pci_dev *pdev = box->pci_dev;
 	struct hw_perf_event *hwc = &event->hw;
 
-	pci_write_config_dword(pdev, hwc->config_base, hwc->config);
+	pci_write_config_dword(pdev, hwc->cpu.config_base, hwc->cpu.config);
 }
 
 static u64 snbep_uncore_pci_read_counter(struct intel_uncore_box *box, struct perf_event *event)
@@ -443,8 +443,8 @@ static u64 snbep_uncore_pci_read_counter(struct intel_uncore_box *box, struct pe
 	struct hw_perf_event *hwc = &event->hw;
 	u64 count = 0;
 
-	pci_read_config_dword(pdev, hwc->event_base, (u32 *)&count);
-	pci_read_config_dword(pdev, hwc->event_base + 4, (u32 *)&count + 1);
+	pci_read_config_dword(pdev, hwc->cpu.event_base, (u32 *)&count);
+	pci_read_config_dword(pdev, hwc->cpu.event_base + 4, (u32 *)&count + 1);
 
 	return count;
 }
@@ -486,12 +486,12 @@ static void snbep_uncore_msr_enable_box(struct intel_uncore_box *box)
 static void snbep_uncore_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE)
 		wrmsrl(reg1->reg, uncore_shared_reg_config(box, 0));
 
-	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static void snbep_uncore_msr_disable_event(struct intel_uncore_box *box,
@@ -499,7 +499,7 @@ static void snbep_uncore_msr_disable_event(struct intel_uncore_box *box,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrl(hwc->config_base, hwc->config);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config);
 }
 
 static void snbep_uncore_msr_init_box(struct intel_uncore_box *box)
@@ -777,7 +777,7 @@ static struct extra_reg snbep_uncore_cbox_extra_regs[] = {
 
 static void snbep_cbox_put_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct intel_uncore_extra_reg *er = &box->shared_regs[0];
 	int i;
 
@@ -795,7 +795,7 @@ static struct event_constraint *
 __snbep_cbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event,
 			    u64 (*cbox_filter_mask)(int fields))
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct intel_uncore_extra_reg *er = &box->shared_regs[0];
 	int i, alloc = 0;
 	unsigned long flags;
@@ -862,12 +862,12 @@ snbep_cbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event
 
 static int snbep_cbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct extra_reg *er;
 	int idx = 0;
 
 	for (er = snbep_uncore_cbox_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.config & er->config_mask))
+		if (er->event != (event->hw.cpu.config & er->config_mask))
 			continue;
 		idx |= er->idx;
 	}
@@ -907,7 +907,7 @@ static struct intel_uncore_type snbep_uncore_cbox = {
 static u64 snbep_pcu_alter_er(struct perf_event *event, int new_idx, bool modify)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
 	u64 config = reg1->config;
 
 	if (new_idx > reg1->idx)
@@ -916,7 +916,7 @@ static u64 snbep_pcu_alter_er(struct perf_event *event, int new_idx, bool modify
 		config >>= 8 * (reg1->idx - new_idx);
 
 	if (modify) {
-		hwc->config += new_idx - reg1->idx;
+		hwc->cpu.config += new_idx - reg1->idx;
 		reg1->config = config;
 		reg1->idx = new_idx;
 	}
@@ -926,7 +926,7 @@ static u64 snbep_pcu_alter_er(struct perf_event *event, int new_idx, bool modify
 static struct event_constraint *
 snbep_pcu_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct intel_uncore_extra_reg *er = &box->shared_regs[0];
 	unsigned long flags;
 	int idx = reg1->idx;
@@ -967,7 +967,7 @@ again:
 
 static void snbep_pcu_put_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct intel_uncore_extra_reg *er = &box->shared_regs[0];
 
 	if (uncore_box_is_fake(box) || !reg1->alloc)
@@ -980,8 +980,8 @@ static void snbep_pcu_put_constraint(struct intel_uncore_box *box, struct perf_e
 static int snbep_pcu_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
-	int ev_sel = hwc->config & SNBEP_PMON_CTL_EV_SEL_MASK;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	int ev_sel = hwc->cpu.config & SNBEP_PMON_CTL_EV_SEL_MASK;
 
 	if (ev_sel >= 0xb && ev_sel <= 0xe) {
 		reg1->reg = SNBEP_PCU_MSR_PMON_BOX_FILTER;
@@ -1035,10 +1035,10 @@ enum {
 static int snbep_qpi_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
 
-	if ((hwc->config & SNBEP_PMON_CTL_EV_SEL_MASK) == 0x38) {
+	if ((hwc->cpu.config & SNBEP_PMON_CTL_EV_SEL_MASK) == 0x38) {
 		reg1->idx = 0;
 		reg1->reg = SNBEP_Q_Py_PCI_PMON_PKT_MATCH0;
 		reg1->config = event->attr.config1;
@@ -1052,8 +1052,8 @@ static void snbep_qpi_enable_event(struct intel_uncore_box *box, struct perf_eve
 {
 	struct pci_dev *pdev = box->pci_dev;
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		int idx = box->pmu->pmu_idx + SNBEP_PCI_QPI_PORT0_FILTER;
@@ -1072,7 +1072,7 @@ static void snbep_qpi_enable_event(struct intel_uncore_box *box, struct perf_eve
 		}
 	}
 
-	pci_write_config_dword(pdev, hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	pci_write_config_dword(pdev, hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops snbep_uncore_qpi_ops = {
@@ -1543,12 +1543,12 @@ ivbep_cbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event
 
 static int ivbep_cbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct extra_reg *er;
 	int idx = 0;
 
 	for (er = ivbep_uncore_cbox_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.config & er->config_mask))
+		if (er->event != (event->hw.cpu.config & er->config_mask))
 			continue;
 		idx |= er->idx;
 	}
@@ -1565,7 +1565,7 @@ static int ivbep_cbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 static void ivbep_cbox_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		u64 filter = uncore_shared_reg_config(box, 0);
@@ -1573,7 +1573,7 @@ static void ivbep_cbox_enable_event(struct intel_uncore_box *box, struct perf_ev
 		wrmsrl(reg1->reg + 6, filter >> 32);
 	}
 
-	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops ivbep_uncore_cbox_ops = {
@@ -1668,8 +1668,8 @@ static void ivbep_uncore_irp_enable_event(struct intel_uncore_box *box, struct p
 	struct pci_dev *pdev = box->pci_dev;
 	struct hw_perf_event *hwc = &event->hw;
 
-	pci_write_config_dword(pdev, ivbep_uncore_irp_ctls[hwc->idx],
-			       hwc->config | SNBEP_PMON_CTL_EN);
+	pci_write_config_dword(pdev, ivbep_uncore_irp_ctls[hwc->cpu.idx],
+			       hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static void ivbep_uncore_irp_disable_event(struct intel_uncore_box *box, struct perf_event *event)
@@ -1677,7 +1677,7 @@ static void ivbep_uncore_irp_disable_event(struct intel_uncore_box *box, struct 
 	struct pci_dev *pdev = box->pci_dev;
 	struct hw_perf_event *hwc = &event->hw;
 
-	pci_write_config_dword(pdev, ivbep_uncore_irp_ctls[hwc->idx], hwc->config);
+	pci_write_config_dword(pdev, ivbep_uncore_irp_ctls[hwc->cpu.idx], hwc->cpu.config);
 }
 
 static u64 ivbep_uncore_irp_read_counter(struct intel_uncore_box *box, struct perf_event *event)
@@ -1686,8 +1686,8 @@ static u64 ivbep_uncore_irp_read_counter(struct intel_uncore_box *box, struct pe
 	struct hw_perf_event *hwc = &event->hw;
 	u64 count = 0;
 
-	pci_read_config_dword(pdev, ivbep_uncore_irp_ctrs[hwc->idx], (u32 *)&count);
-	pci_read_config_dword(pdev, ivbep_uncore_irp_ctrs[hwc->idx] + 4, (u32 *)&count + 1);
+	pci_read_config_dword(pdev, ivbep_uncore_irp_ctrs[hwc->cpu.idx], (u32 *)&count);
+	pci_read_config_dword(pdev, ivbep_uncore_irp_ctrs[hwc->cpu.idx] + 4, (u32 *)&count + 1);
 
 	return count;
 }
@@ -1971,12 +1971,12 @@ knl_cha_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 static int knl_cha_hw_config(struct intel_uncore_box *box,
 			     struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct extra_reg *er;
 	int idx = 0;
 
 	for (er = knl_uncore_cha_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.config & er->config_mask))
+		if (er->event != (event->hw.cpu.config & er->config_mask))
 			continue;
 		idx |= er->idx;
 	}
@@ -2084,11 +2084,11 @@ static void knl_uncore_imc_enable_event(struct intel_uncore_box *box,
 
 	if ((event->attr.config & SNBEP_PMON_CTL_EV_SEL_MASK)
 							== UNCORE_FIXED_EVENT)
-		pci_write_config_dword(pdev, hwc->config_base,
-				       hwc->config | KNL_PMON_FIXED_CTL_EN);
+		pci_write_config_dword(pdev, hwc->cpu.config_base,
+				       hwc->cpu.config | KNL_PMON_FIXED_CTL_EN);
 	else
-		pci_write_config_dword(pdev, hwc->config_base,
-				       hwc->config | SNBEP_PMON_CTL_EN);
+		pci_write_config_dword(pdev, hwc->cpu.config_base,
+				       hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops knl_uncore_imc_ops = {
@@ -2393,7 +2393,7 @@ static const struct attribute_group hswep_uncore_ubox_format_group = {
 
 static int hswep_ubox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	reg1->reg = HSWEP_U_MSR_PMON_FILTER;
 	reg1->config = event->attr.config1 & HSWEP_U_MSR_PMON_BOX_FILTER_MASK;
 	reg1->idx = 0;
@@ -2526,12 +2526,12 @@ hswep_cbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event
 
 static int hswep_cbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct extra_reg *er;
 	int idx = 0;
 
 	for (er = hswep_uncore_cbox_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.config & er->config_mask))
+		if (er->event != (event->hw.cpu.config & er->config_mask))
 			continue;
 		idx |= er->idx;
 	}
@@ -2549,7 +2549,7 @@ static void hswep_cbox_enable_event(struct intel_uncore_box *box,
 				  struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		u64 filter = uncore_shared_reg_config(box, 0);
@@ -2557,7 +2557,7 @@ static void hswep_cbox_enable_event(struct intel_uncore_box *box,
 		wrmsrl(reg1->reg + 1, filter >> 32);
 	}
 
-	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops hswep_uncore_cbox_ops = {
@@ -2644,8 +2644,8 @@ static struct intel_uncore_type hswep_uncore_sbox = {
 static int hswep_pcu_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
-	int ev_sel = hwc->config & SNBEP_PMON_CTL_EV_SEL_MASK;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	int ev_sel = hwc->cpu.config & SNBEP_PMON_CTL_EV_SEL_MASK;
 
 	if (ev_sel >= 0xb && ev_sel <= 0xe) {
 		reg1->reg = HSWEP_PCU_MSR_PMON_BOX_FILTER;
@@ -2743,8 +2743,8 @@ static u64 hswep_uncore_irp_read_counter(struct intel_uncore_box *box, struct pe
 	struct hw_perf_event *hwc = &event->hw;
 	u64 count = 0;
 
-	pci_read_config_dword(pdev, hswep_uncore_irp_ctrs[hwc->idx], (u32 *)&count);
-	pci_read_config_dword(pdev, hswep_uncore_irp_ctrs[hwc->idx] + 4, (u32 *)&count + 1);
+	pci_read_config_dword(pdev, hswep_uncore_irp_ctrs[hwc->cpu.idx], (u32 *)&count);
+	pci_read_config_dword(pdev, hswep_uncore_irp_ctrs[hwc->cpu.idx] + 4, (u32 *)&count + 1);
 
 	return count;
 }
@@ -3378,12 +3378,12 @@ skx_cha_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 
 static int skx_cha_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
 	struct extra_reg *er;
 	int idx = 0;
 
 	for (er = skx_uncore_cha_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.config & er->config_mask))
+		if (er->event != (event->hw.cpu.config & er->config_mask))
 			continue;
 		idx |= er->idx;
 	}
@@ -3456,7 +3456,7 @@ static void skx_iio_enable_event(struct intel_uncore_box *box,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops skx_uncore_iio_ops = {

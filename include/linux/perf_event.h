@@ -114,25 +114,27 @@ struct hw_perf_event_extra {
 	int		idx;	/* index in shared_regs->regs[] */
 };
 
+struct hw_perf_event_cpu {
+	u64		config;
+	u64		last_tag;
+	unsigned long	config_base;
+	unsigned long	event_base;
+	int		event_base_rdpmc;
+	int		idx;
+	int		last_cpu;
+	int		flags;
+
+	struct hw_perf_event_extra extra_reg;
+	struct hw_perf_event_extra branch_reg;
+};
+
 /**
  * struct hw_perf_event - performance event hardware details:
  */
 struct hw_perf_event {
 #ifdef CONFIG_PERF_EVENTS
 	union {
-		struct { /* hardware */
-			u64		config;
-			u64		last_tag;
-			unsigned long	config_base;
-			unsigned long	event_base;
-			int		event_base_rdpmc;
-			int		idx;
-			int		last_cpu;
-			int		flags;
-
-			struct hw_perf_event_extra extra_reg;
-			struct hw_perf_event_extra branch_reg;
-		};
+		struct hw_perf_event_cpu cpu; /* hardware */
 		struct { /* software */
 			struct hrtimer	hrtimer;
 		};
