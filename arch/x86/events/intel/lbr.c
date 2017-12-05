@@ -427,7 +427,7 @@ void intel_pmu_lbr_add(struct perf_event *event)
 	if (!x86_pmu.lbr_nr)
 		return;
 
-	cpuc->br_sel = event->hw.branch_reg.reg;
+	cpuc->br_sel = event->hw.cpu.branch_reg.reg;
 
 	if (branch_user_callstack(cpuc->br_sel) && event->ctx->task_ctx_data) {
 		task_ctx = event->ctx->task_ctx_data;
@@ -691,7 +691,7 @@ static int intel_pmu_setup_sw_lbr_filter(struct perf_event *event)
 	 * stash actual user request into reg, it may
 	 * be used by fixup code for some CPU
 	 */
-	event->hw.branch_reg.reg = mask;
+	event->hw.cpu.branch_reg.reg = mask;
 	return 0;
 }
 
@@ -719,7 +719,7 @@ static int intel_pmu_setup_hw_lbr_filter(struct perf_event *event)
 			mask |= v;
 	}
 
-	reg = &event->hw.branch_reg;
+	reg = &event->hw.cpu.branch_reg;
 	reg->idx = EXTRA_REG_LBR;
 
 	/*
