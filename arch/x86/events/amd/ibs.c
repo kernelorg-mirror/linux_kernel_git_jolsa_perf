@@ -319,8 +319,8 @@ static int perf_ibs_init(struct perf_event *event)
 	hwc->last_period = hwc->sample_period;
 	local64_set(&hwc->period_left, hwc->sample_period);
 
-	hwc->config_base = perf_ibs->msr;
-	hwc->config = config;
+	hwc->cpu.config_base = perf_ibs->msr;
+	hwc->cpu.config = config;
 
 	return 0;
 }
@@ -367,7 +367,7 @@ perf_ibs_event_update(struct perf_ibs *perf_ibs, struct perf_event *event,
 	 * prev count manually on overflow.
 	 */
 	while (!perf_event_try_update(event, count, 64)) {
-		rdmsrl(event->hw.config_base, *config);
+		rdmsrl(event->hw.cpu.config_base, *config);
 		count = perf_ibs->get_count(*config);
 	}
 }
@@ -375,7 +375,7 @@ perf_ibs_event_update(struct perf_ibs *perf_ibs, struct perf_event *event,
 static inline void perf_ibs_enable_event(struct perf_ibs *perf_ibs,
 					 struct hw_perf_event *hwc, u64 config)
 {
-	wrmsrl(hwc->config_base, hwc->config | config | perf_ibs->enable_mask);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | config | perf_ibs->enable_mask);
 }
 
 /*
@@ -389,9 +389,9 @@ static inline void perf_ibs_disable_event(struct perf_ibs *perf_ibs,
 					  struct hw_perf_event *hwc, u64 config)
 {
 	config &= ~perf_ibs->cnt_mask;
-	wrmsrl(hwc->config_base, config);
+	wrmsrl(hwc->cpu.config_base, config);
 	config &= ~perf_ibs->enable_mask;
-	wrmsrl(hwc->config_base, config);
+	wrmsrl(hwc->cpu.config_base, config);
 }
 
 /*
@@ -441,7 +441,7 @@ static void perf_ibs_stop(struct perf_event *event, int flags)
 	if (!stopping && (hwc->state & PERF_HES_UPTODATE))
 		return;
 
-	rdmsrl(hwc->config_base, config);
+	rdmsrl(hwc->cpu.config_base, config);
 
 	if (stopping) {
 		/*
@@ -602,7 +602,7 @@ fail:
 		return 0;
 	}
 
-	msr = hwc->config_base;
+	msr = hwc->cpu.config_base;
 	buf = ibs_data.regs;
 	rdmsrl(msr, *buf);
 	if (!(*buf++ & perf_ibs->valid_mask))

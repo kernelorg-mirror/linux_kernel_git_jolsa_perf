@@ -179,10 +179,10 @@ knc_pmu_disable_event(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	u64 val;
 
-	val = hwc->config;
+	val = hwc->cpu.config;
 	val &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
 
-	(void)wrmsrl_safe(hwc->config_base + hwc->idx, val);
+	(void)wrmsrl_safe(hwc->cpu.config_base + hwc->cpu.idx, val);
 }
 
 static void knc_pmu_enable_event(struct perf_event *event)
@@ -190,10 +190,10 @@ static void knc_pmu_enable_event(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	u64 val;
 
-	val = hwc->config;
+	val = hwc->cpu.config;
 	val |= ARCH_PERFMON_EVENTSEL_ENABLE;
 
-	(void)wrmsrl_safe(hwc->config_base + hwc->idx, val);
+	(void)wrmsrl_safe(hwc->cpu.config_base + hwc->cpu.idx, val);
 }
 
 static inline u64 knc_pmu_get_status(void)

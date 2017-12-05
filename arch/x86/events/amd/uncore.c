@@ -92,7 +92,7 @@ static void amd_uncore_read(struct perf_event *event)
 	 */
 
 	prev = local64_read(&hwc->prev_count);
-	rdpmcl(hwc->event_base_rdpmc, new);
+	rdpmcl(hwc->cpu.event_base_rdpmc, new);
 	local64_set(&hwc->prev_count, new);
 	delta = (new << COUNTER_SHIFT) - (prev << COUNTER_SHIFT);
 	delta >>= COUNTER_SHIFT;
@@ -104,10 +104,10 @@ static void amd_uncore_start(struct perf_event *event, int flags)
 	struct hw_perf_event *hwc = &event->hw;
 
 	if (flags & PERF_EF_RELOAD)
-		wrmsrl(hwc->event_base, (u64)local64_read(&hwc->prev_count));
+		wrmsrl(hwc->cpu.event_base, (u64)local64_read(&hwc->prev_count));
 
 	hwc->state = 0;
-	wrmsrl(hwc->config_base, (hwc->config | ARCH_PERFMON_EVENTSEL_ENABLE));
+	wrmsrl(hwc->cpu.config_base, (hwc->cpu.config | ARCH_PERFMON_EVENTSEL_ENABLE));
 	perf_event_update_userpage(event);
 }
 
@@ -115,7 +115,7 @@ static void amd_uncore_stop(struct perf_event *event, int flags)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrl(hwc->config_base, hwc->config);
+	wrmsrl(hwc->cpu.config_base, hwc->cpu.config);
 	hwc->state |= PERF_HES_STOPPED;
 
 	if ((flags & PERF_EF_UPDATE) && !(hwc->state & PERF_HES_UPTODATE)) {
@@ -131,32 +131,32 @@ static int amd_uncore_add(struct perf_event *event, int flags)
 	struct hw_perf_event *hwc = &event->hw;
 
 	/* are we already assigned? */
-	if (hwc->idx != -1 && uncore->events[hwc->idx] == event)
+	if (hwc->cpu.idx != -1 && uncore->events[hwc->cpu.idx] == event)
 		goto out;
 
 	for (i = 0; i < uncore->num_counters; i++) {
 		if (uncore->events[i] == event) {
-			hwc->idx = i;
+			hwc->cpu.idx = i;
 			goto out;
 		}
 	}
 
 	/* if not, take the first available counter */
-	hwc->idx = -1;
+	hwc->cpu.idx = -1;
 	for (i = 0; i < uncore->num_counters; i++) {
 		if (cmpxchg(&uncore->events[i], NULL, event) == NULL) {
-			hwc->idx = i;
+			hwc->cpu.idx = i;
 			break;
 		}
 	}
 
 out:
-	if (hwc->idx == -1)
+	if (hwc->cpu.idx == -1)
 		return -EBUSY;
 
-	hwc->config_base = uncore->msr_base + (2 * hwc->idx);
-	hwc->event_base = uncore->msr_base + 1 + (2 * hwc->idx);
-	hwc->event_base_rdpmc = uncore->rdpmc_base + hwc->idx;
+	hwc->cpu.config_base = uncore->msr_base + (2 * hwc->cpu.idx);
+	hwc->cpu.event_base = uncore->msr_base + 1 + (2 * hwc->cpu.idx);
+	hwc->cpu.event_base_rdpmc = uncore->rdpmc_base + hwc->cpu.idx;
 	hwc->state = PERF_HES_UPTODATE | PERF_HES_STOPPED;
 
 	if (flags & PERF_EF_START)
@@ -178,7 +178,7 @@ static void amd_uncore_del(struct perf_event *event, int flags)
 			break;
 	}
 
-	hwc->idx = -1;
+	hwc->cpu.idx = -1;
 }
 
 static int amd_uncore_event_init(struct perf_event *event)
@@ -205,8 +205,8 @@ static int amd_uncore_event_init(struct perf_event *event)
 		return -EINVAL;
 
 	/* and we do not enable counter overflow interrupts */
-	hwc->config = event->attr.config & AMD64_RAW_EVENT_MASK_NB;
-	hwc->idx = -1;
+	hwc->cpu.config = event->attr.config & AMD64_RAW_EVENT_MASK_NB;
+	hwc->cpu.idx = -1;
 
 	if (event->cpu < 0)
 		return -EINVAL;

@@ -140,9 +140,9 @@ static u64 precise_datala_hsw(struct perf_event *event, u64 status)
 
 	dse.val = PERF_MEM_NA;
 
-	if (event->hw.flags & PERF_X86_EVENT_PEBS_ST_HSW)
+	if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_ST_HSW)
 		dse.mem_op = PERF_MEM_OP_STORE;
-	else if (event->hw.flags & PERF_X86_EVENT_PEBS_LD_HSW)
+	else if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_LD_HSW)
 		dse.mem_op = PERF_MEM_OP_LOAD;
 
 	/*
@@ -153,7 +153,7 @@ static u64 precise_datala_hsw(struct perf_event *event, u64 status)
 	 * MEM_UOPS_RETIRED.SPLIT_STORES
 	 * MEM_UOPS_RETIRED.ALL_STORES
 	 */
-	if (event->hw.flags & PERF_X86_EVENT_PEBS_ST_HSW) {
+	if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_ST_HSW) {
 		if (status & 1)
 			dse.mem_lvl = PERF_MEM_LVL_L1 | PERF_MEM_LVL_HIT;
 		else
@@ -859,8 +859,8 @@ struct event_constraint *intel_pebs_constraints(struct perf_event *event)
 
 	if (x86_pmu.pebs_constraints) {
 		for_each_event_constraint(c, x86_pmu.pebs_constraints) {
-			if ((event->hw.config & c->cmask) == c->code) {
-				event->hw.flags |= c->flags;
+			if ((event->hw.cpu.config & c->cmask) == c->code) {
+				event->hw.cpu.flags |= c->flags;
 				return c;
 			}
 		}
@@ -932,7 +932,7 @@ void intel_pmu_pebs_add(struct perf_event *event)
 	bool needed_cb = pebs_needs_sched_cb(cpuc);
 
 	cpuc->n_pebs++;
-	if (hwc->flags & PERF_X86_EVENT_FREERUNNING)
+	if (hwc->cpu.flags & PERF_X86_EVENT_FREERUNNING)
 		cpuc->n_large_pebs++;
 
 	pebs_update_state(needed_cb, cpuc, event->ctx->pmu);
@@ -944,24 +944,24 @@ void intel_pmu_pebs_enable(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct debug_store *ds = cpuc->ds;
 
-	hwc->config &= ~ARCH_PERFMON_EVENTSEL_INT;
+	hwc->cpu.config &= ~ARCH_PERFMON_EVENTSEL_INT;
 
-	cpuc->pebs_enabled |= 1ULL << hwc->idx;
+	cpuc->pebs_enabled |= 1ULL << hwc->cpu.idx;
 
-	if (event->hw.flags & PERF_X86_EVENT_PEBS_LDLAT)
-		cpuc->pebs_enabled |= 1ULL << (hwc->idx + 32);
-	else if (event->hw.flags & PERF_X86_EVENT_PEBS_ST)
+	if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_LDLAT)
+		cpuc->pebs_enabled |= 1ULL << (hwc->cpu.idx + 32);
+	else if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_ST)
 		cpuc->pebs_enabled |= 1ULL << 63;
 
 	/*
 	 * Use auto-reload if possible to save a MSR write in the PMI.
 	 * This must be done in pmu::start(), because PERF_EVENT_IOC_PERIOD.
 	 */
-	if (hwc->flags & PERF_X86_EVENT_AUTO_RELOAD) {
-		ds->pebs_event_reset[hwc->idx] =
+	if (hwc->cpu.flags & PERF_X86_EVENT_AUTO_RELOAD) {
+		ds->pebs_event_reset[hwc->cpu.idx] =
 			(u64)(-hwc->sample_period) & x86_pmu.cntval_mask;
 	} else {
-		ds->pebs_event_reset[hwc->idx] = 0;
+		ds->pebs_event_reset[hwc->cpu.idx] = 0;
 	}
 }
 
@@ -972,7 +972,7 @@ void intel_pmu_pebs_del(struct perf_event *event)
 	bool needed_cb = pebs_needs_sched_cb(cpuc);
 
 	cpuc->n_pebs--;
-	if (hwc->flags & PERF_X86_EVENT_FREERUNNING)
+	if (hwc->cpu.flags & PERF_X86_EVENT_FREERUNNING)
 		cpuc->n_large_pebs--;
 
 	pebs_update_state(needed_cb, cpuc, event->ctx->pmu);
@@ -986,17 +986,17 @@ void intel_pmu_pebs_disable(struct perf_event *event)
 	if (cpuc->n_pebs == cpuc->n_large_pebs)
 		intel_pmu_drain_pebs_buffer();
 
-	cpuc->pebs_enabled &= ~(1ULL << hwc->idx);
+	cpuc->pebs_enabled &= ~(1ULL << hwc->cpu.idx);
 
-	if (event->hw.flags & PERF_X86_EVENT_PEBS_LDLAT)
-		cpuc->pebs_enabled &= ~(1ULL << (hwc->idx + 32));
-	else if (event->hw.flags & PERF_X86_EVENT_PEBS_ST)
+	if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_LDLAT)
+		cpuc->pebs_enabled &= ~(1ULL << (hwc->cpu.idx + 32));
+	else if (event->hw.cpu.flags & PERF_X86_EVENT_PEBS_ST)
 		cpuc->pebs_enabled &= ~(1ULL << 63);
 
 	if (cpuc->enabled)
 		wrmsrl(MSR_IA32_PEBS_ENABLE, cpuc->pebs_enabled);
 
-	hwc->config |= ARCH_PERFMON_EVENTSEL_INT;
+	hwc->cpu.config |= ARCH_PERFMON_EVENTSEL_INT;
 }
 
 void intel_pmu_pebs_enable_all(void)
@@ -1145,7 +1145,7 @@ static void setup_pebs_sample_data(struct perf_event *event,
 	struct pebs_record_skl *pebs = __pebs;
 	u64 sample_type;
 	int fll, fst, dsrc;
-	int fl = event->hw.flags;
+	int fl = event->hw.cpu.flags;
 
 	if (pebs == NULL)
 		return;
@@ -1313,7 +1313,7 @@ static void __intel_pmu_pebs_event(struct perf_event *event,
 	void *at = get_next_pebs_record_by_bit(base, top, bit);
 
 	if (!intel_pmu_save_and_restart(event) &&
-	    !(event->hw.flags & PERF_X86_EVENT_AUTO_RELOAD))
+	    !(event->hw.cpu.flags & PERF_X86_EVENT_AUTO_RELOAD))
 		return;
 
 	while (count > 1) {
