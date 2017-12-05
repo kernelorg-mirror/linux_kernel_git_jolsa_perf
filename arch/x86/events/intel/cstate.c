@@ -295,7 +295,7 @@ static int cstate_pmu_event_init(struct perf_event *event)
 			return -EINVAL;
 		if (!core_msr[cfg].attr)
 			return -EINVAL;
-		event->hw.cpu.event_base = core_msr[cfg].msr;
+		event->hw.cpu->event_base = core_msr[cfg].msr;
 		cpu = cpumask_any_and(&cstate_core_cpu_mask,
 				      topology_sibling_cpumask(event->cpu));
 	} else if (event->pmu == &cstate_pkg_pmu) {
@@ -303,7 +303,7 @@ static int cstate_pmu_event_init(struct perf_event *event)
 			return -EINVAL;
 		if (!pkg_msr[cfg].attr)
 			return -EINVAL;
-		event->hw.cpu.event_base = pkg_msr[cfg].msr;
+		event->hw.cpu->event_base = pkg_msr[cfg].msr;
 		cpu = cpumask_any_and(&cstate_pkg_cpu_mask,
 				      topology_core_cpumask(event->cpu));
 	} else {
@@ -314,8 +314,8 @@ static int cstate_pmu_event_init(struct perf_event *event)
 		return -ENODEV;
 
 	event->cpu = cpu;
-	event->hw.cpu.config = cfg;
-	event->hw.cpu.idx = -1;
+	event->hw.cpu->config = cfg;
+	event->hw.cpu->idx = -1;
 	return 0;
 }
 
@@ -323,7 +323,7 @@ static inline u64 cstate_pmu_read_counter(struct perf_event *event)
 {
 	u64 val;
 
-	rdmsrl(event->hw.cpu.event_base, val);
+	rdmsrl(event->hw.cpu->event_base, val);
 	return val;
 }
 
