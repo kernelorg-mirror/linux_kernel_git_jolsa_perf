@@ -1097,7 +1097,8 @@ static void abs_printout(int id, int nr, struct perf_evsel *evsel, double avg)
 }
 
 static void printout(int id, int nr, struct perf_evsel *counter, double uval,
-		     char *prefix, u64 run, u64 ena, double noise)
+		     char *prefix, u64 run, u64 ena, double noise,
+		     struct runtime_stat *stat)
 {
 	struct perf_stat_output_ctx out;
 	struct outstate os = {
@@ -1190,7 +1191,8 @@ static void printout(int id, int nr, struct perf_evsel *counter, double uval,
 
 	perf_stat__print_shadow_stats(counter, uval,
 				first_shadow_cpu(counter, id),
-				&out, &metric_events);
+				&out, &metric_events,
+				stat);
 	if (!csv_output && !metric_only) {
 		print_noise(counter, noise);
 		print_running(run, ena);
@@ -1335,7 +1337,8 @@ static void print_aggr(char *prefix)
 				fprintf(output, "%s", prefix);
 
 			uval = val * counter->scale;
-			printout(id, nr, counter, uval, prefix, run, ena, 1.0);
+			printout(id, nr, counter, uval, prefix, run, ena, 1.0,
+				 &rt_stat);
 			if (!metric_only)
 				fputc('\n', output);
 		}
@@ -1365,7 +1368,8 @@ static void print_aggr_thread(struct perf_evsel *counter, char *prefix)
 			fprintf(output, "%s", prefix);
 
 		uval = val * counter->scale;
-		printout(thread, 0, counter, uval, prefix, run, ena, 1.0);
+		printout(thread, 0, counter, uval, prefix, run, ena, 1.0,
+			 &rt_stat);
 		fputc('\n', output);
 	}
 }
@@ -1402,7 +1406,8 @@ static void print_counter_aggr(struct perf_evsel *counter, char *prefix)
 		fprintf(output, "%s", prefix);
 
 	uval = cd.avg * counter->scale;
-	printout(-1, 0, counter, uval, prefix, cd.avg_running, cd.avg_enabled, cd.avg);
+	printout(-1, 0, counter, uval, prefix, cd.avg_running, cd.avg_enabled,
+		 cd.avg, &rt_stat);
 	if (!metric_only)
 		fprintf(output, "\n");
 }
@@ -1441,7 +1446,8 @@ static void print_counter(struct perf_evsel *counter, char *prefix)
 			fprintf(output, "%s", prefix);
 
 		uval = val * counter->scale;
-		printout(cpu, 0, counter, uval, prefix, run, ena, 1.0);
+		printout(cpu, 0, counter, uval, prefix, run, ena, 1.0,
+			 &rt_stat);
 
 		fputc('\n', output);
 	}
@@ -1473,7 +1479,8 @@ static void print_no_aggr_metric(char *prefix)
 			run = perf_counts(counter->counts, cpu, 0)->run;
 
 			uval = val * counter->scale;
-			printout(cpu, 0, counter, uval, prefix, run, ena, 1.0);
+			printout(cpu, 0, counter, uval, prefix, run, ena, 1.0,
+				 &rt_stat);
 		}
 		fputc('\n', stat_config.output);
 	}
@@ -1529,7 +1536,8 @@ static void print_metric_headers(const char *prefix, bool no_indent)
 		perf_stat__print_shadow_stats(counter, 0,
 					      0,
 					      &out,
-					      &metric_events);
+					      &metric_events,
+					      &rt_stat);
 	}
 	fputc('\n', stat_config.output);
 }
