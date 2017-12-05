@@ -1189,6 +1189,54 @@ void x86_pmu_enable_event(struct perf_event *event)
 				       ARCH_PERFMON_EVENTSEL_ENABLE);
 }
 
+static bool is_alias(struct perf_event *alias, struct perf_event *event)
+{
+	if (is_sampling_event(alias))
+		return false;
+
+	return memcmp(&alias->attr, &event->attr, sizeof(alias->attr));
+}
+
+static int alias_add(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	struct perf_event *master;
+	int n;
+
+	for (n = 0; n < cpuc->n_events; n++) {
+		if (is_alias(event, cpuc->event_list[n]))
+			break;
+	}
+
+	if (n == cpuc->n_events)
+		return 0;
+
+	master = cpuc->event_list[n];
+	event->hw.cpu = master->hw.cpu;
+	list_add_tail(&event->hw.alias, &master->hw.master);
+	return 1;
+}
+
+static int alias_del(struct cpu_hw_events *cpuc, struct perf_event *event)
+{
+	if (event->hw.cpu != &event->hw.cpu_local)
+		return 0;
+
+	event->hw.cpu = &event->hw.cpu_local;
+	list_del(&event->hw.alias);
+	return 1;
+}
+
+static void alias_update(struct perf_event *event)
+{
+	struct perf_event *alias;
+
+	list_for_each_entry(alias, &event->hw.master, hw.alias) {
+		alias->count          = event->count;
+		alias->hw.prev_count  = event->hw.prev_count;
+		alias->hw.period_left = event->hw.period_left;
+	}
+}
+
 /*
  * Add a single event to the PMU.
  *
@@ -1200,7 +1248,10 @@ static int x86_pmu_add(struct perf_event *event, int flags)
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct hw_perf_event *hwc;
 	int assign[X86_PMC_IDX_MAX];
-	int n, n0, ret;
+	int n, n0, ret = 0;
+
+	if (alias_add(cpuc, event))
+		goto out;
 
 	hwc = &event->hw;
 
@@ -1383,10 +1434,15 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	if (cpuc->txn_flags & PERF_PMU_TXN_ADD)
 		goto do_del;
 
+	if (alias_del(cpuc, event))
+		goto do_del;
+
 	/*
 	 * Not a TXN, therefore cleanup properly.
 	 */
 	x86_pmu_stop(event, PERF_EF_UPDATE);
+
+	alias_update(event);
 
 	for (i = 0; i < cpuc->n_events; i++) {
 		if (event == cpuc->event_list[i])
