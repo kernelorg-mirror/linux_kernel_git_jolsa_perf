@@ -9381,6 +9381,8 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (!event)
 		return ERR_PTR(-ENOMEM);
 
+	event->hw.cpu = &event->hw.cpu_local;
+
 	/*
 	 * Single events are their own group leaders, with an
 	 * empty sibling list:

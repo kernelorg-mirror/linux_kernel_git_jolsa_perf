@@ -134,7 +134,10 @@ struct hw_perf_event_cpu {
 struct hw_perf_event {
 #ifdef CONFIG_PERF_EVENTS
 	union {
-		struct hw_perf_event_cpu cpu; /* hardware */
+		struct { /* hardware */
+			struct hw_perf_event_cpu *cpu;
+			struct hw_perf_event_cpu  cpu_local;
+		};
 		struct { /* software */
 			struct hrtimer	hrtimer;
 		};

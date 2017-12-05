@@ -86,15 +86,15 @@ static void snb_uncore_msr_enable_event(struct intel_uncore_box *box, struct per
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (hwc->cpu.idx < UNCORE_PMC_IDX_FIXED)
-		wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNB_UNC_CTL_EN);
+	if (hwc->cpu->idx < UNCORE_PMC_IDX_FIXED)
+		wrmsrl(hwc->cpu->config_base, hwc->cpu->config | SNB_UNC_CTL_EN);
 	else
-		wrmsrl(hwc->cpu.config_base, SNB_UNC_CTL_EN);
+		wrmsrl(hwc->cpu->config_base, SNB_UNC_CTL_EN);
 }
 
 static void snb_uncore_msr_disable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
-	wrmsrl(event->hw.cpu.config_base, 0);
+	wrmsrl(event->hw.cpu->config_base, 0);
 }
 
 static void snb_uncore_msr_init_box(struct intel_uncore_box *box)
@@ -337,7 +337,7 @@ static u64 snb_uncore_imc_read_counter(struct intel_uncore_box *box, struct perf
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	return (u64)*(unsigned int *)(box->io_addr + hwc->cpu.event_base);
+	return (u64)*(unsigned int *)(box->io_addr + hwc->cpu->event_base);
 }
 
 /*
@@ -395,10 +395,10 @@ static int snb_uncore_imc_event_init(struct perf_event *event)
 
 	event->event_caps |= PERF_EV_CAP_READ_ACTIVE_PKG;
 
-	event->hw.cpu.idx = -1;
-	event->hw.cpu.last_tag = ~0ULL;
-	event->hw.cpu.extra_reg.idx = EXTRA_REG_NONE;
-	event->hw.cpu.branch_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->idx = -1;
+	event->hw.cpu->last_tag = ~0ULL;
+	event->hw.cpu->extra_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->branch_reg.idx = EXTRA_REG_NONE;
 	/*
 	 * check event is known (whitelist, determines counter)
 	 */
@@ -416,9 +416,9 @@ static int snb_uncore_imc_event_init(struct perf_event *event)
 	}
 
 	/* must be done before validate_group */
-	event->hw.cpu.event_base = base;
-	event->hw.cpu.config = cfg;
-	event->hw.cpu.idx = idx;
+	event->hw.cpu->event_base = base;
+	event->hw.cpu->config = cfg;
+	event->hw.cpu->idx = idx;
 
 	/* no group validation needed, we have free running counters */
 
@@ -755,10 +755,10 @@ static void nhm_uncore_msr_enable_event(struct intel_uncore_box *box, struct per
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (hwc->cpu.idx < UNCORE_PMC_IDX_FIXED)
-		wrmsrl(hwc->cpu.config_base, hwc->cpu.config | SNB_UNC_CTL_EN);
+	if (hwc->cpu->idx < UNCORE_PMC_IDX_FIXED)
+		wrmsrl(hwc->cpu->config_base, hwc->cpu->config | SNB_UNC_CTL_EN);
 	else
-		wrmsrl(hwc->cpu.config_base, NHM_UNC_FIXED_CTR_CTL_EN);
+		wrmsrl(hwc->cpu->config_base, NHM_UNC_FIXED_CTR_CTL_EN);
 }
 
 static struct attribute *nhm_uncore_formats_attr[] = {

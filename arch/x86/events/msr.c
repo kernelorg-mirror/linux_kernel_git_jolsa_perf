@@ -174,9 +174,9 @@ static int msr_event_init(struct perf_event *event)
 	if (!msr[cfg].attr)
 		return -EINVAL;
 
-	event->hw.cpu.idx		= -1;
-	event->hw.cpu.event_base	= msr[cfg].msr;
-	event->hw.cpu.config		= cfg;
+	event->hw.cpu->idx		= -1;
+	event->hw.cpu->event_base	= msr[cfg].msr;
+	event->hw.cpu->config		= cfg;
 
 	return 0;
 }
@@ -185,8 +185,8 @@ static inline u64 msr_read_counter(struct perf_event *event)
 {
 	u64 now;
 
-	if (event->hw.cpu.event_base)
-		rdmsrl(event->hw.cpu.event_base, now);
+	if (event->hw.cpu->event_base)
+		rdmsrl(event->hw.cpu->event_base, now);
 	else
 		rdtscll(now);
 
@@ -206,10 +206,10 @@ again:
 		goto again;
 
 	delta = now - prev;
-	if (unlikely(event->hw.cpu.event_base == MSR_SMI_COUNT)) {
+	if (unlikely(event->hw.cpu->event_base == MSR_SMI_COUNT)) {
 		delta = sign_extend64(delta, 31);
 		local64_add(delta, &event->count);
-	} else if (unlikely(event->hw.cpu.event_base == MSR_IA32_THERM_STATUS)) {
+	} else if (unlikely(event->hw.cpu->event_base == MSR_IA32_THERM_STATUS)) {
 		/* If valid, extract digital readout, otherwise set to -1: */
 		now = now & (1ULL << 31) ? (now >> 16) & 0x3f :  -1;
 		local64_set(&event->count, now);

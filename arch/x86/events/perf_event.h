@@ -765,9 +765,9 @@ static inline void __x86_pmu_enable_event(struct hw_perf_event *hwc,
 {
 	u64 disable_mask = __this_cpu_read(cpu_hw_events.perf_ctr_virt_mask);
 
-	if (hwc->cpu.extra_reg.reg)
-		wrmsrl(hwc->cpu.extra_reg.reg, hwc->cpu.extra_reg.config);
-	wrmsrl(hwc->cpu.config_base, (hwc->cpu.config | enable_mask) & ~disable_mask);
+	if (hwc->cpu->extra_reg.reg)
+		wrmsrl(hwc->cpu->extra_reg.reg, hwc->cpu->extra_reg.config);
+	wrmsrl(hwc->cpu->config_base, (hwc->cpu->config | enable_mask) & ~disable_mask);
 }
 
 void x86_pmu_enable_all(int added);
@@ -782,7 +782,7 @@ static inline void x86_pmu_disable_event(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrl(hwc->cpu.config_base, hwc->cpu.config);
+	wrmsrl(hwc->cpu->config_base, hwc->cpu->config);
 }
 
 void x86_pmu_enable_event(struct perf_event *event);

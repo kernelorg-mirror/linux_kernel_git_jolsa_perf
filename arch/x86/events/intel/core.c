@@ -1905,7 +1905,7 @@ static void __intel_pmu_enable_all(int added, bool pmi)
 		if (WARN_ON_ONCE(!event))
 			return;
 
-		intel_pmu_enable_bts(event->hw.cpu.config);
+		intel_pmu_enable_bts(event->hw.cpu->config);
 	}
 }
 
@@ -2011,19 +2011,19 @@ static inline void intel_pmu_ack_status(u64 ack)
 
 static void intel_pmu_disable_fixed(struct hw_perf_event *hwc)
 {
-	int idx = hwc->cpu.idx - INTEL_PMC_IDX_FIXED;
+	int idx = hwc->cpu->idx - INTEL_PMC_IDX_FIXED;
 	u64 ctrl_val, mask;
 
 	mask = 0xfULL << (idx * 4);
 
-	rdmsrl(hwc->cpu.config_base, ctrl_val);
+	rdmsrl(hwc->cpu->config_base, ctrl_val);
 	ctrl_val &= ~mask;
-	wrmsrl(hwc->cpu.config_base, ctrl_val);
+	wrmsrl(hwc->cpu->config_base, ctrl_val);
 }
 
 static inline bool event_is_checkpointed(struct perf_event *event)
 {
-	return (event->hw.cpu.config & HSW_IN_TX_CHECKPOINTED) != 0;
+	return (event->hw.cpu->config & HSW_IN_TX_CHECKPOINTED) != 0;
 }
 
 static void intel_pmu_disable_event(struct perf_event *event)
@@ -2031,17 +2031,17 @@ static void intel_pmu_disable_event(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 
-	if (unlikely(hwc->cpu.idx == INTEL_PMC_IDX_FIXED_BTS)) {
+	if (unlikely(hwc->cpu->idx == INTEL_PMC_IDX_FIXED_BTS)) {
 		intel_pmu_disable_bts();
 		intel_pmu_drain_bts_buffer();
 		return;
 	}
 
-	cpuc->intel_ctrl_guest_mask &= ~(1ull << hwc->cpu.idx);
-	cpuc->intel_ctrl_host_mask &= ~(1ull << hwc->cpu.idx);
-	cpuc->intel_cp_status &= ~(1ull << hwc->cpu.idx);
+	cpuc->intel_ctrl_guest_mask &= ~(1ull << hwc->cpu->idx);
+	cpuc->intel_ctrl_host_mask &= ~(1ull << hwc->cpu->idx);
+	cpuc->intel_cp_status &= ~(1ull << hwc->cpu->idx);
 
-	if (unlikely(hwc->cpu.config_base == MSR_ARCH_PERFMON_FIXED_CTR_CTRL)) {
+	if (unlikely(hwc->cpu->config_base == MSR_ARCH_PERFMON_FIXED_CTR_CTRL)) {
 		intel_pmu_disable_fixed(hwc);
 		return;
 	}
@@ -2062,7 +2062,7 @@ static void intel_pmu_del_event(struct perf_event *event)
 
 static void intel_pmu_enable_fixed(struct hw_perf_event *hwc)
 {
-	int idx = hwc->cpu.idx - INTEL_PMC_IDX_FIXED;
+	int idx = hwc->cpu->idx - INTEL_PMC_IDX_FIXED;
 	u64 ctrl_val, bits, mask;
 
 	/*
@@ -2071,24 +2071,24 @@ static void intel_pmu_enable_fixed(struct hw_perf_event *hwc)
 	 * if requested:
 	 */
 	bits = 0x8ULL;
-	if (hwc->cpu.config & ARCH_PERFMON_EVENTSEL_USR)
+	if (hwc->cpu->config & ARCH_PERFMON_EVENTSEL_USR)
 		bits |= 0x2;
-	if (hwc->cpu.config & ARCH_PERFMON_EVENTSEL_OS)
+	if (hwc->cpu->config & ARCH_PERFMON_EVENTSEL_OS)
 		bits |= 0x1;
 
 	/*
 	 * ANY bit is supported in v3 and up
 	 */
-	if (x86_pmu.version > 2 && hwc->cpu.config & ARCH_PERFMON_EVENTSEL_ANY)
+	if (x86_pmu.version > 2 && hwc->cpu->config & ARCH_PERFMON_EVENTSEL_ANY)
 		bits |= 0x4;
 
 	bits <<= (idx * 4);
 	mask = 0xfULL << (idx * 4);
 
-	rdmsrl(hwc->cpu.config_base, ctrl_val);
+	rdmsrl(hwc->cpu->config_base, ctrl_val);
 	ctrl_val &= ~mask;
 	ctrl_val |= bits;
-	wrmsrl(hwc->cpu.config_base, ctrl_val);
+	wrmsrl(hwc->cpu->config_base, ctrl_val);
 }
 
 static void intel_pmu_enable_event(struct perf_event *event)
@@ -2096,23 +2096,23 @@ static void intel_pmu_enable_event(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 
-	if (unlikely(hwc->cpu.idx == INTEL_PMC_IDX_FIXED_BTS)) {
+	if (unlikely(hwc->cpu->idx == INTEL_PMC_IDX_FIXED_BTS)) {
 		if (!__this_cpu_read(cpu_hw_events.enabled))
 			return;
 
-		intel_pmu_enable_bts(hwc->cpu.config);
+		intel_pmu_enable_bts(hwc->cpu->config);
 		return;
 	}
 
 	if (event->attr.exclude_host)
-		cpuc->intel_ctrl_guest_mask |= (1ull << hwc->cpu.idx);
+		cpuc->intel_ctrl_guest_mask |= (1ull << hwc->cpu->idx);
 	if (event->attr.exclude_guest)
-		cpuc->intel_ctrl_host_mask |= (1ull << hwc->cpu.idx);
+		cpuc->intel_ctrl_host_mask |= (1ull << hwc->cpu->idx);
 
 	if (unlikely(event_is_checkpointed(event)))
-		cpuc->intel_cp_status |= (1ull << hwc->cpu.idx);
+		cpuc->intel_cp_status |= (1ull << hwc->cpu->idx);
 
-	if (unlikely(hwc->cpu.config_base == MSR_ARCH_PERFMON_FIXED_CTR_CTRL)) {
+	if (unlikely(hwc->cpu->config_base == MSR_ARCH_PERFMON_FIXED_CTR_CTRL)) {
 		intel_pmu_enable_fixed(hwc);
 		return;
 	}
@@ -2146,7 +2146,7 @@ int intel_pmu_save_and_restart(struct perf_event *event)
 	 */
 	if (unlikely(event_is_checkpointed(event))) {
 		/* No race with NMIs because the counter should not be armed */
-		wrmsrl(event->hw.cpu.event_base, 0);
+		wrmsrl(event->hw.cpu->event_base, 0);
 		local64_set(&event->hw.prev_count, 0);
 	}
 	return x86_perf_event_set_period(event);
@@ -2343,7 +2343,7 @@ intel_bts_constraints(struct perf_event *event)
 	if (event->attr.freq)
 		return NULL;
 
-	hw_event = hwc->cpu.config & INTEL_ARCH_EVENT_MASK;
+	hw_event = hwc->cpu->config & INTEL_ARCH_EVENT_MASK;
 	bts_event = x86_pmu.event_map(PERF_COUNT_HW_BRANCH_INSTRUCTIONS);
 
 	if (unlikely(hw_event == bts_event && hwc->sample_period == 1))
@@ -2373,16 +2373,16 @@ static int intel_alt_er(int idx, u64 config)
 
 static void intel_fixup_er(struct perf_event *event, int idx)
 {
-	event->hw.cpu.extra_reg.idx = idx;
+	event->hw.cpu->extra_reg.idx = idx;
 
 	if (idx == EXTRA_REG_RSP_0) {
-		event->hw.cpu.config &= ~INTEL_ARCH_EVENT_MASK;
-		event->hw.cpu.config |= x86_pmu.extra_regs[EXTRA_REG_RSP_0].event;
-		event->hw.cpu.extra_reg.reg = MSR_OFFCORE_RSP_0;
+		event->hw.cpu->config &= ~INTEL_ARCH_EVENT_MASK;
+		event->hw.cpu->config |= x86_pmu.extra_regs[EXTRA_REG_RSP_0].event;
+		event->hw.cpu->extra_reg.reg = MSR_OFFCORE_RSP_0;
 	} else if (idx == EXTRA_REG_RSP_1) {
-		event->hw.cpu.config &= ~INTEL_ARCH_EVENT_MASK;
-		event->hw.cpu.config |= x86_pmu.extra_regs[EXTRA_REG_RSP_1].event;
-		event->hw.cpu.extra_reg.reg = MSR_OFFCORE_RSP_1;
+		event->hw.cpu->config &= ~INTEL_ARCH_EVENT_MASK;
+		event->hw.cpu->config |= x86_pmu.extra_regs[EXTRA_REG_RSP_1].event;
+		event->hw.cpu->extra_reg.reg = MSR_OFFCORE_RSP_1;
 	}
 }
 
@@ -2501,13 +2501,13 @@ intel_shared_regs_constraints(struct cpu_hw_events *cpuc,
 	struct event_constraint *c = NULL, *d;
 	struct hw_perf_event_extra *xreg, *breg;
 
-	xreg = &event->hw.cpu.extra_reg;
+	xreg = &event->hw.cpu->extra_reg;
 	if (xreg->idx != EXTRA_REG_NONE) {
 		c = __intel_shared_reg_get_constraints(cpuc, event, xreg);
 		if (c == &emptyconstraint)
 			return c;
 	}
-	breg = &event->hw.cpu.branch_reg;
+	breg = &event->hw.cpu->branch_reg;
 	if (breg->idx != EXTRA_REG_NONE) {
 		d = __intel_shared_reg_get_constraints(cpuc, event, breg);
 		if (d == &emptyconstraint) {
@@ -2526,8 +2526,8 @@ x86_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 
 	if (x86_pmu.event_constraints) {
 		for_each_event_constraint(c, x86_pmu.event_constraints) {
-			if ((event->hw.cpu.config & c->cmask) == c->code) {
-				event->hw.cpu.flags |= c->flags;
+			if ((event->hw.cpu->config & c->cmask) == c->code) {
+				event->hw.cpu->flags |= c->flags;
 				return c;
 			}
 		}
@@ -2709,8 +2709,8 @@ intel_get_excl_constraints(struct cpu_hw_events *cpuc, struct perf_event *event,
 	 * across HT threads
 	 */
 	is_excl = c->flags & PERF_X86_EVENT_EXCL;
-	if (is_excl && !(event->hw.cpu.flags & PERF_X86_EVENT_EXCL_ACCT)) {
-		event->hw.cpu.flags |= PERF_X86_EVENT_EXCL_ACCT;
+	if (is_excl && !(event->hw.cpu->flags & PERF_X86_EVENT_EXCL_ACCT)) {
+		event->hw.cpu->flags |= PERF_X86_EVENT_EXCL_ACCT;
 		if (!cpuc->n_excl++)
 			WRITE_ONCE(excl_cntrs->has_exclusive[tid], 1);
 	}
@@ -2801,8 +2801,8 @@ static void intel_put_excl_constraints(struct cpu_hw_events *cpuc,
 	if (WARN_ON_ONCE(!excl_cntrs))
 		return;
 
-	if (hwc->cpu.flags & PERF_X86_EVENT_EXCL_ACCT) {
-		hwc->cpu.flags &= ~PERF_X86_EVENT_EXCL_ACCT;
+	if (hwc->cpu->flags & PERF_X86_EVENT_EXCL_ACCT) {
+		hwc->cpu->flags &= ~PERF_X86_EVENT_EXCL_ACCT;
 		if (!--cpuc->n_excl)
 			WRITE_ONCE(excl_cntrs->has_exclusive[tid], 0);
 	}
@@ -2811,7 +2811,7 @@ static void intel_put_excl_constraints(struct cpu_hw_events *cpuc,
 	 * If event was actually assigned, then mark the counter state as
 	 * unused now.
 	 */
-	if (hwc->cpu.idx >= 0) {
+	if (hwc->cpu->idx >= 0) {
 		xl = &excl_cntrs->states[tid];
 
 		/*
@@ -2822,7 +2822,7 @@ static void intel_put_excl_constraints(struct cpu_hw_events *cpuc,
 		if (!xl->sched_started)
 			raw_spin_lock(&excl_cntrs->lock);
 
-		xl->state[hwc->cpu.idx] = INTEL_EXCL_UNUSED;
+		xl->state[hwc->cpu->idx] = INTEL_EXCL_UNUSED;
 
 		if (!xl->sched_started)
 			raw_spin_unlock(&excl_cntrs->lock);
@@ -2835,11 +2835,11 @@ intel_put_shared_regs_event_constraints(struct cpu_hw_events *cpuc,
 {
 	struct hw_perf_event_extra *reg;
 
-	reg = &event->hw.cpu.extra_reg;
+	reg = &event->hw.cpu->extra_reg;
 	if (reg->idx != EXTRA_REG_NONE)
 		__intel_shared_reg_put_constraints(cpuc, reg);
 
-	reg = &event->hw.cpu.branch_reg;
+	reg = &event->hw.cpu->branch_reg;
 	if (reg->idx != EXTRA_REG_NONE)
 		__intel_shared_reg_put_constraints(cpuc, reg);
 }
@@ -2860,7 +2860,7 @@ static void intel_put_event_constraints(struct cpu_hw_events *cpuc,
 
 static void intel_pebs_aliases_core2(struct perf_event *event)
 {
-	if ((event->hw.cpu.config & X86_RAW_EVENT_MASK) == 0x003c) {
+	if ((event->hw.cpu->config & X86_RAW_EVENT_MASK) == 0x003c) {
 		/*
 		 * Use an alternative encoding for CPU_CLK_UNHALTED.THREAD_P
 		 * (0x003c) so that we can use it with PEBS.
@@ -2881,14 +2881,14 @@ static void intel_pebs_aliases_core2(struct perf_event *event)
 		 */
 		u64 alt_config = X86_CONFIG(.event=0xc0, .inv=1, .cmask=16);
 
-		alt_config |= (event->hw.cpu.config & ~X86_RAW_EVENT_MASK);
-		event->hw.cpu.config = alt_config;
+		alt_config |= (event->hw.cpu->config & ~X86_RAW_EVENT_MASK);
+		event->hw.cpu->config = alt_config;
 	}
 }
 
 static void intel_pebs_aliases_snb(struct perf_event *event)
 {
-	if ((event->hw.cpu.config & X86_RAW_EVENT_MASK) == 0x003c) {
+	if ((event->hw.cpu->config & X86_RAW_EVENT_MASK) == 0x003c) {
 		/*
 		 * Use an alternative encoding for CPU_CLK_UNHALTED.THREAD_P
 		 * (0x003c) so that we can use it with PEBS.
@@ -2909,14 +2909,14 @@ static void intel_pebs_aliases_snb(struct perf_event *event)
 		 */
 		u64 alt_config = X86_CONFIG(.event=0xc2, .umask=0x01, .inv=1, .cmask=16);
 
-		alt_config |= (event->hw.cpu.config & ~X86_RAW_EVENT_MASK);
-		event->hw.cpu.config = alt_config;
+		alt_config |= (event->hw.cpu->config & ~X86_RAW_EVENT_MASK);
+		event->hw.cpu->config = alt_config;
 	}
 }
 
 static void intel_pebs_aliases_precdist(struct perf_event *event)
 {
-	if ((event->hw.cpu.config & X86_RAW_EVENT_MASK) == 0x003c) {
+	if ((event->hw.cpu->config & X86_RAW_EVENT_MASK) == 0x003c) {
 		/*
 		 * Use an alternative encoding for CPU_CLK_UNHALTED.THREAD_P
 		 * (0x003c) so that we can use it with PEBS.
@@ -2933,8 +2933,8 @@ static void intel_pebs_aliases_precdist(struct perf_event *event)
 		 */
 		u64 alt_config = X86_CONFIG(.event=0xc0, .umask=0x01, .inv=1, .cmask=16);
 
-		alt_config |= (event->hw.cpu.config & ~X86_RAW_EVENT_MASK);
-		event->hw.cpu.config = alt_config;
+		alt_config |= (event->hw.cpu->config & ~X86_RAW_EVENT_MASK);
+		event->hw.cpu->config = alt_config;
 	}
 }
 
@@ -2974,10 +2974,10 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 	if (event->attr.precise_ip) {
 		if (!event->attr.freq) {
-			event->hw.cpu.flags |= PERF_X86_EVENT_AUTO_RELOAD;
+			event->hw.cpu->flags |= PERF_X86_EVENT_AUTO_RELOAD;
 			if (!(event->attr.sample_type &
 			      ~intel_pmu_free_running_flags(event)))
-				event->hw.cpu.flags |= PERF_X86_EVENT_FREERUNNING;
+				event->hw.cpu->flags |= PERF_X86_EVENT_FREERUNNING;
 		}
 		if (x86_pmu.pebs_aliases)
 			x86_pmu.pebs_aliases(event);
@@ -3012,7 +3012,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 	if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	event->hw.cpu.config |= ARCH_PERFMON_EVENTSEL_ANY;
+	event->hw.cpu->config |= ARCH_PERFMON_EVENTSEL_ANY;
 
 	return 0;
 }
@@ -3063,7 +3063,7 @@ static struct perf_guest_switch_msr *core_guest_get_msrs(int *nr)
 			continue;
 
 		arr[idx].host = arr[idx].guest =
-			event->hw.cpu.config | ARCH_PERFMON_EVENTSEL_ENABLE;
+			event->hw.cpu->config | ARCH_PERFMON_EVENTSEL_ENABLE;
 
 		if (event->attr.exclude_host)
 			arr[idx].host &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
@@ -3105,15 +3105,15 @@ static int hsw_hw_config(struct perf_event *event)
 		return ret;
 	if (!boot_cpu_has(X86_FEATURE_RTM) && !boot_cpu_has(X86_FEATURE_HLE))
 		return 0;
-	event->hw.cpu.config |= event->attr.config & (HSW_IN_TX|HSW_IN_TX_CHECKPOINTED);
+	event->hw.cpu->config |= event->attr.config & (HSW_IN_TX|HSW_IN_TX_CHECKPOINTED);
 
 	/*
 	 * IN_TX/IN_TX-CP filters are not supported by the Haswell PMU with
 	 * PEBS or in ANY thread mode. Since the results are non-sensical forbid
 	 * this combination.
 	 */
-	if ((event->hw.cpu.config & (HSW_IN_TX|HSW_IN_TX_CHECKPOINTED)) &&
-	     ((event->hw.cpu.config & ARCH_PERFMON_EVENTSEL_ANY) ||
+	if ((event->hw.cpu->config & (HSW_IN_TX|HSW_IN_TX_CHECKPOINTED)) &&
+	     ((event->hw.cpu->config & ARCH_PERFMON_EVENTSEL_ANY) ||
 	      event->attr.precise_ip > 0))
 		return -EOPNOTSUPP;
 
@@ -3149,7 +3149,7 @@ hsw_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 	c = intel_get_event_constraints(cpuc, idx, event);
 
 	/* Handle special quirk on in_tx_checkpointed only in counter 2 */
-	if (event->hw.cpu.config & HSW_IN_TX_CHECKPOINTED) {
+	if (event->hw.cpu->config & HSW_IN_TX_CHECKPOINTED) {
 		if (c->idxmsk64 & (1U << 2))
 			return &counter2_constraint;
 		return &emptyconstraint;
@@ -3190,7 +3190,7 @@ glp_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
  */
 static unsigned bdw_limit_period(struct perf_event *event, unsigned left)
 {
-	if ((event->hw.cpu.config & INTEL_ARCH_EVENT_MASK) ==
+	if ((event->hw.cpu->config & INTEL_ARCH_EVENT_MASK) ==
 			X86_CONFIG(.event=0xc0, .umask=0x01)) {
 		if (left < 128)
 			left = 128;
