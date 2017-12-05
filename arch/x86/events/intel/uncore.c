@@ -113,7 +113,7 @@ u64 uncore_msr_read_counter(struct intel_uncore_box *box, struct perf_event *eve
 {
 	u64 count;
 
-	rdmsrl(event->hw.cpu.event_base, count);
+	rdmsrl(event->hw.cpu->event_base, count);
 
 	return count;
 }
@@ -125,8 +125,8 @@ struct event_constraint *
 uncore_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct intel_uncore_extra_reg *er;
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &event->hw.cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &event->hw.cpu->branch_reg;
 	unsigned long flags;
 	bool ok = false;
 
@@ -162,7 +162,7 @@ uncore_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 void uncore_put_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct intel_uncore_extra_reg *er;
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
 
 	/*
 	 * Only put constraint if extra reg was actually allocated. Also
@@ -200,17 +200,17 @@ static void uncore_assign_hw_event(struct intel_uncore_box *box,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	hwc->cpu.idx = idx;
-	hwc->cpu.last_tag = ++box->tags[idx];
+	hwc->cpu->idx = idx;
+	hwc->cpu->last_tag = ++box->tags[idx];
 
-	if (hwc->cpu.idx == UNCORE_PMC_IDX_FIXED) {
-		hwc->cpu.event_base = uncore_fixed_ctr(box);
-		hwc->cpu.config_base = uncore_fixed_ctl(box);
+	if (hwc->cpu->idx == UNCORE_PMC_IDX_FIXED) {
+		hwc->cpu->event_base = uncore_fixed_ctr(box);
+		hwc->cpu->config_base = uncore_fixed_ctl(box);
 		return;
 	}
 
-	hwc->cpu.config_base = uncore_event_ctl(box, hwc->cpu.idx);
-	hwc->cpu.event_base  = uncore_perf_ctr(box, hwc->cpu.idx);
+	hwc->cpu->config_base = uncore_event_ctl(box, hwc->cpu->idx);
+	hwc->cpu->event_base  = uncore_perf_ctr(box, hwc->cpu->idx);
 }
 
 void uncore_perf_event_update(struct intel_uncore_box *box, struct perf_event *event)
@@ -218,7 +218,7 @@ void uncore_perf_event_update(struct intel_uncore_box *box, struct perf_event *e
 	u64 prev_count, new_count, delta;
 	int shift;
 
-	if (event->hw.cpu.idx >= UNCORE_PMC_IDX_FIXED)
+	if (event->hw.cpu->idx >= UNCORE_PMC_IDX_FIXED)
 		shift = 64 - uncore_fixed_ctr_bits(box);
 	else
 		shift = 64 - uncore_perf_ctr_bits(box);
@@ -385,7 +385,7 @@ uncore_get_event_constraint(struct intel_uncore_box *box, struct perf_event *eve
 
 	if (type->constraints) {
 		for_each_event_constraint(c, type->constraints) {
-			if ((event->hw.cpu.config & c->cmask) == c->code)
+			if ((event->hw.cpu->config & c->cmask) == c->code)
 				return c;
 		}
 	}
@@ -422,20 +422,20 @@ static int uncore_assign_events(struct intel_uncore_box *box, int assign[], int 
 		c = box->event_constraint[i];
 
 		/* never assigned */
-		if (hwc->cpu.idx == -1)
+		if (hwc->cpu->idx == -1)
 			break;
 
 		/* constraint still honored */
-		if (!test_bit(hwc->cpu.idx, c->idxmsk))
+		if (!test_bit(hwc->cpu->idx, c->idxmsk))
 			break;
 
 		/* not already used */
-		if (test_bit(hwc->cpu.idx, used_mask))
+		if (test_bit(hwc->cpu->idx, used_mask))
 			break;
 
-		__set_bit(hwc->cpu.idx, used_mask);
+		__set_bit(hwc->cpu->idx, used_mask);
 		if (assign)
-			assign[i] = hwc->cpu.idx;
+			assign[i] = hwc->cpu->idx;
 	}
 	/* slow path */
 	if (i != n)
@@ -452,7 +452,7 @@ static int uncore_assign_events(struct intel_uncore_box *box, int assign[], int 
 static void uncore_pmu_event_start(struct perf_event *event, int flags)
 {
 	struct intel_uncore_box *box = uncore_event_to_box(event);
-	int idx = event->hw.cpu.idx;
+	int idx = event->hw.cpu->idx;
 
 	if (WARN_ON_ONCE(!(event->hw.state & PERF_HES_STOPPED)))
 		return;
@@ -479,10 +479,10 @@ static void uncore_pmu_event_stop(struct perf_event *event, int flags)
 	struct intel_uncore_box *box = uncore_event_to_box(event);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (__test_and_clear_bit(hwc->cpu.idx, box->active_mask)) {
+	if (__test_and_clear_bit(hwc->cpu->idx, box->active_mask)) {
 		uncore_disable_event(box, event);
 		box->n_active--;
-		box->events[hwc->cpu.idx] = NULL;
+		box->events[hwc->cpu->idx] = NULL;
 		WARN_ON_ONCE(hwc->state & PERF_HES_STOPPED);
 		hwc->state |= PERF_HES_STOPPED;
 
@@ -529,8 +529,8 @@ static int uncore_pmu_event_add(struct perf_event *event, int flags)
 		event = box->event_list[i];
 		hwc = &event->hw;
 
-		if (hwc->cpu.idx == assign[i] &&
-			hwc->cpu.last_tag == box->tags[assign[i]])
+		if (hwc->cpu->idx == assign[i] &&
+			hwc->cpu->last_tag == box->tags[assign[i]])
 			continue;
 		/*
 		 * Ensure we don't accidentally enable a stopped
@@ -547,8 +547,8 @@ static int uncore_pmu_event_add(struct perf_event *event, int flags)
 		event = box->event_list[i];
 		hwc = &event->hw;
 
-		if (hwc->cpu.idx != assign[i] ||
-			hwc->cpu.last_tag != box->tags[assign[i]])
+		if (hwc->cpu->idx != assign[i] ||
+			hwc->cpu->last_tag != box->tags[assign[i]])
 			uncore_assign_hw_event(box, event, assign[i]);
 		else if (i < box->n_events)
 			continue;
@@ -582,8 +582,8 @@ static void uncore_pmu_event_del(struct perf_event *event, int flags)
 		}
 	}
 
-	event->hw.cpu.idx = -1;
-	event->hw.cpu.last_tag = ~0ULL;
+	event->hw.cpu->idx = -1;
+	event->hw.cpu->last_tag = ~0ULL;
 }
 
 void uncore_pmu_event_read(struct perf_event *event)
@@ -672,10 +672,10 @@ static int uncore_pmu_event_init(struct perf_event *event)
 
 	event->event_caps |= PERF_EV_CAP_READ_ACTIVE_PKG;
 
-	event->hw.cpu.idx = -1;
-	event->hw.cpu.last_tag = ~0ULL;
-	event->hw.cpu.extra_reg.idx = EXTRA_REG_NONE;
-	event->hw.cpu.branch_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->idx = -1;
+	event->hw.cpu->last_tag = ~0ULL;
+	event->hw.cpu->extra_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->branch_reg.idx = EXTRA_REG_NONE;
 
 	if (event->attr.config == UNCORE_FIXED_EVENT) {
 		/* no fixed counter */
@@ -689,9 +689,9 @@ static int uncore_pmu_event_init(struct perf_event *event)
 			return -EINVAL;
 
 		/* fixed counters have event field hardcoded to zero */
-		hwc->cpu.config = 0ULL;
+		hwc->cpu->config = 0ULL;
 	} else {
-		hwc->cpu.config = event->attr.config &
+		hwc->cpu->config = event->attr.config &
 			      (pmu->type->event_mask | ((u64)pmu->type->event_mask_ext << 32));
 		if (pmu->type->ops->hw_config) {
 			ret = pmu->type->ops->hw_config(box, event);

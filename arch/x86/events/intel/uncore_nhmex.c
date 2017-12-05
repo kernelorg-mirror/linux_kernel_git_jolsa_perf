@@ -239,19 +239,19 @@ static void nhmex_uncore_msr_enable_box(struct intel_uncore_box *box)
 
 static void nhmex_uncore_msr_disable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
-	wrmsrl(event->hw.cpu.config_base, 0);
+	wrmsrl(event->hw.cpu->config_base, 0);
 }
 
 static void nhmex_uncore_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (hwc->cpu.idx >= UNCORE_PMC_IDX_FIXED)
-		wrmsrl(hwc->cpu.config_base, NHMEX_PMON_CTL_EN_BIT0);
+	if (hwc->cpu->idx >= UNCORE_PMC_IDX_FIXED)
+		wrmsrl(hwc->cpu->config_base, NHMEX_PMON_CTL_EN_BIT0);
 	else if (box->pmu->type->event_mask & NHMEX_PMON_CTL_EN_BIT0)
-		wrmsrl(hwc->cpu.config_base, hwc->cpu.config | NHMEX_PMON_CTL_EN_BIT22);
+		wrmsrl(hwc->cpu->config_base, hwc->cpu->config | NHMEX_PMON_CTL_EN_BIT22);
 	else
-		wrmsrl(hwc->cpu.config_base, hwc->cpu.config | NHMEX_PMON_CTL_EN_BIT0);
+		wrmsrl(hwc->cpu->config_base, hwc->cpu->config | NHMEX_PMON_CTL_EN_BIT0);
 }
 
 #define NHMEX_UNCORE_OPS_COMMON_INIT()				\
@@ -350,13 +350,13 @@ static struct intel_uncore_type nhmex_uncore_wbox = {
 static int nhmex_bbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 	int ctr, ev_sel;
 
-	ctr = (hwc->cpu.config & NHMEX_B_PMON_CTR_MASK) >>
+	ctr = (hwc->cpu->config & NHMEX_B_PMON_CTR_MASK) >>
 		NHMEX_B_PMON_CTR_SHIFT;
-	ev_sel = (hwc->cpu.config & NHMEX_B_PMON_CTL_EV_SEL_MASK) >>
+	ev_sel = (hwc->cpu->config & NHMEX_B_PMON_CTL_EV_SEL_MASK) >>
 		  NHMEX_B_PMON_CTL_EV_SEL_SHIFT;
 
 	/* events that do not use the match/mask registers */
@@ -377,15 +377,15 @@ static int nhmex_bbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 static void nhmex_bbox_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		wrmsrl(reg1->reg, reg1->config);
 		wrmsrl(reg1->reg + 1, reg2->config);
 	}
-	wrmsrl(hwc->cpu.config_base, NHMEX_PMON_CTL_EN_BIT0 |
-		(hwc->cpu.config & NHMEX_B_PMON_CTL_EV_SEL_MASK));
+	wrmsrl(hwc->cpu->config_base, NHMEX_PMON_CTL_EN_BIT0 |
+		(hwc->cpu->config & NHMEX_B_PMON_CTL_EV_SEL_MASK));
 }
 
 /*
@@ -441,11 +441,11 @@ static struct intel_uncore_type nhmex_uncore_bbox = {
 static int nhmex_sbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 
 	/* only TO_R_PROG_EV event uses the match/mask register */
-	if ((hwc->cpu.config & NHMEX_PMON_CTL_EV_SEL_MASK) !=
+	if ((hwc->cpu->config & NHMEX_PMON_CTL_EV_SEL_MASK) !=
 	    NHMEX_S_EVENT_TO_R_PROG_EV)
 		return 0;
 
@@ -462,8 +462,8 @@ static int nhmex_sbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 static void nhmex_sbox_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		wrmsrl(reg1->reg, 0);
@@ -471,7 +471,7 @@ static void nhmex_sbox_msr_enable_event(struct intel_uncore_box *box, struct per
 		wrmsrl(reg1->reg + 2, reg2->config);
 		wrmsrl(reg1->reg, NHMEX_S_PMON_MM_CFG_EN);
 	}
-	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | NHMEX_PMON_CTL_EN_BIT22);
+	wrmsrl(hwc->cpu->config_base, hwc->cpu->config | NHMEX_PMON_CTL_EN_BIT22);
 }
 
 static struct attribute *nhmex_uncore_sbox_formats_attr[] = {
@@ -629,7 +629,7 @@ static void nhmex_mbox_put_shared_reg(struct intel_uncore_box *box, int idx)
 static u64 nhmex_mbox_alter_er(struct perf_event *event, int new_idx, bool modify)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
 	u64 idx, orig_idx = __BITS_VALUE(reg1->idx, 0, 8);
 	u64 config = reg1->config;
 
@@ -656,9 +656,9 @@ static u64 nhmex_mbox_alter_er(struct perf_event *event, int new_idx, bool modif
 	if (modify) {
 		/* adjust the main event selector */
 		if (new_idx > orig_idx)
-			hwc->cpu.config += idx << NHMEX_M_PMON_CTL_INC_SEL_SHIFT;
+			hwc->cpu->config += idx << NHMEX_M_PMON_CTL_INC_SEL_SHIFT;
 		else
-			hwc->cpu.config -= idx << NHMEX_M_PMON_CTL_INC_SEL_SHIFT;
+			hwc->cpu->config -= idx << NHMEX_M_PMON_CTL_INC_SEL_SHIFT;
 		reg1->config = config;
 		reg1->idx = ~0xff | new_idx;
 	}
@@ -668,8 +668,8 @@ static u64 nhmex_mbox_alter_er(struct perf_event *event, int new_idx, bool modif
 static struct event_constraint *
 nhmex_mbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &event->hw.cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &event->hw.cpu->branch_reg;
 	int i, idx[2], alloc = 0;
 	u64 config1 = reg1->config;
 
@@ -737,8 +737,8 @@ fail:
 
 static void nhmex_mbox_put_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &event->hw.cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &event->hw.cpu->branch_reg;
 
 	if (uncore_box_is_fake(box))
 		return;
@@ -765,8 +765,8 @@ static int nhmex_mbox_extra_reg_idx(struct extra_reg *er)
 static int nhmex_mbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct intel_uncore_type *type = box->pmu->type;
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &event->hw.cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &event->hw.cpu->branch_reg;
 	struct extra_reg *er;
 	unsigned msr;
 	int reg_idx = 0;
@@ -776,7 +776,7 @@ static int nhmex_mbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 	 * config1 to pass two MSRs' config.
 	 */
 	for (er = nhmex_uncore_mbox_extra_regs; er->msr; er++) {
-		if (er->event != (event->hw.cpu.config & er->config_mask))
+		if (er->event != (event->hw.cpu->config & er->config_mask))
 			continue;
 		if (event->attr.config1 & ~er->valid_mask)
 			return -EINVAL;
@@ -835,8 +835,8 @@ static u64 nhmex_mbox_shared_reg_config(struct intel_uncore_box *box, int idx)
 static void nhmex_mbox_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 	int idx;
 
 	idx = __BITS_VALUE(reg1->idx, 0, 8);
@@ -859,7 +859,7 @@ static void nhmex_mbox_msr_enable_event(struct intel_uncore_box *box, struct per
 		}
 	}
 
-	wrmsrl(hwc->cpu.config_base, hwc->cpu.config | NHMEX_PMON_CTL_EN_BIT0);
+	wrmsrl(hwc->cpu->config_base, hwc->cpu->config | NHMEX_PMON_CTL_EN_BIT0);
 }
 
 DEFINE_UNCORE_FORMAT_ATTR(count_mode,		count_mode,	"config:2-3");
@@ -944,15 +944,15 @@ static struct intel_uncore_type nhmex_uncore_mbox = {
 static void nhmex_rbox_alter_er(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
 
 	/* adjust the main event selector and extra register index */
 	if (reg1->idx % 2) {
 		reg1->idx--;
-		hwc->cpu.config -= 1 << NHMEX_R_PMON_CTL_EV_SEL_SHIFT;
+		hwc->cpu->config -= 1 << NHMEX_R_PMON_CTL_EV_SEL_SHIFT;
 	} else {
 		reg1->idx++;
-		hwc->cpu.config += 1 << NHMEX_R_PMON_CTL_EV_SEL_SHIFT;
+		hwc->cpu->config += 1 << NHMEX_R_PMON_CTL_EV_SEL_SHIFT;
 	}
 
 	/* adjust extra register config */
@@ -978,8 +978,8 @@ static struct event_constraint *
 nhmex_rbox_get_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 	struct intel_uncore_extra_reg *er;
 	unsigned long flags;
 	int idx, er_idx;
@@ -1021,11 +1021,11 @@ again:
 		}
 	} else {
 		if (!atomic_read(&er->ref) ||
-				(er->config == (hwc->cpu.config >> 32) &&
+				(er->config == (hwc->cpu->config >> 32) &&
 				 er->config1 == reg1->config &&
 				 er->config2 == reg2->config)) {
 			atomic_inc(&er->ref);
-			er->config = (hwc->cpu.config >> 32);
+			er->config = (hwc->cpu->config >> 32);
 			er->config1 = reg1->config;
 			er->config2 = reg2->config;
 			ok = true;
@@ -1062,7 +1062,7 @@ again:
 static void nhmex_rbox_put_constraint(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct intel_uncore_extra_reg *er;
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
 	int idx, er_idx;
 
 	if (uncore_box_is_fake(box) || !reg1->alloc)
@@ -1086,11 +1086,11 @@ static void nhmex_rbox_put_constraint(struct intel_uncore_box *box, struct perf_
 static int nhmex_rbox_hw_config(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &event->hw.cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &event->hw.cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &event->hw.cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &event->hw.cpu->branch_reg;
 	int idx;
 
-	idx = (event->hw.cpu.config & NHMEX_R_PMON_CTL_EV_SEL_MASK) >>
+	idx = (event->hw.cpu->config & NHMEX_R_PMON_CTL_EV_SEL_MASK) >>
 		NHMEX_R_PMON_CTL_EV_SEL_SHIFT;
 	if (idx >= 0x18)
 		return -EINVAL;
@@ -1101,7 +1101,7 @@ static int nhmex_rbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 	switch (idx % 6) {
 	case 4:
 	case 5:
-		hwc->cpu.config |= event->attr.config & (~0ULL << 32);
+		hwc->cpu->config |= event->attr.config & (~0ULL << 32);
 		reg2->config = event->attr.config2;
 		break;
 	}
@@ -1111,8 +1111,8 @@ static int nhmex_rbox_hw_config(struct intel_uncore_box *box, struct perf_event 
 static void nhmex_rbox_msr_enable_event(struct intel_uncore_box *box, struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	struct hw_perf_event_extra *reg1 = &hwc->cpu.extra_reg;
-	struct hw_perf_event_extra *reg2 = &hwc->cpu.branch_reg;
+	struct hw_perf_event_extra *reg1 = &hwc->cpu->extra_reg;
+	struct hw_perf_event_extra *reg2 = &hwc->cpu->branch_reg;
 	int idx, port;
 
 	idx = reg1->idx;
@@ -1132,20 +1132,20 @@ static void nhmex_rbox_msr_enable_event(struct intel_uncore_box *box, struct per
 		break;
 	case 4:
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET1_MM_CFG(port),
-			hwc->cpu.config >> 32);
+			hwc->cpu->config >> 32);
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET1_MATCH(port), reg1->config);
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET1_MASK(port), reg2->config);
 		break;
 	case 5:
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET2_MM_CFG(port),
-			hwc->cpu.config >> 32);
+			hwc->cpu->config >> 32);
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET2_MATCH(port), reg1->config);
 		wrmsrl(NHMEX_R_MSR_PORTN_XBR_SET2_MASK(port), reg2->config);
 		break;
 	}
 
-	wrmsrl(hwc->cpu.config_base, NHMEX_PMON_CTL_EN_BIT0 |
-		(hwc->cpu.config & NHMEX_R_PMON_CTL_EV_SEL_MASK));
+	wrmsrl(hwc->cpu->config_base, NHMEX_PMON_CTL_EN_BIT0 |
+		(hwc->cpu->config & NHMEX_R_PMON_CTL_EV_SEL_MASK));
 }
 
 DEFINE_UNCORE_FORMAT_ATTR(xbr_mm_cfg, xbr_mm_cfg, "config:32-63");

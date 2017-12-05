@@ -813,11 +813,11 @@ static int p4_hw_config(struct perf_event *event)
 	cccr = p4_default_cccr_conf(cpu);
 	escr = p4_default_escr_conf(cpu, event->attr.exclude_kernel,
 					 event->attr.exclude_user);
-	event->hw.cpu.config = p4_config_pack_escr(escr) |
+	event->hw.cpu->config = p4_config_pack_escr(escr) |
 			   p4_config_pack_cccr(cccr);
 
 	if (p4_ht_active() && p4_ht_thread(cpu))
-		event->hw.cpu.config = p4_set_ht_bit(event->hw.cpu.config);
+		event->hw.cpu->config = p4_set_ht_bit(event->hw.cpu->config);
 
 	if (event->attr.type == PERF_TYPE_RAW) {
 		struct p4_event_bind *bind;
@@ -836,14 +836,14 @@ static int p4_hw_config(struct perf_event *event)
 		 * Note that for RAW events we allow user to use P4_CCCR_RESERVED
 		 * bits since we keep additional info here (for cache events and etc)
 		 */
-		event->hw.cpu.config |= event->attr.config;
+		event->hw.cpu->config |= event->attr.config;
 		bind = p4_config_get_bind(event->attr.config);
 		if (!bind) {
 			rc = -EINVAL;
 			goto out;
 		}
 		esel = P4_OPCODE_ESEL(bind->opcode);
-		event->hw.cpu.config |= p4_config_pack_cccr(P4_CCCR_ESEL(esel));
+		event->hw.cpu->config |= p4_config_pack_cccr(P4_CCCR_ESEL(esel));
 	}
 
 	rc = x86_setup_perfctr(event);
@@ -857,9 +857,9 @@ static inline int p4_pmu_clear_cccr_ovf(struct hw_perf_event *hwc)
 	u64 v;
 
 	/* an official way for overflow indication */
-	rdmsrl(hwc->cpu.config_base, v);
+	rdmsrl(hwc->cpu->config_base, v);
 	if (v & P4_CCCR_OVF) {
-		wrmsrl(hwc->cpu.config_base, v & ~P4_CCCR_OVF);
+		wrmsrl(hwc->cpu->config_base, v & ~P4_CCCR_OVF);
 		return 1;
 	}
 
@@ -870,7 +870,7 @@ static inline int p4_pmu_clear_cccr_ovf(struct hw_perf_event *hwc)
 	 * the counter has reached zero value and continued counting before
 	 * real NMI signal was received:
 	 */
-	rdmsrl(hwc->cpu.event_base, v);
+	rdmsrl(hwc->cpu->event_base, v);
 	if (!(v & ARCH_P4_UNFLAGGED_BIT))
 		return 1;
 
@@ -909,8 +909,8 @@ static inline void p4_pmu_disable_event(struct perf_event *event)
 	 * state we need to clear P4_CCCR_OVF, otherwise interrupt get
 	 * asserted again and again
 	 */
-	(void)wrmsrl_safe(hwc->cpu.config_base,
-		p4_config_unpack_cccr(hwc->cpu.config) & ~P4_CCCR_ENABLE & ~P4_CCCR_OVF & ~P4_CCCR_RESERVED);
+	(void)wrmsrl_safe(hwc->cpu->config_base,
+		p4_config_unpack_cccr(hwc->cpu->config) & ~P4_CCCR_ENABLE & ~P4_CCCR_OVF & ~P4_CCCR_RESERVED);
 }
 
 static void p4_pmu_disable_all(void)
@@ -949,9 +949,9 @@ static void p4_pmu_enable_pebs(u64 config)
 static void p4_pmu_enable_event(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
-	int thread = p4_ht_config_thread(hwc->cpu.config);
-	u64 escr_conf = p4_config_unpack_escr(p4_clear_ht_bit(hwc->cpu.config));
-	unsigned int idx = p4_config_unpack_event(hwc->cpu.config);
+	int thread = p4_ht_config_thread(hwc->cpu->config);
+	u64 escr_conf = p4_config_unpack_escr(p4_clear_ht_bit(hwc->cpu->config));
+	unsigned int idx = p4_config_unpack_event(hwc->cpu->config);
 	struct p4_event_bind *bind;
 	u64 escr_addr, cccr;
 
@@ -962,23 +962,23 @@ static void p4_pmu_enable_event(struct perf_event *event)
 	 * - we dont support cascaded counters yet
 	 * - and counter 1 is broken (erratum)
 	 */
-	WARN_ON_ONCE(p4_is_event_cascaded(hwc->cpu.config));
-	WARN_ON_ONCE(hwc->cpu.idx == 1);
+	WARN_ON_ONCE(p4_is_event_cascaded(hwc->cpu->config));
+	WARN_ON_ONCE(hwc->cpu->idx == 1);
 
 	/* we need a real Event value */
 	escr_conf &= ~P4_ESCR_EVENT_MASK;
 	escr_conf |= P4_ESCR_EVENT(P4_OPCODE_EVNT(bind->opcode));
 
-	cccr = p4_config_unpack_cccr(hwc->cpu.config);
+	cccr = p4_config_unpack_cccr(hwc->cpu->config);
 
 	/*
 	 * it could be Cache event so we need to write metrics
 	 * into additional MSRs
 	 */
-	p4_pmu_enable_pebs(hwc->cpu.config);
+	p4_pmu_enable_pebs(hwc->cpu->config);
 
 	(void)wrmsrl_safe(escr_addr, escr_conf);
-	(void)wrmsrl_safe(hwc->cpu.config_base,
+	(void)wrmsrl_safe(hwc->cpu->config_base,
 				(cccr & ~P4_CCCR_RESERVED) | P4_CCCR_ENABLE);
 }
 
@@ -1019,7 +1019,7 @@ static int p4_pmu_handle_irq(struct pt_regs *regs)
 		event = cpuc->events[idx];
 		hwc = &event->hw;
 
-		WARN_ON_ONCE(hwc->cpu.idx != idx);
+		WARN_ON_ONCE(hwc->cpu->idx != idx);
 
 		/* it might be unflagged overflow */
 		overflow = p4_pmu_clear_cccr_ovf(hwc);
@@ -1070,7 +1070,7 @@ static void p4_pmu_swap_config_ts(struct hw_perf_event *hwc, int cpu)
 	/*
 	 * we either lucky and continue on same cpu or no HT support
 	 */
-	if (!p4_should_swap_ts(hwc->cpu.config, cpu))
+	if (!p4_should_swap_ts(hwc->cpu->config, cpu))
 		return;
 
 	/*
@@ -1078,8 +1078,8 @@ static void p4_pmu_swap_config_ts(struct hw_perf_event *hwc, int cpu)
 	 * cpu, so we need to swap thread specific flags
 	 */
 
-	escr = p4_config_unpack_escr(hwc->cpu.config);
-	cccr = p4_config_unpack_cccr(hwc->cpu.config);
+	escr = p4_config_unpack_escr(hwc->cpu->config);
+	cccr = p4_config_unpack_cccr(hwc->cpu->config);
 
 	if (p4_ht_thread(cpu)) {
 		cccr &= ~P4_CCCR_OVF_PMI_T0;
@@ -1092,9 +1092,9 @@ static void p4_pmu_swap_config_ts(struct hw_perf_event *hwc, int cpu)
 			escr &= ~P4_ESCR_T0_USR;
 			escr |= P4_ESCR_T1_USR;
 		}
-		hwc->cpu.config  = p4_config_pack_escr(escr);
-		hwc->cpu.config |= p4_config_pack_cccr(cccr);
-		hwc->cpu.config |= P4_CONFIG_HT;
+		hwc->cpu->config  = p4_config_pack_escr(escr);
+		hwc->cpu->config |= p4_config_pack_cccr(cccr);
+		hwc->cpu->config |= P4_CONFIG_HT;
 	} else {
 		cccr &= ~P4_CCCR_OVF_PMI_T1;
 		cccr |= P4_CCCR_OVF_PMI_T0;
@@ -1106,9 +1106,9 @@ static void p4_pmu_swap_config_ts(struct hw_perf_event *hwc, int cpu)
 			escr &= ~P4_ESCR_T1_USR;
 			escr |= P4_ESCR_T0_USR;
 		}
-		hwc->cpu.config  = p4_config_pack_escr(escr);
-		hwc->cpu.config |= p4_config_pack_cccr(cccr);
-		hwc->cpu.config &= ~P4_CONFIG_HT;
+		hwc->cpu->config  = p4_config_pack_escr(escr);
+		hwc->cpu->config |= p4_config_pack_cccr(cccr);
+		hwc->cpu->config &= ~P4_CONFIG_HT;
 	}
 }
 
@@ -1233,15 +1233,15 @@ again:
 		if (pass > 2)
 			goto done;
 
-		bind = p4_config_get_bind(hwc->cpu.config);
+		bind = p4_config_get_bind(hwc->cpu->config);
 		escr_idx = p4_get_escr_idx(bind->escr_msr[thread]);
 		if (unlikely(escr_idx == -1))
 			goto done;
 
-		if (hwc->cpu.idx != -1 && !p4_should_swap_ts(hwc->cpu.config, cpu)) {
-			cntr_idx = hwc->cpu.idx;
+		if (hwc->cpu->idx != -1 && !p4_should_swap_ts(hwc->cpu->config, cpu)) {
+			cntr_idx = hwc->cpu->idx;
 			if (assign)
-				assign[i] = hwc->cpu.idx;
+				assign[i] = hwc->cpu->idx;
 			goto reserve;
 		}
 
@@ -1250,10 +1250,10 @@ again:
 			/*
 			 * Check whether an event alias is still available.
 			 */
-			config_alias = p4_get_alias_event(hwc->cpu.config);
+			config_alias = p4_get_alias_event(hwc->cpu->config);
 			if (!config_alias)
 				goto done;
-			hwc->cpu.config = config_alias;
+			hwc->cpu->config = config_alias;
 			pass++;
 			goto again;
 		}
@@ -1273,8 +1273,8 @@ again:
 		 * This probably doesn't comply with the general spirit of how
 		 * perf wants to work, but P4 is special. :-(
 		 */
-		if (p4_should_swap_ts(hwc->cpu.config, cpu))
-			hwc->cpu.idx = -1;
+		if (p4_should_swap_ts(hwc->cpu->config, cpu))
+			hwc->cpu->idx = -1;
 		p4_pmu_swap_config_ts(hwc, cpu);
 		if (assign)
 			assign[i] = cntr_idx;

@@ -69,7 +69,7 @@ u64 x86_perf_event_update(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	int shift = 64 - x86_pmu.cntval_bits;
 	u64 prev_raw_count, new_raw_count;
-	int idx = hwc->cpu.idx;
+	int idx = hwc->cpu->idx;
 	u64 delta;
 
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
@@ -84,7 +84,7 @@ u64 x86_perf_event_update(struct perf_event *event)
 	 */
 again:
 	prev_raw_count = local64_read(&hwc->prev_count);
-	rdpmcl(hwc->cpu.event_base_rdpmc, new_raw_count);
+	rdpmcl(hwc->cpu->event_base_rdpmc, new_raw_count);
 
 	if (local64_cmpxchg(&hwc->prev_count, prev_raw_count,
 					new_raw_count) != prev_raw_count)
@@ -115,7 +115,7 @@ static int x86_pmu_extra_regs(u64 config, struct perf_event *event)
 	struct hw_perf_event_extra *reg;
 	struct extra_reg *er;
 
-	reg = &event->hw.cpu.extra_reg;
+	reg = &event->hw.cpu->extra_reg;
 
 	if (!x86_pmu.extra_regs)
 		return 0;
@@ -324,7 +324,7 @@ set_ext_hw_attr(struct hw_perf_event *hwc, struct perf_event *event)
 	if (val == -1)
 		return -EINVAL;
 
-	hwc->cpu.config |= val;
+	hwc->cpu->config |= val;
 	attr->config1 = hw_cache_extra_regs[cache_type][cache_op][cache_result];
 	return x86_pmu_extra_regs(val, event);
 }
@@ -452,7 +452,7 @@ int x86_setup_perfctr(struct perf_event *event)
 		event->destroy = hw_perf_lbr_event_destroy;
 	}
 
-	hwc->cpu.config |= config;
+	hwc->cpu->config |= config;
 
 	return 0;
 }
@@ -555,18 +555,18 @@ int x86_pmu_hw_config(struct perf_event *event)
 	 * Generate PMC IRQs:
 	 * (keep 'enabled' bit clear for now)
 	 */
-	event->hw.cpu.config = ARCH_PERFMON_EVENTSEL_INT;
+	event->hw.cpu->config = ARCH_PERFMON_EVENTSEL_INT;
 
 	/*
 	 * Count user and OS events unless requested not to
 	 */
 	if (!event->attr.exclude_user)
-		event->hw.cpu.config |= ARCH_PERFMON_EVENTSEL_USR;
+		event->hw.cpu->config |= ARCH_PERFMON_EVENTSEL_USR;
 	if (!event->attr.exclude_kernel)
-		event->hw.cpu.config |= ARCH_PERFMON_EVENTSEL_OS;
+		event->hw.cpu->config |= ARCH_PERFMON_EVENTSEL_OS;
 
 	if (event->attr.type == PERF_TYPE_RAW)
-		event->hw.cpu.config |= event->attr.config & X86_RAW_EVENT_MASK;
+		event->hw.cpu->config |= event->attr.config & X86_RAW_EVENT_MASK;
 
 	if (event->attr.sample_period && x86_pmu.limit_period) {
 		if (x86_pmu.limit_period(event, event->attr.sample_period) >
@@ -594,13 +594,13 @@ static int __x86_pmu_event_init(struct perf_event *event)
 	atomic_inc(&active_events);
 	event->destroy = hw_perf_event_destroy;
 
-	event->hw.cpu.idx = -1;
-	event->hw.cpu.last_cpu = -1;
-	event->hw.cpu.last_tag = ~0ULL;
+	event->hw.cpu->idx = -1;
+	event->hw.cpu->last_cpu = -1;
+	event->hw.cpu->last_tag = ~0ULL;
 
 	/* mark unused */
-	event->hw.cpu.extra_reg.idx = EXTRA_REG_NONE;
-	event->hw.cpu.branch_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->extra_reg.idx = EXTRA_REG_NONE;
+	event->hw.cpu->branch_reg.idx = EXTRA_REG_NONE;
 
 	return x86_pmu.hw_config(event);
 }
@@ -888,20 +888,20 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 		c = cpuc->event_constraint[i];
 
 		/* never assigned */
-		if (hwc->cpu.idx == -1)
+		if (hwc->cpu->idx == -1)
 			break;
 
 		/* constraint still honored */
-		if (!test_bit(hwc->cpu.idx, c->idxmsk))
+		if (!test_bit(hwc->cpu->idx, c->idxmsk))
 			break;
 
 		/* not already used */
-		if (test_bit(hwc->cpu.idx, used_mask))
+		if (test_bit(hwc->cpu->idx, used_mask))
 			break;
 
-		__set_bit(hwc->cpu.idx, used_mask);
+		__set_bit(hwc->cpu->idx, used_mask);
 		if (assign)
-			assign[i] = hwc->cpu.idx;
+			assign[i] = hwc->cpu->idx;
 	}
 
 	/* slow path */
@@ -939,7 +939,7 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 	if (!unsched && assign) {
 		for (i = 0; i < n; i++) {
 			e = cpuc->event_list[i];
-			e->hw.cpu.flags |= PERF_X86_EVENT_COMMITTED;
+			e->hw.cpu->flags |= PERF_X86_EVENT_COMMITTED;
 			if (x86_pmu.commit_scheduling)
 				x86_pmu.commit_scheduling(cpuc, i, assign[i]);
 		}
@@ -950,7 +950,7 @@ int x86_schedule_events(struct cpu_hw_events *cpuc, int n, int *assign)
 			 * do not put_constraint() on comitted events,
 			 * because they are good to go
 			 */
-			if ((e->hw.cpu.flags & PERF_X86_EVENT_COMMITTED))
+			if ((e->hw.cpu->flags & PERF_X86_EVENT_COMMITTED))
 				continue;
 
 			/*
@@ -1009,21 +1009,21 @@ static inline void x86_assign_hw_event(struct perf_event *event,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	hwc->cpu.idx = cpuc->assign[i];
-	hwc->cpu.last_cpu = smp_processor_id();
-	hwc->cpu.last_tag = ++cpuc->tags[i];
+	hwc->cpu->idx = cpuc->assign[i];
+	hwc->cpu->last_cpu = smp_processor_id();
+	hwc->cpu->last_tag = ++cpuc->tags[i];
 
-	if (hwc->cpu.idx == INTEL_PMC_IDX_FIXED_BTS) {
-		hwc->cpu.config_base = 0;
-		hwc->cpu.event_base	= 0;
-	} else if (hwc->cpu.idx >= INTEL_PMC_IDX_FIXED) {
-		hwc->cpu.config_base = MSR_ARCH_PERFMON_FIXED_CTR_CTRL;
-		hwc->cpu.event_base = MSR_ARCH_PERFMON_FIXED_CTR0 + (hwc->cpu.idx - INTEL_PMC_IDX_FIXED);
-		hwc->cpu.event_base_rdpmc = (hwc->cpu.idx - INTEL_PMC_IDX_FIXED) | 1<<30;
+	if (hwc->cpu->idx == INTEL_PMC_IDX_FIXED_BTS) {
+		hwc->cpu->config_base = 0;
+		hwc->cpu->event_base	= 0;
+	} else if (hwc->cpu->idx >= INTEL_PMC_IDX_FIXED) {
+		hwc->cpu->config_base = MSR_ARCH_PERFMON_FIXED_CTR_CTRL;
+		hwc->cpu->event_base = MSR_ARCH_PERFMON_FIXED_CTR0 + (hwc->cpu->idx - INTEL_PMC_IDX_FIXED);
+		hwc->cpu->event_base_rdpmc = (hwc->cpu->idx - INTEL_PMC_IDX_FIXED) | 1<<30;
 	} else {
-		hwc->cpu.config_base = x86_pmu_config_addr(hwc->cpu.idx);
-		hwc->cpu.event_base  = x86_pmu_event_addr(hwc->cpu.idx);
-		hwc->cpu.event_base_rdpmc = x86_pmu_rdpmc_index(hwc->cpu.idx);
+		hwc->cpu->config_base = x86_pmu_config_addr(hwc->cpu->idx);
+		hwc->cpu->event_base  = x86_pmu_event_addr(hwc->cpu->idx);
+		hwc->cpu->event_base_rdpmc = x86_pmu_rdpmc_index(hwc->cpu->idx);
 	}
 }
 
@@ -1031,9 +1031,9 @@ static inline int match_prev_assignment(struct hw_perf_event *hwc,
 					struct cpu_hw_events *cpuc,
 					int i)
 {
-	return hwc->cpu.idx == cpuc->assign[i] &&
-		hwc->cpu.last_cpu == smp_processor_id() &&
-		hwc->cpu.last_tag == cpuc->tags[i];
+	return hwc->cpu->idx == cpuc->assign[i] &&
+		hwc->cpu->last_cpu == smp_processor_id() &&
+		hwc->cpu->last_tag == cpuc->tags[i];
 }
 
 static void x86_pmu_start(struct perf_event *event, int flags);
@@ -1069,7 +1069,7 @@ static void x86_pmu_enable(struct pmu *pmu)
 			 * - running on same CPU as last time
 			 * - no other event has used the counter since
 			 */
-			if (hwc->cpu.idx == -1 ||
+			if (hwc->cpu->idx == -1 ||
 			    match_prev_assignment(hwc, cpuc, i))
 				continue;
 
@@ -1121,7 +1121,7 @@ int x86_perf_event_set_period(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	s64 left = local64_read(&hwc->period_left);
 	s64 period = hwc->sample_period;
-	int ret = 0, idx = hwc->cpu.idx;
+	int ret = 0, idx = hwc->cpu->idx;
 
 	if (idx == INTEL_PMC_IDX_FIXED_BTS)
 		return 0;
@@ -1156,7 +1156,7 @@ int x86_perf_event_set_period(struct perf_event *event)
 
 	per_cpu(pmc_prev_left[idx], smp_processor_id()) = left;
 
-	if (!(hwc->cpu.flags & PERF_X86_EVENT_AUTO_RELOAD) ||
+	if (!(hwc->cpu->flags & PERF_X86_EVENT_AUTO_RELOAD) ||
 	    local64_read(&hwc->prev_count) != (u64)-left) {
 		/*
 		 * The hw event starts counting from this event offset,
@@ -1164,7 +1164,7 @@ int x86_perf_event_set_period(struct perf_event *event)
 		 */
 		local64_set(&hwc->prev_count, (u64)-left);
 
-		wrmsrl(hwc->cpu.event_base, (u64)(-left) & x86_pmu.cntval_mask);
+		wrmsrl(hwc->cpu->event_base, (u64)(-left) & x86_pmu.cntval_mask);
 	}
 
 	/*
@@ -1173,7 +1173,7 @@ int x86_perf_event_set_period(struct perf_event *event)
 	 * is updated properly
 	 */
 	if (x86_pmu.perfctr_second_write) {
-		wrmsrl(hwc->cpu.event_base,
+		wrmsrl(hwc->cpu->event_base,
 			(u64)(-left) & x86_pmu.cntval_mask);
 	}
 
@@ -1258,7 +1258,7 @@ out:
 static void x86_pmu_start(struct perf_event *event, int flags)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
-	int idx = event->hw.cpu.idx;
+	int idx = event->hw.cpu->idx;
 
 	if (WARN_ON_ONCE(!(event->hw.state & PERF_HES_STOPPED)))
 		return;
@@ -1345,9 +1345,9 @@ void x86_pmu_stop(struct perf_event *event, int flags)
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (__test_and_clear_bit(hwc->cpu.idx, cpuc->active_mask)) {
+	if (__test_and_clear_bit(hwc->cpu->idx, cpuc->active_mask)) {
 		x86_pmu.disable(event);
-		cpuc->events[hwc->cpu.idx] = NULL;
+		cpuc->events[hwc->cpu->idx] = NULL;
 		WARN_ON_ONCE(hwc->state & PERF_HES_STOPPED);
 		hwc->state |= PERF_HES_STOPPED;
 	}
@@ -1370,7 +1370,7 @@ static void x86_pmu_del(struct perf_event *event, int flags)
 	/*
 	 * event is descheduled
 	 */
-	event->hw.cpu.flags &= ~PERF_X86_EVENT_COMMITTED;
+	event->hw.cpu->flags &= ~PERF_X86_EVENT_COMMITTED;
 
 	/*
 	 * If we're called during a txn, we only need to undo x86_pmu.add.
@@ -1848,7 +1848,7 @@ static int __init init_hw_perf_events(void)
 
 	/*
 	 * Install callbacks. Core will call them for each online
-	 * cpu.
+	 * cpu->
 	 */
 	err = cpuhp_setup_state(CPUHP_PERF_X86_PREPARE, "perf/x86:prepare",
 				x86_pmu_prepare_cpu, x86_pmu_dead_cpu);
@@ -2119,7 +2119,7 @@ static int x86_pmu_event_init(struct perf_event *event)
 	}
 
 	if (READ_ONCE(x86_pmu.attr_rdpmc))
-		event->hw.cpu.flags |= PERF_X86_EVENT_RDPMC_ALLOWED;
+		event->hw.cpu->flags |= PERF_X86_EVENT_RDPMC_ALLOWED;
 
 	return err;
 }
@@ -2131,7 +2131,7 @@ static void refresh_pce(void *ignored)
 
 static void x86_pmu_event_mapped(struct perf_event *event, struct mm_struct *mm)
 {
-	if (!(event->hw.cpu.flags & PERF_X86_EVENT_RDPMC_ALLOWED))
+	if (!(event->hw.cpu->flags & PERF_X86_EVENT_RDPMC_ALLOWED))
 		return;
 
 	/*
@@ -2153,7 +2153,7 @@ static void x86_pmu_event_mapped(struct perf_event *event, struct mm_struct *mm)
 static void x86_pmu_event_unmapped(struct perf_event *event, struct mm_struct *mm)
 {
 
-	if (!(event->hw.cpu.flags & PERF_X86_EVENT_RDPMC_ALLOWED))
+	if (!(event->hw.cpu->flags & PERF_X86_EVENT_RDPMC_ALLOWED))
 		return;
 
 	if (atomic_dec_and_test(&mm->context.perf_rdpmc_allowed))
@@ -2162,9 +2162,9 @@ static void x86_pmu_event_unmapped(struct perf_event *event, struct mm_struct *m
 
 static int x86_pmu_event_idx(struct perf_event *event)
 {
-	int idx = event->hw.cpu.idx;
+	int idx = event->hw.cpu->idx;
 
-	if (!(event->hw.cpu.flags & PERF_X86_EVENT_RDPMC_ALLOWED))
+	if (!(event->hw.cpu->flags & PERF_X86_EVENT_RDPMC_ALLOWED))
 		return 0;
 
 	if (x86_pmu.num_counters_fixed && idx >= INTEL_PMC_IDX_FIXED) {
@@ -2302,7 +2302,7 @@ void arch_perf_update_userpage(struct perf_event *event,
 	userpg->cap_user_time = 0;
 	userpg->cap_user_time_zero = 0;
 	userpg->cap_user_rdpmc =
-		!!(event->hw.cpu.flags & PERF_X86_EVENT_RDPMC_ALLOWED);
+		!!(event->hw.cpu->flags & PERF_X86_EVENT_RDPMC_ALLOWED);
 	userpg->pmc_width = x86_pmu.cntval_bits;
 
 	if (!using_native_sched_clock() || !sched_clock_stable())

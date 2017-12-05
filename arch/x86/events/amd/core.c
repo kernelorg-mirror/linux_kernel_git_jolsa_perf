@@ -181,12 +181,12 @@ static int amd_core_hw_config(struct perf_event *event)
 		 * and will count in both modes. We don't want to count in that
 		 * case so we emulate no-counting by setting US = OS = 0.
 		 */
-		event->hw.cpu.config &= ~(ARCH_PERFMON_EVENTSEL_USR |
+		event->hw.cpu->config &= ~(ARCH_PERFMON_EVENTSEL_USR |
 				      ARCH_PERFMON_EVENTSEL_OS);
 	else if (event->attr.exclude_host)
-		event->hw.cpu.config |= AMD64_EVENTSEL_GUESTONLY;
+		event->hw.cpu->config |= AMD64_EVENTSEL_GUESTONLY;
 	else if (event->attr.exclude_guest)
-		event->hw.cpu.config |= AMD64_EVENTSEL_HOSTONLY;
+		event->hw.cpu->config |= AMD64_EVENTSEL_HOSTONLY;
 
 	return 0;
 }
@@ -196,12 +196,12 @@ static int amd_core_hw_config(struct perf_event *event)
  */
 static inline unsigned int amd_get_event_code(struct hw_perf_event *hwc)
 {
-	return ((hwc->cpu.config >> 24) & 0x0f00) | (hwc->cpu.config & 0x00ff);
+	return ((hwc->cpu->config >> 24) & 0x0f00) | (hwc->cpu->config & 0x00ff);
 }
 
 static inline int amd_is_nb_event(struct hw_perf_event *hwc)
 {
-	return (hwc->cpu.config & 0xe0) == 0xe0;
+	return (hwc->cpu->config & 0xe0) == 0xe0;
 }
 
 static inline int amd_has_nb(struct cpu_hw_events *cpuc)
@@ -227,7 +227,7 @@ static int amd_pmu_hw_config(struct perf_event *event)
 		return ret;
 
 	if (event->attr.type == PERF_TYPE_RAW)
-		event->hw.cpu.config |= event->attr.config & AMD64_RAW_EVENT_MASK;
+		event->hw.cpu->config |= event->attr.config & AMD64_RAW_EVENT_MASK;
 
 	return amd_core_hw_config(event);
 }
@@ -314,7 +314,7 @@ __amd_get_nb_event_constraints(struct cpu_hw_events *cpuc, struct perf_event *ev
 	 * hw_perf_group_sched_in() without hw_perf_enable()
 	 */
 	for_each_set_bit(idx, c->idxmsk, x86_pmu.num_counters) {
-		if (new == -1 || hwc->cpu.idx == idx)
+		if (new == -1 || hwc->cpu->idx == idx)
 			/* assign free slot, prefer hwc->idx */
 			old = cmpxchg(nb->owners + idx, NULL, event);
 		else if (nb->owners[idx] == event)
@@ -549,13 +549,13 @@ amd_get_event_constraints_f15h(struct cpu_hw_events *cpuc, int idx,
 	case AMD_EVENT_FP:
 		switch (event_code) {
 		case 0x000:
-			if (!(hwc->cpu.config & 0x0000F000ULL))
+			if (!(hwc->cpu->config & 0x0000F000ULL))
 				break;
-			if (!(hwc->cpu.config & 0x00000F00ULL))
+			if (!(hwc->cpu->config & 0x00000F00ULL))
 				break;
 			return &amd_f15_PMC3;
 		case 0x004:
-			if (hweight_long(hwc->cpu.config & ARCH_PERFMON_EVENTSEL_UMASK) <= 1)
+			if (hweight_long(hwc->cpu->config & ARCH_PERFMON_EVENTSEL_UMASK) <= 1)
 				break;
 			return &amd_f15_PMC3;
 		case 0x003:
@@ -580,7 +580,7 @@ amd_get_event_constraints_f15h(struct cpu_hw_events *cpuc, int idx,
 		case 0x02E:
 			return &amd_f15_PMC30;
 		case 0x031:
-			if (hweight_long(hwc->cpu.config & ARCH_PERFMON_EVENTSEL_UMASK) <= 1)
+			if (hweight_long(hwc->cpu->config & ARCH_PERFMON_EVENTSEL_UMASK) <= 1)
 				return &amd_f15_PMC20;
 			return &emptyconstraint;
 		case 0x1C0:
