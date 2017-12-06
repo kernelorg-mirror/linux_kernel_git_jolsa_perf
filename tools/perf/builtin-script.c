@@ -94,6 +94,7 @@ enum perf_output_field {
 	PERF_OUTPUT_UREGS	    = 1U << 27,
 	PERF_OUTPUT_METRIC	    = 1U << 28,
 	PERF_OUTPUT_MISC            = 1U << 29,
+	PERF_OUTPUT_USER_DATA_ID    = 1U << 30,
 };
 
 struct output_option {
@@ -130,6 +131,7 @@ struct output_option {
 	{.str = "phys_addr", .field = PERF_OUTPUT_PHYS_ADDR},
 	{.str = "metric", .field = PERF_OUTPUT_METRIC},
 	{.str = "misc", .field = PERF_OUTPUT_MISC},
+	{.str = "user_data_id", .field = PERF_OUTPUT_USER_DATA_ID},
 };
 
 enum {
@@ -1668,6 +1670,13 @@ static void process_event(struct perf_script *script,
 
 	if (PRINT_FIELD(WEIGHT))
 		fprintf(fp, "%16" PRIu64, sample->weight);
+
+	if (PRINT_FIELD(USER_DATA_ID)) {
+		if (sample->misc & PERF_RECORD_MISC_USER_DATA)
+			fprintf(fp, "%16" PRIu64, sample->user_data_id);
+		else
+			fprintf(fp, "%16s", "N/A");
+	}
 
 	if (PRINT_FIELD(IP)) {
 		struct callchain_cursor *cursor = NULL;
