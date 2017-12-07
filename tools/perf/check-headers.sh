@@ -31,6 +31,7 @@ arch/powerpc/include/uapi/asm/kvm.h
 arch/s390/include/uapi/asm/kvm.h
 arch/s390/include/uapi/asm/kvm_perf.h
 arch/s390/include/uapi/asm/sie.h
+arch/s390/include/uapi/asm/unistd.h
 arch/arm/include/uapi/asm/kvm.h
 arch/arm64/include/uapi/asm/kvm.h
 include/asm-generic/bitops/arch_hweight.h
