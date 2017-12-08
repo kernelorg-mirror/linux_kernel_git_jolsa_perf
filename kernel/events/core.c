@@ -50,6 +50,7 @@
 #include <linux/sched/mm.h>
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
+#include <linux/task_work.h>
 
 #include "internal.h"
 
@@ -4850,6 +4851,11 @@ void __weak arch_perf_update_userpage(
 {
 }
 
+int __weak arch_perf_set_user_data(struct task_struct *task, bool set)
+{
+	return -EINVAL;
+}
+
 /*
  * Callers need to ensure there can be no nesting of this function, otherwise
  * the seqlock logic goes bad. We can not serialize this because the arch
@@ -5938,6 +5944,23 @@ void perf_output_sample(struct perf_output_handle *handle,
 			}
 		}
 	}
+
+	if (event->attr.user_data) {
+		struct perf_user_data *user_data = &current->perf_user_data;
+
+		if (user_data->state == PERF_USER_DATA_STATE_ENABLE) {
+			user_data->state = PERF_USER_DATA_STATE_ON;
+
+			/*
+			 * We cannot do set_notify_resume() from NMI context,
+			 * also, knowing we are already in an interrupted
+			 * context and will pass return to userspace, we can
+			 * simply set TIF_NOTIFY_RESUME.
+			 */
+			task_work_add(current, &user_data->work, false);
+			set_tsk_thread_flag(current, TIF_NOTIFY_RESUME);
+		}
+	}
 }
 
 static u64 perf_virt_to_phys(u64 virt)
@@ -5972,6 +5995,20 @@ static u64 perf_virt_to_phys(u64 virt)
 	return phys_addr;
 }
 
+struct user_data {
+	u64	type;
+	bool	allow;
+};
+
+static void user_data(struct user_data *ud, struct perf_event *event)
+{
+	ud->allow = event->attr.user_data &&		/* is user data event	*/
+		    current->perf_user_data_allowed &&	/* is in allowed area	*/
+		    current->mm &&			/* is normal task	*/
+		    !(current->flags & PF_EXITING);	/* is not exiting task	*/
+	ud->type  = 0;
+}
+
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
 static struct perf_callchain_entry *
@@ -5998,6 +6035,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 			 struct pt_regs *regs)
 {
 	u64 sample_type = event->attr.sample_type;
+	struct user_data ud;
+
+	user_data(&ud, event);
 
 	header->type = PERF_RECORD_SAMPLE;
 	header->size = sizeof(*header) + event->header_size;
@@ -6111,6 +6151,27 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		data->phys_addr = perf_virt_to_phys(data->addr);
+
+	if (ud.allow && ud.type) {
+		struct perf_user_data *user_data = &current->perf_user_data;
+
+		header->misc |= PERF_RECORD_MISC_USER_DATA;
+		user_data->type |= ud.type;
+
+		if (!user_data->state)
+			user_data->state = PERF_USER_DATA_STATE_ENABLE;
+	}
+}
+
+void perf_prepare_sample_fallback(struct perf_event *event)
+{
+	struct perf_user_data *user_data = &current->perf_user_data;
+
+	if (!event->attr.user_data)
+		return;
+
+	if (user_data->state == PERF_USER_DATA_STATE_ENABLE)
+		user_data->state = PERF_USER_DATA_STATE_OFF;
 }
 
 static void __always_inline
@@ -6129,8 +6190,10 @@ __perf_event_output(struct perf_event *event,
 
 	perf_prepare_sample(&header, data, event, regs);
 
-	if (output_begin(&handle, event, header.size))
+	if (output_begin(&handle, event, header.size)) {
+		perf_prepare_sample_fallback(event);
 		goto exit;
+	}
 
 	perf_output_sample(&handle, &header, data, event);
 
@@ -6283,6 +6346,67 @@ perf_iterate_sb(perf_iterate_f output, void *data,
 done:
 	preempt_enable();
 	rcu_read_unlock();
+}
+
+struct perf_user_data_event {
+	struct {
+		struct perf_event_header	header;
+		u64				type;
+	} event_id;
+};
+
+static void perf_user_data_output(struct perf_event *event, void *data)
+{
+	struct perf_user_data *user_data = &current->perf_user_data;
+	struct perf_user_data_event *user = data;
+	struct perf_output_handle handle;
+	struct perf_sample_data sample;
+	u16 header_size = user->event_id.header.size;
+
+	if (!event->attr.user_data)
+		return;
+
+	user->event_id.type  = event->attr.sample_type & user_data->type;
+
+	perf_event_header__init_id(&user->event_id.header, &sample, event);
+
+	if (perf_output_begin(&handle, event, user->event_id.header.size))
+		goto out;
+
+	perf_output_put(&handle, user->event_id);
+	perf_event__output_id_sample(event, &handle, &sample);
+	perf_output_end(&handle);
+out:
+	user->event_id.header.size = header_size;
+}
+
+static void perf_user_data_event(struct perf_user_data *user_data)
+{
+	struct perf_user_data_event event;
+
+	event = (struct perf_user_data_event) {
+		.event_id = {
+			.header	= {
+				.type = PERF_RECORD_USER_DATA,
+				.misc = 0,
+				.size = sizeof(event.event_id),
+			},
+		},
+	};
+
+	perf_iterate_sb(perf_user_data_output, &event, NULL);
+
+	/*
+	 * User data events are disabled (perf_user_data_allowed),
+	 * so there's no race and we can set new id and zero type.
+	 */
+	user_data->type  = 0;
+	user_data->state = PERF_USER_DATA_STATE_OFF;
+}
+
+static void perf_user_data_work(struct callback_head *work)
+{
+	perf_user_data_event(&current->perf_user_data);
 }
 
 /*
@@ -9919,16 +10043,26 @@ SYSCALL_DEFINE5(perf_event_open,
 		}
 	}
 
+	if (attr.user_data) {
+		if (!task) {
+			err = -EINVAL;
+			goto err_group_fd;
+		}
+		err = arch_perf_set_user_data(task, true);
+		if (err)
+			goto err_task;
+	}
+
 	if (task && group_leader &&
 	    group_leader->attr.inherit != attr.inherit) {
 		err = -EINVAL;
-		goto err_task;
+		goto err_user_data;
 	}
 
 	if (task) {
 		err = mutex_lock_interruptible(&task->signal->cred_guard_mutex);
 		if (err)
-			goto err_task;
+			goto err_user_data;
 
 		/*
 		 * Reuse ptrace permission checks for now.
@@ -10252,6 +10386,9 @@ err_alloc:
 err_cred:
 	if (task)
 		mutex_unlock(&task->signal->cred_guard_mutex);
+err_user_data:
+	if (attr.user_data && task)
+		arch_perf_set_user_data(task, false);
 err_task:
 	if (task)
 		put_task_struct(task);
@@ -10985,6 +11122,8 @@ int perf_event_init_task(struct task_struct *child)
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
 	mutex_init(&child->perf_event_mutex);
 	INIT_LIST_HEAD(&child->perf_event_list);
+	init_task_work(&child->perf_user_data.work, perf_user_data_work);
+	mutex_init(&child->perf_user_data.enabled_mutex);
 
 	for_each_task_context_nr(ctxn) {
 		ret = perf_event_init_context(child, ctxn);
