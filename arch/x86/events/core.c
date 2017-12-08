@@ -2567,3 +2567,12 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	cap->events_mask_len	= x86_pmu.events_mask_len;
 }
 EXPORT_SYMBOL_GPL(perf_get_x86_pmu_capability);
+
+int arch_perf_set_user_data(struct task_struct *task, bool set)
+{
+	if (set)
+		set_tsk_thread_flag(task, TIF_PERF_USER_DATA);
+	else
+		clear_tsk_thread_flag(task, TIF_PERF_USER_DATA);
+	return 0;
+}
