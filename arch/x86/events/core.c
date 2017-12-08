@@ -2567,3 +2567,21 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	cap->events_mask_len	= x86_pmu.events_mask_len;
 }
 EXPORT_SYMBOL_GPL(perf_get_x86_pmu_capability);
+
+int arch_perf_set_user_data(struct task_struct *task, bool set)
+{
+	struct perf_user_data *ud = &task->perf_user_data;
+
+	mutex_lock(&ud->enabled_mutex);
+
+	ud->enabled_count += set ? 1 : -1;
+	WARN_ON_ONCE(ud->enabled_count < 0);
+
+	if (ud->enabled_count == 1)
+		set_tsk_thread_flag(task, TIF_PERF_USER_DATA);
+	else if (ud->enabled_count == 0)
+		clear_tsk_thread_flag(task, TIF_PERF_USER_DATA);
+
+	mutex_unlock(&ud->enabled_mutex);
+	return 0;
+}

@@ -157,7 +157,9 @@ extern struct cred init_cred;
 # define INIT_PERF_EVENTS(tsk)						\
 	.perf_event_mutex = 						\
 		 __MUTEX_INITIALIZER(tsk.perf_event_mutex),		\
-	.perf_event_list = LIST_HEAD_INIT(tsk.perf_event_list),
+	.perf_event_list = LIST_HEAD_INIT(tsk.perf_event_list),		\
+	.perf_user_data.enabled_mutex =					\
+		 __MUTEX_INITIALIZER(tsk.perf_user_data.enabled_mutex),	\
 #else
 # define INIT_PERF_EVENTS(tsk)
 #endif

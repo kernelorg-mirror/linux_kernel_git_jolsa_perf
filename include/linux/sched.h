@@ -506,6 +506,20 @@ union rcu_special {
 	u32 s; /* Set of bits. */
 };
 
+enum perf_user_data_state {
+	PERF_USER_DATA_STATE_OFF	= 0,
+	PERF_USER_DATA_STATE_ENABLE	= 1,
+	PERF_USER_DATA_STATE_ON		= 2,
+};
+
+struct perf_user_data {
+	struct callback_head		 work;
+	enum perf_user_data_state	 state;
+	u64				 type;
+	int				 enabled_count;
+	struct mutex			 enabled_mutex;
+};
+
 enum perf_event_task_context {
 	perf_invalid_context = -1,
 	perf_hw_context = 0,
@@ -917,6 +931,7 @@ struct task_struct {
 	struct perf_event_context	*perf_event_ctxp[perf_nr_task_contexts];
 	struct mutex			perf_event_mutex;
 	struct list_head		perf_event_list;
+	struct perf_user_data		perf_user_data;
 #endif
 #ifdef CONFIG_DEBUG_PREEMPT
 	unsigned long			preempt_disable_ip;
