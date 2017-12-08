@@ -948,6 +948,7 @@ extern void perf_prepare_sample(struct perf_event_header *header,
 				struct perf_sample_data *data,
 				struct perf_event *event,
 				struct pt_regs *regs);
+void perf_prepare_sample_fallback(struct perf_event *event);
 
 extern int perf_event_overflow(struct perf_event *event,
 				 struct perf_sample_data *data,
