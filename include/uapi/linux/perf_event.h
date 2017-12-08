@@ -370,7 +370,8 @@ struct perf_event_attr {
 				context_switch :  1, /* context switch data */
 				write_backward :  1, /* Write ring buffer from end to beginning */
 				namespaces     :  1, /* include namespaces data */
-				__reserved_1   : 35;
+				user_data      :  1, /* generate user data */
+				__reserved_1   : 34;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
@@ -618,10 +619,12 @@ struct perf_event_mmap_page {
  *   PERF_RECORD_MISC_MMAP_DATA  - PERF_RECORD_MMAP* events
  *   PERF_RECORD_MISC_COMM_EXEC  - PERF_RECORD_COMM event
  *   PERF_RECORD_MISC_SWITCH_OUT - PERF_RECORD_SWITCH* events
+ *   PERF_RECORD_MISC_USER_DATA  - PERF_RECORD_SAMPLE event
  */
 #define PERF_RECORD_MISC_MMAP_DATA		(1 << 13)
 #define PERF_RECORD_MISC_COMM_EXEC		(1 << 13)
 #define PERF_RECORD_MISC_SWITCH_OUT		(1 << 13)
+#define PERF_RECORD_MISC_USER_DATA		(1 << 13)
 /*
  * Indicates that the content of PERF_SAMPLE_IP points to
  * the actual instruction that triggered the event. See also
@@ -921,6 +924,18 @@ enum perf_event_type {
 	 * };
 	 */
 	PERF_RECORD_NAMESPACES			= 16,
+
+	/*
+	 * Records the user space data for previous
+	 * kernel samples.
+	 *
+	 * struct {
+	 *	struct perf_event_header	header;
+	 *	u64				sample_type;
+	 *	struct sample_id		sample_id;
+	 * };
+	 */
+	PERF_RECORD_USER_DATA			= 17,
 
 	PERF_RECORD_MAX,			/* non-ABI */
 };

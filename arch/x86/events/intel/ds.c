@@ -637,8 +637,10 @@ int intel_pmu_drain_bts_buffer(void)
 	perf_prepare_sample(&header, &data, event, &regs);
 
 	if (perf_output_begin(&handle, event, header.size *
-			      (top - base - skip)))
+			      (top - base - skip))) {
+		perf_prepare_sample_fallback(event);
 		goto unlock;
+	}
 
 	for (at = base; at < top; at++) {
 		/* Filter out any records that contain kernel addresses. */
