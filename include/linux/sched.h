@@ -518,6 +518,7 @@ struct perf_user_data {
 	u64				 type;
 	u64				 id;
 	u16				 max_stack;
+	void				*stack;
 };
 
 enum perf_event_task_context {
