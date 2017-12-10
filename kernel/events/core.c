@@ -1792,6 +1792,12 @@ event_filter_match(struct perf_event *event)
 	       perf_cgroup_match(event) && pmu_filter_match(event);
 }
 
+static bool has_user_data_stack(struct perf_event *event)
+{
+	return event->attr.user_data &&
+	       (event->attr.sample_type & PERF_SAMPLE_STACK_USER);
+}
+
 static void
 event_sched_out(struct perf_event *event,
 		  struct perf_cpu_context *cpuctx,
@@ -1822,6 +1828,8 @@ event_sched_out(struct perf_event *event,
 		perf_event_ctx_deactivate(ctx);
 	if (event->attr.freq && event->attr.sample_freq)
 		ctx->nr_freq--;
+	if (has_user_data_stack(event))
+		ctx->nr_udstack--;
 	if (event->attr.exclusive || !cpuctx->active_oncpu)
 		cpuctx->exclusive = 0;
 
@@ -2092,6 +2100,8 @@ event_sched_in(struct perf_event *event,
 		perf_event_ctx_activate(ctx);
 	if (event->attr.freq && event->attr.sample_freq)
 		ctx->nr_freq++;
+	if (has_user_data_stack(event))
+		ctx->nr_udstack++;
 
 	if (event->attr.exclusive)
 		cpuctx->exclusive = 1;
@@ -10013,6 +10023,18 @@ again:
 	return gctx;
 }
 
+static int perf_user_data_alloc_stack(struct task_struct *task)
+{
+	void *stack;
+
+	stack = kmalloc(USHRT_MAX, GFP_KERNEL);
+	if (!stack)
+		return -ENOMEM;
+
+	task->perf_user_data.stack = stack;
+	return 0;
+}
+
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
  *
@@ -10116,6 +10138,9 @@ SYSCALL_DEFINE5(perf_event_open,
 		err = arch_perf_set_user_data(task, true);
 		if (err)
 			goto err_task;
+		err = perf_user_data_alloc_stack(task);
+		if (err)
+			goto err_user_data;
 	}
 
 	if (task && group_leader &&
@@ -10452,8 +10477,10 @@ err_cred:
 	if (task)
 		mutex_unlock(&task->signal->cred_guard_mutex);
 err_user_data:
-	if (attr.user_data && task)
+	if (attr.user_data && task) {
 		arch_perf_set_user_data(task, false);
+		kfree(task->perf_user_data.stack);
+	}
 err_task:
 	if (task)
 		put_task_struct(task);
@@ -10844,6 +10871,8 @@ void perf_event_free_task(struct task_struct *task)
 		mutex_unlock(&ctx->mutex);
 		put_ctx(ctx);
 	}
+
+	kfree(task->perf_user_data.stack);
 }
 
 void perf_event_delayed_put(struct task_struct *task)
@@ -11169,6 +11198,7 @@ out_unlock:
 int perf_event_init_task(struct task_struct *child)
 {
 	int ctxn, ret;
+	void *stack = NULL;
 
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
 	mutex_init(&child->perf_event_mutex);
@@ -11176,10 +11206,20 @@ int perf_event_init_task(struct task_struct *child)
 	init_task_work(&child->perf_user_data.work, perf_user_data_work);
 
 	for_each_task_context_nr(ctxn) {
+		struct perf_event_context *ctx;
+
 		ret = perf_event_init_context(child, ctxn);
 		if (ret) {
 			perf_event_free_task(child);
 			return ret;
+		}
+
+		ctx = child->perf_event_ctxp[ctxn];
+		if (ctx && ctx->nr_udstack && !stack) {
+			if (perf_user_data_alloc_stack(child)) {
+				perf_event_free_task(child);
+				return -ENOMEM;
+			}
 		}
 	}
 
