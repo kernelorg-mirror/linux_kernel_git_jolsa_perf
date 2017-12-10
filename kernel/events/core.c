@@ -5589,14 +5589,13 @@ perf_sample_ustack_size(u16 stack_size, u16 header_size,
 
 static void
 perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
-			  struct pt_regs *regs)
+			  void *data)
 {
 	/* Case of a kernel thread, nothing to dump */
-	if (!regs) {
+	if (!data) {
 		u64 size = 0;
 		perf_output_put(handle, size);
 	} else {
-		unsigned long sp;
 		unsigned int rem;
 		u64 dyn_size;
 
@@ -5615,8 +5614,7 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 		perf_output_put(handle, dump_size);
 
 		/* Data. */
-		sp = perf_user_stack_pointer(regs);
-		rem = __output_copy_user(handle, (void *) sp, dump_size);
+		rem = __output_copy_user(handle, data, dump_size);
 		dyn_size = dump_size - rem;
 
 		perf_output_skip(handle, rem);
@@ -5910,9 +5908,14 @@ void perf_output_sample(struct perf_output_handle *handle,
 	}
 
 	if (sample_type & PERF_SAMPLE_STACK_USER) {
+		unsigned long sp = 0;
+
+		if (data->regs_user.regs)
+			sp = perf_user_stack_pointer(data->regs_user.regs);
+
 		perf_output_sample_ustack(handle,
 					  data->stack_user_size,
-					  data->regs_user.regs);
+					  (void *) sp);
 	}
 
 	if (sample_type & PERF_SAMPLE_WEIGHT)
