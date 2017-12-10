@@ -1466,6 +1466,12 @@ ctx_group_list(struct perf_event *event, struct perf_event_context *ctx)
 		return &ctx->flexible_groups;
 }
 
+static bool has_user_data_stack(struct perf_event *event)
+{
+	return event->attr.user_data &&
+	       (event->attr.sample_type & PERF_SAMPLE_STACK_USER);
+}
+
 /*
  * Add a event from the lists for its context.
  * Must be called with ctx->mutex and ctx->lock held.
@@ -1500,6 +1506,8 @@ list_add_event(struct perf_event *event, struct perf_event_context *ctx)
 	ctx->nr_events++;
 	if (event->attr.inherit_stat)
 		ctx->nr_stat++;
+	if (has_user_data_stack(event))
+		ctx->nr_udstack++;
 
 	ctx->generation++;
 }
@@ -1684,6 +1692,8 @@ list_del_event(struct perf_event *event, struct perf_event_context *ctx)
 	ctx->nr_events--;
 	if (event->attr.inherit_stat)
 		ctx->nr_stat--;
+	if (has_user_data_stack(event))
+		ctx->nr_udstack--;
 
 	list_del_rcu(&event->event_entry);
 
@@ -10014,6 +10024,18 @@ again:
 	return gctx;
 }
 
+static int perf_user_data_alloc_stack(struct task_struct *task)
+{
+	void *stack;
+
+	stack = kmalloc(USHRT_MAX, GFP_KERNEL);
+	if (!stack)
+		return -ENOMEM;
+
+	task->perf_user_data.stack = stack;
+	return 0;
+}
+
 /**
  * sys_perf_event_open - open a performance event, associate it to a task/cpu
  *
@@ -10117,6 +10139,9 @@ SYSCALL_DEFINE5(perf_event_open,
 		err = arch_perf_set_user_data(task, true);
 		if (err)
 			goto err_task;
+		err = perf_user_data_alloc_stack(task);
+		if (err)
+			goto err_user_data;
 	}
 
 	if (task && group_leader &&
@@ -10453,8 +10478,10 @@ err_cred:
 	if (task)
 		mutex_unlock(&task->signal->cred_guard_mutex);
 err_user_data:
-	if (attr.user_data && task)
+	if (attr.user_data && task) {
 		arch_perf_set_user_data(task, false);
+		kfree(task->perf_user_data.stack);
+	}
 err_task:
 	if (task)
 		put_task_struct(task);
@@ -10845,6 +10872,8 @@ void perf_event_free_task(struct task_struct *task)
 		mutex_unlock(&ctx->mutex);
 		put_ctx(ctx);
 	}
+
+	kfree(task->perf_user_data.stack);
 }
 
 void perf_event_delayed_put(struct task_struct *task)
@@ -11184,6 +11213,7 @@ out_unlock:
 int perf_event_init_task(struct task_struct *child)
 {
 	int ctxn, ret;
+	void *stack = NULL;
 
 	memset(child->perf_event_ctxp, 0, sizeof(child->perf_event_ctxp));
 	mutex_init(&child->perf_event_mutex);
@@ -11192,10 +11222,20 @@ int perf_event_init_task(struct task_struct *child)
 	child->perf_user_data.id = 0;
 
 	for_each_task_context_nr(ctxn) {
+		struct perf_event_context *ctx;
+
 		ret = perf_event_init_context(child, ctxn);
 		if (ret) {
 			perf_event_free_task(child);
 			return ret;
+		}
+
+		ctx = child->perf_event_ctxp[ctxn];
+		if (ctx && ctx->nr_udstack && !stack) {
+			if (perf_user_data_alloc_stack(child)) {
+				perf_event_free_task(child);
+				return -ENOMEM;
+			}
 		}
 	}
 
