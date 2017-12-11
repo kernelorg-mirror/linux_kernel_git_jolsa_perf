@@ -1129,6 +1129,13 @@ static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (sample_type & PERF_SAMPLE_TRANSACTION)
 		printf("... transaction: %" PRIx64 "\n", sample->transaction);
 
+	if (sample_type & PERF_SAMPLE_USER_DATA_ID) {
+		if (sample->misc & PERF_RECORD_MISC_USER_DATA)
+			printf("... user data ID: %" PRIx64 "\n", sample->user_data_id);
+                else
+			printf("... user data ID: N/A\n");
+	}
+
 	if (sample_type & PERF_SAMPLE_READ)
 		sample_read__printf(sample, evsel->attr.read_format);
 }
