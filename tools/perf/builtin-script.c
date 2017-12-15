@@ -648,6 +648,10 @@ static int perf_sample__fprintf_start(struct perf_sample *sample,
 			ret += fprintf(fp, "g");
 
 		switch (type) {
+		case PERF_RECORD_SAMPLE:
+			if (has(USER_DATA))
+				ret += fprintf(fp, "D");
+			break;
 		case PERF_RECORD_MMAP:
 		case PERF_RECORD_MMAP2:
 			if (has(MMAP_DATA))
