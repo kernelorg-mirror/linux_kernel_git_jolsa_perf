@@ -236,6 +236,7 @@ OPTIONS
 	  PERF_RECORD_MISC_MMAP_DATA*    M
 	  PERF_RECORD_MISC_COMM_EXEC     E
 	  PERF_RECORD_MISC_SWITCH_OUT    S
+	  PERF_RECORD_MISC_USER_DATA     D
 
 	  $ perf script -F +misc ...
 	   sched-messaging  1414 K     28690.636582:       4590 cycles ...
