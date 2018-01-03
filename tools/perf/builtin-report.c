@@ -15,6 +15,7 @@
 #include "util/color.h"
 #include <linux/list.h>
 #include <linux/rbtree.h>
+#include <linux/err.h>
 #include "util/symbol.h"
 #include "util/callchain.h"
 #include "util/values.h"
@@ -61,6 +62,7 @@ struct report {
 	bool			inverted_callchain;
 	bool			mem_mode;
 	bool			stat_mode;
+	bool			task_mode;
 	bool			header;
 	bool			header_only;
 	bool			nonany_branch_mode;
@@ -598,6 +600,124 @@ static int stat_print(struct report *rep)
 	return 0;
 }
 
+static void task_setup(struct report *rep)
+{
+	memset(&rep->tool, 0, sizeof(rep->tool));
+	rep->tool.comm = perf_event__process_comm;
+	rep->tool.exit = perf_event__process_exit;
+	rep->tool.fork = perf_event__process_fork;
+	rep->tool.no_warn = true;
+}
+
+struct task {
+	struct thread		*thread;
+	struct list_head	 list;
+	struct list_head	 children;
+};
+
+static struct task *task_list(struct task *task, struct machine *machine)
+{
+	struct thread *parent_thread, *thread = task->thread;
+	struct task   *parent_task;
+
+	/* Already listed. */
+	if (!list_empty(&task->list))
+		return NULL;
+
+	/* Last one in the chain. */
+	if (thread->ppid == -1)
+		return task;
+
+	parent_thread = machine__findnew_thread(machine, -1, thread->ppid);
+	if (!parent_thread)
+		return ERR_PTR(-ENOMEM);
+
+	parent_task = thread__priv(parent_thread);
+	list_add_tail(&task->list, &parent_task->children);
+	return task_list(parent_task, machine);
+}
+
+static void task__print_level(struct task *task, FILE *fp, int level)
+{
+	struct thread *thread = task->thread;
+	struct task *child;
+
+	fprintf(fp, "  %8d %8d %8d |%*s%s\n",
+		thread->pid_, thread->tid, thread->ppid,
+		level, "", thread__comm_str(thread));
+
+	if (!list_empty(&task->children)) {
+		list_for_each_entry(child, &task->children, list)
+			task__print_level(child, fp, level + 1);
+	}
+}
+
+static int task_print(struct report *rep, FILE *fp)
+{
+	struct perf_session *session = rep->session;
+	struct machine      *machine = &session->machines.host;
+	struct task *tasks, *task;
+	unsigned int nr = 0, itask = 0, i;
+	struct rb_node *nd;
+	LIST_HEAD(list);
+
+	/*
+	 * No locking needed while accessing machine->threads,
+	 * because --task is single threaded command.
+	 */
+
+	/* Count all the threads. */
+	for (i = 0; i < THREADS__TABLE_SIZE; i++)
+		nr += machine->threads[i].nr;
+
+	tasks = malloc(sizeof(*tasks) * nr);
+	if (!tasks)
+		return -ENOMEM;
+
+	for (i = 0; i < THREADS__TABLE_SIZE; i++) {
+		struct threads *threads = &machine->threads[i];
+
+		for (nd = rb_first(&threads->entries); nd; nd = rb_next(nd)) {
+			task = tasks + itask++;
+
+			task->thread = rb_entry(nd, struct thread, rb_node);
+			INIT_LIST_HEAD(&task->children);
+			INIT_LIST_HEAD(&task->list);
+			thread__set_priv(task->thread, task);
+		}
+	}
+
+	/*
+	 * Iterate every task down to the unprocessed parent
+	 * and link all in task children list. Task with no
+	 * parent is added into 'list'.
+	 */
+	for (itask = 0; itask < nr; itask++) {
+		task = tasks + itask;
+
+		if (!list_empty(&task->list))
+			continue;
+
+		task = task_list(task, machine);
+		if (IS_ERR(task)) {
+			pr_err("Error: failed to process tasks\n");
+			free(tasks);
+			return -ENOMEM;
+		}
+
+		if (task)
+			list_add_tail(&task->list, &list);
+	}
+
+	fprintf(fp, "# %8s %8s %8s  %s\n", "pid", "tid", "ppid", "comm");
+
+	list_for_each_entry(task, &list, list)
+		task__print_level(task, fp, 0);
+
+	free(tasks);
+	return 0;
+}
+
 static int __cmd_report(struct report *rep)
 {
 	int ret;
@@ -632,6 +752,9 @@ static int __cmd_report(struct report *rep)
 	if (rep->stat_mode)
 		stat_setup(rep);
 
+	if (rep->task_mode)
+		task_setup(rep);
+
 	ret = perf_session__process_events(session);
 	if (ret) {
 		ui__error("failed to process sample\n");
@@ -640,6 +763,9 @@ static int __cmd_report(struct report *rep)
 
 	if (rep->stat_mode)
 		return stat_print(rep);
+
+	if (rep->task_mode)
+		return task_print(rep, stdout);
 
 	report__warn_kptr_restrict(rep);
 
@@ -798,6 +924,7 @@ int cmd_report(int argc, const char **argv)
 	OPT_BOOLEAN('D', "dump-raw-trace", &dump_trace,
 		    "dump raw trace in ASCII"),
 	OPT_BOOLEAN(0, "stat", &report.stat_mode, "Display event stats"),
+	OPT_BOOLEAN(0, "task", &report.task_mode, "Display recorded tasks"),
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
 	OPT_STRING(0, "kallsyms", &symbol_conf.kallsyms_name,
@@ -1059,8 +1186,12 @@ repeat:
 		report.tool.show_feat_hdr = SHOW_FEAT_HEADER;
 	if (report.show_full_info)
 		report.tool.show_feat_hdr = SHOW_FEAT_HEADER_FULL_INFO;
-	if (report.stat_mode)
+	if (report.stat_mode || report.task_mode)
 		use_browser = 0;
+	if (report.stat_mode && report.task_mode) {
+		pr_err("Error: --task and --stat options cannot be used together\n");
+		goto error;
+	}
 
 	if (strcmp(input_name, "-") != 0)
 		setup_browser(true);
@@ -1083,7 +1214,8 @@ repeat:
 			ret = 0;
 			goto error;
 		}
-	} else if (use_browser == 0 && !quiet && !report.stat_mode) {
+	} else if (use_browser == 0 && !quiet &&
+		   !report.stat_mode && !report.task_mode) {
 		fputs("# To display the perf.data header info, please use --header/--header-only options.\n#\n",
 		      stdout);
 	}

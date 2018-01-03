@@ -441,6 +441,10 @@ include::itrace.txt[]
 	Display overall events statistics without any further processing.
 	(like the one at the end of the perf report -D command)
 
+--task::
+	Display monitored tasks stored in perf data. Displaying pid/tid/ppid
+	plus the command string alligned to distinguish parent and child tasks.
+
 include::callchain-overhead-calculation.txt[]
 
 SEE ALSO
