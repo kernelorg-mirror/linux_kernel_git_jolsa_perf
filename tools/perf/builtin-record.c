@@ -1161,7 +1161,7 @@ record__threads_assign_cnt(struct record *rec)
 	struct record_thread *thread0 = threads;
 	struct perf_evlist *evlist = rec->evlist;
 	int cnt = rec->threads_cnt;
-	int i, j, t, nr, nr_trk, nr_thr, nr_mod, n0;
+	int i, j, t, nr, nr_trk, nr_thr, nr_mod, n0 = 0;
 
 	nr     = evlist->mmap       ? evlist->nr_mmaps : 0;
 	nr_trk = evlist->track_mmap ? evlist->nr_mmaps : 0;
