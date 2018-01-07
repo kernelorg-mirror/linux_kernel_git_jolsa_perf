@@ -129,6 +129,9 @@ struct record {
 		struct thread_cfg	*cfgs;
 		int			 cnt;
 		int			 type;
+		int			 signal_cnt;
+		pthread_mutex_t		 signal_mutex;
+		pthread_cond_t		 signal_cond;
 	} threads;
 };
 
@@ -1692,7 +1695,13 @@ record__threads_config(struct record *rec)
 	if (ret)
 		return ret;
 
-	return record__threads_create_poll(rec);
+	ret = record__threads_create_poll(rec);
+	if (ret)
+		return ret;
+
+	pthread_mutex_init(&rec->threads.signal_mutex, NULL);
+	pthread_cond_init(&rec->threads.signal_cond, NULL);
+	return 0;
 }
 
 static void fdarray__munmap_filtered(struct fdarray *fda, int fd,
@@ -1733,6 +1742,26 @@ thread_obj__process(struct record *rec)
 	return NULL;
 }
 
+static void signal_main(struct record *rec)
+{
+	pthread_mutex_lock(&rec->threads.signal_mutex);
+	rec->threads.signal_cnt++;
+	pthread_cond_signal(&rec->threads.signal_cond);
+	pthread_mutex_unlock(&rec->threads.signal_mutex);
+}
+
+static void wait_for_signal(struct record *rec)
+{
+	pthread_mutex_lock(&rec->threads.signal_mutex);
+
+	while (rec->threads.signal_cnt < rec->threads.cnt) {
+		pthread_cond_wait(&rec->threads.signal_cond,
+				  &rec->threads.signal_mutex);
+	}
+
+	pthread_mutex_unlock(&rec->threads.signal_mutex);
+}
+
 static void *worker(void *arg)
 {
 	struct thread_obj *th = arg;
@@ -1740,6 +1769,8 @@ static void *worker(void *arg)
 
 	thread        = th;
 	thread->state = RECORD_THREAD__RUNNING;
+
+	signal_main(rec);
 
 	return thread_obj__process(rec);
 }
@@ -1749,11 +1780,16 @@ static int record__threads_start(struct record *rec)
 	struct thread_obj *objs = rec->threads.objs;
 	int i, err = 0;
 
+	rec->threads.signal_cnt = 1;
+
 	for (i = 1; !err && i < rec->threads.cnt; i++) {
 		struct thread_obj *th = objs + i;
 
 		err = pthread_create(&th->pt, NULL, worker, th);
 	}
+
+	if (rec->threads.cnt > 1)
+		wait_for_signal(rec);
 
 	return err;
 }
