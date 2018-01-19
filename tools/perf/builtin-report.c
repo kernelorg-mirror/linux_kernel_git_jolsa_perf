@@ -54,6 +54,11 @@
 #include <unistd.h>
 #include <linux/mman.h>
 
+enum {
+	TASKS_STAT__USER_NONE = 0,
+	TASKS_STAT__USER_DATA,
+};
+
 struct report {
 	struct perf_tool	tool;
 	struct perf_session	*session;
@@ -83,6 +88,7 @@ struct report {
 	int			socket_filter;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 	struct branch_type_stat	brtype_stat;
+	int			tasks_stat;
 };
 
 static int report__config(const char *var, const char *value, void *cb)
@@ -839,6 +845,11 @@ static void tasks_setup(struct report *rep)
 	rep->tool.exit = perf_event__process_exit;
 	rep->tool.fork = perf_event__process_fork;
 	rep->tool.no_warn = true;
+
+	if (rep->tasks_stat == TASKS_STAT__USER_DATA) {
+		rep->tool.sample    = process_sample_event;
+		rep->tool.user_data = process_user_data_event;
+	}
 }
 
 struct task {
@@ -898,11 +909,24 @@ static int map_groups__fprintf_task(struct map_groups *mg, int indent, FILE *fp)
 	return printed;
 }
 
-static void task__print_level(struct task *task, FILE *fp, int level)
+static void task__print_level(struct task *task, FILE *fp, int level,
+			      struct report *rep)
 {
 	struct thread *thread = task->thread;
 	struct task *child;
-	int comm_indent = fprintf(fp, "  %8d %8d %8d |%*s",
+	int comm_indent;
+
+	comm_indent = fprintf(fp, " ");
+
+	if (rep->tasks_stat == TASKS_STAT__USER_DATA) {
+		comm_indent += fprintf(fp, "%8" PRIu64 " %8" PRIu64 " %8" PRIu64 " %8" PRIu64,
+					thread->stats.user_data_sample,
+					thread->stats.user_data_event,
+					thread->stats.user_data_match,
+					thread->stats.user_data_drop);
+	}
+
+	comm_indent += fprintf(fp, "%8d %8d %8d |%*s",
 				  thread->pid_, thread->tid, thread->ppid,
 				  level, "");
 
@@ -912,7 +936,7 @@ static void task__print_level(struct task *task, FILE *fp, int level)
 
 	if (!list_empty(&task->children)) {
 		list_for_each_entry(child, &task->children, list)
-			task__print_level(child, fp, level + 1);
+			task__print_level(child, fp, level + 1, rep);
 	}
 }
 
@@ -973,10 +997,15 @@ static int tasks_print(struct report *rep, FILE *fp)
 			list_add_tail(&task->list, &list);
 	}
 
-	fprintf(fp, "# %8s %8s %8s  %s\n", "pid", "tid", "ppid", "comm");
+	fprintf(fp, "#");
+
+	if (rep->tasks_stat == TASKS_STAT__USER_DATA)
+		fprintf(fp, "%8s %8s %8s %8s", "sample", "event", "match", "drop");
+
+	fprintf(fp, "%8s %8s %8s  %s\n", "pid", "tid", "ppid", "comm");
 
 	list_for_each_entry(task, &list, list)
-		task__print_level(task, fp, 0);
+		task__print_level(task, fp, 0, rep);
 
 	free(tasks);
 	return 0;
@@ -1154,6 +1183,7 @@ int cmd_report(int argc, const char **argv)
 		"perf report [<options>]",
 		NULL
 	};
+	const char *tasks_stat;
 	struct report report = {
 		.tool = {
 			.sample		 = process_sample_event,
@@ -1189,7 +1219,8 @@ int cmd_report(int argc, const char **argv)
 	OPT_BOOLEAN('D', "dump-raw-trace", &dump_trace,
 		    "dump raw trace in ASCII"),
 	OPT_BOOLEAN(0, "stats", &report.stats_mode, "Display event stats"),
-	OPT_BOOLEAN(0, "tasks", &report.tasks_mode, "Display recorded tasks"),
+	OPT_STRING_OPTARG_SET(0, "tasks", &tasks_stat, &report.tasks_mode,
+			      "ud", "Display recorded tasks", "(none)"),
 	OPT_BOOLEAN(0, "mmaps", &report.mmaps_mode, "Display recorded tasks memory maps"),
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
@@ -1340,6 +1371,14 @@ int cmd_report(int argc, const char **argv)
 
 	if (report.mmaps_mode)
 		report.tasks_mode = true;
+
+	if (report.tasks_mode) {
+		if (!strcmp(tasks_stat, "ud")) {
+			report.tasks_stat = TASKS_STAT__USER_DATA;
+			/* force --no-children */
+			symbol_conf.cumulate_callchain = false;
+		}
+	}
 
 	if (quiet)
 		perf_quiet_option();
