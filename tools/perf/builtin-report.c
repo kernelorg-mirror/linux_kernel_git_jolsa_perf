@@ -314,6 +314,7 @@ perf_thread__add_user_data(struct thread *thread,
 		return -ENOMEM;
 	}
 
+	thread->stats.user_data_sample++;
 	list_add_tail(&entry->list, &thread->user_data_list);
 	return 0;
 }
@@ -425,6 +426,8 @@ thread__flush_user_data(struct thread *thread,
 	struct user_data *entry, *p;
 	int ret = 0;
 
+	thread->stats.user_data_event++;
+
 	list_for_each_entry_safe(entry, p, &thread->user_data_list, list) {
 		/* different event, skip it */
 		if (entry->sample.id != sample->id)
@@ -439,6 +442,9 @@ thread__flush_user_data(struct thread *thread,
 			ret = user_data__process(entry, sample, event, rep);
 			if (ret)
 				pr_debug("problem adding hist entry, skipping event\n");
+			thread->stats.user_data_match++;
+		} else {
+			thread->stats.user_data_drop++;
 		}
 
 		list_del(&entry->list);
