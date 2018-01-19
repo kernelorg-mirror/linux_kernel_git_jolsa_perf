@@ -22,6 +22,13 @@ struct user_data {
 	struct perf_evsel	*evsel;
 };
 
+struct thread_stats {
+	u64	user_data_sample;
+	u64	user_data_event;
+	u64	user_data_match;
+	u64	user_data_drop;
+};
+
 struct thread {
 	union {
 		struct rb_node	 rb_node;
@@ -51,6 +58,7 @@ struct thread {
 	void				*addr_space;
 	struct unwind_libunwind_ops	*unwind_libunwind_ops;
 #endif
+	struct thread_stats	stats;
 };
 
 struct machine;
