@@ -80,6 +80,7 @@ static struct cmd_struct commands[] = {
 	{ "mem",	cmd_mem,	0 },
 	{ "data",	cmd_data,	0 },
 	{ "ftrace",	cmd_ftrace,	0 },
+	{ "bpf",	cmd_bpf,	0 },
 };
 
 struct pager_config {
