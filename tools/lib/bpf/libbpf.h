@@ -180,6 +180,9 @@ int bpf_program__set_prep(struct bpf_program *prog, int nr_instance,
 
 int bpf_program__nth_fd(struct bpf_program *prog, int n);
 
+struct bpf_insn*
+bpf_program__insns(struct bpf_program *prog, int *insns_cnt);
+
 /*
  * Adjust type of bpf program. Default is kprobe.
  */

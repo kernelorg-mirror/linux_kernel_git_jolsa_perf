@@ -261,6 +261,13 @@ struct bpf_object {
 };
 #define obj_elf_valid(o)	((o)->efile.elf)
 
+struct bpf_insn*
+bpf_program__insns(struct bpf_program *prog, int *insns_cnt)
+{
+	*insns_cnt = prog->insns_cnt;
+	return prog->insns;
+}
+
 static void bpf_program__unload(struct bpf_program *prog)
 {
 	int i;
