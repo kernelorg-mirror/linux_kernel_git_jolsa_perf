@@ -25,6 +25,7 @@ perf-y += builtin-data.o
 perf-y += builtin-version.o
 perf-y += builtin-c2c.o
 perf-y += builtin-bpf.o
+perf-y += bpf-disasm.o
 
 perf-$(CONFIG_TRACE) += builtin-trace.o
 perf-$(CONFIG_LIBELF) += builtin-probe.o
@@ -46,6 +47,7 @@ CFLAGS_perf.o              += -DPERF_HTML_PATH="BUILD_STR($(htmldir_SQ))"	\
 CFLAGS_builtin-trace.o	   += -DSTRACE_GROUPS_DIR="BUILD_STR($(STRACE_GROUPS_DIR_SQ))"
 CFLAGS_builtin-report.o	   += -DTIPDIR="BUILD_STR($(tipdir_SQ))"
 CFLAGS_builtin-report.o	   += -DDOCDIR="BUILD_STR($(srcdir_SQ)/Documentation)"
+CFLAGS_builtin-bpf.o	   += -I$(srctree)/kernel/bpf
 
 libperf-y += util/
 libperf-y += arch/
@@ -54,3 +56,7 @@ libperf-y += scripts/
 libperf-$(CONFIG_TRACE) += trace/beauty/
 
 gtk-y += ui/gtk/
+
+$(OUTPUT)bpf-disasm.o: ../../kernel/bpf/disasm.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
