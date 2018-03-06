@@ -58,6 +58,8 @@ int bpf__strerror_prepare_load(const char *filename, bool source,
 struct bpf_object *bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz,
 					    const char *name);
 
+int bpf__compile(const char *filename);
+
 void bpf__clear(void);
 
 int bpf__probe(struct bpf_object *obj);

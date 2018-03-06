@@ -74,6 +74,38 @@ bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz, const char *name)
 	return obj;
 }
 
+static int compile(const char *filename, void *obj_buf, size_t *obj_buf_sz)
+{
+	int err;
+
+	perf_clang__init();
+	err = perf_clang__compile_bpf(filename, obj_buf, obj_buf_sz);
+	perf_clang__cleanup();
+	if (err) {
+		pr_debug("bpf: builtin compilation failed: %d, try external compiler\n", err);
+		err = llvm__compile_bpf(filename, obj_buf, obj_buf_sz);
+		if (err)
+			return -1;
+	} else {
+		pr_debug("bpf: successfull builtin compilation\n");
+	}
+
+	return 0;
+}
+
+int bpf__compile(const char *filename)
+{
+	void *obj_buf;
+	size_t obj_buf_sz;
+
+	if (compile(filename, &obj_buf, &obj_buf_sz))
+		return -1;
+
+	/* make llvm__dump_obj to return error value */
+	llvm__dump_obj(filename, obj_buf, obj_buf_sz);
+	return 0;
+}
+
 struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 {
 	struct bpf_object *obj;
@@ -86,20 +118,11 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 	}
 
 	if (source) {
-		int err;
 		void *obj_buf;
 		size_t obj_buf_sz;
 
-		perf_clang__init();
-		err = perf_clang__compile_bpf(filename, &obj_buf, &obj_buf_sz);
-		perf_clang__cleanup();
-		if (err) {
-			pr_debug("bpf: builtin compilation failed: %d, try external compiler\n", err);
-			err = llvm__compile_bpf(filename, &obj_buf, &obj_buf_sz);
-			if (err)
-				return ERR_PTR(-BPF_LOADER_ERRNO__COMPILE);
-		} else
-			pr_debug("bpf: successfull builtin compilation\n");
+		if (compile(filename, &obj_buf, &obj_buf_sz))
+			return ERR_PTR(-BPF_LOADER_ERRNO__COMPILE);
 
 		if (llvm_param.dump_obj)
 			llvm__dump_obj(filename, obj_buf, obj_buf_sz);
