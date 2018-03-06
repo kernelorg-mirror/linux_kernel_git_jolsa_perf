@@ -145,6 +145,7 @@ int cmd_bpf(int argc, const char **argv)
 		"perf bpf [<options>] -- <command> [<options>]",
 		NULL
 	};
+	const char *compile_src = NULL;
 	const struct option bpf_options[] = {
 		OPT_CALLBACK('e', "event", &bpf.evlist, "event",
 			     "event selector. use 'perf list' to list available events",
@@ -159,6 +160,8 @@ int cmd_bpf(int argc, const char **argv)
 			   "record events on existing thread id"),
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose"),
+		OPT_STRING('c', "compile", &compile_src, "eBPF source",
+			   "compile eBPF object"),
 		OPT_END()
 	};
 
@@ -170,6 +173,10 @@ int cmd_bpf(int argc, const char **argv)
 
 	argc = parse_options(argc, argv, bpf_options, bpf_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (compile_src)
+		return bpf__compile(compile_src);
+
 	if (!argc && target__none(&bpf.target))
 		usage_with_options(bpf_usage, bpf_options);
 
