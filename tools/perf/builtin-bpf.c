@@ -4,6 +4,8 @@
 #include <time.h>
 #include <linux/compiler.h>
 #include <subcmd/parse-options.h>
+#include <bpf/bpf.h>
+#include <bpf/libbpf.h>
 #include "builtin.h"
 #include "perf.h"
 #include "target.h"
@@ -13,6 +15,7 @@
 #include "evsel.h"
 #include "config.h"
 #include "bpf-loader.h"
+#include <kernel/bpf/disasm.h>
 
 struct perf_bpf {
 	struct target		 target;
@@ -137,6 +140,114 @@ out:
 	return WEXITSTATUS(status);
 }
 
+struct insn_data {
+	FILE	*out;
+	bool	 opcodes;
+};
+
+static void print_insn(void *private_data, const char *fmt, ...)
+{
+	struct insn_data *data = private_data;
+	va_list args;
+
+	va_start(args, fmt);
+	vfprintf(data->out, fmt, args);
+	va_end(args);
+}
+
+static const char *print_call(void *private_data __maybe_unused,
+			      const struct bpf_insn *insn __maybe_unused)
+{
+	return NULL;
+}
+
+static const char *print_imm(void *private_data __maybe_unused,
+			     const struct bpf_insn *insn __maybe_unused,
+			     __u64 full_imm __maybe_unused)
+{
+	return NULL;
+}
+
+static void fprint_hex(FILE *f, void *arg, unsigned int n, const char *sep)
+{
+	unsigned char *data = arg;
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		const char *pfx = "";
+
+		if (!i)
+			/* nothing */;
+		else if (!(i % 16))
+			fprintf(f, "\n");
+		else if (!(i % 8))
+			fprintf(f, "  ");
+		else
+			pfx = sep;
+
+		fprintf(f, "%s%02hhx", i ? pfx : "", data[i]);
+	}
+}
+
+static int prog_walk_insn(int i, struct bpf_insn *insn, char *symbol,
+			  bool double_insn, void *_data)
+{
+	struct insn_data *data = _data;
+	const struct bpf_insn_cbs cbs = {
+		.cb_print	= print_insn,
+		.cb_call	= print_call,
+		.cb_imm		= print_imm,
+		.private_data	= data,
+	};
+
+	if (symbol)
+		fprintf(data->out, "<%s>: \n", symbol);
+
+	fprintf(data->out, "% 4d: ", i);
+
+	if (data->opcodes) {
+		fprint_hex(data->out, insn, 8, " ");
+		fprintf(data->out, "  ");
+	}
+
+	print_bpf_insn(&cbs, insn, true);
+
+	if (data->opcodes && double_insn) {
+		fprintf(data->out, "      ");
+		fprint_hex(data->out, insn + 1, 8, " ");
+		fprintf(data->out, "\n");
+	}
+
+	return 0;
+}
+
+static int disasm_fprintf(FILE *out, const char *filename, bool opcodes)
+{
+	struct bpf_program *prog;
+	struct bpf_object *obj;
+	int first = true;
+
+	obj = bpf__prepare_load(filename, false);
+	if (IS_ERR(obj))
+		return -1;
+
+	bpf_object__for_each_program(prog, obj, true) {
+		struct insn_data data = {
+			.out	 = stdout,
+			.opcodes = opcodes,
+		};
+
+		fprintf(out, "%sDisassembly of %s\n",
+			first ? "" : "\n",
+			bpf_program__title(prog, false));
+
+		first = false;
+		bpf_program__walk_insn(prog, prog_walk_insn, &data);
+	}
+
+	return 0;
+}
+
 static int perf_bpf_config(const char *var, const char *value, void *cb)
 {
 	return perf_default_config(var, value, cb);
@@ -151,6 +262,7 @@ int cmd_bpf(int argc, const char **argv)
 		NULL
 	};
 	const char *compile_src = NULL;
+	const char *disasm_obj = NULL;
 	const struct option bpf_options[] = {
 		OPT_CALLBACK('e', "event", &bpf.evlist, "event",
 			     "event selector. use 'perf list' to list available events",
@@ -167,6 +279,8 @@ int cmd_bpf(int argc, const char **argv)
 			 "be more verbose"),
 		OPT_STRING('c', "compile", &compile_src, "eBPF source",
 			   "compile eBPF object"),
+		OPT_STRING('d', "disasm", &disasm_obj, "eBPF object",
+			   "disasm eBPF object"),
 		OPT_END()
 	};
 
@@ -187,6 +301,9 @@ int cmd_bpf(int argc, const char **argv)
 
 	if (compile_src)
 		return bpf__compile(compile_src);
+
+	if (disasm_obj)
+		return disasm_fprintf(stdout, disasm_obj, true);
 
 	if (!argc && target__none(&bpf.target))
 		usage_with_options(bpf_usage, bpf_options);
