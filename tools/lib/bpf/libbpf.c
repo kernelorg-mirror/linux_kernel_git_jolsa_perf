@@ -1705,22 +1705,34 @@ void *bpf_object__priv(struct bpf_object *obj)
 struct bpf_program *
 bpf_program__next(struct bpf_program *prev, struct bpf_object *obj)
 {
+	struct bpf_program *prog;
 	size_t idx;
 
 	if (!obj->programs)
 		return NULL;
+
 	/* First handler */
 	if (prev == NULL)
-		return &obj->programs[0];
+		idx = 0;
+	else
+		idx = (prev - obj->programs) + 1;
 
-	if (prev->obj != obj) {
+	if (prev && (prev->obj != obj)) {
 		pr_warning("error: program handler doesn't match object\n");
 		return NULL;
 	}
 
-	idx = (prev - obj->programs) + 1;
 	if (idx >= obj->nr_programs)
 		return NULL;
+
+	prog = &obj->programs[idx];
+
+	if (prog->idx == obj->efile.text_shndx)
+		idx++;
+
+	if (idx >= obj->nr_programs)
+		return NULL;
+
 	return &obj->programs[idx];
 }
 
