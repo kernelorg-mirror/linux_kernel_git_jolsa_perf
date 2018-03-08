@@ -94,12 +94,13 @@ void *bpf_object__priv(struct bpf_object *prog);
 /* Accessors of bpf_program. */
 struct bpf_program;
 struct bpf_program *bpf_program__next(struct bpf_program *prog,
-				      struct bpf_object *obj);
+				      struct bpf_object *obj,
+				      bool text);
 
-#define bpf_object__for_each_program(pos, obj)		\
-	for ((pos) = bpf_program__next(NULL, (obj));	\
-	     (pos) != NULL;				\
-	     (pos) = bpf_program__next((pos), (obj)))
+#define bpf_object__for_each_program(pos, obj, text)		\
+	for ((pos) = bpf_program__next(NULL, (obj), text);	\
+	     (pos) != NULL;					\
+	     (pos) = bpf_program__next((pos), (obj), text))
 
 typedef void (*bpf_program_clear_priv_t)(struct bpf_program *,
 					 void *);

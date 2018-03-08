@@ -654,7 +654,7 @@ int bpf__probe(struct bpf_object *obj)
 		return err;
 	}
 
-	bpf_object__for_each_program(prog, obj) {
+	bpf_object__for_each_program(prog, obj, false) {
 		err = config_bpf_program(prog);
 		if (err)
 			goto out;
@@ -707,7 +707,7 @@ int bpf__unprobe(struct bpf_object *obj)
 	int err, ret = 0;
 	struct bpf_program *prog;
 
-	bpf_object__for_each_program(prog, obj) {
+	bpf_object__for_each_program(prog, obj, false) {
 		struct bpf_prog_priv *priv = bpf_program__priv(prog);
 		int i;
 
@@ -761,7 +761,7 @@ int bpf__foreach_event(struct bpf_object *obj,
 	struct bpf_program *prog;
 	int err;
 
-	bpf_object__for_each_program(prog, obj) {
+	bpf_object__for_each_program(prog, obj, false) {
 		struct bpf_prog_priv *priv = bpf_program__priv(prog);
 		struct probe_trace_event *tev;
 		struct perf_probe_event *pev;

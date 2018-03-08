@@ -1638,7 +1638,7 @@ int bpf_object__pin(struct bpf_object *obj, const char *path)
 			return err;
 	}
 
-	bpf_object__for_each_program(prog, obj) {
+	bpf_object__for_each_program(prog, obj, false) {
 		char buf[PATH_MAX];
 		int len;
 
@@ -1737,24 +1737,39 @@ void *bpf_object__priv(struct bpf_object *obj)
 }
 
 struct bpf_program *
-bpf_program__next(struct bpf_program *prev, struct bpf_object *obj)
+bpf_program__next(struct bpf_program *prev, struct bpf_object *obj,
+		  bool text)
 {
+	struct bpf_program *prog;
 	size_t idx;
 
 	if (!obj->programs)
 		return NULL;
+
 	/* First handler */
 	if (prev == NULL)
-		return &obj->programs[0];
+		idx = 0;
+	else
+		idx = (prev - obj->programs) + 1;
 
-	if (prev->obj != obj) {
+	if (prev && (prev->obj != obj)) {
 		pr_warning("error: program handler doesn't match object\n");
 		return NULL;
 	}
 
-	idx = (prev - obj->programs) + 1;
 	if (idx >= obj->nr_programs)
 		return NULL;
+
+	if (!text) {
+		prog = &obj->programs[idx];
+
+		if (prog->idx == obj->efile.text_shndx)
+			idx++;
+
+		if (idx >= obj->nr_programs)
+			return NULL;
+	}
+
 	return &obj->programs[idx];
 }
 
@@ -2066,7 +2081,7 @@ int bpf_prog_load_xattr(const struct bpf_prog_load_attr *attr,
 	if (IS_ERR(obj))
 		return -ENOENT;
 
-	bpf_object__for_each_program(prog, obj) {
+	bpf_object__for_each_program(prog, obj, false) {
 		/*
 		 * If type is not specified, try to guess it based on
 		 * section name.
