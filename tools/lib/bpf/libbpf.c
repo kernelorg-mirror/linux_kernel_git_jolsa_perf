@@ -45,6 +45,7 @@
 
 #include "libbpf.h"
 #include "bpf.h"
+#include "interp.h"
 
 #ifndef EM_BPF
 #define EM_BPF 247
@@ -2162,4 +2163,33 @@ int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
 	}
 
 	return ret;
+}
+
+static u64 bpf_program__run(struct bpf_program *prog,
+			    struct bpf_insn *insn,
+			    struct bpf_interp *interp)
+{
+	interp->insns       = prog->insns;
+	interp->insns_cnt   = prog->insns_cnt;
+	interp->insns_start = insn - prog->insns;
+
+	return bpf_interp__run(interp);
+}
+
+u64 bpf_object__run_begin(struct bpf_object *obj, struct bpf_interp *interp)
+{
+	struct bpf_program *prog = obj->text;
+	struct bpf_insn *insn = obj->insn_begin;
+
+	pr_debug("running BEGIN(%p) for %s\n", insn, prog->name);
+	return insn && bpf_program__run(obj->text, insn, interp);
+}
+
+u64 bpf_object__run_end(struct bpf_object *obj, struct bpf_interp *interp)
+{
+	struct bpf_program *prog = obj->text;
+	struct bpf_insn *insn = obj->insn_end;
+
+	pr_debug("running END(%p) for %s\n", insn, prog->name);
+	return insn && bpf_program__run(obj->text, insn, interp);
 }

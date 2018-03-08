@@ -97,6 +97,10 @@ struct bpf_program *bpf_program__next(struct bpf_program *prog,
 				      struct bpf_object *obj,
 				      bool text);
 
+struct bpf_interp;
+u64 bpf_object__run_begin(struct bpf_object *obj, struct bpf_interp *interp);
+u64 bpf_object__run_end(struct bpf_object *obj, struct bpf_interp *interp);
+
 #define bpf_object__for_each_program(pos, obj, text)		\
 	for ((pos) = bpf_program__next(NULL, (obj), text);	\
 	     (pos) != NULL;					\
