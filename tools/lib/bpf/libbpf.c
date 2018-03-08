@@ -225,6 +225,10 @@ struct bpf_object {
 	struct bpf_map *maps;
 	size_t nr_maps;
 
+	struct bpf_program *text;
+	struct bpf_insn *insn_begin;
+	struct bpf_insn *insn_end;
+
 	bool loaded;
 
 	/*
@@ -440,6 +444,68 @@ skip_search:
 	return 0;
 }
 
+static int
+bpf_object__init_text(struct bpf_object *obj)
+{
+	Elf_Data *symbols = obj->efile.symbols;
+	struct bpf_program *prog;
+	size_t pi, si;
+
+	if (obj->efile.text_shndx == -1)
+		return 0;
+
+	for (pi = 0; pi < obj->nr_programs; pi++) {
+		prog = &obj->programs[pi];
+		if (prog->idx != obj->efile.text_shndx)
+			continue;
+
+		obj->text = prog;
+
+		for (si = 0; si < symbols->d_size / sizeof(GElf_Sym); si++) {
+			bool is_end = false, is_begin = false;
+			struct bpf_insn *insn;
+			const char *name = NULL;
+			unsigned int insn_idx;
+			GElf_Sym sym;
+
+			if (!gelf_getsym(symbols, si, &sym))
+				continue;
+			if (sym.st_shndx != prog->idx)
+				continue;
+			if (GELF_ST_BIND(sym.st_info) != STB_GLOBAL)
+				continue;
+
+			name = elf_strptr(obj->efile.elf,
+					  obj->efile.strtabidx,
+					  sym.st_name);
+			if (!name) {
+				pr_warning("failed to get sym name string for prog %s\n",
+					   prog->section_name);
+				return -LIBBPF_ERRNO__LIBELF;
+			}
+
+			is_begin = !strcmp(name, "BEGIN");
+			is_end   = !strcmp(name, "END");
+
+			if (!is_begin && !is_end)
+				continue;
+
+			insn_idx = sym.st_value / sizeof(struct bpf_insn);
+			insn = &prog->insns[insn_idx];
+
+			pr_debug("set %s to %p\n", name, insn);
+
+			if (is_begin)
+				obj->insn_begin = insn;
+			else
+				obj->insn_end   = insn;
+		}
+	}
+
+	return 0;
+}
+
+
 static struct bpf_object *bpf_object__new(const char *path,
 					  void *obj_buf,
 					  size_t obj_buf_sz)
@@ -464,6 +530,7 @@ static struct bpf_object *bpf_object__new(const char *path,
 	obj->efile.obj_buf = obj_buf;
 	obj->efile.obj_buf_sz = obj_buf_sz;
 	obj->efile.maps_shndx = -1;
+	obj->efile.text_shndx = -1;
 
 	obj->loaded = false;
 
@@ -890,6 +957,9 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			goto out;
 	}
 	err = bpf_object__init_prog_names(obj);
+	if (err)
+		goto out;
+	err = bpf_object__init_text(obj);
 out:
 	return err;
 }
