@@ -168,6 +168,11 @@ int libbpf_strerror(int err, char *buf, size_t size)
 # define LIBBPF_ELF_C_READ_MMAP ELF_C_READ
 #endif
 
+struct bpf_symbol {
+	int	 idx;
+	char	*name;
+};
+
 /*
  * bpf_prog should be a better name but it has been used in
  * linux/filter.h.
@@ -179,6 +184,8 @@ struct bpf_program {
 	char *section_name;
 	struct bpf_insn *insns;
 	size_t insns_cnt, main_prog_cnt;
+	struct bpf_symbol *syms;
+	size_t syms_cnt;
 	enum bpf_prog_type type;
 
 	struct reloc_desc {
@@ -286,6 +293,8 @@ static void bpf_program__unload(struct bpf_program *prog)
 
 static void bpf_program__exit(struct bpf_program *prog)
 {
+	int i;
+
 	if (!prog)
 		return;
 
@@ -300,6 +309,10 @@ static void bpf_program__exit(struct bpf_program *prog)
 	zfree(&prog->section_name);
 	zfree(&prog->insns);
 	zfree(&prog->reloc_desc);
+
+	for (i = 0; i < prog->syms_cnt; i++)
+		free(prog->syms[i].name);
+	zfree(&prog->syms);
 
 	prog->nr_reloc = 0;
 	prog->insns_cnt = 0;
@@ -433,6 +446,67 @@ skip_search:
 	return 0;
 }
 
+static int
+bpf_object__init_symbols(struct bpf_object *obj)
+{
+	Elf_Data *symbols = obj->efile.symbols;
+	struct bpf_program *prog;
+	size_t pi, si;
+
+	if (obj->efile.text_shndx == -1)
+		return 0;
+
+	for (pi = 0; pi < obj->nr_programs; pi++) {
+		struct bpf_symbol *syms;
+		size_t count = 0;
+
+		prog = &obj->programs[pi];
+
+		syms = malloc(sizeof(syms[0]) * prog->insns_cnt);
+		if (!syms)
+			return -ENOMEM;
+
+		for (si = 0; si < symbols->d_size / sizeof(GElf_Sym); si++) {
+			const char *name;
+			unsigned int insn_idx;
+			GElf_Sym sym;
+
+			if (!gelf_getsym(symbols, si, &sym))
+				continue;
+			if (sym.st_shndx != prog->idx)
+				continue;
+			if (GELF_ST_BIND(sym.st_info) != STB_GLOBAL)
+				continue;
+
+			name = elf_strptr(obj->efile.elf,
+					  obj->efile.strtabidx,
+					  sym.st_name);
+			if (!name) {
+				pr_warning("failed to get sym name string for prog %s\n",
+					   prog->section_name);
+				return -LIBBPF_ERRNO__LIBELF;
+			}
+
+			insn_idx = sym.st_value / sizeof(struct bpf_insn);
+
+			syms[count].idx  = insn_idx;
+			syms[count].name = strdup(name);
+			count++;
+		}
+
+		prog->syms = realloc(syms, sizeof(*symbols) * count);
+		if (!prog->syms) {
+			free(syms);
+			return -ENOMEM;
+		}
+
+		prog->syms_cnt = count;
+	}
+
+	return 0;
+}
+
+
 static struct bpf_object *bpf_object__new(const char *path,
 					  void *obj_buf,
 					  size_t obj_buf_sz)
@@ -457,6 +531,7 @@ static struct bpf_object *bpf_object__new(const char *path,
 	obj->efile.obj_buf = obj_buf;
 	obj->efile.obj_buf_sz = obj_buf_sz;
 	obj->efile.maps_shndx = -1;
+	obj->efile.text_shndx = -1;
 
 	obj->loaded = false;
 
@@ -883,6 +958,9 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			goto out;
 	}
 	err = bpf_object__init_prog_names(obj);
+	if (err)
+		goto out;
+	err = bpf_object__init_symbols(obj);
 out:
 	return err;
 }
