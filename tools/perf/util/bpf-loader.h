@@ -87,6 +87,8 @@ int bpf__setup_stdout(struct perf_evlist *evlist);
 int bpf__strerror_setup_stdout(struct perf_evlist *evlist, int err,
 			       char *buf, size_t size);
 
+int bpf__run_begin(FILE *out);
+int bpf__run_end(FILE *out);
 #else
 #include <errno.h>
 
