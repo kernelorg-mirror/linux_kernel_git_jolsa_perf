@@ -9,6 +9,7 @@
 #include <linux/bpf.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <bpf/interp.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -23,6 +24,7 @@
 #include "strfilter.h"
 #include "llvm-utils.h"
 #include "c++/clang-c.h"
+#include "bpf-userapi.h"
 
 #define DEFINE_PRINT_FN(name, level) \
 static int libbpf_##name(const char *fmt, ...)	\
@@ -1540,6 +1542,82 @@ int bpf__apply_obj_config(void)
 
 	bpf_object__for_each_safe(obj, tmp) {
 		err = apply_obj_config_object(obj);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+struct interp {
+	struct bpf_interp  in;
+	FILE		  *out;
+};
+
+static int bpf_interp_call_cb(struct bpf_interp *in,
+			      u64 imm, u64 *regs)
+{
+	struct interp *interp = container_of(in, struct interp, in);
+	u64 dr;
+
+	switch (imm) {
+	case BPF_FUNC_USER_bpf_map_lookup_elem:
+		dr = bpf_map_lookup_elem((int)    regs[1],
+					 (void *) regs[2],
+					 (void *) regs[3]);
+		break;
+	case BPF_FUNC_USER_bpf_map_get_next_key:
+		dr = bpf_map_get_next_key((int)    regs[1],
+					  (void *) regs[2],
+					  (void *) regs[3]);
+		break;
+	case BPF_FUNC_USER_print:
+		dr = fprintf(interp->out, (const char *) regs[1],
+			     regs[2], regs[3], regs[4], regs[5]);
+		fflush(interp->out);
+		break;
+	default:
+		return -1;
+		break;
+	};
+
+	regs[0] = dr;
+	regs[1] = 0xdeadbeef;
+	regs[2] = 0xdeadbeef;
+	regs[3] = 0xdeadbeef;
+	regs[4] = 0xdeadbeef;
+	return 0;
+}
+
+int bpf__run_begin(FILE *out)
+{
+	struct interp interp = {
+		.in.call_cb	= bpf_interp_call_cb,
+		.out		= out,
+	};
+	struct bpf_object *obj, *tmp;
+	int err;
+
+	bpf_object__for_each_safe(obj, tmp) {
+		err = bpf_object__run_begin(obj, &interp.in);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+int bpf__run_end(FILE *out)
+{
+	struct interp interp = {
+		.in.call_cb	= bpf_interp_call_cb,
+		.out		= out,
+	};
+	struct bpf_object *obj, *tmp;
+	int err;
+
+	bpf_object__for_each_safe(obj, tmp) {
+		err = bpf_object__run_end(obj, &interp.in);
 		if (err)
 			return err;
 	}

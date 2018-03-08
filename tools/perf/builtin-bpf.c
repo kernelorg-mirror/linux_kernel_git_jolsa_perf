@@ -94,6 +94,10 @@ static int __cmd_bpf(int argc , const char **argv)
 		goto out_child;
 	}
 
+	err = bpf__run_begin(stdout);
+	if (err)
+		goto out_child;
+
 	if (forks) {
 		perf_evlist__start_workload(bpf.evlist);
 
@@ -114,6 +118,8 @@ static int __cmd_bpf(int argc , const char **argv)
 		perf_evlist__disable(bpf.evlist);
 
 	child_pid = -1;
+
+	bpf__run_end(stdout);
 
 out_child:
 	if (forks) {
