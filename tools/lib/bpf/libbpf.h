@@ -300,4 +300,7 @@ struct bpf_interp {
 	u64 args[BPF_INTERP__ARG_MAX];
 };
 
+u64 bpf_object__run_prog(struct bpf_object *obj, struct bpf_interp *interp,
+			 unsigned int prog);
+
 #endif
