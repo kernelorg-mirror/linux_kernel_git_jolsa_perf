@@ -241,4 +241,8 @@ static int (*bpf_skb_change_head)(void *, int len, int flags) =
 				(void *)(PT_REGS_FP(ctx) + sizeof(ip))); })
 #endif
 
+int print(const char *fmt, ...);
+int map_get_next_key(void *map, void *key, void *value);
+int map_lookup_elem(void *map, void *key, void *value);
+
 #endif

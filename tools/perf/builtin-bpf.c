@@ -34,6 +34,108 @@ static void sig_handler(int sig __maybe_unused)
 	done = 1;
 }
 
+struct interp {
+	struct bpf_interp  in;
+	FILE		  *out;
+};
+
+#define FUNC(__f) FUNC_ ## __f,
+enum {
+#include "bpf-userfuncs.h"
+};
+#undef FUNC
+
+#define FUNC(__f) [FUNC_ ## __f] = # __f,
+static const char *funcs[] = {
+#include "bpf-userfuncs.h"
+};
+#undef FUNC
+
+static u32 bpf_interp_resolve(struct bpf_interp *in __maybe_unused, char *symbol)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(funcs); i++)
+		if (!strcmp(funcs[i], symbol))
+			return i;
+
+	pr_debug("perf: failed to resolve %s\n", symbol);
+	return (u32) -1;
+}
+
+static int bpf_interp_call(struct bpf_interp *in,
+			   u64 imm, u64 *regs)
+{
+	struct interp *interp = container_of(in, struct interp, in);
+	u64 dr;
+
+	pr_debug("bpf_interp_call regs = [ 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx ]\n",
+		 regs[1], regs[2], regs[3], regs[4], regs[5]);
+
+	switch (imm) {
+	case FUNC_map_lookup_elem:
+		dr = bpf_map_lookup_elem((int)    regs[1],
+					 (void *) regs[2],
+					 (void *) regs[3]);
+		break;
+	case FUNC_map_get_next_key:
+		dr = bpf_map_get_next_key((int)    regs[1],
+					  (void *) regs[2],
+					  (void *) regs[3]);
+		break;
+	case FUNC_print:
+		dr = fprintf(interp->out, (const char *) regs[1],
+			     regs[2], regs[3], regs[4], regs[5]);
+		fflush(interp->out);
+		break;
+	default:
+		return -1;
+	};
+
+	regs[0] = dr;
+	regs[1] = 0xdeadbeef;
+	regs[2] = 0xdeadbeef;
+	regs[3] = 0xdeadbeef;
+	regs[4] = 0xdeadbeef;
+	return 0;
+}
+
+static int run_prog(struct bpf_interp *in, int prog)
+{
+	struct bpf_object *obj, *tmp;
+	int err;
+
+	bpf_object__for_each_safe(obj, tmp) {
+		err = bpf_object__run_prog(obj, in, prog);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
+static int run_begin(FILE *out)
+{
+	struct interp interp = {
+		.in.call_cb	= bpf_interp_call,
+		.in.resolve_cb	= bpf_interp_resolve,
+		.out		= out,
+	};
+
+	return run_prog(&interp.in, BPF_PROG__BEGIN);
+}
+
+static int run_end(FILE *out)
+{
+	struct interp interp = {
+		.in.call_cb	= bpf_interp_call,
+		.in.resolve_cb	= bpf_interp_resolve,
+		.out		= out,
+	};
+
+	return run_prog(&interp.in, BPF_PROG__END);
+}
+
 /*
  * perf_evlist__prepare_workload will send a SIGUSR1
  * if the fork fails, since we asked by setting its
@@ -93,6 +195,10 @@ static int __cmd_bpf(int argc , const char **argv)
 		goto out_child;
 	}
 
+	err = run_begin(stdout);
+	if (err)
+		goto out_child;
+
 	if (forks)
 		perf_evlist__start_workload(bpf.evlist);
 
@@ -114,6 +220,8 @@ static int __cmd_bpf(int argc , const char **argv)
 		perf_evlist__disable(bpf.evlist);
 
 	child_pid = -1;
+
+	run_end(stdout);
 
 out_child:
 	if (forks) {
