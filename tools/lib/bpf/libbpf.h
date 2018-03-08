@@ -281,4 +281,7 @@ struct bpf_interp {
 	bpf_interp_resolve_cb_t	 resolve_cb;
 };
 
+u64 bpf_object__run_prog(struct bpf_object *obj, struct bpf_interp *interp,
+			 unsigned int prog);
+
 #endif

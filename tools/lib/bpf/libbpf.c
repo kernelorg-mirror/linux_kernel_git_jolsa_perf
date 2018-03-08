@@ -2359,7 +2359,6 @@ int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
 	return ret;
 }
 
-__maybe_unused
 static u64 bpf_interp__run(struct bpf_interp *interp, struct bpf_program *prog, int start)
 {
 	struct bpf_insn *i = prog->insns + start;
@@ -2608,4 +2607,22 @@ static u64 bpf_interp__run(struct bpf_interp *interp, struct bpf_program *prog, 
 	}
 
 	return 0;
+}
+
+u64 bpf_object__run_prog(struct bpf_object *obj, struct bpf_interp *interp,
+			 unsigned int prog)
+{
+	static const char *name[BPF_PROG__MAX] = {
+		"BEGIN", "END", "TIMER",
+	};
+
+	if (prog >= BPF_PROG__MAX)
+		return (u64) -1;
+
+	pr_debug("running %s(%d) for text\n", name[prog], obj->progs.array[prog]);
+
+	if (obj->progs.array[prog] == -1)
+		return 0;
+
+	return bpf_interp__run(interp, obj->text, obj->progs.array[prog]);
 }
