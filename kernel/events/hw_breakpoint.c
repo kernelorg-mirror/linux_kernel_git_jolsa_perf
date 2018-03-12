@@ -344,6 +344,20 @@ void release_bp_slot(struct perf_event *bp)
 	mutex_unlock(&nr_bp_mutex);
 }
 
+static int modify_bp_slot(struct perf_event *bp, u64 bp_type)
+{
+	int ret;
+
+	mutex_lock(&nr_bp_mutex);
+
+	ret = __reserve_bp_slot(bp, bp_type);
+	if (!ret)
+		__release_bp_slot(bp, bp->attr.bp_type);
+
+	mutex_unlock(&nr_bp_mutex);
+	return ret;
+}
+
 /*
  * Allow the kernel debugger to reserve breakpoint slots without
  * taking a lock using the dbg_* variant of for the reserve and
@@ -455,6 +469,12 @@ int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *att
 		perf_event_disable_local(bp);
 	else
 		perf_event_disable(bp);
+
+	if (attr->bp_type != bp->attr.bp_type) {
+		ret = modify_bp_slot(bp, attr->bp_type);
+		if (ret)
+			return ret;
+	}
 
 	bp->attr.bp_addr = attr->bp_addr;
 	bp->attr.bp_type = attr->bp_type;
