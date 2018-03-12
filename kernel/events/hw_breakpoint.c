@@ -505,6 +505,21 @@ int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *att
 }
 EXPORT_SYMBOL_GPL(modify_user_hw_breakpoint);
 
+int
+modify_user_hw_breakpoint_check(struct perf_event *bp, struct perf_event_attr *attr)
+{
+	struct perf_event_attr tmp = bp->attr;
+
+	tmp.bp_addr = attr->bp_addr;
+	tmp.bp_len  = attr->bp_len;
+	tmp.bp_type = attr->bp_type;
+
+	if (memcmp(&bp->attr, attr, sizeof(*attr)))
+		return -EINVAL;
+
+	return __modify_user_hw_breakpoint(bp, attr);
+}
+
 /**
  * unregister_hw_breakpoint - unregister a user-space hardware breakpoint
  * @bp: the breakpoint structure to unregister
