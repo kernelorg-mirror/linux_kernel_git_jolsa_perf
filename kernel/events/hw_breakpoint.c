@@ -44,6 +44,7 @@
 #include <linux/list.h>
 #include <linux/cpu.h>
 #include <linux/smp.h>
+#include <linux/bug.h>
 
 #include <linux/hw_breakpoint.h>
 /*
@@ -344,6 +345,27 @@ void release_bp_slot(struct perf_event *bp)
 	mutex_unlock(&nr_bp_mutex);
 }
 
+static int __modify_bp_slot(struct perf_event *bp, u64 bp_type)
+{
+	int err;
+
+	err = __reserve_bp_slot(bp, bp_type);
+	if (!err)
+		__release_bp_slot(bp, bp->attr.bp_type);
+
+	return err;
+}
+
+static int modify_bp_slot(struct perf_event *bp, u64 type)
+{
+	int ret;
+
+	mutex_lock(&nr_bp_mutex);
+	ret = __modify_bp_slot(bp, type);
+	mutex_unlock(&nr_bp_mutex);
+	return ret;
+}
+
 /*
  * Allow the kernel debugger to reserve breakpoint slots without
  * taking a lock using the dbg_* variant of for the reserve and
@@ -439,9 +461,12 @@ EXPORT_SYMBOL_GPL(register_user_hw_breakpoint);
  */
 int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
 {
+	bool modify_slot = attr->bp_type != bp->attr.bp_type;
 	int ret;
 
 	ret = validate_hw_breakpoint(attr);
+	if (!ret && modify_slot)
+		ret = modify_bp_slot(bp, attr->bp_type);
 	if (ret)
 		return ret;
 
@@ -463,8 +488,10 @@ int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *att
 
 	if (!attr->disabled) {
 		int err = commit_hw_breakpoint(bp);
-		if (err)
+		if (err) {
+			release_bp_slot(bp);
 			return err;
+		}
 
 		perf_event_enable(bp);
 		bp->attr.disabled = 0;
