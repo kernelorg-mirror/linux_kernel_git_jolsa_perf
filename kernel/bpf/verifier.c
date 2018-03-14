@@ -202,8 +202,7 @@ EXPORT_SYMBOL_GPL(bpf_verifier_log_write);
  * generic for symbol export. The function was renamed, but not the calls in
  * the verifier to avoid complicating backports. Hence the alias below.
  */
-static __printf(2, 3) void verbose(struct bpf_verifier_env *env,
-				   const char *fmt, ...)
+static __printf(2, 3) void verbose(void *private_data, const char *fmt, ...)
 	__attribute__((alias("bpf_verifier_log_write")));
 
 static bool type_is_pkt_pointer(enum bpf_reg_type type)
@@ -4591,10 +4590,11 @@ static int do_check(struct bpf_verifier_env *env)
 		if (env->log.level) {
 			const struct bpf_insn_cbs cbs = {
 				.cb_print	= verbose,
+				.private_data	= env,
 			};
 
 			verbose(env, "%d: ", insn_idx);
-			print_bpf_insn(&cbs, env, insn, env->allow_ptr_leaks);
+			print_bpf_insn(&cbs, insn, env->allow_ptr_leaks);
 		}
 
 		if (bpf_prog_is_dev_bound(env->prog->aux)) {
