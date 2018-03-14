@@ -1,1 +1,5 @@
-libbpf-y := libbpf.o bpf.o nlattr.o
+libbpf-y := libbpf.o bpf.o nlattr.o bpf-disasm.o
+
+$(OUTPUT)bpf-disasm.o: ../../../kernel/bpf/disasm.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
