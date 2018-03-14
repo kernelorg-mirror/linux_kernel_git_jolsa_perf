@@ -38,7 +38,7 @@ int func(void *ctx)
 
 int BEGIN(void)
 {
-	print("BEGIN\n");
+	bpfu_print("BEGIN\n");
 	return 0;
 }
 
