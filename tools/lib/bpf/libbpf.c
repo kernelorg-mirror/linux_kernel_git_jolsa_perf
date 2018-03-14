@@ -232,6 +232,16 @@ struct bpf_object {
 	struct bpf_map *maps;
 	size_t nr_maps;
 
+	struct bpf_program *text;
+	union {
+		int array[BPF_PROG__MAX];
+		struct {
+			int begin;
+			int end;
+			int timer;
+		};
+	} progs;
+
 	bool loaded;
 
 	/*
@@ -462,6 +472,9 @@ bpf_object__init_symbols(struct bpf_object *obj)
 
 		prog = &obj->programs[pi];
 
+		if (prog->idx == obj->efile.text_shndx)
+			obj->text = prog;
+
 		syms = malloc(sizeof(syms[0]) * prog->insns_cnt);
 		if (!syms)
 			return -ENOMEM;
@@ -492,6 +505,13 @@ bpf_object__init_symbols(struct bpf_object *obj)
 			syms[count].idx  = insn_idx;
 			syms[count].name = strdup(name);
 			count++;
+
+			if (!strcmp(name, "BEGIN"))
+				obj->progs.begin = insn_idx;
+			if (!strcmp(name, "END"))
+				obj->progs.end   = insn_idx;
+			if (!strcmp(name, "TIMER"))
+				obj->progs.timer = insn_idx;
 
 			pr_debug("found %s [insn %d]\n", name, insn_idx);
 		}
