@@ -232,6 +232,10 @@ struct bpf_object {
 	struct bpf_map *maps;
 	size_t nr_maps;
 
+	struct bpf_program *text;
+	struct bpf_insn *insn_begin;
+	struct bpf_insn *insn_end;
+
 	bool loaded;
 
 	/*
@@ -462,11 +466,16 @@ bpf_object__init_symbols(struct bpf_object *obj)
 
 		prog = &obj->programs[pi];
 
+		if (prog->idx == obj->efile.text_shndx)
+			obj->text = prog;
+
 		syms = malloc(sizeof(syms[0]) * prog->insns_cnt);
 		if (!syms)
 			return -ENOMEM;
 
 		for (si = 0; si < symbols->d_size / sizeof(GElf_Sym); si++) {
+			bool is_end = false, is_begin = false;
+			struct bpf_insn *insn;
 			const char *name;
 			unsigned int insn_idx;
 			GElf_Sym sym;
@@ -492,6 +501,21 @@ bpf_object__init_symbols(struct bpf_object *obj)
 			syms[count].idx  = insn_idx;
 			syms[count].name = strdup(name);
 			count++;
+
+			is_begin = !strcmp(name, "BEGIN");
+			is_end   = !strcmp(name, "END");
+
+			if (!is_begin && !is_end)
+				continue;
+
+			insn = &prog->insns[insn_idx];
+
+			pr_debug("set %s to %p\n", name, insn);
+
+			if (is_begin)
+				obj->insn_begin = insn;
+			else
+				obj->insn_end   = insn;
 		}
 
 		prog->syms = realloc(syms, sizeof(*symbols) * count);
