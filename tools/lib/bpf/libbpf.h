@@ -261,4 +261,13 @@ int bpf_prog_load(const char *file, enum bpf_prog_type type,
 		  struct bpf_object **pobj, int *prog_fd);
 
 int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags);
+
+enum {
+	BPF_PROG__BEGIN	= 0,
+	BPF_PROG__END	= 1,
+	BPF_PROG__TIMER	= 2,
+	BPF_PROG__EVENT	= 3,
+	BPF_PROG__MAX	= 4,
+};
+
 #endif
