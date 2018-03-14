@@ -253,4 +253,11 @@ int bpf_prog_load(const char *file, enum bpf_prog_type type,
 		  struct bpf_object **pobj, int *prog_fd);
 
 int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags);
+
+typedef int (*bpf_walk_insn_cb_t)(int i, struct bpf_insn *insn,
+				  char *symbol, bool double_insn,
+				  void *data);
+
+int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
+			   void *data);
 #endif
