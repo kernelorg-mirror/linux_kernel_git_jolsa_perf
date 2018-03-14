@@ -261,4 +261,10 @@ enum {
 	BPF_PROG__MAX	= 3
 };
 
+typedef int (*bpf_walk_insn_cb_t)(int i, struct bpf_insn *insn,
+				  char *symbol, bool double_insn,
+				  void *data);
+
+int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
+			   void *data);
 #endif

@@ -2132,3 +2132,32 @@ int bpf_prog_load(const char *file, enum bpf_prog_type type,
 	*prog_fd = bpf_program__fd(first_prog);
 	return 0;
 }
+
+int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
+			   void *data)
+{
+	struct bpf_symbol *syms = prog->syms;
+	bool double_insn = false;
+	int i, isym = 0, ret = 0;
+
+	for (i = 0; i < (int) prog->insns_cnt && !ret; i++) {
+		char *symbol = NULL;
+
+		if (double_insn) {
+			double_insn = false;
+			continue;
+		}
+
+		if (syms && isym < prog->syms_cnt &&
+		    i == syms[isym].idx) {
+			symbol = syms[isym].name;
+			isym++;
+		}
+
+		double_insn = prog->insns[i].code == (BPF_LD | BPF_IMM | BPF_DW);
+
+		ret = cb(i, &prog->insns[i], symbol, double_insn, data);
+	}
+
+	return ret;
+}
