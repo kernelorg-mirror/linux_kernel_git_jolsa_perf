@@ -899,10 +899,10 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			err = -LIBBPF_ERRNO__FORMAT;
 			goto out;
 		}
-		pr_debug("section(%d) %s, size %ld, link %d, flags %lx, type=%d\n",
+		pr_debug("section(%d) %s, size %ld, link %d, flags 0x%lx, type %d, info %d\n",
 			 idx, name, (unsigned long)data->d_size,
 			 (int)sh.sh_link, (unsigned long)sh.sh_flags,
-			 (int)sh.sh_type);
+			 (int)sh.sh_type, (int)sh.sh_info);
 
 		if (strcmp(name, "license") == 0)
 			err = bpf_object__init_license(obj,
@@ -1011,9 +1011,12 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 	size_t nr_maps = obj->nr_maps;
 	int i, nrels;
 
-	pr_debug("collecting relocating info for: '%s'\n",
-		 prog->section_name);
 	nrels = shdr->sh_size / shdr->sh_entsize;
+
+	pr_debug("collecting relocating info for: '%s' (idx %d, nrel %d)\n",
+		 prog->section_name, prog->idx, nrels);
+	pr_debug("maps_shndx %d, text_shndx %d\n",
+		 text_shndx, maps_shndx);
 
 	prog->reloc_desc = malloc(sizeof(*prog->reloc_desc) * nrels);
 	if (!prog->reloc_desc) {
@@ -1028,6 +1031,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		unsigned int insn_idx;
 		struct bpf_insn *insns = prog->insns;
 		size_t map_idx;
+		const char *name;
 
 		if (!gelf_getrel(data, i, &rel)) {
 			pr_warning("relocation: failed to get %d reloc\n", i);
@@ -1041,9 +1045,13 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 				   GELF_R_SYM(rel.r_info));
 			return -LIBBPF_ERRNO__FORMAT;
 		}
-		pr_debug("relo for %lld value %lld name %d\n",
-			 (long long) (rel.r_info >> 32),
-			 (long long) sym.st_value, sym.st_name);
+
+		name = elf_strptr(obj->efile.elf, obj->efile.strtabidx,
+				  sym.st_name);
+
+		pr_debug("relocation: r_offset %lu, r_sym %lu, r_info %lu, symbol %s(%u), st_value %ld, st_shndx %d\n",
+			 rel.r_offset, GELF_R_SYM(rel.r_info), GELF_R_TYPE(rel.r_info),
+			 name ?: "N/A", sym.st_name, sym.st_value, sym.st_shndx);
 
 		if (sym.st_shndx != maps_shndx && sym.st_shndx != text_shndx) {
 			pr_warning("Program '%s' contains non-map related relo data pointing to section %u\n",
