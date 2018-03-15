@@ -49,7 +49,7 @@ void END(void)
 	int i = 0;
 
 	print("END\n");
-	print("\n              comm            value\n");
+	print("%18s %16s\n", "comm","value");
 
 	while (bpfu_map_get_next_key(&counts_map, &key, &next_key) == 0) {
                 if (bpfu_map_lookup_elem(&counts_map, &next_key, &value))

@@ -199,7 +199,10 @@ struct bpf_program {
 		union {
 			int map_idx;
 			int text_off;
-			struct bpf_data *data;
+			struct {
+				struct bpf_data *data;
+				size_t st_value;
+			} d;
 		};
 	} *reloc_desc;
 	int nr_reloc;
@@ -1147,7 +1150,8 @@ collect_reloc_data(struct reloc_desc *desc, struct bpf_object *obj,
 
 	desc->type = RELO_LD64_DATA;
 	desc->insn_idx = insn_idx;
-	desc->data = &data[idx];
+	desc->d.data = &data[idx];
+	desc->d.st_value = sym->st_value;
 	return 0;
 }
 
@@ -1196,13 +1200,12 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 				  obj->efile.strtabidx,
 				  sym.st_name);
 
-		pr_debug("relo for %lld value %lld name %d (%s), section %d\n",
-			 (long long) (rel.r_info >> 32),
-			 (long long) sym.st_value, sym.st_name, name ?: "N/A",
-			 sym.st_shndx);
+		pr_debug("relocation: r_offset %lu, r_info %lu, symbol %s(%u), st_value %ld, st_shndx %d\n",
+			 rel.r_offset, GELF_R_SYM(rel.r_info), name ?: "N/A", sym.st_name,
+			 sym.st_value, sym.st_shndx);
 
 		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
-		pr_debug("relocation: insn_idx=%u\n", insn_idx);
+		pr_debug("relocation: insn_idx %u\n", insn_idx);
 
 		if (insns[insn_idx].code == (BPF_JMP | BPF_CALL)) {
 			if (insns[insn_idx].src_reg != BPF_PSEUDO_CALL) {
@@ -1221,7 +1224,10 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			return -LIBBPF_ERRNO__RELOC;
 		}
 
-		if (sym.st_shndx != maps_shndx) {
+		pr_debug("sym.st_shndx %d, maps_shndx %d, prog->idx %d, text_shndx %d\n",
+			sym.st_shndx, maps_shndx, prog->idx, text_shndx);
+
+		if (sym.st_shndx == maps_shndx) {
 			err = collect_reloc_maps(&prog->reloc_desc[i], obj, &sym, insn_idx);
 		} else if (prog->idx == text_shndx) {
 			err = collect_reloc_data(&prog->reloc_desc[i], obj, &sym, insn_idx);
@@ -1335,6 +1341,19 @@ bpf_program__relocate(struct bpf_program *prog, struct bpf_object *obj)
 			}
 			insns[insn_idx].src_reg = BPF_PSEUDO_MAP_FD;
 			insns[insn_idx].imm = obj->maps[map_idx].fd;
+		} else if (prog->reloc_desc[i].type == RELO_LD64_DATA) {
+			struct reloc_desc *desc = &prog->reloc_desc[i];
+			struct bpf_insn *insns = prog->insns;
+			int insn_idx;
+			u64 ptr;
+
+			ptr = (u64) desc->d.data->ptr;
+			ptr += desc->d.st_value;
+
+			insn_idx = desc->insn_idx;
+
+			insns[insn_idx].imm = (u32) ptr & ((u32) -1);
+			insns[insn_idx + 1].imm = (u32) (ptr >> 32);
 		} else {
 			err = bpf_program__reloc_text(prog, obj,
 						      &prog->reloc_desc[i]);
