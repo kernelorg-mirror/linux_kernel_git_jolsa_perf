@@ -1090,14 +1090,40 @@ bpf_object__find_prog_by_idx(struct bpf_object *obj, int idx)
 }
 
 static int
+collect_reloc_maps(struct reloc_desc *desc, struct bpf_object *obj,
+		   GElf_Sym *sym)
+{
+	struct bpf_map *maps = obj->maps;
+	size_t nr_maps = obj->nr_maps;
+	size_t map_idx;
+
+	/* TODO: 'maps' is sorted. We can use bsearch to make it faster. */
+	for (map_idx = 0; map_idx < nr_maps; map_idx++) {
+		if (maps[map_idx].offset == sym->st_value) {
+			pr_debug("relocation: find map %zd (%s) for insn %u\n",
+				 map_idx, maps[map_idx].name, desc->insn_idx);
+			break;
+		}
+	}
+
+	if (map_idx >= nr_maps) {
+		pr_warning("bpf relocation: map_idx %d large than %d\n",
+			   (int)map_idx, (int)nr_maps - 1);
+		return -LIBBPF_ERRNO__RELOC;
+	}
+
+	desc->type = RELO_LD64;
+	desc->map_idx = map_idx;
+	return 0;
+}
+
+static int
 bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			   Elf_Data *data, struct bpf_object *obj)
 {
 	Elf_Data *symbols = obj->efile.symbols;
 	int text_shndx = obj->efile.text_shndx;
 	int maps_shndx = obj->efile.maps_shndx;
-	struct bpf_map *maps = obj->maps;
-	size_t nr_maps = obj->nr_maps;
 	int i, nrels;
 
 	nrels = shdr->sh_size / shdr->sh_entsize;
@@ -1119,7 +1145,6 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		GElf_Rel rel;
 		unsigned int insn_idx;
 		struct bpf_insn *insns = prog->insns;
-		size_t map_idx;
 		const char *name;
 
 		if (!gelf_getrel(data, i, &rel)) {
@@ -1168,23 +1193,8 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			return -LIBBPF_ERRNO__RELOC;
 		}
 
-		/* TODO: 'maps' is sorted. We can use bsearch to make it faster. */
-		for (map_idx = 0; map_idx < nr_maps; map_idx++) {
-			if (maps[map_idx].offset == sym.st_value) {
-				pr_debug("relocation: find map %zd (%s) for insn %u\n",
-					 map_idx, maps[map_idx].name, insn_idx);
-				break;
-			}
-		}
-
-		if (map_idx >= nr_maps) {
-			pr_warning("bpf relocation: map_idx %d large than %d\n",
-				   (int)map_idx, (int)nr_maps - 1);
+		if (collect_reloc_maps(&prog->reloc_desc[i], obj, &sym))
 			return -LIBBPF_ERRNO__RELOC;
-		}
-
-		prog->reloc_desc[i].type = RELO_LD64;
-		prog->reloc_desc[i].map_idx = map_idx;
 	}
 	return 0;
 }
