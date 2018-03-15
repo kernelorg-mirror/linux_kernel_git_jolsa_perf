@@ -191,7 +191,7 @@ struct bpf_program {
 
 	struct reloc_desc {
 		enum {
-			RELO_LD64,
+			RELO_LD64_MAP,
 			RELO_CALL,
 		} type;
 		int insn_idx;
@@ -1115,7 +1115,7 @@ collect_reloc_maps(struct reloc_desc *desc, struct bpf_object *obj,
 		return -LIBBPF_ERRNO__RELOC;
 	}
 
-	desc->type = RELO_LD64;
+	desc->type = RELO_LD64_MAP;
 	desc->insn_idx = insn_idx;
 	desc->map_idx = map_idx;
 	return 0;
@@ -1286,7 +1286,7 @@ bpf_program__relocate(struct bpf_program *prog, struct bpf_object *obj)
 		return 0;
 
 	for (i = 0; i < prog->nr_reloc; i++) {
-		if (prog->reloc_desc[i].type == RELO_LD64) {
+		if (prog->reloc_desc[i].type == RELO_LD64_MAP) {
 			struct bpf_insn *insns = prog->insns;
 			int insn_idx, map_idx;
 
