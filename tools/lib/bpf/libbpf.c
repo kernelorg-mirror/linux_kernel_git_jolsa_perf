@@ -192,12 +192,14 @@ struct bpf_program {
 	struct reloc_desc {
 		enum {
 			RELO_LD64_MAP,
+			RELO_LD64_DATA,
 			RELO_CALL,
 		} type;
 		int insn_idx;
 		union {
 			int map_idx;
 			int text_off;
+			struct bpf_data *data;
 		};
 	} *reloc_desc;
 	int nr_reloc;
@@ -1122,6 +1124,34 @@ collect_reloc_maps(struct reloc_desc *desc, struct bpf_object *obj,
 }
 
 static int
+collect_reloc_data(struct reloc_desc *desc, struct bpf_object *obj,
+		   GElf_Sym *sym, unsigned int insn_idx)
+{
+	struct bpf_data *data = obj->data;
+	size_t nr_data = obj->nr_data;
+	size_t idx;
+
+	for (idx = 0; idx < nr_data; idx++) {
+		if (data[idx].idx == sym->st_shndx) {
+			pr_debug("relocation: find map %zd (%s) for insn %u\n",
+				 idx, data[idx].name, insn_idx);
+			break;
+		}
+	}
+
+	if (idx >= nr_data) {
+		pr_warning("bpf relocation: data idx %d large than %d\n",
+			   (int)idx, (int)nr_data - 1);
+		return -LIBBPF_ERRNO__RELOC;
+	}
+
+	desc->type = RELO_LD64_DATA;
+	desc->insn_idx = insn_idx;
+	desc->data = &data[idx];
+	return 0;
+}
+
+static int
 bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			   Elf_Data *data, struct bpf_object *obj)
 {
@@ -1147,6 +1177,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		unsigned int insn_idx;
 		struct bpf_insn *insns = prog->insns;
 		const char *name;
+		int err;
 
 		if (!gelf_getrel(data, i, &rel)) {
 			pr_warning("relocation: failed to get %d reloc\n", i);
@@ -1170,12 +1201,6 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			 (long long) sym.st_value, sym.st_name, name ?: "N/A",
 			 sym.st_shndx);
 
-		if (sym.st_shndx != maps_shndx && sym.st_shndx != text_shndx) {
-			pr_warning("Program '%s' contains non-map related relo data pointing to section %u\n",
-				   prog->section_name, sym.st_shndx);
-			return -LIBBPF_ERRNO__RELOC;
-		}
-
 		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
 		pr_debug("relocation: insn_idx=%u\n", insn_idx);
 
@@ -1196,8 +1221,18 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			return -LIBBPF_ERRNO__RELOC;
 		}
 
-		if (collect_reloc_maps(&prog->reloc_desc[i], obj, &sym, insn_idx))
+		if (sym.st_shndx != maps_shndx) {
+			err = collect_reloc_maps(&prog->reloc_desc[i], obj, &sym, insn_idx);
+		} else if (prog->idx == text_shndx) {
+			err = collect_reloc_data(&prog->reloc_desc[i], obj, &sym, insn_idx);
+		} else {
+			pr_warning("Program '%s' contains non-map related relo data pointing to section %u\n",
+				   prog->section_name, sym.st_shndx);
 			return -LIBBPF_ERRNO__RELOC;
+		}
+
+		if (err)
+			return err;
 	}
 	return 0;
 }
