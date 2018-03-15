@@ -902,10 +902,10 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			err = -LIBBPF_ERRNO__FORMAT;
 			goto out;
 		}
-		pr_debug("section(%d) %s, size %ld, link %d, flags %lx, type=%d\n",
+		pr_debug("section(%d) %s, size %ld, link %d, flags 0x%lx, type=%d, info=%d \n",
 			 idx, name, (unsigned long)data->d_size,
 			 (int)sh.sh_link, (unsigned long)sh.sh_flags,
-			 (int)sh.sh_type);
+			 (int)sh.sh_type, (int)sh.sh_info);
 
 		if (strcmp(name, "license") == 0)
 			err = bpf_object__init_license(obj,
@@ -1031,6 +1031,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		unsigned int insn_idx;
 		struct bpf_insn *insns = prog->insns;
 		size_t map_idx;
+		const char *name;
 
 		if (!gelf_getrel(data, i, &rel)) {
 			pr_warning("relocation: failed to get %d reloc\n", i);
@@ -1044,9 +1045,15 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 				   GELF_R_SYM(rel.r_info));
 			return -LIBBPF_ERRNO__FORMAT;
 		}
-		pr_debug("relo for %lld value %lld name %d, section %d\n",
+
+		name = elf_strptr(obj->efile.elf,
+				  obj->efile.strtabidx,
+				  sym.st_name);
+
+		pr_debug("relo for %lld value %lld name %d (%s), section %d\n",
 			 (long long) (rel.r_info >> 32),
-			 (long long) sym.st_value, sym.st_name, sym.st_shndx);
+			 (long long) sym.st_value, sym.st_name, name ?: "N/A",
+			 sym.st_shndx);
 
 		if (sym.st_shndx != maps_shndx && sym.st_shndx != text_shndx) {
 			pr_warning("Program '%s' contains non-map related relo data pointing to section %u\n",
