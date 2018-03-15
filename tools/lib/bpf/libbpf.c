@@ -222,6 +222,13 @@ struct bpf_map {
 	bpf_map_clear_priv_t clear_priv;
 };
 
+struct bpf_data {
+	int idx;
+	char *name;
+	void *ptr;
+	size_t size;
+};
+
 static LIST_HEAD(bpf_objects_list);
 
 struct bpf_object {
@@ -232,6 +239,8 @@ struct bpf_object {
 	size_t nr_programs;
 	struct bpf_map *maps;
 	size_t nr_maps;
+	struct bpf_data *data;
+	size_t nr_data;
 
 	struct bpf_program *text;
 	struct bpf_insn *insn_begin;
@@ -394,6 +403,74 @@ bpf_object__add_program(struct bpf_object *obj, void *data, size_t size,
 	obj->nr_programs = nr_progs + 1;
 	prog.obj = obj;
 	progs[nr_progs] = prog;
+	return 0;
+}
+
+static void bpf_data__exit(struct bpf_data *data)
+{
+	if (!data)
+		return;
+
+	zfree(&data->ptr);
+	zfree(&data->name);
+	data->idx = -1;
+}
+
+static int
+bpf_data__init(void *ptr, size_t size, char *name, int idx,
+	       struct bpf_data *data)
+{
+	bzero(data, sizeof(*data));
+
+	data->name = strdup(name);
+	if (!data->name) {
+		pr_warning("failed to alloc name for data under section(%d) %s\n",
+			   idx, name);
+		goto errout;
+	}
+
+	data->ptr = malloc(size);
+	if (!data->ptr) {
+		pr_warning("failed to alloc data for section %s\n", name);
+		goto errout;
+	}
+
+	data->size = size;
+	memcpy(data->ptr, ptr, size);
+	data->idx = idx;
+	return 0;
+
+errout:
+	bpf_data__exit(data);
+	return -ENOMEM;
+}
+
+static int
+bpf_object__add_data(struct bpf_object *obj, void *ptr, size_t size,
+		     char *section_name, int idx)
+{
+	struct bpf_data d, *data;
+	int nr_data, err;
+
+	err = bpf_data__init(ptr, size, section_name, idx, &d);
+	if (err)
+		return err;
+
+	data = obj->data;
+	nr_data = obj->nr_data;
+
+	data = realloc(data, sizeof(data[0]) * (nr_data + 1));
+	if (!data) {
+		pr_warning("failed to alloc a new data under section '%s'\n",
+			   section_name);
+		bpf_data__exit(&d);
+		return -ENOMEM;
+	}
+
+	pr_debug("found data %s, size %lu\n", d.name, d.size);
+	obj->data = data;
+	obj->nr_data = nr_data + 1;
+	data[nr_data] = d;
 	return 0;
 }
 
@@ -940,6 +1017,18 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 				pr_warning("failed to alloc program %s (%s): %s",
 					   name, obj->path, errmsg);
 			}
+		} else if ((sh.sh_type == SHT_PROGBITS) &&
+			   (sh.sh_flags & SHF_ALLOC)) {
+			err = bpf_object__add_data(obj, data->d_buf,
+						   data->d_size, name, idx);
+			if (err) {
+				char errmsg[STRERR_BUFSIZE];
+
+				strerror_r(-err, errmsg, sizeof(errmsg));
+				pr_warning("failed to alloc data %s (%s): %s",
+					   name, obj->path, errmsg);
+			}
+
 		} else if (sh.sh_type == SHT_REL) {
 			void *reloc = obj->efile.reloc;
 			int nr_reloc = obj->efile.nr_reloc + 1;
