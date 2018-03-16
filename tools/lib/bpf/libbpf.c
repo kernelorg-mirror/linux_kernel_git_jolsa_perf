@@ -191,12 +191,12 @@ struct bpf_program {
 	struct reloc_desc {
 		enum {
 			RELO_LD64_MAP,
-			RELO_CALL,
+			RELO_CALL_PSEUDO,
 		} type;
 		int insn_idx;
 		union {
 			int map_idx;	/* RELO_LD64_MAP */
-			int text_off;
+			int text_off;	/* RELO_CALL_PSEUDO */
 		};
 	} *reloc_desc;
 	int nr_reloc;
@@ -1211,7 +1211,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 				return -LIBBPF_ERRNO__RELOC;
 			}
 
-			desc->type = RELO_CALL;
+			desc->type = RELO_CALL_PSEUDO;
 			desc->text_off = sym.st_value;
 			continue;
 		}
@@ -1274,7 +1274,7 @@ bpf_program__reloc_text(struct bpf_program *prog, struct bpf_object *obj,
 	struct bpf_program *text;
 	size_t new_cnt;
 
-	if (relo->type != RELO_CALL)
+	if (relo->type != RELO_CALL_PSEUDO)
 		return -LIBBPF_ERRNO__RELOC;
 
 	if (prog->idx == obj->efile.text_shndx) {
