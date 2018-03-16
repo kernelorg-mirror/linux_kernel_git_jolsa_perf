@@ -276,4 +276,28 @@ typedef int (*bpf_walk_insn_cb_t)(int i, struct bpf_insn *insn,
 
 int bpf_program__walk_insn(struct bpf_program *prog, bpf_walk_insn_cb_t cb,
 			   void *data);
+
+struct bpf_interp;
+
+typedef int (*bpf_interp_call_cb_t)(struct bpf_interp *interp,
+				    u64 imm, u64 *regs);
+
+typedef u32 (*bpf_interp_resolve_cb_t)(struct bpf_interp *interp,
+				       char *symbol);
+
+enum {
+	BPF_INTERP__ARG1    = 0,
+	BPF_INTERP__ARG2    = 1,
+	BPF_INTERP__ARG3    = 2,
+	BPF_INTERP__ARG4    = 3,
+	BPF_INTERP__ARG5    = 4,
+	BPF_INTERP__ARG_MAX = 5,
+};
+
+struct bpf_interp {
+	bpf_interp_call_cb_t	 call_cb;
+	bpf_interp_resolve_cb_t	 resolve_cb;
+	u64 args[BPF_INTERP__ARG_MAX];
+};
+
 #endif
