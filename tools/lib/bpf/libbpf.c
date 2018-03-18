@@ -173,6 +173,11 @@ struct bpf_symbol {
 	char	*name;
 };
 
+
+enum {
+	RELO_CALL_USER_UNRESOLVED = 1 << 31,
+};
+
 /*
  * bpf_prog should be a better name but it has been used in
  * linux/filter.h.
@@ -193,6 +198,7 @@ struct bpf_program {
 			RELO_LD64_MAP,
 			RELO_LD64_DATA,
 			RELO_CALL_PSEUDO,
+			RELO_CALL_USER,
 		} type;
 		int insn_idx;
 		union {
@@ -202,9 +208,13 @@ struct bpf_program {
 				struct bpf_data *data;
 				size_t st_value;
 			} ld;		/* RELO_LD64_DATA */
+			char *func;	/* RELO_CALL_USER */
 		};
 	} *reloc_desc;
 	int nr_reloc;
+
+	char **call_resolve;
+	int nr_call_resolve;
 
 	struct {
 		int nr;
@@ -1214,19 +1224,20 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		desc->insn_idx = insn_idx;
 
 		if (insns[insn_idx].code == (BPF_JMP | BPF_CALL)) {
-			if (insns[insn_idx].src_reg != BPF_PSEUDO_CALL) {
-				pr_warning("incorrect bpf_call opcode\n");
-				return -LIBBPF_ERRNO__RELOC;
-			}
+			if (insns[insn_idx].src_reg == BPF_PSEUDO_CALL) {
+				if (sym.st_shndx != text_shndx) {
+					pr_warning("Program '%s' contains non-text related relo pointing to section %u\n",
+						   prog->section_name, sym.st_shndx);
+					return -LIBBPF_ERRNO__RELOC;
+				}
 
-			if (sym.st_shndx != text_shndx) {
-				pr_warning("Program '%s' contains non-text related relo pointing to section %u\n",
-					   prog->section_name, sym.st_shndx);
-				return -LIBBPF_ERRNO__RELOC;
+				desc->type = RELO_CALL_PSEUDO;
+				desc->text_off = sym.st_value;
+			} else {
+				desc->type = RELO_CALL_USER;
+				desc->func = strdup(name);
+				prog->nr_call_resolve++;
 			}
-
-			desc->type = RELO_CALL_PSEUDO;
-			desc->text_off = sym.st_value;
 			continue;
 		}
 
@@ -1292,9 +1303,6 @@ bpf_program__reloc_text(struct bpf_program *prog, struct bpf_object *obj,
 	struct bpf_program *text;
 	size_t new_cnt;
 
-	if (relo->type != RELO_CALL_PSEUDO)
-		return -LIBBPF_ERRNO__RELOC;
-
 	if (prog->idx == obj->efile.text_shndx) {
 		pr_warning("relo in .text insn %d into off %d\n",
 			   relo->insn_idx, relo->text_off);
@@ -1328,15 +1336,33 @@ bpf_program__reloc_text(struct bpf_program *prog, struct bpf_object *obj,
 }
 
 static int
+bpf_program__reloc_call(struct bpf_program *prog, struct bpf_object *obj,
+			int i, struct reloc_desc *relo)
+{
+	struct bpf_insn *insns = prog->insns;
+	int insn_idx = relo->insn_idx;
+
+	if (!prog->call_resolve) {
+		prog->call_resolve = malloc(sizeof(char*) * prog->nr_call_resolve);
+		if (!prog->call_resolve)
+			return -ENOMEM;
+	}
+
+	insns[insn_idx].imm = i | RELO_CALL_USER_UNRESOLVED;
+	prog->call_resolve[i] = strdup(relo->func);
+	return prog->call_resolve[i] ? 0 : -ENOMEM;
+}
+
+static int
 bpf_program__relocate(struct bpf_program *prog, struct bpf_object *obj)
 {
 	struct bpf_insn *insns = prog->insns;
-	int i, err;
+	int i, err = 0, i_call = 0;
 
 	if (!prog || !prog->reloc_desc)
 		return 0;
 
-	for (i = 0; i < prog->nr_reloc; i++) {
+	for (i = 0; i < prog->nr_reloc && !err; i++) {
 		struct reloc_desc *desc = &prog->reloc_desc[i];
 		int insn_idx = desc->insn_idx;
 
@@ -1360,17 +1386,19 @@ bpf_program__relocate(struct bpf_program *prog, struct bpf_object *obj)
 
 			insns[insn_idx].imm = (u32) ptr & ((u32) -1);
 			insns[insn_idx + 1].imm = (u32) (ptr >> 32);
-		} else {
+		} else if (prog->reloc_desc[i].type == RELO_CALL_PSEUDO) {
 			err = bpf_program__reloc_text(prog, obj,
 						      &prog->reloc_desc[i]);
-			if (err)
-				return err;
+		} else if (prog->reloc_desc[i].type == RELO_CALL_USER) {
+			err = bpf_program__reloc_call(prog, obj, i_call,
+						      &prog->reloc_desc[i]);
+			i_call++;
 		}
 	}
 
 	zfree(&prog->reloc_desc);
 	prog->nr_reloc = 0;
-	return 0;
+	return err;
 }
 
 
