@@ -21,10 +21,12 @@
 		"$CLANG_OPTIONS $KERNEL_INC_OPTIONS "		\
 		"-Wno-unused-value -Wno-pointer-sign "		\
 		"-working-directory $WORKING_DIR "		\
-		"-c \"$CLANG_SOURCE\" -target bpf -O2 -o -"
+		"-c \"$CLANG_SOURCE\" -emit-llvm -O2 -o - | "	\
+		"$LLC_EXEC -march=bpf -filetype=obj -o -"
 
 struct llvm_param llvm_param = {
 	.clang_path = "clang",
+	.llc_path = "llc",
 	.clang_bpf_cmd_template = CLANG_BPF_CMD_DEFAULT_TEMPLATE,
 	.clang_opt = NULL,
 	.kbuild_dir = NULL,
@@ -430,6 +432,7 @@ int llvm__compile_bpf(const char *path, void **p_obj_buf,
 	char linux_version_code_str[64];
 	const char *clang_opt = llvm_param.clang_opt;
 	char clang_path[PATH_MAX], abspath[PATH_MAX], nr_cpus_avail_str[64];
+	char llc_path[PATH_MAX];
 	char serr[STRERR_BUFSIZE];
 	char *kbuild_dir = NULL, *kbuild_include_opts = NULL;
 	const char *template = llvm_param.clang_bpf_cmd_template;
@@ -456,6 +459,13 @@ int llvm__compile_bpf(const char *path, void **p_obj_buf,
 		return -ENOENT;
 	}
 
+	err = search_program(llvm_param.llc_path,
+			     "llc", llc_path);
+	if (err) {
+		pr_err("ERROR:\tunable to find llc.\n");
+		return -ENOENT;
+	}
+
 	/*
 	 * This is an optional work. Even it fail we can continue our
 	 * work. Needn't to check error return.
@@ -475,6 +485,7 @@ int llvm__compile_bpf(const char *path, void **p_obj_buf,
 	force_set_env("NR_CPUS", nr_cpus_avail_str);
 	force_set_env("LINUX_VERSION_CODE", linux_version_code_str);
 	force_set_env("CLANG_EXEC", clang_path);
+	force_set_env("LLC_EXEC", llc_path);
 	force_set_env("CLANG_OPTIONS", clang_opt);
 	force_set_env("KERNEL_INC_OPTIONS", kbuild_include_opts);
 	force_set_env("WORKING_DIR", kbuild_dir ? : ".");
