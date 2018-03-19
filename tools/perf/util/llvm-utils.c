@@ -20,6 +20,7 @@
 		"-DLINUX_VERSION_CODE=$LINUX_VERSION_CODE "	\
 		"$CLANG_OPTIONS $KERNEL_INC_OPTIONS "		\
 		"-Wno-unused-value -Wno-pointer-sign "		\
+		"-Wno-address-of-packed-member "		\
 		"-working-directory $WORKING_DIR "		\
 		"-c \"$CLANG_SOURCE\" -emit-llvm -O2 -o - | "	\
 		"$LLC_EXEC -march=bpf -filetype=obj -o -"
