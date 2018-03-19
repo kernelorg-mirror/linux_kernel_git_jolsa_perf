@@ -11,6 +11,8 @@
 struct llvm_param {
 	/* Path of clang executable */
 	const char *clang_path;
+	/* Path of llc executable */
+	const char *llc_path;
 	/*
 	 * Template of clang bpf compiling. 5 env variables
 	 * can be used:
