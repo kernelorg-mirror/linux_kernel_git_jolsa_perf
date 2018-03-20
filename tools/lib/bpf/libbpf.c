@@ -1066,6 +1066,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 
 		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
 		pr_debug("relocation: insn_idx=%u\n", insn_idx);
+		prog->reloc_desc[i].insn_idx = insn_idx;
 
 		if (insns[insn_idx].code == (BPF_JMP | BPF_CALL)) {
 			if (insns[insn_idx].src_reg != BPF_PSEUDO_CALL) {
@@ -1073,7 +1074,6 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 				return -LIBBPF_ERRNO__RELOC;
 			}
 			prog->reloc_desc[i].type = RELO_CALL;
-			prog->reloc_desc[i].insn_idx = insn_idx;
 			prog->reloc_desc[i].text_off = sym.st_value;
 			continue;
 		}
@@ -1100,7 +1100,6 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		}
 
 		prog->reloc_desc[i].type = RELO_LD64;
-		prog->reloc_desc[i].insn_idx = insn_idx;
 		prog->reloc_desc[i].map_idx = map_idx;
 	}
 	return 0;
