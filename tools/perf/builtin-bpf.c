@@ -20,6 +20,7 @@
 struct perf_bpf {
 	struct target		 target;
 	struct perf_evlist	*evlist;
+	time_t			 timer;
 };
 
 struct perf_bpf bpf = {
@@ -28,10 +29,14 @@ struct perf_bpf bpf = {
 
 static volatile int done;
 static volatile int workload_exec_errno;
+static volatile int timer;
 
-static void sig_handler(int sig __maybe_unused)
+static void sig_handler(int sig)
 {
-	done = 1;
+	if (sig == SIGINT)
+		done = 1;
+	if (sig == SIGALRM)
+		timer = 1;
 }
 
 struct interp {
@@ -88,6 +93,10 @@ static int bpf_interp_call(struct bpf_interp *in,
 			     regs[2], regs[3], regs[4], regs[5]);
 		fflush(interp->out);
 		break;
+	case FUNC_set_timer:
+		dr = 0;
+		bpf.timer = (int) regs[1];
+		break;
 	default:
 		return -1;
 	};
@@ -134,6 +143,17 @@ static int run_end(FILE *out)
 	};
 
 	return run_prog(&interp.in, BPF_PROG__END);
+}
+
+static int run_timer(FILE *out)
+{
+	struct interp interp = {
+		.in.call_cb	= bpf_interp_call,
+		.in.resolve_cb	= bpf_interp_resolve,
+		.out		= out,
+	};
+
+	return run_prog(&interp.in, BPF_PROG__TIMER);
 }
 
 /*
@@ -205,6 +225,11 @@ static int __cmd_bpf(int argc , const char **argv)
 	if (!target__none(&bpf.target))
 		perf_evlist__enable(bpf.evlist);
 
+	if (bpf.timer) {
+		signal(SIGALRM, sig_handler);
+		alarm(bpf.timer);
+	}
+
 	while (!done) {
 		if (forks) {
 			int pid = waitpid(child_pid, &status, WNOHANG);
@@ -214,6 +239,13 @@ static int __cmd_bpf(int argc , const char **argv)
 		}
 
 		nanosleep(&ts, NULL);
+
+		if (timer) {
+			if (run_timer(stdout))
+				goto out_child;
+			timer = 0;
+			alarm(bpf.timer);
+		}
 	}
 
 	if (!target__none(&bpf.target))
