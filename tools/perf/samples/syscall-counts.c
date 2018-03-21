@@ -17,12 +17,20 @@ struct bpf_map_def SEC("maps") counts_map = {
 	.max_entries = 100,
 };
 
+struct bpf_map_def SEC("maps") __bpf_stdout__ = {
+	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+	.key_size = sizeof(int),
+	.value_size = sizeof(u32),
+	.max_entries = __NR_CPUS__,
+};
+
 SEC("raw_syscalls:sys_enter")
 int func(void *ctx)
 {
 	u64 *val, one = 1;
 	struct key_t key;
 	char comm[TASK_COMM_LEN];
+	char output_str[] = "Raise a BPF event!";
 
 	bpf_get_current_comm(&key.comm, sizeof(comm));
 
@@ -32,6 +40,8 @@ int func(void *ctx)
 	else
 		bpf_map_update_elem(&counts_map, &key, &one, BPF_NOEXIST);
 
+	bpf_perf_event_output(ctx, &__bpf_stdout__, bpf_get_smp_processor_id(),
+			      &output_str, sizeof(output_str));
 	return 0;
 }
 
@@ -50,10 +60,15 @@ static void krava(void)
 	}
 }
 
+int EVENT(void *ptr, u64 size)
+{
+	print("event %p, size %llu, %s\n", ptr, size, ptr);
+	return 0;
+}
+
 int TIMER(void)
 {
 	print("timer\n");
-	krava();
 	return 0;
 }
 

@@ -258,7 +258,8 @@ enum {
 	BPF_PROG__BEGIN	= 0,
 	BPF_PROG__END	= 1,
 	BPF_PROG__TIMER	= 2,
-	BPF_PROG__MAX	= 3
+	BPF_PROG__EVENT	= 3,
+	BPF_PROG__MAX	= 4,
 };
 
 typedef int (*bpf_walk_insn_cb_t)(int i, struct bpf_insn *insn,
@@ -279,6 +280,9 @@ typedef u32 (*bpf_interp_resolve_cb_t)(struct bpf_interp *interp,
 struct bpf_interp {
 	bpf_interp_call_cb_t	 call_cb;
 	bpf_interp_resolve_cb_t	 resolve_cb;
+
+	u64	arg1;
+	u64	arg2;
 };
 
 u64 bpf_object__run_prog(struct bpf_object *obj, struct bpf_interp *interp,

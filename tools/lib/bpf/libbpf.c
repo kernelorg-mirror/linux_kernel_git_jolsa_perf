@@ -263,6 +263,7 @@ struct bpf_object {
 			int begin;
 			int end;
 			int timer;
+			int event;
 		};
 	} progs;
 
@@ -604,6 +605,8 @@ bpf_object__init_symbols(struct bpf_object *obj)
 				obj->progs.end   = insn_idx;
 			if (!strcmp(name, "TIMER"))
 				obj->progs.timer = insn_idx;
+			if (!strcmp(name, "EVENT"))
+				obj->progs.event = insn_idx;
 
 			pr_debug("found %s [insn %d]\n", name, insn_idx);
 		}
@@ -2365,6 +2368,8 @@ static u64 bpf_interp__run(struct bpf_interp *interp, struct bpf_program *prog, 
 	u64 stack[512 / 8];
 	u64 regs[MAX_BPF_REG];
 
+	regs[BPF_REG_1] = interp->arg1;
+	regs[BPF_REG_2] = interp->arg2;
 	regs[BPF_REG_10] = (uintptr_t)stack + sizeof(stack);
 
 	while ((size_t)(i - prog->insns) < prog->insns_cnt) {
