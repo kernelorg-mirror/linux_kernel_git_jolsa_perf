@@ -242,6 +242,7 @@ static int (*bpf_skb_change_head)(void *, int len, int flags) =
 #endif
 
 int print(const char *fmt, ...);
+int set_timer(int sec);
 int map_get_next_key(void *map, void *key, void *value);
 int map_lookup_elem(void *map, void *key, void *value);
 
