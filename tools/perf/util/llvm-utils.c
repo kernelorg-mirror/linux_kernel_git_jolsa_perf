@@ -22,6 +22,7 @@
 		"-Wno-unused-value -Wno-pointer-sign "		\
 		"-Wno-address-of-packed-member "		\
 		"-working-directory $WORKING_DIR "		\
+		"-I$WORKING_DIR/tools/perf/util "		\
 		"-c \"$CLANG_SOURCE\" -emit-llvm -O2 -o - | "	\
 		"$LLC_EXEC -march=bpf -filetype=obj -o -"
 
