@@ -16,10 +16,13 @@
 #include "config.h"
 #include "bpf-loader.h"
 #include <kernel/bpf/disasm.h>
+#include "thread_map.h"
+#include "cpumap.h"
 
 struct perf_bpf {
 	struct target		 target;
 	struct perf_evlist	*evlist;
+	struct perf_evlist	*evlist_event;
 	time_t			 timer;
 };
 
@@ -156,6 +159,21 @@ static int run_timer(FILE *out)
 	return run_prog(&interp.in, BPF_PROG__TIMER);
 }
 
+static int run_event(FILE *out, struct perf_sample *sample __maybe_unused)
+{
+	struct interp interp = {
+		.out		= out,
+		.in.call_cb	= bpf_interp_call,
+		.in.resolve_cb	= bpf_interp_resolve,
+
+		/* arguments */
+		.in.args[BPF_INTERP__ARG1] = (u64) sample->raw_data,
+		.in.args[BPF_INTERP__ARG2] = (u64) sample->raw_size,
+	};
+
+	return run_prog(&interp.in, BPF_PROG__EVENT);
+}
+
 /*
  * perf_evlist__prepare_workload will send a SIGUSR1
  * if the fork fails, since we asked by setting its
@@ -175,6 +193,45 @@ static int create_perf_bpf_counter(struct perf_evsel *evsel)
 	return perf_evsel__open_per_thread(evsel, bpf.evlist->threads);
 }
 
+static int read_event(struct perf_evlist *evlist)
+{
+	int i, nr_events = 0;
+
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		union perf_event *event;
+		struct perf_mmap *md;
+
+		md = &evlist->mmap[i];
+		if (perf_mmap__read_init(md) < 0)
+			continue;
+
+		while ((event = perf_mmap__read_event(md)) != NULL) {
+			struct perf_sample sample;
+			int err;
+
+			nr_events++;
+
+			err = perf_evlist__parse_sample(evlist, event, &sample);
+			if (err) {
+				pr_warning("Can't parse sample, err = %d, skipping...\n", err);
+				goto next_event;
+			}
+
+			if (run_event(stdout, &sample))
+				return -1;
+
+next_event:
+			perf_mmap__consume(md);
+
+			if (done)
+				break;
+		}
+		perf_mmap__read_done(md);
+	}
+
+	return nr_events;
+}
+
 static int __cmd_bpf(int argc , const char **argv)
 {
 	struct perf_evsel *evsel;
@@ -183,6 +240,7 @@ static int __cmd_bpf(int argc , const char **argv)
 	int child_pid = -1;
 	char msg[BUFSIZ];
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 500 };
+	bool has_event;
 
 	if (forks) {
 		err = perf_evlist__prepare_workload(bpf.evlist, &bpf.target,
@@ -205,6 +263,25 @@ static int __cmd_bpf(int argc , const char **argv)
                         pr_err("%s\n", msg);
 			goto out_child;
                 }
+	}
+
+	err = bpf__setup_stdout(bpf.evlist_event);
+	if (err) {
+		bpf__strerror_setup_stdout(bpf.evlist_event, err, msg, sizeof(msg));
+		pr_err("ERROR: Setup BPF stdout failed: %s\n", msg);
+		goto out_child;
+	}
+
+	has_event = !!bpf.evlist_event->nr_entries;
+
+	if (has_event) {
+		err = perf_evlist__open(bpf.evlist_event);
+		if (err)
+			goto out_child;
+
+		err = perf_evlist__mmap(bpf.evlist_event, UINT_MAX);
+		if (err < 0)
+			goto out_child;
 	}
 
 	err = bpf__apply_obj_config();
@@ -238,7 +315,17 @@ static int __cmd_bpf(int argc , const char **argv)
 				break;
 		}
 
-		nanosleep(&ts, NULL);
+		if (has_event) {
+			int nr;
+
+			nr = read_event(bpf.evlist_event);
+			if (nr < 0)
+				goto out_child;
+
+			if (!nr && !done && !timer)
+				perf_evlist__poll(bpf.evlist_event, 500);
+		} else
+			nanosleep(&ts, NULL);
 
 		if (timer) {
 			if (run_timer(stdout))
@@ -395,6 +482,7 @@ static int perf_bpf_config(const char *var, const char *value, void *cb)
 
 int cmd_bpf(int argc, const char **argv)
 {
+	struct cpu_map *cpus;
 	int err = -1;
 	const char * const bpf_usage[] = {
 		"perf bpf [<options>] [<command>]",
@@ -436,6 +524,10 @@ int cmd_bpf(int argc, const char **argv)
 	if (bpf.evlist == NULL)
 		return -ENOMEM;
 
+	bpf.evlist_event = perf_evlist__new();
+	if (bpf.evlist_event == NULL)
+		goto out;
+
 	argc = parse_options(argc, argv, bpf_options, bpf_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
@@ -465,10 +557,18 @@ int cmd_bpf(int argc, const char **argv)
 		}
 	}
 
+	cpus = cpu_map__new(bpf.target.cpu_list);
+	if (!cpus)
+		goto out;
+
+        perf_evlist__set_maps(bpf.evlist_event, cpus,
+			      bpf.evlist->threads);
+
 	target__validate(&bpf.target);
 
 	err = __cmd_bpf(argc, argv);
 out:
+	perf_evlist__delete(bpf.evlist_event);
 	perf_evlist__delete(bpf.evlist);
 	return err;
 }
