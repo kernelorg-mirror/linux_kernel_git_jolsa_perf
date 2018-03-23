@@ -248,4 +248,10 @@ int map_lookup_elem(void *map, void *key, void *value);
 
 char *strcat(char *dst, char *src);
 
+int hash_init(void **hash, u64 key_size, u64 val_size);
+int hash_destroy(void *hash);
+int hash_add(void *hash, void *key, void *value);
+int hash_remove(void *hash, void *key);
+int hash_lookup(void *hash, void *key, void **value);
+
 #endif

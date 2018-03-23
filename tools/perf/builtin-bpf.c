@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <time.h>
 #include <linux/compiler.h>
+#include <linux/jhash.h>
 #include <subcmd/parse-options.h>
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
@@ -71,10 +72,122 @@ static u32 bpf_interp_resolve(struct bpf_interp *in __maybe_unused, char *symbol
 	return (u32) -1;
 }
 
+#define HLIST_BITS  8
+#define HLIST_SIZE (1 << HLIST_BITS)
+
+struct hash_t {
+	struct hlist_head	heads[HLIST_SIZE];
+	u64			key_size;
+	u64			val_size;
+};
+
+struct hash_node_t {
+	struct hlist_node	 node;
+	void			*key;
+	void			*val;
+};
+
+static int hash_init(void **h, u64 key_size, u64 val_size)
+{
+	struct hash_t *hash = zalloc(sizeof(*hash));
+
+	if (hash) {
+		int i;
+
+		for (i = 0; i < HLIST_SIZE; i++)
+			INIT_HLIST_HEAD(&hash->heads[i]);
+
+		hash->key_size = key_size;
+		hash->val_size = val_size;
+	}
+
+	*h = (void *) hash;
+	return hash ? 0 : -ENOMEM;
+}
+
+static int hash_add(void *h, void *k, void *v)
+{
+	struct hash_t *hash = h;
+	struct hash_node_t *node;
+	int hv;
+
+	fprintf(stdout, "hash_add %p\n", hash);
+
+	node = zalloc(sizeof(*node));
+	if (!node)
+		goto err;
+
+	node->key = memdup(k, hash->key_size);
+	node->val = memdup(v, hash->val_size);
+
+	if (!node->key || !node->val)
+		goto err;
+
+	hv = jhash(node->key, hash->key_size, 0) & (HLIST_SIZE - 1);
+	hlist_add_head(&node->node, &hash->heads[hv]);
+	return 0;
+
+err:
+	if (node) {
+		free(node->key);
+		free(node->val);
+	}
+	free(node);
+	return -ENOMEM;
+}
+
+static struct hash_node_t*
+node_lookup(struct hash_t *hash, void *k)
+{
+	struct hash_node_t *node;
+	struct hlist_head *head;
+	int hv;
+
+	hv = jhash(k, hash->key_size, 0) & (HLIST_SIZE - 1);
+	head = &hash->heads[hv];
+
+	hlist_for_each_entry(node, head, node) {
+		if (!memcmp(node->key, k, hash->key_size))
+			return node;
+	}
+
+	return NULL;
+}
+
+static int
+hash_lookup(void *h, void *k, void **v)
+{
+	struct hash_t *hash = h;
+	struct hash_node_t *node;
+
+	node = node_lookup(hash, k);
+	if (node)
+		*v = node->val;
+
+	return node ? 0 : -1;
+}
+
+static int hash_remove(void *h, void *k)
+{
+	struct hash_t *hash = h;
+	struct hash_node_t *node;
+
+	node = node_lookup(hash, k);
+	if (node) {
+		hlist_del(&node->node);
+		free(node->key);
+		free(node->val);
+		free(node);
+	}
+
+	return node ? 0 : -1;
+}
+
 static int bpf_interp_call(struct bpf_interp *in,
 			   u64 imm, u64 *regs)
 {
 	struct interp *interp = container_of(in, struct interp, in);
+	void **hashp, *hash;
 	u64 dr;
 
 	pr_debug("bpf_interp_call regs = [ 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx ]\n",
@@ -103,6 +216,25 @@ static int bpf_interp_call(struct bpf_interp *in,
 	case FUNC_strcat:
 		strcat((char *) regs[1], (char *) regs[2]);
 		dr = 0;
+		break;
+	case FUNC_hash_init:
+		hashp = (void **) regs[1];
+		dr = hash_init(hashp, regs[2], regs[3]);
+		break;
+	case FUNC_hash_destroy:
+		dr = 0;
+		break;
+	case FUNC_hash_add:
+		hash = (void *) regs[1];
+		dr = hash_add(hash, (void *) regs[2], (void *) regs[3]);
+		break;
+	case FUNC_hash_remove:
+		hash = (void *) regs[1];
+		dr = hash_remove(hash, (void *) regs[2]);
+		break;
+	case FUNC_hash_lookup:
+		hash = (void *) regs[1];
+		dr = hash_lookup(hash, (void *) regs[2], (void **) regs[3]);
 		break;
 	default:
 		return -1;
