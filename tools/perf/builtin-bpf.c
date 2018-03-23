@@ -70,10 +70,49 @@ static u32 bpf_interp_resolve(struct bpf_interp *in __maybe_unused, char *symbol
 	return (u32) -1;
 }
 
+#define HLIST_BITS  8
+#define HLIST_SIZE (1 << HLIST_BITS)
+
+struct hash_t {
+	struct hlist_head	heads[HLIST_SIZE];
+	u64			key_size;
+	u64			val_size;
+};
+
+static int hash_init(void **h, u64 key_size, u64 val_size)
+{
+	struct hash_t *hash = zalloc(sizeof(*hash));
+
+	if (hash) {
+		int i;
+
+		for (i = 0; i < HLIST_SIZE; i++)
+			INIT_HLIST_HEAD(&hash->heads[i]);
+
+		hash->key_size = key_size;
+		hash->val_size = val_size;
+	}
+
+	*h = (void *) hash;
+	return hash ? 0 : -ENOMEM;
+}
+
+static int hash_add(void *h, void *key, void *value)
+{
+	struct hash_t *hash = h;
+	int hash;
+
+	hash = hash_64(sid->id, PERF_EVLIST__HLIST_BITS);
+        hlist_add_head(&sid->node, &evlist->heads[hash]);
+
+	return 0;
+}
+
 static int bpf_interp_call(struct bpf_interp *in,
 			   u64 imm, u64 *regs)
 {
 	struct interp *interp = container_of(in, struct interp, in);
+	void **hash;
 	u64 dr;
 
 	switch (imm) {
@@ -95,6 +134,19 @@ static int bpf_interp_call(struct bpf_interp *in,
 	case FUNC_set_timer:
 		dr = 0;
 		bpf.timer = (int) regs[1];
+		break;
+	case FUNC_hash_init:
+		hash = (void **) regs[1];
+		dr = hash_init(hash, regs[2], regs[3]);
+		break;
+	case FUNC_hash_destroy:
+		break;
+	case FUNC_hash_add:
+		hash = (void *) regs[1];
+		dr = hash_add(hash, regs[2], regs[3]);
+		break;
+	case FUNC_hash_remove:
+	case FUNC_hash_lookup:
 		break;
 	default:
 		return -1;
