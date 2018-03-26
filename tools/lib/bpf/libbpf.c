@@ -460,7 +460,11 @@ bpf_data__init(void *ptr, size_t size, char *name, int idx,
 	}
 
 	data->size = size;
-	memcpy(data->ptr, ptr, size);
+	if (ptr)
+		memcpy(data->ptr, ptr, size);
+	else
+		memset(data->ptr, 0, size);
+
 	data->idx = idx;
 	return 0;
 
@@ -1038,10 +1042,14 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 				pr_warning("failed to alloc program %s (%s): %s",
 					   name, obj->path, errmsg);
 			}
-		} else if ((sh.sh_type == SHT_PROGBITS) &&
-			   (sh.sh_flags & SHF_ALLOC)) {
-			err = bpf_object__add_data(obj, data->d_buf,
-						   data->d_size, name, idx);
+		} else if (sh.sh_flags & SHF_ALLOC) {
+			void *ptr = data->d_buf;
+			size_t size = PERF_ALIGN(data->d_size, sh.sh_addralign);
+
+			if (sh.sh_type == SHT_NOBITS)
+				ptr = NULL;
+
+			err = bpf_object__add_data(obj, ptr, size, name, idx);
 			if (err) {
 				char errmsg[STRERR_BUFSIZE];
 
