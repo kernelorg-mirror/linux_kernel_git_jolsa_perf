@@ -421,7 +421,9 @@ bpf_object__add_program(struct bpf_object *obj, void *data, size_t size,
 		return -ENOMEM;
 	}
 
+#if 0
 	pr_debug("found program %s\n", prog.section_name);
+#endif
 	obj->programs = progs;
 	obj->nr_programs = nr_progs + 1;
 	prog.obj = obj;
@@ -494,7 +496,9 @@ bpf_object__add_data(struct bpf_object *obj, void *ptr, size_t size,
 		return -ENOMEM;
 	}
 
+#if 0
 	pr_debug("found data %s, size %lu\n", d.name, d.size);
+#endif
 	obj->data = data;
 	obj->nr_data = nr_data + 1;
 	data[nr_data] = d;
@@ -614,7 +618,9 @@ bpf_object__init_symbols(struct bpf_object *obj)
 			if (!strcmp(name, "EVENT"))
 				obj->progs.event = insn_idx;
 
+#if 0
 			pr_debug("found %s [insn %d]\n", name, insn_idx);
+#endif
 		}
 
 		prog->syms = realloc(syms, sizeof(*symbols) * count);
@@ -774,7 +780,9 @@ bpf_object__init_license(struct bpf_object *obj,
 {
 	memcpy(obj->license, data,
 	       min(size, sizeof(obj->license) - 1));
+#if 0
 	pr_debug("license of %s is %s\n", obj->path, obj->license);
+#endif
 	return 0;
 }
 
@@ -790,8 +798,11 @@ bpf_object__init_kversion(struct bpf_object *obj,
 	}
 	memcpy(&kver, data, sizeof(kver));
 	obj->kern_version = kver;
+
+#if 0
 	pr_debug("kernel version of %s is %x\n", obj->path,
 		 obj->kern_version);
+#endif
 	return 0;
 }
 
@@ -842,9 +853,11 @@ bpf_object__init_maps(struct bpf_object *obj)
 		nr_maps++;
 	}
 
+#if 0
 	/* Alloc obj->maps and fill nr_maps. */
 	pr_debug("maps in %s: %d maps in %zd bytes\n", obj->path,
 		 nr_maps, data->d_size);
+#endif
 
 	if (!nr_maps)
 		return 0;
@@ -901,8 +914,11 @@ bpf_object__init_maps(struct bpf_object *obj)
 			pr_warning("failed to alloc map name\n");
 			return -ENOMEM;
 		}
+
+#if 0
 		pr_debug("map %d is \"%s\"\n", map_idx,
 			 obj->maps[map_idx].name);
+#endif
 		def = (struct bpf_map_def *)(data->d_buf + sym.st_value);
 		/*
 		 * If the definition of the map in the object file fits in
@@ -1000,10 +1016,13 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			err = -LIBBPF_ERRNO__FORMAT;
 			goto out;
 		}
+
+#if 0
 		pr_debug("section(%d) %s, size %ld, link %d, flags 0x%lx, type %d, info %d\n",
 			 idx, name, (unsigned long)data->d_size,
 			 (int)sh.sh_link, (unsigned long)sh.sh_flags,
 			 (int)sh.sh_type, (int)sh.sh_info);
+#endif
 
 		if (strcmp(name, "license") == 0)
 			err = bpf_object__init_license(obj,
@@ -1128,8 +1147,10 @@ collect_reloc_maps(struct reloc_desc *desc, struct bpf_object *obj,
 	/* TODO: 'maps' is sorted. We can use bsearch to make it faster. */
 	for (map_idx = 0; map_idx < nr_maps; map_idx++) {
 		if (maps[map_idx].offset == sym->st_value) {
+#if 0
 			pr_debug("relocation: find map %zd (%s) for insn %u\n",
 				 map_idx, maps[map_idx].name, desc->insn_idx);
+#endif
 			break;
 		}
 	}
@@ -1162,8 +1183,10 @@ collect_reloc_data(struct reloc_desc *desc, struct bpf_object *obj,
 
 	for (idx = 0; idx < nr_data; idx++) {
 		if (data[idx].idx == sym->st_shndx) {
+#if 0
 			pr_debug("relocation: found data %zd (%s) for insn %u\n",
 				 idx, data[idx].name, desc->insn_idx);
+#endif
 			break;
 		}
 	}
@@ -1191,10 +1214,12 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 
 	nrels = shdr->sh_size / shdr->sh_entsize;
 
+#if 0
 	pr_debug("collecting relocating info for: '%s' (idx %d, nrel %d)\n",
 		 prog->section_name, prog->idx, nrels);
 	pr_debug("maps_shndx %d, text_shndx %d\n",
 		 text_shndx, maps_shndx);
+#endif
 
 	prog->reloc_desc = malloc(sizeof(*prog->reloc_desc) * nrels);
 	if (!prog->reloc_desc) {
@@ -1228,12 +1253,18 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		name = elf_strptr(obj->efile.elf, obj->efile.strtabidx,
 				  sym.st_name);
 
+#if 0
 		pr_debug("relocation: r_offset %lu, r_sym %lu, r_info %lu, symbol %s(%u), st_value %ld, st_shndx %d\n",
 			 rel.r_offset, GELF_R_SYM(rel.r_info), GELF_R_TYPE(rel.r_info),
 			 name ?: "N/A", sym.st_name, sym.st_value, sym.st_shndx);
+#endif
 
 		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
+
+#if 0
 		pr_debug("relocation: insn_idx=%u\n", insn_idx);
+#endif
+
 		desc->insn_idx = insn_idx;
 
 		if (insns[insn_idx].code == (BPF_JMP | BPF_CALL)) {
@@ -1302,7 +1333,9 @@ bpf_object__create_maps(struct bpf_object *obj)
 				zclose(obj->maps[j].fd);
 			return err;
 		}
+#if 0
 		pr_debug("create map %s: fd=%d\n", obj->maps[i].name, *pfd);
+#endif
 	}
 
 	return 0;
