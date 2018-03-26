@@ -1683,6 +1683,178 @@ static int bpf_object__validate(struct bpf_object *obj)
 	return 0;
 }
 
+void static pr_debug_map(struct bpf_map *map)
+{
+	if (!map) {
+		pr_debug("maps:\n");
+		pr_debug("%7s %4s %3s %5s %3s %5s %-s\n",
+			 "offset", "type", "key", "value", "max", "flags", "name");
+	} else {
+		pr_debug("%7lu %4u %3u %5u %3u %5u %-s\n",
+			map->offset,
+			map->def.type,
+			map->def.key_size,
+			map->def.value_size,
+			map->def.max_entries,
+			map->def.map_flags,
+			map->name);
+	}
+}
+
+void static pr_debug_data(struct bpf_data *data)
+{
+	if (!data) {
+		pr_debug("data:\n");
+		pr_debug("%4s %5s %16s %-s\n", "idx", "size", "ptr", "data");
+	} else {
+		pr_debug("%4d %5lu %16p %-s\n", data->idx, data->size, data->ptr, data->name);
+	}
+}
+
+void static pr_debug_program(struct bpf_program *prog)
+{
+	if (!prog) {
+		pr_debug("progs:\n");
+		pr_debug("%4s %4s %-s\n", "idx", "cnt", "name@section");
+	} else {
+		pr_debug("%4d %4lu %-s@%s\n", prog->idx, prog->insns_cnt, prog->name, prog->section_name);
+	}
+}
+
+void static pr_debug_symbols(struct bpf_program *prog)
+{
+	struct bpf_symbol *sym;
+	size_t i;
+
+	pr_debug("symbols (%s):\n", prog->name);
+	pr_debug("%4s %-s\n", "idx", "name");
+
+	for (i = 0; i < prog->syms_cnt; i++) {
+		sym = &prog->syms[i];
+
+		pr_debug("%4d %-s@%s\n", sym->idx, sym->name, prog->name);
+	}
+}
+
+void static pr_debug_relocs(struct bpf_program *prog, struct bpf_object *obj)
+{
+	struct reloc_desc *desc;
+	int i;
+
+	pr_debug("relocs map (%s@%s):\n", prog->name, prog->section_name);
+
+	for (i = 0; i < prog->nr_reloc; i++) {
+		struct bpf_map *map;
+
+		desc = &prog->reloc_desc[i];
+
+		if (desc->type != RELO_LD64_MAP)
+			continue;
+
+		if (!i)
+			pr_debug("%5s %-s\n", "insn", "map");
+
+		map = &obj->maps[desc->map_idx];
+		pr_debug("%5d %-s\n", desc->insn_idx, map->name);
+	}
+
+	pr_debug("relocs data (%s@%s):\n", prog->name, prog->section_name);
+
+	for (i = 0; i < prog->nr_reloc; i++) {
+		desc = &prog->reloc_desc[i];
+
+		if (desc->type != RELO_LD64_DATA)
+			continue;
+
+		if (!i)
+			pr_debug("%5s %16s %4s %-s\n", "insn", "val", "idx", "sym");
+
+		pr_debug("%5d %16lx %4d %-s\n", desc->insn_idx, desc->ld.val, desc->ld.idx, desc->ld.sym);
+	}
+
+	pr_debug("relocs pseudo call (%s@%s):\n", prog->name, prog->section_name);
+
+	for (i = 0; i < prog->nr_reloc; i++) {
+		desc = &prog->reloc_desc[i];
+
+		if (desc->type != RELO_CALL_PSEUDO)
+			continue;
+
+		if (!i)
+			pr_debug("%5s %8s\n", "insn", "text_off");
+
+		pr_debug("%5d %8d\n", desc->insn_idx, desc->text_off);
+	}
+
+	pr_debug("relocs user call (%s@%s):\n", prog->name, prog->section_name);
+
+	for (i = 0; i < prog->nr_reloc; i++) {
+		desc = &prog->reloc_desc[i];
+
+		if (desc->type != RELO_CALL_USER)
+			continue;
+
+		if (!i)
+			pr_debug("%5s %-s\n", "insn", "func");
+
+		pr_debug("%5d %-s\n", desc->insn_idx, desc->func);
+	}
+}
+
+static struct bpf_data*
+bpf_data__next(struct bpf_data *prev, struct bpf_object *obj)
+{
+	size_t idx;
+
+	if (!obj->data)
+		return NULL;
+
+	/* First handler */
+	if (prev == NULL)
+		idx = 0;
+	else
+		idx = (prev - obj->data) + 1;
+
+	if (idx >= obj->nr_data)
+		return NULL;
+
+	return &obj->data[idx];
+}
+
+#define bpf_object__for_each_data(pos, obj)		\
+	for ((pos) = bpf_data__next(NULL, (obj));	\
+	     (pos) != NULL;				\
+	     (pos) = bpf_data__next((pos), (obj)))
+
+void static pr_debug_obj(struct bpf_object *obj)
+{
+	struct bpf_program *prog;
+	struct bpf_data *data;
+	struct bpf_map *map;
+
+	pr_debug("object:  %s\n", obj->path);
+	pr_debug("license: %s\n", obj->license);
+	pr_debug("version: %x\n", obj->kern_version);
+
+	pr_debug_map(NULL);
+	bpf_map__for_each(map, obj)
+		pr_debug_map(map);
+
+	pr_debug_data(NULL);
+	bpf_object__for_each_data(data, obj)
+		pr_debug_data(data);
+
+	pr_debug_program(NULL);
+	bpf_object__for_each_program(prog, obj, true)
+		pr_debug_program(prog);
+
+	bpf_object__for_each_program(prog, obj, true)
+		pr_debug_symbols(prog);
+
+	bpf_object__for_each_program(prog, obj, true)
+		pr_debug_relocs(prog, obj);
+}
+
 static struct bpf_object *
 __bpf_object__open(const char *path, void *obj_buf, size_t obj_buf_sz)
 {
@@ -1704,9 +1876,12 @@ __bpf_object__open(const char *path, void *obj_buf, size_t obj_buf_sz)
 	CHECK_ERR(bpf_object__collect_reloc(obj), err, out);
 	CHECK_ERR(bpf_object__validate(obj), err, out);
 
+	pr_debug_obj(obj);
+
 	bpf_object__elf_finish(obj);
 	return obj;
 out:
+	pr_debug_obj(obj);
 	bpf_object__close(obj);
 	return ERR_PTR(err);
 }
