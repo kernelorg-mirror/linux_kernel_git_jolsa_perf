@@ -140,7 +140,7 @@ int arch_bp_generic_fields(int type, int *gen_bp_type)
 /*
  * Validate the arch-specific HW Breakpoint register settings
  */
-int arch_validate_hwbkpt_settings(struct perf_event *bp)
+int arch_commit_hwbkpt_settings(struct perf_event *bp)
 {
 	int ret = -EINVAL, length_max;
 	struct arch_hw_breakpoint *info = counter_arch_bp(bp);

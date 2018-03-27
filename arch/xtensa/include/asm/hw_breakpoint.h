@@ -36,7 +36,7 @@ struct task_struct;
 
 int hw_breakpoint_slots(int type);
 int arch_check_bp_in_kernelspace(struct perf_event *bp);
-int arch_validate_hwbkpt_settings(struct perf_event *bp);
+int arch_commit_hwbkpt_settings(struct perf_event *bp);
 int hw_breakpoint_exceptions_notify(struct notifier_block *unused,
 				    unsigned long val, void *data);
 

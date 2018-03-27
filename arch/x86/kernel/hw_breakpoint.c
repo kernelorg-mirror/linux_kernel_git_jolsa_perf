@@ -172,14 +172,13 @@ void arch_uninstall_hw_breakpoint(struct perf_event *bp)
 /*
  * Check for virtual address in kernel space.
  */
-int arch_check_bp_in_kernelspace(struct perf_event *bp)
+int arch_check_bp_in_kernelspace(const struct perf_event_attr *attr)
 {
 	unsigned int len;
 	unsigned long va;
-	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
 
-	va = info->address;
-	len = bp->attr.bp_len;
+	va = attr->bp_addr;
+	len = attr->bp_len;
 
 	/*
 	 * We don't need to worry about va + len - 1 overflowing:
@@ -233,6 +232,63 @@ int arch_bp_generic_fields(int x86_len, int x86_type,
 	return 0;
 }
 
+int arch_validate_hwbkpt(const struct perf_event_attr *attr)
+{
+	if (attr->bp_type == HW_BREAKPOINT_X) {
+		/*
+		 * We don't allow kernel breakpoints in places that are not
+		 * acceptable for kprobes.  On non-kprobes kernels, we don't
+		 * allow kernel breakpoints at all.
+		 */
+		if (attr->bp_addr >= TASK_SIZE_MAX) {
+#ifdef CONFIG_KPROBES
+			if (within_kprobe_blacklist(attr->bp_addr))
+				return -EINVAL;
+#else
+			return -EINVAL;
+#endif
+		}
+
+		/*
+		 * x86 inst breakpoints need to have a specific undefined len.
+		 * But we still need to check userspace is not trying to setup
+		 * an unsupported length, to get a range breakpoint for example.
+		 */
+		if (attr->bp_len != sizeof(long))
+			return -EINVAL;
+	}
+
+	switch (attr->bp_len) {
+		/* All x86 systems support 1, 2, 4, and 8 byte breakpoints. */
+	case HW_BREAKPOINT_LEN_1:
+	case HW_BREAKPOINT_LEN_2:
+	case HW_BREAKPOINT_LEN_4:
+#ifdef CONFIG_X86_64
+	case HW_BREAKPOINT_LEN_8:
+#endif
+		break;
+
+	default:
+		/* AMD range breakpoint */
+		if (!is_power_of_2(attr->bp_len))
+			return -EINVAL;
+		if (attr->bp_addr & (attr->bp_len - 1))
+			return -EINVAL;
+
+		if (!boot_cpu_has(X86_FEATURE_BPEXT))
+			return -EOPNOTSUPP;
+
+		/*
+		 * It's impossible to use a range breakpoint to fake out
+		 * user vs kernel detection because bp_len - 1 can't
+		 * have the high bit set.  If we ever allow range instruction
+		 * breakpoints, then we'll have to check for kprobe-blacklisted
+		 * addresses anywhere in the range.
+		 */
+	}
+
+	return 0;
+}
 
 static int arch_build_bp_info(struct perf_event *bp)
 {
@@ -249,30 +305,9 @@ static int arch_build_bp_info(struct perf_event *bp)
 		info->type = X86_BREAKPOINT_RW;
 		break;
 	case HW_BREAKPOINT_X:
-		/*
-		 * We don't allow kernel breakpoints in places that are not
-		 * acceptable for kprobes.  On non-kprobes kernels, we don't
-		 * allow kernel breakpoints at all.
-		 */
-		if (bp->attr.bp_addr >= TASK_SIZE_MAX) {
-#ifdef CONFIG_KPROBES
-			if (within_kprobe_blacklist(bp->attr.bp_addr))
-				return -EINVAL;
-#else
-			return -EINVAL;
-#endif
-		}
-
 		info->type = X86_BREAKPOINT_EXECUTE;
-		/*
-		 * x86 inst breakpoints need to have a specific undefined len.
-		 * But we still need to check userspace is not trying to setup
-		 * an unsupported length, to get a range breakpoint for example.
-		 */
-		if (bp->attr.bp_len == sizeof(long)) {
-			info->len = X86_BREAKPOINT_LEN_X;
-			return 0;
-		}
+		info->len = X86_BREAKPOINT_LEN_X;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -297,21 +332,6 @@ static int arch_build_bp_info(struct perf_event *bp)
 #endif
 	default:
 		/* AMD range breakpoint */
-		if (!is_power_of_2(bp->attr.bp_len))
-			return -EINVAL;
-		if (bp->attr.bp_addr & (bp->attr.bp_len - 1))
-			return -EINVAL;
-
-		if (!boot_cpu_has(X86_FEATURE_BPEXT))
-			return -EOPNOTSUPP;
-
-		/*
-		 * It's impossible to use a range breakpoint to fake out
-		 * user vs kernel detection because bp_len - 1 can't
-		 * have the high bit set.  If we ever allow range instruction
-		 * breakpoints, then we'll have to check for kprobe-blacklisted
-		 * addresses anywhere in the range.
-		 */
 		info->mask = bp->attr.bp_len - 1;
 		info->len = X86_BREAKPOINT_LEN_1;
 	}
@@ -322,7 +342,7 @@ static int arch_build_bp_info(struct perf_event *bp)
 /*
  * Validate the arch-specific HW Breakpoint register settings
  */
-int arch_validate_hwbkpt_settings(struct perf_event *bp)
+int arch_commit_hwbkpt_settings(struct perf_event *bp)
 {
 	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
 	unsigned int align;

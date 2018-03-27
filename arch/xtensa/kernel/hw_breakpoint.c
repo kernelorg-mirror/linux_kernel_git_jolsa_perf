@@ -83,7 +83,7 @@ static int arch_build_bp_info(struct perf_event *bp)
 	return 0;
 }
 
-int arch_validate_hwbkpt_settings(struct perf_event *bp)
+int arch_commit_hwbkpt_settings(struct perf_event *bp)
 {
 	int ret;
 

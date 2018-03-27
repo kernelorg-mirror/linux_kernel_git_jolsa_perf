@@ -367,16 +367,16 @@ int dbg_release_bp_slot(struct perf_event *bp)
 	return 0;
 }
 
-static int validate_hw_breakpoint(struct perf_event *bp)
+static int validate_hw_breakpoint(struct perf_event_attr *attr)
 {
 	int ret;
 
-	ret = arch_validate_hwbkpt_settings(bp);
+	ret = arch_validate_hwbkpt(attr);
 	if (ret)
 		return ret;
 
-	if (arch_check_bp_in_kernelspace(bp)) {
-		if (bp->attr.exclude_kernel)
+	if (arch_check_bp_in_kernelspace(attr)) {
+		if (attr->exclude_kernel)
 			return -EINVAL;
 		/*
 		 * Don't let unprivileged users set a breakpoint in the trap
@@ -389,17 +389,24 @@ static int validate_hw_breakpoint(struct perf_event *bp)
 	return 0;
 }
 
+static int commit_hw_breakpoint(struct perf_event *bp)
+{
+	return WARN_ON_ONCE(arch_commit_hwbkpt_settings(bp));
+}
+
 int register_perf_hw_breakpoint(struct perf_event *bp)
 {
 	int ret;
+
+	ret = validate_hw_breakpoint(&bp->attr);
+	if (ret)
+		return ret;
 
 	ret = reserve_bp_slot(bp);
 	if (ret)
 		return ret;
 
-	ret = validate_hw_breakpoint(bp);
-
-	/* if arch_validate_hwbkpt_settings() fails then release bp slot */
+	ret = commit_hw_breakpoint(bp);
 	if (ret)
 		release_bp_slot(bp);
 
@@ -432,6 +439,12 @@ EXPORT_SYMBOL_GPL(register_user_hw_breakpoint);
  */
 int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
 {
+	int ret;
+
+	ret = validate_hw_breakpoint(attr);
+	if (ret)
+		return ret;
+
 	/*
 	 * modify_user_hw_breakpoint can be invoked with IRQs disabled and hence it
 	 * will not be possible to raise IPIs that invoke __perf_event_disable.
@@ -449,7 +462,7 @@ int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *att
 	bp->attr.disabled = 1;
 
 	if (!attr->disabled) {
-		int err = validate_hw_breakpoint(bp);
+		int err = commit_hw_breakpoint(bp);
 		if (err)
 			return err;
 
