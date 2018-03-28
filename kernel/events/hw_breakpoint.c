@@ -444,31 +444,14 @@ register_user_hw_breakpoint(struct perf_event_attr *attr,
 }
 EXPORT_SYMBOL_GPL(register_user_hw_breakpoint);
 
-/**
- * modify_user_hw_breakpoint - modify a user-space hardware breakpoint
- * @bp: the breakpoint structure to modify
- * @attr: new breakpoint attributes
- * @triggered: callback to trigger when we hit the breakpoint
- * @tsk: pointer to 'task_struct' of the process to which the address belongs
- */
-int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
+static int
+__modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
 {
 	int ret;
 
 	ret = validate_hw_breakpoint(attr);
 	if (ret)
 		return ret;
-
-	/*
-	 * modify_user_hw_breakpoint can be invoked with IRQs disabled and hence it
-	 * will not be possible to raise IPIs that invoke __perf_event_disable.
-	 * So call the function directly after making sure we are targeting the
-	 * current task.
-	 */
-	if (irqs_disabled() && bp->ctx && bp->ctx->task == current)
-		perf_event_disable_local(bp);
-	else
-		perf_event_disable(bp);
 
 	if (attr->bp_type != bp->attr.bp_type) {
 		ret = modify_bp_slot(bp, attr->bp_type);
@@ -481,11 +464,39 @@ int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *att
 	bp->attr.bp_len = attr->bp_len;
 	bp->attr.disabled = 1;
 
-	if (!attr->disabled) {
-		int err = commit_hw_breakpoint(bp);
-		if (err)
-			return err;
+	if (!attr->disabled)
+		ret = commit_hw_breakpoint(bp);
 
+	return ret;
+}
+
+/**
+ * modify_user_hw_breakpoint - modify a user-space hardware breakpoint
+ * @bp: the breakpoint structure to modify
+ * @attr: new breakpoint attributes
+ * @triggered: callback to trigger when we hit the breakpoint
+ * @tsk: pointer to 'task_struct' of the process to which the address belongs
+ */
+int modify_user_hw_breakpoint(struct perf_event *bp, struct perf_event_attr *attr)
+{
+	int ret;
+
+	/*
+	 * modify_user_hw_breakpoint can be invoked with IRQs disabled and hence it
+	 * will not be possible to raise IPIs that invoke __perf_event_disable.
+	 * So call the function directly after making sure we are targeting the
+	 * current task.
+	 */
+	if (irqs_disabled() && bp->ctx && bp->ctx->task == current)
+		perf_event_disable_local(bp);
+	else
+		perf_event_disable(bp);
+
+	ret = __modify_user_hw_breakpoint(bp, attr);
+	if (ret)
+		return ret;
+
+	if (!attr->disabled) {
 		perf_event_enable(bp);
 		bp->attr.disabled = 0;
 	}
