@@ -8336,6 +8336,213 @@ static struct pmu perf_tracepoint = {
 	.read		= perf_swevent_read,
 };
 
+enum {
+	PERF_RUSAGE_UTIME	= 0,
+	PERF_RUSAGE_STIME	= 1,
+	PERF_RUSAGE_MAXRSS	= 2,
+	PERF_RUSAGE_IXRSS	= 3,
+	PERF_RUSAGE_IDRSS	= 4,
+	PERF_RUSAGE_ISRSS	= 5,
+	PERF_RUSAGE_MINFLT	= 6,
+	PERF_RUSAGE_MAJFLT	= 7,
+	PERF_RUSAGE_NSWAP	= 8,
+	PERF_RUSAGE_INBLOCK	= 9,
+	PERF_RUSAGE_OUBLOCK	= 10,
+	PERF_RUSAGE_MSGSND	= 11,
+	PERF_RUSAGE_MSGRCV	= 12,
+	PERF_RUSAGE_NSIGNALS	= 13,
+	PERF_RUSAGE_NVCSW	= 14,
+	PERF_RUSAGE_NIVCSW	= 15,
+	PERF_RUSAGE_MAX,
+};
+
+PMU_FORMAT_ATTR(event, "config:0-63");
+
+static struct attribute *rusage_format_attrs[] = {
+	&format_attr_event.attr,
+	NULL,
+};
+
+static struct attribute_group rusage_format_attr_group = {
+	.name = "format",
+	.attrs = rusage_format_attrs,
+};
+
+#define RU(__n, __e) \
+	PMU_EVENT_ATTR_STRING(_n, rusage_attr_##__n, "event=0x" # __e);
+RU(utime,    PERF_RUSAGE_UTIME)
+RU(stime,    PERF_RUSAGE_STIME)
+RU(maxrss,   PERF_RUSAGE_MAXRSS)
+RU(ixrss,    PERF_RUSAGE_IXRSS)
+RU(idrss,    PERF_RUSAGE_IDRSS)
+RU(isrss,    PERF_RUSAGE_ISRSS)
+RU(minflt,   PERF_RUSAGE_MINFLT)
+RU(majflt,   PERF_RUSAGE_MAJFLT)
+RU(nswap,    PERF_RUSAGE_NSWAP)
+RU(inblock,  PERF_RUSAGE_INBLOCK)
+RU(oublock,  PERF_RUSAGE_OUBLOCK)
+RU(msgsnd,   PERF_RUSAGE_MSGSND)
+RU(msgrcv,   PERF_RUSAGE_MSGRCV)
+RU(nsignals, PERF_RUSAGE_NSIGNALS)
+RU(nvcsw,    PERF_RUSAGE_NVCSW)
+RU(nivcsw,   PERF_RUSAGE_NIVCSW)
+#undef RU
+
+static struct attribute *rusage_events_attrs[PERF_RUSAGE_MAX + 1] = {
+#define RU(__n) &rusage_attr_##__n.attr.attr
+
+	RU(utime),
+	RU(stime),
+	RU(maxrss),
+	RU(ixrss),
+	RU(idrss),
+	RU(isrss),
+	RU(minflt),
+	RU(majflt),
+	RU(nswap),
+	RU(inblock),
+	RU(oublock),
+	RU(msgsnd),
+	RU(msgrcv),
+	RU(nsignals),
+	RU(nvcsw),
+	RU(nivcsw),
+
+#undef RU
+	NULL,
+};
+
+static struct attribute_group rusage_events_attr_group = {
+	.name = "events",
+	.attrs = rusage_events_attrs,
+};
+
+static const struct attribute_group *rusage_attr_groups[] = {
+	&rusage_format_attr_group,
+	&rusage_events_attr_group,
+	NULL,
+};
+
+static int perf_rusage_event_init(struct perf_event *event)
+{
+	u64 cfg = event->attr.config;
+
+	if (event->attr.type != PERF_TYPE_RUSAGE)
+		return -ENOENT;
+
+	if (has_branch_stack(event))
+		return -EOPNOTSUPP;
+
+	if (!(event->attach_state & PERF_ATTACH_TASK))
+		return -EOPNOTSUPP;
+
+	if (event->attr.exclude_user   ||
+	    event->attr.exclude_kernel ||
+	    event->attr.exclude_hv     ||
+	    event->attr.exclude_idle   ||
+	    event->attr.exclude_host   ||
+	    event->attr.exclude_guest)
+		return -EOPNOTSUPP;
+
+	if (cfg >= PERF_RUSAGE_MAX)
+		return -EINVAL;
+
+	event->hw.config = cfg;
+	return 0;
+}
+
+static u64 rusage_read_counter(struct perf_event *event)
+{
+	struct task_struct *p = event->hw.target;
+	struct rusage ru;
+
+	getrusage(p, RUSAGE_THREAD, &ru);
+
+	switch (event->hw.config) {
+	case PERF_RUSAGE_UTIME:
+		return timeval_to_ns(&ru.ru_utime);
+	case PERF_RUSAGE_STIME:
+		return timeval_to_ns(&ru.ru_stime);
+
+#define RU(__e, __v) \
+	case PERF_RUSAGE_##__e: return ru.__v
+
+	RU(MAXRSS,   ru_maxrss);
+	RU(IXRSS,    ru_ixrss);
+	RU(IDRSS,    ru_idrss);
+	RU(ISRSS,    ru_isrss);
+	RU(MINFLT,   ru_minflt);
+	RU(MAJFLT,   ru_majflt);
+	RU(NSWAP,    ru_nswap);
+	RU(INBLOCK,  ru_inblock);
+	RU(OUBLOCK,  ru_oublock);
+	RU(MSGSND,   ru_msgsnd);
+	RU(MSGRCV,   ru_msgrcv);
+	RU(NSIGNALS, ru_nsignals);
+	RU(NVCSW,    ru_nvcsw);
+	RU(NIVCSW,   ru_nivcsw    );
+
+#undef RU
+	};
+
+	WARN_ON_ONCE(1);
+	return 0;
+}
+
+static void perf_rusage_update(struct perf_event *event)
+{
+	u64 prev, now;
+	s64 delta;
+
+	/* Careful, an NMI might modify the previous event value: */
+again:
+	prev = local64_read(&event->hw.prev_count);
+	now = rusage_read_counter(event);
+
+	if (local64_cmpxchg(&event->hw.prev_count, prev, now) != prev)
+		goto again;
+
+	delta = now - prev;
+	local64_add(delta, &event->count);
+}
+
+static void perf_rusage_start(struct perf_event *event, int flags)
+{
+	u64 now = rusage_read_counter(event);
+
+	local64_set(&event->hw.prev_count, now);
+}
+
+static void perf_rusage_stop(struct perf_event *event, int flags)
+{
+	perf_rusage_update(event);
+}
+
+void perf_rusage_del(struct perf_event *event, int flags)
+{
+	perf_rusage_stop(event, PERF_EF_UPDATE);
+}
+
+int perf_rusage_add(struct perf_event *event, int flags)
+{
+	if (flags & PERF_EF_START)
+		perf_rusage_start(event, flags);
+
+	return 0;
+}
+
+static struct pmu perf_rusage = {
+	.task_ctx_nr	= perf_sw_context,
+	.attr_groups	= rusage_attr_groups,
+	.event_init	= perf_rusage_event_init,
+	.add		= perf_rusage_add,
+	.del		= perf_rusage_del,
+	.start		= perf_rusage_start,
+	.stop		= perf_rusage_stop,
+	.read		= perf_rusage_update,
+	.capabilities	= PERF_PMU_CAP_NO_INTERRUPT,
+};
+
 #if defined(CONFIG_KPROBE_EVENTS) || defined(CONFIG_UPROBE_EVENTS)
 /*
  * Flags in config, used by dynamic PMU kprobe and uprobe
@@ -8443,6 +8650,7 @@ static int perf_uprobe_event_init(struct perf_event *event)
 static inline void perf_tp_register(void)
 {
 	perf_pmu_register(&perf_tracepoint, "tracepoint", PERF_TYPE_TRACEPOINT);
+	perf_pmu_register(&perf_rusage, "rusage", PERF_TYPE_RUSAGE);
 #ifdef CONFIG_KPROBE_EVENTS
 	perf_pmu_register(&perf_kprobe, "kprobe", -1);
 #endif
