@@ -220,9 +220,11 @@ export srctree objtree VPATH
 version_h := include/generated/uapi/linux/version.h
 old_version_h := include/linux/version.h
 
+buildid_h := include/generated/uapi/linux/buildid.h
+
 no-dot-config-targets := clean mrproper distclean \
 			 cscope gtags TAGS tags help% %docs check% coccicheck \
-			 $(version_h) headers_% archheaders archscripts \
+			 $(version_h) $(buildid_h) headers_% archheaders archscripts \
 			 kernelversion %src-pkg
 
 config-targets := 0
@@ -1030,6 +1032,13 @@ endif
 include/generated/autoksyms.h: FORCE
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/adjust_autoksyms.sh true
 
+ifdef CONFIG_BUILDID_H
+define filechk_buildid.h
+	buildid=`readelf -n $@ |grep 'Build ID' |sed -e 's/^.*Build ID: \(.*\)$$/\1/'`; \
+	scripts/extract-buildid $$buildid
+endef
+endif
+
 ARCH_POSTLINK := $(wildcard $(srctree)/arch/$(SRCARCH)/Makefile.postlink)
 
 # Final link of vmlinux with optional arch pass after final link
@@ -1039,6 +1048,9 @@ cmd_link-vmlinux =                                                 \
 
 vmlinux: scripts/link-vmlinux.sh vmlinux_prereq $(vmlinux-deps) FORCE
 	+$(call if_changed,link-vmlinux)
+ifdef CONFIG_BUILDID_H
+	+$(call filechk2,buildid.h,$(buildid_h))
+endif
 
 # Build samples along the rest of the kernel
 ifdef CONFIG_SAMPLES
