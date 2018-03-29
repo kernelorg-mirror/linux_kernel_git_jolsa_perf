@@ -308,6 +308,8 @@ union bpf_attr {
 		 * (context accesses, allowed helpers, etc).
 		 */
 		__u32		expected_attach_type;
+		/* Checked when prog_type=kprobe and CONFIG_BPF_BUILDID_CHECK. */
+		__aligned_u64	kern_buildid;
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */

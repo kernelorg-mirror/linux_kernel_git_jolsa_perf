@@ -1406,6 +1406,15 @@ config BPF_JIT_ALWAYS_ON
 	  Enables BPF JIT and removes BPF interpreter to avoid
 	  speculative execution of BPF instructions by the interpreter
 
+config BPF_BUILDID_CHECK
+	bool "Check buildid for kprobe and tracepoint programs"
+	depends on BPF_SYSCALL
+	select BUILDID_H
+	default n
+	help
+	  Enables BPF program load code to check on kernel Build ID
+	  for kprobe programs.
+
 config USERFAULTFD
 	bool "Enable userfaultfd() system call"
 	select ANON_INODES
