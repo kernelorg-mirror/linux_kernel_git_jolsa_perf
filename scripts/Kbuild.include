@@ -67,6 +67,30 @@ define filechk
 	fi
 endef
 
+# filechk2 is used to check if the content of a generated file is updated.
+# It follows the same logic as the filechk except instead of the $@ target
+# variable, the checked file is passed in 2nd argument.
+#
+# Sample usage:
+# define filechk_sample
+#	echo $KERNELRELEASE
+# endef
+# version.h : Makefile
+#	$(call filechk2,sample,version.h)
+# endef
+define filechk2
+	$(Q)set -e;					\
+	$(kecho) '  CHK     $(2)';			\
+	mkdir -p $(dir $(2));				\
+	$(filechk_$(1)) < $< > $(2).tmp;		\
+	if [ -r $(2) ] && cmp -s $(2) $(2).tmp; then	\
+		rm -f $(2).tmp;				\
+	else						\
+		$(kecho) '  UPD     $(2)';		\
+		mv -f $(2).tmp $(2);			\
+	fi
+endef
+
 ######
 # gcc support functions
 # See documentation in Documentation/kbuild/makefiles.txt
