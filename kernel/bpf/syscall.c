@@ -1172,7 +1172,80 @@ struct bpf_prog *bpf_prog_get_type_dev(u32 ufd, enum bpf_prog_type type,
 EXPORT_SYMBOL_GPL(bpf_prog_get_type_dev);
 
 /* last field in 'union bpf_attr' used by this command */
-#define	BPF_PROG_LOAD_LAST_FIELD prog_ifindex
+#define	BPF_PROG_LOAD_LAST_FIELD kern_buildid
+
+#ifdef CONFIG_BPF_BUILDID_CHECK
+
+static struct {
+	const char *ptr;
+	int         size;
+} buildid;
+
+#define BUILDID_MAX 40
+
+static int __check_buildid(union bpf_attr *attr)
+{
+	char id[buildid.size];
+
+	/* copy buildid from user space */
+	if (strncpy_from_user(id, u64_to_user_ptr(attr->kern_buildid),
+			      buildid.size) < 0)
+		return -EFAULT;
+
+	return memcmp(id, buildid.ptr, buildid.size);
+}
+
+static int check_buildid(union bpf_attr *attr)
+{
+	return buildid.ptr ? __check_buildid(attr) : 0;
+}
+
+#define NOTE_ALIGN(n)	(((n) + 3) & ~3)
+#define NT_GNU_BUILD_ID	3
+
+extern const void __start_notes __weak;
+extern const void __stop_notes __weak;
+
+static int __init buildid_init(void)
+{
+	const void *ptr = &__start_notes;
+
+	while (ptr < &__stop_notes) {
+		const Elf64_Nhdr *nhdr = ptr;
+		size_t namesz = NOTE_ALIGN(nhdr->n_namesz),
+		       descsz = NOTE_ALIGN(nhdr->n_descsz);
+		const char *name;
+
+		ptr += sizeof(*nhdr);
+		name = ptr;
+		ptr += namesz;
+
+		if (nhdr->n_type != NT_GNU_BUILD_ID ||
+		    nhdr->n_namesz != sizeof("GNU") ||
+		    memcmp(name, "GNU", sizeof("GNU"))) {
+			ptr += descsz;
+			continue;
+		}
+
+		buildid.ptr = ptr;
+		buildid.size = descsz;
+		break;
+	}
+
+	if (!buildid.ptr)
+		pr_warning("bpf: GNU buildid not found, switching off the check\n");
+
+	return 0;
+}
+
+subsys_initcall(buildid_init);
+
+#else
+static int check_buildid(union bpf_attr *attr __maybe_unused)
+{
+	return 0;
+}
+#endif /* CONFIG_BPF_BUILDID_CHECK */
 
 static int bpf_prog_load(union bpf_attr *attr)
 {
@@ -1202,6 +1275,10 @@ static int bpf_prog_load(union bpf_attr *attr)
 
 	if (type == BPF_PROG_TYPE_KPROBE &&
 	    attr->kern_version != LINUX_VERSION_CODE)
+		return -EINVAL;
+
+	if (type == BPF_PROG_TYPE_KPROBE &&
+	    check_buildid(attr))
 		return -EINVAL;
 
 	if (type != BPF_PROG_TYPE_SOCKET_FILTER &&

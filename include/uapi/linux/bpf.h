@@ -296,6 +296,7 @@ union bpf_attr {
 		__u32		prog_flags;
 		char		prog_name[BPF_OBJ_NAME_LEN];
 		__u32		prog_ifindex;	/* ifindex of netdev to prep for */
+		__aligned_u64	kern_buildid;   /* checked for CONFIG_BPF_BUILDID_CHECK */
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
