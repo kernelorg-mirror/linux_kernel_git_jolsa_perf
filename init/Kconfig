@@ -1387,6 +1387,9 @@ config KALLSYMS_BASE_RELATIVE
 
 # end of the "standard kernel features (expert users)" menu
 
+config BUILDID_H
+	bool
+
 # syscall, maps, verifier
 config BPF_SYSCALL
 	bool "Enable bpf() system call"
