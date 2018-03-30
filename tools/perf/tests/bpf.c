@@ -292,6 +292,7 @@ static int check_env(void)
 	int err;
 	unsigned int kver_int;
 	char license[] = "GPL";
+	char buildid[64];
 
 	struct bpf_insn insns[] = {
 		BPF_MOV64_IMM(BPF_REG_0, 1),
@@ -304,9 +305,15 @@ static int check_env(void)
 		return err;
 	}
 
+	err = fetch_kernel_buildid(buildid, sizeof(buildid));
+	if (err) {
+		pr_debug("Unable to get kernel buildid\n");
+		return err;
+	}
+
 	err = bpf_load_program(BPF_PROG_TYPE_KPROBE, insns,
 			       sizeof(insns) / sizeof(insns[0]),
-			       license, kver_int, NULL, 0);
+			       license, kver_int, buildid, NULL, 0);
 	if (err < 0) {
 		pr_err("Missing basic BPF support, skip this test: %s\n",
 		       strerror(errno));
