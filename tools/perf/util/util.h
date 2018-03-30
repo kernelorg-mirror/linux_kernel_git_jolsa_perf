@@ -48,6 +48,8 @@ extern int cacheline_size;
 int fetch_kernel_version(unsigned int *puint,
 			 char *str, size_t str_sz);
 
+int fetch_kernel_buildid(char *buildid, int size);
+
 int parse_notes_buildid(void *note_data, size_t note_len, void *bf,
 			size_t size, bool need_swap);
 

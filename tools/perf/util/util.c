@@ -495,6 +495,24 @@ int parse_notes_buildid(void *note_data, size_t note_len, void *bf,
 	return -1;
 }
 
+int fetch_kernel_buildid(char *buildid, int size)
+{
+	char path[PATH_MAX], *buf;
+	size_t len;
+	int err;
+
+	scnprintf(path, PATH_MAX, "%s/kernel/notes",
+		  sysfs__mountpoint());
+
+	if (filename__read_str(path, &buf, &len))
+		return -EINVAL;
+
+	err = parse_notes_buildid(buf, len, buildid, size, false);
+
+	free(buf);
+	return err;
+}
+
 const char *perf_tip(const char *dirpath)
 {
 	struct strlist *tips;
