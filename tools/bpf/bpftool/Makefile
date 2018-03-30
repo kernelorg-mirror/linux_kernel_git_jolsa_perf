@@ -75,9 +75,12 @@ include $(wildcard $(OUTPUT)*.d)
 all: $(OUTPUT)bpftool
 
 SRCS = $(wildcard *.c)
-OBJS = $(patsubst %.c,$(OUTPUT)%.o,$(SRCS)) $(OUTPUT)disasm.o
+OBJS = $(patsubst %.c,$(OUTPUT)%.o,$(SRCS)) $(OUTPUT)disasm.o $(OUTPUT)vsprintf.o
 
 $(OUTPUT)disasm.o: $(srctree)/kernel/bpf/disasm.c
+	$(QUIET_CC)$(COMPILE.c) -MMD -o $@ $<
+
+$(OUTPUT)vsprintf.o: $(srctree)/tools/lib/vsprintf.c
 	$(QUIET_CC)$(COMPILE.c) -MMD -o $@ $<
 
 $(OUTPUT)bpftool: $(OBJS) $(LIBBPF)
