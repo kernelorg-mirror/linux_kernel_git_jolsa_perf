@@ -218,6 +218,7 @@ static LIST_HEAD(bpf_objects_list);
 
 struct bpf_object {
 	char license[64];
+	char buildid[64];
 	u32 kern_version;
 
 	struct bpf_program *programs;
@@ -597,6 +598,32 @@ bpf_object__init_kversion(struct bpf_object *obj,
 	return 0;
 }
 
+static void buildid_scnprint(char *buf, int n, char *buildid, int size)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < size; i++) {
+		ret += scnprintf(buf + ret, n - ret, "%x",
+				 (unsigned char) buildid[i]);
+	}
+}
+
+static int
+bpf_object__init_buildid(struct bpf_object *obj,
+			 void *data, size_t size)
+{
+	char buf[64];
+
+	if (size > sizeof(obj->buildid))
+		return -LIBBPF_ERRNO__FORMAT;
+
+	memcpy(&obj->buildid, data, size);
+
+	buildid_scnprint(buf, 64, obj->buildid, size);
+	pr_debug("kernel buildid of %s is: %s\n", obj->path,buf);
+	return 0;
+}
+
 static int compare_bpf_map(const void *_a, const void *_b)
 {
 	const struct bpf_map *a = _a;
@@ -815,6 +842,10 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			err = bpf_object__init_kversion(obj,
 							data->d_buf,
 							data->d_size);
+		else if (strcmp(name, "buildid") == 0)
+			err = bpf_object__init_buildid(obj,
+						       data->d_buf,
+						       data->d_size);
 		else if (strcmp(name, "maps") == 0)
 			obj->efile.maps_shndx = idx;
 		else if (sh.sh_type == SHT_SYMTAB) {
@@ -1163,7 +1194,8 @@ static int bpf_object__collect_reloc(struct bpf_object *obj)
 
 static int
 load_program(enum bpf_prog_type type, const char *name, struct bpf_insn *insns,
-	     int insns_cnt, char *license, u32 kern_version, int *pfd)
+	     int insns_cnt, char *license, u32 kern_version, const char *buildid,
+	     int *pfd)
 {
 	int ret;
 	char *log_buf;
@@ -1176,7 +1208,8 @@ load_program(enum bpf_prog_type type, const char *name, struct bpf_insn *insns,
 		pr_warning("Alloc log buffer for bpf loader error, continue without log\n");
 
 	ret = bpf_load_program_name(type, name, insns, insns_cnt, license,
-				    kern_version, log_buf, BPF_LOG_BUF_SIZE);
+				    kern_version, buildid, log_buf,
+				    BPF_LOG_BUF_SIZE);
 
 	if (ret >= 0) {
 		*pfd = ret;
@@ -1203,7 +1236,7 @@ load_program(enum bpf_prog_type type, const char *name, struct bpf_insn *insns,
 
 			fd = bpf_load_program_name(BPF_PROG_TYPE_KPROBE, name,
 						   insns, insns_cnt, license,
-						   kern_version, NULL, 0);
+						   kern_version, buildid, NULL, 0);
 			if (fd >= 0) {
 				close(fd);
 				ret = -LIBBPF_ERRNO__PROGTYPE;
@@ -1222,7 +1255,8 @@ out:
 
 static int
 bpf_program__load(struct bpf_program *prog,
-		  char *license, u32 kern_version)
+		  char *license, u32 kern_version,
+		  const char *buildid)
 {
 	int err = 0, fd, i;
 
@@ -1248,7 +1282,8 @@ bpf_program__load(struct bpf_program *prog,
 				   prog->section_name, prog->instances.nr);
 		}
 		err = load_program(prog->type, prog->name, prog->insns,
-				   prog->insns_cnt, license, kern_version, &fd);
+				   prog->insns_cnt, license, kern_version,
+				   buildid, &fd);
 		if (!err)
 			prog->instances.fds[0] = fd;
 		goto out;
@@ -1279,7 +1314,8 @@ bpf_program__load(struct bpf_program *prog,
 		err = load_program(prog->type, prog->name,
 				   result.new_insn_ptr,
 				   result.new_insn_cnt,
-				   license, kern_version, &fd);
+				   license, kern_version,
+				   buildid, &fd);
 
 		if (err) {
 			pr_warning("Loading the %dth instance of program '%s' failed\n",
@@ -1311,7 +1347,8 @@ bpf_object__load_progs(struct bpf_object *obj)
 			continue;
 		err = bpf_program__load(&obj->programs[i],
 					obj->license,
-					obj->kern_version);
+					obj->kern_version,
+					obj->buildid);
 		if (err)
 			return err;
 	}

@@ -46,12 +46,12 @@ int bpf_create_map_in_map(enum bpf_map_type map_type, const char *name,
 int bpf_load_program_name(enum bpf_prog_type type, const char *name,
 			  const struct bpf_insn *insns,
 			  size_t insns_cnt, const char *license,
-			  __u32 kern_version, char *log_buf,
-			  size_t log_buf_sz);
+			  __u32 kern_version, const char *buildid,
+			  char *log_buf, size_t log_buf_sz);
 int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 		     size_t insns_cnt, const char *license,
-		     __u32 kern_version, char *log_buf,
-		     size_t log_buf_sz);
+		     __u32 kern_version, const char *buildid,
+		     char *log_buf, size_t log_buf_sz);
 int bpf_verify_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 		       size_t insns_cnt, int strict_alignment,
 		       const char *license, __u32 kern_version,

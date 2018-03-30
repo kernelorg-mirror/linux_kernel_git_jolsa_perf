@@ -149,8 +149,8 @@ int bpf_create_map_in_map(enum bpf_map_type map_type, const char *name,
 int bpf_load_program_name(enum bpf_prog_type type, const char *name,
 			  const struct bpf_insn *insns,
 			  size_t insns_cnt, const char *license,
-			  __u32 kern_version, char *log_buf,
-			  size_t log_buf_sz)
+			  __u32 kern_version, const char *buildid,
+			  char *log_buf, size_t log_buf_sz)
 {
 	int fd;
 	union bpf_attr attr;
@@ -165,6 +165,7 @@ int bpf_load_program_name(enum bpf_prog_type type, const char *name,
 	attr.log_size = 0;
 	attr.log_level = 0;
 	attr.kern_version = kern_version;
+	attr.kern_buildid = ptr_to_u64(buildid);
 	memcpy(attr.prog_name, name, min(name_len, BPF_OBJ_NAME_LEN - 1));
 
 	fd = sys_bpf(BPF_PROG_LOAD, &attr, sizeof(attr));
@@ -181,11 +182,11 @@ int bpf_load_program_name(enum bpf_prog_type type, const char *name,
 
 int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 		     size_t insns_cnt, const char *license,
-		     __u32 kern_version, char *log_buf,
-		     size_t log_buf_sz)
+		     __u32 kern_version, const char *buildid,
+		     char *log_buf, size_t log_buf_sz)
 {
 	return bpf_load_program_name(type, NULL, insns, insns_cnt, license,
-				     kern_version, log_buf, log_buf_sz);
+				     kern_version, buildid, log_buf, log_buf_sz);
 }
 
 int bpf_verify_program(enum bpf_prog_type type, const struct bpf_insn *insns,
