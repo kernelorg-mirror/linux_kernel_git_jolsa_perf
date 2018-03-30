@@ -47,6 +47,10 @@ extern int cacheline_size;
 
 int fetch_kernel_version(unsigned int *puint,
 			 char *str, size_t str_sz);
+
+int parse_notes_buildid(void *note_data, size_t note_len, void *bf,
+			size_t size, bool need_swap);
+
 #define KVER_VERSION(x)		(((x) >> 16) & 0xff)
 #define KVER_PATCHLEVEL(x)	(((x) >> 8) & 0xff)
 #define KVER_SUBLEVEL(x)	((x) & 0xff)
