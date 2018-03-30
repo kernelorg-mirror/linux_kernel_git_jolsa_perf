@@ -168,6 +168,7 @@ int bpf_load_program_xattr(const struct bpf_load_program_attr *load_attr,
 	attr.log_size = 0;
 	attr.log_level = 0;
 	attr.kern_version = load_attr->kern_version;
+	attr.kern_buildid = ptr_to_u64(load_attr->buildid);
 	memcpy(attr.prog_name, load_attr->name,
 	       min(name_len, BPF_OBJ_NAME_LEN - 1));
 
@@ -185,8 +186,8 @@ int bpf_load_program_xattr(const struct bpf_load_program_attr *load_attr,
 
 int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 		     size_t insns_cnt, const char *license,
-		     __u32 kern_version, char *log_buf,
-		     size_t log_buf_sz)
+		     __u32 kern_version, const char *buildid,
+		     char *log_buf, size_t log_buf_sz)
 {
 	struct bpf_load_program_attr load_attr;
 
@@ -198,6 +199,7 @@ int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 	load_attr.insns_cnt = insns_cnt;
 	load_attr.license = license;
 	load_attr.kern_version = kern_version;
+	load_attr.buildid = buildid;
 
 	return bpf_load_program_xattr(&load_attr, log_buf, log_buf_sz);
 }
