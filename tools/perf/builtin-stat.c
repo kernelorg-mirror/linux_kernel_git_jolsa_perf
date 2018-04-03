@@ -1752,6 +1752,8 @@ static int get_precision(double num)
 
 static void print_table(FILE *output, int precision, double avg)
 {
+	int hash[run_count];
+	double base, top;
 	char tmp[64];
 	int idx, indent = 0;
 
@@ -1764,8 +1766,27 @@ static void print_table(FILE *output, int precision, double avg)
 	for (idx = 0; idx < run_count; idx++) {
 		double run = (double) walltime_run[idx] / NSEC_PER_SEC;
 
-		fprintf(output, " %17.*f (%+.*f)\n",
+		base = idx ? min(base, run) : run;
+		top  = idx ? max(top,  run) : run;
+	}
+
+	for (idx = 0; idx < run_count; idx++) {
+		double run = (double) walltime_run[idx] / NSEC_PER_SEC;
+
+		hash[idx] = 1 + (int) (100.0 * (run - base)/top) / 5;
+	}
+
+	for (idx = 0; idx < run_count; idx++) {
+		double run = (double) walltime_run[idx] / NSEC_PER_SEC;
+		int h;
+
+		fprintf(output, " %17.*f (%+.*f) ",
 			precision, run, precision, run - avg);
+
+		for (h = 0; h < hash[idx]; h++)
+			fprintf(output, "#");
+
+		fprintf(output, "\n");
 	}
 
 	fprintf(output, "\n%*s# Final result:\n", indent, "");
