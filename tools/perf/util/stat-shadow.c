@@ -212,9 +212,14 @@ void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 count,
 
 	count *= counter->scale;
 
-	if (perf_evsel__match(counter, SOFTWARE, SW_TASK_CLOCK) ||
-	    perf_evsel__match(counter, SOFTWARE, SW_CPU_CLOCK))
+	if (perf_evsel__match(counter, SOFTWARE, SW_TASK_CLOCK))
 		update_runtime_stat(st, STAT_NSECS, 0, cpu, count);
+	else if (perf_evsel__match(counter, SOFTWARE, SW_CPU_CLOCK)) {
+		enum stat_type type = counter->attr.exclude_idle ?
+				      STAT_CPU_CLOCK_I : STAT_NSECS;
+
+		update_runtime_stat(st, type, ctx, cpu, count);
+	}
 	else if (perf_evsel__match(counter, HARDWARE, HW_CPU_CYCLES))
 		update_runtime_stat(st, STAT_CYCLES, ctx, cpu, count);
 	else if (perf_stat_evsel__is(counter, CYCLES_IN_TX))
@@ -913,8 +918,25 @@ void perf_stat__print_shadow_stats(struct perf_evsel *evsel,
 			ratio = total / avg;
 
 		print_metric(ctxp, NULL, "%8.0f", "cycles / elision", ratio);
-	} else if (perf_evsel__match(evsel, SOFTWARE, SW_TASK_CLOCK) ||
-		   perf_evsel__match(evsel, SOFTWARE, SW_CPU_CLOCK)) {
+	} else if (perf_evsel__match(evsel, SOFTWARE, SW_CPU_CLOCK)) {
+		bool idle = evsel->attr.exclude_idle;
+
+		if (idle) {
+			total = runtime_stat_avg(st, STAT_NSECS, 0, cpu);
+
+			if ((ratio = avg_stats(&walltime_nsecs_stats)) != 0)
+				print_metric(ctxp, NULL, "%8.3f", "Idle utilized",
+					     (avg) / ratio);
+			else
+				print_metric(ctxp, NULL, NULL, "Idle utilized", 0);
+		} else {
+			if ((ratio = avg_stats(&walltime_nsecs_stats)) != 0)
+				print_metric(ctxp, NULL, "%8.3f", "CPUs utilized",
+					     avg / ratio);
+			else
+				print_metric(ctxp, NULL, NULL, "CPUs utilized", 0);
+		}
+	} else if (perf_evsel__match(evsel, SOFTWARE, SW_TASK_CLOCK)) {
 		if ((ratio = avg_stats(&walltime_nsecs_stats)) != 0)
 			print_metric(ctxp, NULL, "%8.3f", "CPUs utilized",
 				     avg / ratio);
