@@ -100,10 +100,11 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 				return ERR_PTR(-BPF_LOADER_ERRNO__COMPILE);
 		} else
 			pr_debug("bpf: successfull builtin compilation\n");
-		obj = bpf_object__open_buffer(obj_buf, obj_buf_sz, filename);
 
-		if (!IS_ERR(obj) && llvm_param.dump_obj)
+		if (llvm_param.dump_obj)
 			llvm__dump_obj(filename, obj_buf, obj_buf_sz);
+
+		obj = bpf_object__open_buffer(obj_buf, obj_buf_sz, filename);
 
 		free(obj_buf);
 	} else
