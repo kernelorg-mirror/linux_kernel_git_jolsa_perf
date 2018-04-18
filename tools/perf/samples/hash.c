@@ -20,32 +20,52 @@ struct value_t {
 	char	str[MAX_PATH];
 };
 
-void *hash;
+
+static void *hash;
+static struct value_t value;
 
 int BEGIN(void)
 {
+	hash_init((void *) &hash, sizeof(struct key_t), sizeof(struct value_t));
+	print("hash3 %p %p\n", hash, &value.str);
+
+#if 0
 	print("BEGIN");
 
-	hash_init(&hash, sizeof(struct key_t), sizeof(struct value_t));
+	print("hash1 %p %p\n", hash, &hash);
+
+	hash_init((void *) &hash, sizeof(struct key_t), sizeof(struct value_t));
+
+	print("hash2 %p\n", hash);
+#endif
 	return 0;
 }
 
-static struct value_t value = {
-	.str = "",
-};
 
+#if 0
 void END(void)
 {
 	struct key_t   key;
 	struct value_t *val;
 
+	print("hash3 %p %p\n", hash, &value.str);
+
 	key.pid   = 123;
-	strcat(value.str, "krava");
+	concat(value.str, "krava");
 
 	if (hash_add(hash, &key, &value)) {
 		print("hash: failed to add\n");
 		return;
 	}
+
+	key.pid = 123;
+
+	if (hash_lookup(hash, &key, (void **) &val)) {
+		print("hash: failed to lookup\n");
+		return;
+	}
+
+	print("hash 123 '%s'\n", val->str);
 
 	key.pid   = 124;
 	strcat(value.str, "krava");
@@ -78,3 +98,4 @@ void END(void)
 
 	print("END\n");
 }
+#endif

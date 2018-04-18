@@ -205,8 +205,9 @@ struct bpf_program {
 			int map_idx;	/* RELO_LD64_MAP */
 			int text_off;	/* RELO_CALL_PSEUDO */
 			struct {
-				struct bpf_data *data;
-				size_t st_value;
+				u64 val;
+				int idx;
+				char *sym;
 			} ld;		/* RELO_LD64_DATA */
 			char *func;	/* RELO_CALL_USER */
 		};
@@ -589,9 +590,12 @@ bpf_object__init_symbols(struct bpf_object *obj)
 
 			if (!gelf_getsym(symbols, si, &sym))
 				continue;
+
 			if (sym.st_shndx != prog->idx)
 				continue;
-			if (GELF_ST_BIND(sym.st_info) != STB_GLOBAL)
+
+			if ((GELF_ST_BIND(sym.st_info) != STB_GLOBAL) &&
+			    (GELF_ST_BIND(sym.st_info) != STB_LOCAL))
 				continue;
 
 			name = elf_strptr(obj->efile.elf,
@@ -1017,12 +1021,10 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 			goto out;
 		}
 
-#if 0
 		pr_debug("section(%d) %s, size %ld, link %d, flags 0x%lx, type %d, info %d\n",
 			 idx, name, (unsigned long)data->d_size,
 			 (int)sh.sh_link, (unsigned long)sh.sh_flags,
 			 (int)sh.sh_type, (int)sh.sh_info);
-#endif
 
 		if (strcmp(name, "license") == 0)
 			err = bpf_object__init_license(obj,
@@ -1084,7 +1086,6 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 					 name, idx, sec);
 				continue;
 			}
-
 			reloc = realloc(reloc,
 					sizeof(*obj->efile.reloc) * nr_reloc);
 			if (!reloc) {
@@ -1173,6 +1174,7 @@ collect_reloc_data(struct reloc_desc *desc, struct bpf_object *obj,
 	struct bpf_data *data = obj->data;
 	size_t nr_data = obj->nr_data;
 	size_t idx;
+	const char *name;
 
 	/* TODO needs arch specific code */
 	if (GELF_R_TYPE(rel->r_info) != R_X86_64_64) {
@@ -1197,9 +1199,14 @@ collect_reloc_data(struct reloc_desc *desc, struct bpf_object *obj,
 		return -LIBBPF_ERRNO__RELOC;
 	}
 
+	name = elf_strptr(obj->efile.elf, obj->efile.strtabidx,
+			  sym->st_name);
+
 	desc->type = RELO_LD64_DATA;
-	desc->ld.data = &data[idx];
-	desc->ld.st_value = sym->st_value;
+	desc->ld.idx = data[idx].idx;
+	desc->ld.val = (u64) data[idx].ptr + sym->st_value;
+	desc->ld.val = sym->st_value;
+	desc->ld.sym = strdup(name);
 	return 0;
 }
 
@@ -1253,11 +1260,9 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 		name = elf_strptr(obj->efile.elf, obj->efile.strtabidx,
 				  sym.st_name);
 
-#if 0
 		pr_debug("relocation: r_offset %lu, r_sym %lu, r_info %lu, symbol %s(%u), st_value %ld, st_shndx %d\n",
 			 rel.r_offset, GELF_R_SYM(rel.r_info), GELF_R_TYPE(rel.r_info),
 			 name ?: "N/A", sym.st_name, sym.st_value, sym.st_shndx);
-#endif
 
 		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
 
@@ -1425,13 +1430,10 @@ bpf_program__relocate(struct bpf_program *prog, struct bpf_object *obj)
 			insns[insn_idx].src_reg = BPF_PSEUDO_MAP_FD;
 			insns[insn_idx].imm = obj->maps[map_idx].fd;
 		} else if (prog->reloc_desc[i].type == RELO_LD64_DATA) {
-			u64 ptr;
+			u64 val = desc->ld.val;
 
-			ptr  = (u64) desc->ld.data->ptr;
-			ptr += (u64) desc->ld.st_value;
-
-			insns[insn_idx].imm = (u32) ptr & ((u32) -1);
-			insns[insn_idx + 1].imm = (u32) (ptr >> 32);
+			insns[insn_idx].imm = (u32) val & ((u32) -1);
+			insns[insn_idx + 1].imm = (u32) (val >> 32);
 		} else if (prog->reloc_desc[i].type == RELO_CALL_PSEUDO) {
 			err = bpf_program__reloc_text(prog, obj,
 						      &prog->reloc_desc[i]);
@@ -1703,9 +1705,9 @@ void static pr_debug_data(struct bpf_data *data)
 {
 	if (!data) {
 		pr_debug("data:\n");
-		pr_debug("%5s %-s\n", "size", "data");
+		pr_debug("%4s %5s %16s %-s\n", "idx", "size", "ptr", "data");
 	} else {
-		pr_debug("%5lu %-s\n", data->size, data->name);
+		pr_debug("%4d %5lu %16p %-s\n", data->idx, data->size, data->ptr, data->name);
 	}
 }
 
@@ -1713,9 +1715,9 @@ void static pr_debug_program(struct bpf_program *prog)
 {
 	if (!prog) {
 		pr_debug("progs:\n");
-		pr_debug("%4s %-s\n", "cnt", "name@section");
+		pr_debug("%4s %4s %-s\n", "idx", "cnt", "name@section");
 	} else {
-		pr_debug("%4lu %-s@%s\n", prog->insns_cnt, prog->name, prog->section_name);
+		pr_debug("%4d %4lu %-s@%s\n", prog->idx, prog->insns_cnt, prog->name, prog->section_name);
 	}
 }
 
@@ -1759,18 +1761,15 @@ void static pr_debug_relocs(struct bpf_program *prog, struct bpf_object *obj)
 	pr_debug("relocs data (%s@%s):\n", prog->name, prog->section_name);
 
 	for (i = 0; i < prog->nr_reloc; i++) {
-		struct bpf_data *data;
-
 		desc = &prog->reloc_desc[i];
 
 		if (desc->type != RELO_LD64_DATA)
 			continue;
 
 		if (!i)
-			pr_debug("%5s %8s %-s\n", "insn", "st_value", "data");
+			pr_debug("%5s %16s %4s %-s\n", "insn", "val", "idx", "sym");
 
-		data = desc->ld.data;
-		pr_debug("%5d %8lu %-s\n", desc->insn_idx, desc->ld.st_value, data->name);
+		pr_debug("%5d %16lx %4d %-s\n", desc->insn_idx, desc->ld.val, desc->ld.idx, desc->ld.sym);
 	}
 
 	pr_debug("relocs pseudo call (%s@%s):\n", prog->name, prog->section_name);
@@ -1882,6 +1881,7 @@ __bpf_object__open(const char *path, void *obj_buf, size_t obj_buf_sz)
 	bpf_object__elf_finish(obj);
 	return obj;
 out:
+	pr_debug_obj(obj);
 	bpf_object__close(obj);
 	return ERR_PTR(err);
 }
