@@ -842,7 +842,8 @@ static int bpf_object__elf_collect(struct bpf_object *obj)
 				pr_warning("failed to alloc program %s (%s): %s",
 					   name, obj->path, errmsg);
 			}
-		} else if (sh.sh_type == SHT_REL) {
+		} else if (sh.sh_type == SHT_REL ||
+			   sh.sh_type == SHT_RELA) {
 			void *reloc = obj->efile.reloc;
 			int nr_reloc = obj->efile.nr_reloc + 1;
 			int sec = sh.sh_info; /* points to other section */
@@ -903,6 +904,28 @@ bpf_object__find_prog_by_idx(struct bpf_object *obj, int idx)
 	return NULL;
 }
 
+static int getrel(Elf_Data *data, int i, GElf_Rela *rela, GElf_Shdr *shdr)
+{
+	GElf_Rel rel;
+
+	if (shdr->sh_type == SHT_REL) {
+		if (!gelf_getrel(data, i, &rel))
+			goto error;
+		rela->r_offset = rel.r_offset;
+		rela->r_info   = rel.r_info;
+		rela->r_addend = 0;
+	} else if (shdr->sh_type == SHT_RELA) {
+		if (!gelf_getrela(data, i, rela))
+			goto error;
+	}
+
+	return 0;
+
+error:
+	pr_warning("relocation: failed to get %d reloc\n", i);
+	return -1;
+}
+
 static int
 bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			   Elf_Data *data, struct bpf_object *obj)
@@ -927,26 +950,30 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 
 	for (i = 0; i < nrels; i++) {
 		GElf_Sym sym;
-		GElf_Rel rel;
+		GElf_Rela rela;
 		unsigned int insn_idx;
 		struct bpf_insn *insns = prog->insns;
 		size_t map_idx;
 
-		if (!gelf_getrel(data, i, &rel)) {
-			pr_warning("relocation: failed to get %d reloc\n", i);
+		if (getrel(data, i, &rela, shdr))
 			return -LIBBPF_ERRNO__FORMAT;
-		}
 
 		if (!gelf_getsym(symbols,
-				 GELF_R_SYM(rel.r_info),
+				 GELF_R_SYM(rela.r_info),
 				 &sym)) {
 			pr_warning("relocation: symbol %"PRIx64" not found\n",
-				   GELF_R_SYM(rel.r_info));
+				   GELF_R_SYM(rela.r_info));
 			return -LIBBPF_ERRNO__FORMAT;
 		}
 		pr_debug("relo for %lld value %lld name %d\n",
-			 (long long) (rel.r_info >> 32),
+			 (long long) (rela.r_info >> 32),
 			 (long long) sym.st_value, sym.st_name);
+
+		if (rela.r_addend != 0) {
+			pr_warning("Program '%s' contains unsupported relocation addend %lu\n",
+				   prog->section_name, rela.r_addend);
+			return -LIBBPF_ERRNO__RELOC;
+		}
 
 		if (sym.st_shndx != maps_shndx && sym.st_shndx != text_shndx) {
 			pr_warning("Program '%s' contains non-map related relo data pointing to section %u\n",
@@ -954,7 +981,7 @@ bpf_program__collect_reloc(struct bpf_program *prog, GElf_Shdr *shdr,
 			return -LIBBPF_ERRNO__RELOC;
 		}
 
-		insn_idx = rel.r_offset / sizeof(struct bpf_insn);
+		insn_idx = rela.r_offset / sizeof(struct bpf_insn);
 		pr_debug("relocation: insn_idx=%u\n", insn_idx);
 
 		if (insns[insn_idx].code == (BPF_JMP | BPF_CALL)) {
@@ -1143,7 +1170,8 @@ static int bpf_object__collect_reloc(struct bpf_object *obj)
 		int idx = shdr->sh_info;
 		struct bpf_program *prog;
 
-		if (shdr->sh_type != SHT_REL) {
+		if (shdr->sh_type != SHT_REL &&
+		    shdr->sh_type != SHT_RELA) {
 			pr_warning("internal error at %d\n", __LINE__);
 			return -LIBBPF_ERRNO__INTERNAL;
 		}
