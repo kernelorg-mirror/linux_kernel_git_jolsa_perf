@@ -246,4 +246,6 @@ int set_timer(int sec);
 int map_get_next_key(void *map, void *key, void *value);
 int map_lookup_elem(void *map, void *key, void *value);
 
+char *strcat(char *dst, char *src);
+
 #endif
