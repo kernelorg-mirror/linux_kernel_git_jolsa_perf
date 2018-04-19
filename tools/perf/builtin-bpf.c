@@ -11,6 +11,7 @@
 #include "parse-events.h"
 #include "evlist.h"
 #include "evsel.h"
+#include "config.h"
 #include "bpf-loader.h"
 
 struct perf_bpf {
@@ -136,6 +137,11 @@ out:
 	return WEXITSTATUS(status);
 }
 
+static int perf_bpf_config(const char *var, const char *value, void *cb)
+{
+	return perf_default_config(var, value, cb);
+}
+
 int cmd_bpf(int argc, const char **argv)
 {
 	int err = -1;
@@ -162,6 +168,12 @@ int cmd_bpf(int argc, const char **argv)
 	};
 
 	signal(SIGINT, sig_handler);
+
+	err = perf_config(perf_bpf_config, NULL);
+	if (err) {
+		pr_err("failed: process perf config\n");
+		return err;
+	}
 
 	bpf.evlist = perf_evlist__new();
 	if (bpf.evlist == NULL)
