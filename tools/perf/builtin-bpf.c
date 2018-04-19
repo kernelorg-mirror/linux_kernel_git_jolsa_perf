@@ -100,6 +100,10 @@ static int bpf_interp_call(struct bpf_interp *in,
 		dr = 0;
 		bpf.timer = (int) regs[1];
 		break;
+	case FUNC_strcat:
+		strcat((char *) regs[1], (char *) regs[2]);
+		dr = 0;
+		break;
 	default:
 		return -1;
 	};
