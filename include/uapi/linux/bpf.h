@@ -1039,6 +1039,7 @@ struct bpf_prog_info {
 	__u32 ifindex;
 	__u64 netns_dev;
 	__u64 netns_ino;
+	__u16 gpl_compatible:1;
 } __attribute__((aligned(8)));
 
 struct bpf_map_info {
