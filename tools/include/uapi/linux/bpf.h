@@ -884,6 +884,7 @@ enum bpf_func_id {
 /* BPF_FUNC_skb_set_tunnel_key flags. */
 #define BPF_F_ZERO_CSUM_TX		(1ULL << 1)
 #define BPF_F_DONT_FRAGMENT		(1ULL << 2)
+#define BPF_F_SEQ_NUMBER		(1ULL << 3)
 
 /* BPF_FUNC_perf_event_output, BPF_FUNC_perf_event_read and
  * BPF_FUNC_perf_event_read_value flags.
@@ -1038,6 +1039,7 @@ struct bpf_prog_info {
 	__u32 ifindex;
 	__u64 netns_dev;
 	__u64 netns_ino;
+	__u16 gpl_compatible:1;
 } __attribute__((aligned(8)));
 
 struct bpf_map_info {
