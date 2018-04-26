@@ -93,6 +93,32 @@ ifeq ($(feature-disassembler-four-args), 1)
 CFLAGS += -DDISASM_FOUR_ARGS_SIGNATURE
 endif
 
+# get relative building directory (to $(OUTPUT))
+# and '.' if it's $(OUTPUT) itself
+__build-dir = $(subst $(OUTPUT),,$(dir $@))
+build-dir   = $(if $(__build-dir),$(__build-dir),.)
+
+$(OUTPUT)%.o: %.c FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%.i: %.c FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%.s: %.c FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%-bison.o: %.c FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%-flex.o: %.c FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%.o: %.S FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
+$(OUTPUT)%.i: %.S FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=$(build-dir) $@
+
 all: $(OUTPUT)bpftool
 
 $(OUTPUT)bpftool-in.o: FORCE
