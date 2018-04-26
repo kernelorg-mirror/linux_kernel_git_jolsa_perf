@@ -1,0 +1,14 @@
+bpftool-y += cfg.o
+bpftool-y += cgroup.o
+bpftool-y += common.o
+bpftool-y += jit_disasm.o
+bpftool-y += json_writer.o
+bpftool-y += main.o
+bpftool-y += map.o
+bpftool-y += prog.o
+bpftool-y += xlated_dumper.o
+bpftool-y += disasm.o
+
+$(OUTPUT)disasm.o: ../../../kernel/bpf/disasm.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)

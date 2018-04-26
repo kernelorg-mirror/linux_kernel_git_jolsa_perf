@@ -1,6 +1,8 @@
 include ../../scripts/Makefile.include
 include ../../scripts/utilities.mak
 
+all:
+
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(CURDIR)))
 srctree := $(patsubst %/,%,$(dir $(srctree)))
@@ -13,6 +15,7 @@ else
   Q = @
 endif
 
+MAKEFLAGS= --no-print-directory -r
 BPF_DIR = $(srctree)/tools/lib/bpf/
 
 ifneq ($(OUTPUT),)
@@ -31,6 +34,26 @@ $(LIBBPF): FORCE
 $(LIBBPF)-clean:
 	$(call QUIET_CLEAN, libbpf)
 	$(Q)$(MAKE) -C $(BPF_DIR) OUTPUT=$(OUTPUT) clean >/dev/null
+
+ifdef FIXDEP
+  force_fixdep := 0
+else
+  force_fixdep := 1
+endif
+
+export srctree OUTPUT CC CFLAGS LIBS INSTALL RM V
+
+include $(srctree)/tools/build/Makefile.include
+
+ifeq ($(force_fixdep),1)
+goals := $(filter-out all sub-make, $(MAKECMDGOALS))
+
+$(goals) all: sub-make
+
+sub-make: fixdep
+	$(Q)$(MAKE) FIXDEP=1 -f Makefile $(goals)
+
+else # force_fixdep
 
 prefix ?= /usr/local
 bash_compdir ?= /usr/share/bash-completion/completions
@@ -70,23 +93,15 @@ ifeq ($(feature-disassembler-four-args), 1)
 CFLAGS += -DDISASM_FOUR_ARGS_SIGNATURE
 endif
 
-include $(wildcard $(OUTPUT)*.d)
-
 all: $(OUTPUT)bpftool
 
-SRCS = $(wildcard *.c)
-OBJS = $(patsubst %.c,$(OUTPUT)%.o,$(SRCS)) $(OUTPUT)disasm.o
+$(OUTPUT)bpftool-in.o: FORCE
+	$(Q)$(MAKE) $(build)=bpftool
 
-$(OUTPUT)disasm.o: $(srctree)/kernel/bpf/disasm.c
-	$(QUIET_CC)$(COMPILE.c) -MMD -o $@ $<
-
-$(OUTPUT)bpftool: $(OBJS) $(LIBBPF)
+$(OUTPUT)bpftool: $(OUTPUT)bpftool-in.o $(LIBBPF)
 	$(QUIET_LINK)$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(OUTPUT)%.o: %.c
-	$(QUIET_CC)$(COMPILE.c) -MMD -o $@ $<
-
-clean: $(LIBBPF)-clean
+clean: $(LIBBPF)-clean fixdep-clean
 	$(call QUIET_CLEAN, bpftool)
 	$(Q)$(RM) $(OUTPUT)bpftool $(OUTPUT)*.o $(OUTPUT)*.d
 	$(call QUIET_CLEAN, core-gen)
@@ -120,4 +135,5 @@ FORCE:
 
 .PHONY: all FORCE clean install uninstall
 .PHONY: doc doc-clean doc-install doc-uninstall
-.DEFAULT_GOAL := all
+
+endif # force_fixdep
