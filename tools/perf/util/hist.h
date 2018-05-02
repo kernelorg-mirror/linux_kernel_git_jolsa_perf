@@ -12,6 +12,7 @@
 
 struct hist_entry;
 struct hist_entry_ops;
+struct hist_entry_data;
 struct addr_location;
 struct symbol;
 
@@ -126,22 +127,7 @@ extern const struct hist_iter_ops hist_iter_branch;
 extern const struct hist_iter_ops hist_iter_mem;
 extern const struct hist_iter_ops hist_iter_cumulative;
 
-struct hist_entry *hists__add_entry(struct hists *hists,
-				    struct addr_location *al,
-				    struct symbol *parent,
-				    struct branch_info *bi,
-				    struct mem_info *mi,
-				    struct perf_sample *sample,
-				    bool sample_self);
-
-struct hist_entry *hists__add_entry_ops(struct hists *hists,
-					struct hist_entry_ops *ops,
-					struct addr_location *al,
-					struct symbol *sym_parent,
-					struct branch_info *bi,
-					struct mem_info *mi,
-					struct perf_sample *sample,
-					bool sample_self);
+struct hist_entry *hists__add_entry(struct hist_entry_data *data);
 
 int hist_entry_iter__add(struct hist_entry_iter *iter, struct addr_location *al,
 			 int max_stack_depth, void *arg);

@@ -214,6 +214,12 @@ static int perf_evsel__add_sample(struct perf_evsel *evsel,
 				  struct machine *machine)
 {
 	struct hists *hists = evsel__hists(evsel);
+	struct hist_entry_data data = {
+		.hists		= hists,
+		.al		= al,
+		.sample		= sample,
+		.sample_self	= true,
+	};
 	struct hist_entry *he;
 	int ret;
 
@@ -244,7 +250,7 @@ static int perf_evsel__add_sample(struct perf_evsel *evsel,
 	if (ann->has_br_stack && has_annotation(ann))
 		return process_branch_callback(evsel, sample, al, ann, machine);
 
-	he = hists__add_entry(hists, al, NULL, NULL, NULL, sample, true);
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		return -ENOMEM;
 

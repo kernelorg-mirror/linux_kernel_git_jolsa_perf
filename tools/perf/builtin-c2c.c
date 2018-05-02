@@ -250,6 +250,7 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 				struct perf_evsel *evsel,
 				struct machine *machine)
 {
+	struct hist_entry_data data;
 	struct c2c_hists *c2c_hists = &c2c.hists;
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_stats stats = { .nr_entries = 0, };
@@ -282,9 +283,16 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 	c2c_decode_stats(&stats, mi);
 
-	he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
-				  &al, NULL, NULL, mi,
-				  sample, true);
+	data = (struct hist_entry_data) {
+		.hists		= &c2c_hists->hists,
+		.al		= &al,
+		.mi		= mi,
+		.sample		= sample,
+		.sample_self	= true,
+		.ops		= &c2c_entry_ops,
+	};
+
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		goto free_mi;
 
@@ -310,15 +318,15 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 		int cpu = sample->cpu == (unsigned int) -1 ? 0 : sample->cpu;
 		int node = c2c.cpu2node[cpu];
 
-		mi = mi_dup;
+		data.mi = mi = mi_dup;
 
 		c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, 2);
 		if (!c2c_hists)
 			goto free_mi;
 
-		he = hists__add_entry_ops(&c2c_hists->hists, &c2c_entry_ops,
-					  &al, NULL, NULL, mi,
-					  sample, true);
+		data.hists = &c2c_hists->hists;
+
+		he = hists__add_entry(&data);
 		if (he == NULL)
 			goto free_mi;
 

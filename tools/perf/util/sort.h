@@ -80,6 +80,17 @@ struct hist_entry_ops {
 	void	(*free)(void *ptr);
 };
 
+struct hist_entry_data {
+	struct hists		*hists;
+	struct addr_location	*al;
+	struct symbol		*sym_parent;
+	struct branch_info	*bi;
+	struct mem_info		*mi;
+	struct perf_sample	*sample;
+	bool 			 sample_self;
+	struct hist_entry_ops	*ops;
+};
+
 /**
  * struct hist_entry - histogram entry
  *

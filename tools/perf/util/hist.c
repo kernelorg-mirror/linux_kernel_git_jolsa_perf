@@ -17,6 +17,7 @@
 #include <math.h>
 #include <inttypes.h>
 #include <sys/param.h>
+#include <asm/bug.h>
 
 static bool hists__filter_entry_by_dso(struct hists *hists,
 				       struct hist_entry *he);
@@ -581,18 +582,22 @@ out:
 	return he;
 }
 
-static struct hist_entry*
-__hists__add_entry(struct hists *hists,
-		   struct addr_location *al,
-		   struct symbol *sym_parent,
-		   struct branch_info *bi,
-		   struct mem_info *mi,
-		   struct perf_sample *sample,
-		   bool sample_self,
-		   struct hist_entry_ops *ops)
+struct hist_entry*
+hists__add_entry(struct hist_entry_data *data)
 {
-	struct namespaces *ns = thread__namespaces(al->thread);
-	struct hist_entry entry = {
+	struct addr_location *al   = data->al;
+	struct symbol *sym_parent  = data->sym_parent;
+	struct branch_info *bi	   = data->bi;
+	struct mem_info *mi	   = data->mi;
+	struct perf_sample *sample = data->sample;
+	struct hist_entry_ops *ops = data->ops;
+	struct namespaces *ns	   = thread__namespaces(al->thread);
+	struct hist_entry entry;
+
+	if (WARN_ON(!al || !sample || !data->hists))
+		return NULL;
+
+	entry = (struct hist_entry) {
 		.thread	= al->thread,
 		.comm = thread__comm(al->thread),
 		.cgroup_id = {
@@ -616,7 +621,7 @@ __hists__add_entry(struct hists *hists,
 		},
 		.parent = sym_parent,
 		.filtered = symbol__parent_filter(sym_parent) | al->filtered,
-		.hists	= hists,
+		.hists	= data->hists,
 		.branch_info = bi,
 		.mem_info = mi,
 		.transaction = sample->transaction,
@@ -625,32 +630,7 @@ __hists__add_entry(struct hists *hists,
 		.ops = ops,
 	};
 
-	return hists__findnew_entry(hists, &entry, al, sample_self);
-}
-
-struct hist_entry *hists__add_entry(struct hists *hists,
-				    struct addr_location *al,
-				    struct symbol *sym_parent,
-				    struct branch_info *bi,
-				    struct mem_info *mi,
-				    struct perf_sample *sample,
-				    bool sample_self)
-{
-	return __hists__add_entry(hists, al, sym_parent, bi, mi,
-				  sample, sample_self, NULL);
-}
-
-struct hist_entry *hists__add_entry_ops(struct hists *hists,
-					struct hist_entry_ops *ops,
-					struct addr_location *al,
-					struct symbol *sym_parent,
-					struct branch_info *bi,
-					struct mem_info *mi,
-					struct perf_sample *sample,
-					bool sample_self)
-{
-	return __hists__add_entry(hists, al, sym_parent, bi, mi,
-				  sample, sample_self, ops);
+	return hists__findnew_entry(data->hists, &entry, al, data->sample_self);
 }
 
 static int
@@ -685,12 +665,19 @@ static int
 iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al)
 {
 	u64 cost;
-	struct mem_info *mi = iter->priv;
 	struct hists *hists = evsel__hists(iter->evsel);
 	struct perf_sample *sample = iter->sample;
+	struct hist_entry_data data = {
+		.hists		= hists,
+		.al		= al,
+		.sym_parent	= iter->parent,
+		.mi		= iter->priv,
+		.sample		= sample,
+		.sample_self	= true,
+	};
 	struct hist_entry *he;
 
-	if (mi == NULL)
+	if (data.mi == NULL)
 		return -EINVAL;
 
 	cost = sample->weight;
@@ -706,8 +693,7 @@ iter_add_single_mem_entry(struct hist_entry_iter *iter, struct addr_location *al
 	 */
 	sample->period = cost;
 
-	he = hists__add_entry(hists, al, iter->parent, NULL, mi,
-			      sample, true);
+	he = hists__add_entry(&data);
 	if (!he)
 		return -ENOMEM;
 
@@ -788,6 +774,7 @@ iter_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *al)
 static int
 iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *al)
 {
+	struct hist_entry_data data;
 	struct branch_info *bi;
 	struct perf_evsel *evsel = iter->evsel;
 	struct hists *hists = evsel__hists(evsel);
@@ -808,8 +795,16 @@ iter_add_next_branch_entry(struct hist_entry_iter *iter, struct addr_location *a
 	sample->period = 1;
 	sample->weight = bi->flags.cycles ? bi->flags.cycles : 1;
 
-	he = hists__add_entry(hists, al, iter->parent, &bi[i], NULL,
-			      sample, true);
+	data = (struct hist_entry_data) {
+		.hists		= hists,
+		.al		= al,
+		.sym_parent	= iter->parent,
+		.bi		= &bi[i],
+		.sample		= sample,
+		.sample_self	= true,
+	};
+
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -842,11 +837,16 @@ static int
 iter_add_single_normal_entry(struct hist_entry_iter *iter, struct addr_location *al)
 {
 	struct perf_evsel *evsel = iter->evsel;
-	struct perf_sample *sample = iter->sample;
+	struct hist_entry_data data = {
+		.hists		= evsel__hists(evsel),
+		.al		= al,
+		.sym_parent	= iter->parent,
+		.sample		= iter->sample,
+		.sample_self	= true,
+	};
 	struct hist_entry *he;
 
-	he = hists__add_entry(evsel__hists(evsel), al, iter->parent, NULL, NULL,
-			      sample, true);
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -903,11 +903,17 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 	struct hists *hists = evsel__hists(evsel);
 	struct perf_sample *sample = iter->sample;
 	struct hist_entry **he_cache = iter->priv;
+	struct hist_entry_data data = {
+		.hists		= hists,
+		.al		= al,
+		.sym_parent	= iter->parent,
+		.sample		= sample,
+		.sample_self	= true,
+	};
 	struct hist_entry *he;
 	int err = 0;
 
-	he = hists__add_entry(hists, al, iter->parent, NULL, NULL,
-			      sample, true);
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		return -ENOMEM;
 
@@ -965,6 +971,12 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 	};
 	int i;
 	struct callchain_cursor cursor;
+	struct hist_entry_data data = {
+		.hists		= evsel__hists(evsel),
+		.al		= al,
+		.sym_parent	= iter->parent,
+		.sample		= sample,
+	};
 
 	callchain_cursor_snapshot(&cursor, &callchain_cursor);
 
@@ -982,8 +994,7 @@ iter_add_next_cumulative_entry(struct hist_entry_iter *iter,
 		}
 	}
 
-	he = hists__add_entry(evsel__hists(evsel), al, iter->parent, NULL, NULL,
-			      sample, false);
+	he = hists__add_entry(&data);
 	if (he == NULL)
 		return -ENOMEM;
 

@@ -331,6 +331,12 @@ static int diff__process_sample_event(struct perf_tool *tool __maybe_unused,
 {
 	struct addr_location al;
 	struct hists *hists = evsel__hists(evsel);
+	struct hist_entry_data data = {
+		.hists		= hists,
+		.al		= &al,
+		.sample		= sample,
+		.sample_self	= true,
+	};
 	int ret = -1;
 
 	if (machine__resolve(machine, &al, sample) < 0) {
@@ -339,7 +345,7 @@ static int diff__process_sample_event(struct perf_tool *tool __maybe_unused,
 		return -1;
 	}
 
-	if (!hists__add_entry(hists, &al, NULL, NULL, NULL, sample, true)) {
+	if (!hists__add_entry(&data)) {
 		pr_warning("problem incrementing symbol period, skipping event\n");
 		goto out_put;
 	}

@@ -77,6 +77,12 @@ static int add_hist_entries(struct perf_evlist *evlist, struct machine *machine)
 	 */
 	evlist__for_each_entry(evlist, evsel) {
 		struct hists *hists = evsel__hists(evsel);
+		struct hist_entry_data data = {
+			.hists		= hists,
+			.al		= &al,
+			.sample		= &sample,
+			.sample_self	= true,
+		};
 
 		for (k = 0; k < ARRAY_SIZE(fake_common_samples); k++) {
 			sample.cpumode = PERF_RECORD_MISC_USER;
@@ -87,8 +93,7 @@ static int add_hist_entries(struct perf_evlist *evlist, struct machine *machine)
 			if (machine__resolve(machine, &al, &sample) < 0)
 				goto out;
 
-			he = hists__add_entry(hists, &al, NULL,
-						NULL, NULL, &sample, true);
+			he = hists__add_entry(&data);
 			if (he == NULL) {
 				addr_location__put(&al);
 				goto out;
@@ -106,8 +111,7 @@ static int add_hist_entries(struct perf_evlist *evlist, struct machine *machine)
 			if (machine__resolve(machine, &al, &sample) < 0)
 				goto out;
 
-			he = hists__add_entry(hists, &al, NULL,
-						NULL, NULL, &sample, true);
+			he = hists__add_entry(&data);
 			if (he == NULL) {
 				addr_location__put(&al);
 				goto out;
