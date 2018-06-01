@@ -7,4 +7,5 @@ obj-y := core.o ring_buffer.o callchain.o
 
 obj-$(CONFIG_HAVE_HW_BREAKPOINT) += hw_breakpoint.o
 obj-$(CONFIG_UPROBES) += uprobes.o
-
+obj-$(CONFIG_PERF_CPUTIME) += cputime-perf.o
+cputime-perf-objs := cputime.o
