@@ -307,6 +307,22 @@ The output is SMI cycles%, equals to (aperf - unhalted core cycles) / aperf
 
 Users who wants to get the actual value can apply --no-metric-only.
 
+--top::
+--top-full:
+Measure cputime PMU events and display percentage CPU utilization rates.
+
+The --top option displays rates for following events:
+  idle system user irq softirq iowait
+
+The --top-full option displays additional rates:
+  guest guest_nice nice steal
+
+  # perf stat --top
+  # perf stat --top-full
+  # perf stat --top -I 1000
+  # perf stat --top -I 1000 -A
+  # perf stat --top -I 1000 --per-core
+
 EXAMPLES
 --------
 
