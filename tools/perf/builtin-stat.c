@@ -135,6 +135,34 @@ static const char *smi_cost_attrs = {
 	"}"
 };
 
+static const char *top_attrs = {
+	"{"
+	"cpu-clock,"
+	"cputime/idle/,"
+	"cputime/system/,"
+	"cputime/user/,"
+	"cputime/irq/,"
+	"cputime/softirq/,"
+	"cputime/iowait/"
+	"}"
+};
+
+static const char *top_full_attrs = {
+	"{"
+	"cpu-clock,"
+	"cputime/idle/,"
+	"cputime/system/,"
+	"cputime/user/,"
+	"cputime/irq/,"
+	"cputime/softirq/,"
+	"cputime/iowait/,"
+	"cputime/guest/,"
+	"cputime/guest_nice/,"
+	"cputime/nice/,"
+	"cputime/steal/"
+	"}"
+};
+
 static struct perf_evlist	*evsel_list;
 
 static struct rblist		 metric_events;
@@ -154,6 +182,8 @@ static bool			null_run			=  false;
 static int			detailed_run			=  0;
 static bool			transaction_run;
 static bool			topdown_run			= false;
+static bool			top_run				= false;
+static bool			top_run_full			= false;
 static bool			smi_cost			= false;
 static bool			smi_reset			= false;
 static bool			big_num				=  true;
@@ -2004,6 +2034,8 @@ static const struct option stat_options[] = {
 			"measure topdown level 1 statistics"),
 	OPT_BOOLEAN(0, "smi-cost", &smi_cost,
 			"measure SMI cost"),
+	OPT_BOOLEAN(0, "top", &top_run, "show CPU utilization"),
+	OPT_BOOLEAN(0, "top-full", &top_run_full, "show extended CPU utilization"),
 	OPT_CALLBACK('M', "metrics", &evsel_list, "metric/metric group list",
 		     "monitor specified metrics or metric groups (separated by ,)",
 		     parse_metric_groups),
@@ -2387,6 +2419,21 @@ static int add_default_attributes(void)
 			parse_events_print_error(&errinfo, transaction_attrs);
 			return -1;
 		}
+		return 0;
+	}
+
+	if (top_run || top_run_full) {
+		const char *attrs = top_run ? top_attrs : top_full_attrs;
+
+		err = parse_events(evsel_list, attrs, &errinfo);
+		if (err) {
+			fprintf(stderr, "Cannot set up cputime events\n");
+			parse_events_print_error(&errinfo, attrs);
+			return -1;
+		}
+		if (!force_metric_only)
+			metric_only = true;
+		metric_only_len = 10;
 		return 0;
 	}
 
