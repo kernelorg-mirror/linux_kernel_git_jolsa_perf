@@ -1407,4 +1407,5 @@ int perf_event_exit_cpu(unsigned int cpu);
 #define perf_event_exit_cpu	NULL
 #endif
 
+bool has_cputime_event(int cpu);
 #endif /* _LINUX_PERF_EVENT_H */

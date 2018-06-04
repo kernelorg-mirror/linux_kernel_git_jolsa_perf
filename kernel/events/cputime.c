@@ -1,6 +1,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/sched.h>
 #include <linux/perf_event.h>
+#include <linux/tick.h>
 
 enum perf_cputime_id {
 	PERF_CPUTIME_USER,
@@ -15,6 +16,13 @@ enum perf_cputime_id {
 	PERF_CPUTIME_GUEST_NICE,
 	PERF_CPUTIME_MAX,
 };
+
+static DEFINE_PER_CPU(int, has_cputime);
+
+bool has_cputime_event(int cpu)
+{
+	return per_cpu(has_cputime, cpu) != 0;
+}
 
 static enum cpu_usage_stat map[PERF_CPUTIME_MAX] = {
 	[PERF_CPUTIME_USER]		= CPUTIME_USER,
@@ -143,12 +151,17 @@ static int cputime_event_add(struct perf_event *event, int flags)
 	if (flags & PERF_EF_START)
 		cputime_event_start(event, flags);
 
+	if (event->hw.config == PERF_CPUTIME_IDLE)
+		tick_nohz_idle_restart_tick();
+
+	this_cpu_inc(has_cputime);
 	return 0;
 }
 
 static void cputime_event_del(struct perf_event *event, int flags)
 {
 	cputime_event_stop(event, PERF_EF_UPDATE);
+	this_cpu_dec(has_cputime);
 }
 
 static void perf_cputime_read(struct perf_event *event)

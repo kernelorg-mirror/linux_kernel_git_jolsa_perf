@@ -28,6 +28,7 @@
 #include <linux/posix-timers.h>
 #include <linux/context_tracking.h>
 #include <linux/mm.h>
+#include <linux/perf_event.h>
 
 #include <asm/irq_regs.h>
 
@@ -911,6 +912,9 @@ static bool can_stop_idle_tick(int cpu, struct tick_sched *ts)
 		if (tick_do_timer_cpu == TICK_DO_TIMER_NONE)
 			return false;
 	}
+
+	if (has_cputime_event(cpu))
+		return false;
 
 	return true;
 }
