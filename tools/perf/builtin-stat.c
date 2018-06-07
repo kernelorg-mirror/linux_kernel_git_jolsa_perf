@@ -135,34 +135,6 @@ static const char *smi_cost_attrs = {
 	"}"
 };
 
-static const char *top_attrs = {
-	"{"
-	"cpu-clock,"
-	"cputime/idle/,"
-	"cputime/system/,"
-	"cputime/user/,"
-	"cputime/irq/,"
-	"cputime/softirq/,"
-	"cputime/iowait/"
-	"}"
-};
-
-static const char *top_full_attrs = {
-	"{"
-	"cpu-clock,"
-	"cputime/idle/,"
-	"cputime/system/,"
-	"cputime/user/,"
-	"cputime/irq/,"
-	"cputime/softirq/,"
-	"cputime/iowait/,"
-	"cputime/guest/,"
-	"cputime/guest_nice/,"
-	"cputime/nice/,"
-	"cputime/steal/"
-	"}"
-};
-
 static struct perf_evlist	*evsel_list;
 
 static struct rblist		 metric_events;

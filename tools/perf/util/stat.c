@@ -7,6 +7,34 @@
 #include "evsel.h"
 #include "thread_map.h"
 
+const char *top_attrs = {
+	"{"
+	"cpu-clock,"
+	"cputime/idle/,"
+	"cputime/system/,"
+	"cputime/user/,"
+	"cputime/irq/,"
+	"cputime/softirq/,"
+	"cputime/iowait/"
+	"}"
+};
+
+const char *top_full_attrs = {
+	"{"
+	"cpu-clock,"
+	"cputime/idle/,"
+	"cputime/system/,"
+	"cputime/user/,"
+	"cputime/irq/,"
+	"cputime/softirq/,"
+	"cputime/iowait/,"
+	"cputime/guest/,"
+	"cputime/guest_nice/,"
+	"cputime/nice/,"
+	"cputime/steal/"
+	"}"
+};
+
 void update_stats(struct stats *stats, u64 val)
 {
 	double delta;
