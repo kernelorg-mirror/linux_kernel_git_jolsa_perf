@@ -41,6 +41,7 @@
 #include "util/perf-hooks.h"
 #include "util/time-utils.h"
 #include "util/units.h"
+#include "util/stat.h"
 #include "asm/bug.h"
 
 #include <errno.h>
@@ -81,6 +82,11 @@ struct record {
 	bool			timestamp_boundary;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
+
+	struct {
+		bool			 enabled;
+		struct perf_stat_record	 record;
+	} stat;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -589,7 +595,111 @@ static void record__init_features(struct record *rec)
 	if (!rec->opts.full_auxtrace)
 		perf_header__clear_feat(&session->header, HEADER_AUXTRACE);
 
+	if (!rec->stat.enabled)
+		perf_header__clear_feat(&session->header, HEADER_STAT_DATA);
+
 	perf_header__clear_feat(&session->header, HEADER_STAT);
+}
+
+static int stat_open(struct record *rec)
+{
+	struct perf_stat_config *config = &rec->stat.record.config;
+	struct record_opts *opts = &rec->opts;
+
+	if (target__none(&opts->target)) {
+		thread_map__set_pid(rec->stat.record.evlist->threads, 0,
+				    rec->evlist->workload.pid);
+	}
+
+	config->output = stderr;
+	config->opts.initial_delay = opts->initial_delay;
+	config->opts.no_inherit    = opts->no_inherit;
+
+	if (perf_stat_record__open(&rec->stat.record, &opts->target, true))
+		return -1;
+
+	perf_stat__init_shadow_stats(&config->rt_stat);
+	return 0;
+}
+
+static int process_synthesized_stat(struct perf_tool *tool,
+				    union perf_event *event,
+				    struct perf_sample *sample __maybe_unused,
+				    struct machine *machine __maybe_unused)
+{
+	struct record *rec = container_of(tool, struct record, tool);
+	struct perf_session *session = rec->session;
+
+	if (perf_data_file__write(&session->stat_file, event, event->header.size) < 0) {
+		pr_err("Failed to write perf stat data, error: %m\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+#define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
+
+static int
+write_stat_event(struct perf_evsel *counter, u32 cpu, u32 thread,
+		 struct perf_counts_values *count,
+		 struct perf_tool *tool)
+{
+	struct perf_sample_id *sid = SID(counter, cpu, thread);
+
+	return perf_event__synthesize_stat(tool, cpu, thread, sid->id, count,
+					   process_synthesized_stat, NULL);
+}
+
+static int write_stat_round_event(struct perf_tool *tool, u64 tm, u64 type)
+{
+	return perf_event__synthesize_stat_round(tool, tm, type,
+						 process_synthesized_stat,
+						 NULL);
+}
+
+static int stat_read(struct record *rec)
+{
+	struct perf_stat_config *config = &rec->stat.record.config;
+	struct perf_session *session = rec->session;
+	struct perf_data_file *file = &session->stat_file;
+	int ret;
+
+	if (file->fd < 0) {
+		if (perf_data_file__mkstemp(file, "/tmp/perf-stat-data-XXXXXX")) {
+			pr_err("Failed to create temporary file\n");
+			return -1;
+		}
+	} else {
+		ret = ftruncate(file->fd, 0);
+		if (ret) {
+			pr_err("Failed to truncate stat temporary file\n");
+			return -1;
+		}
+	}
+
+	ret = perf_stat_synthesize_config(config, &rec->tool, rec->stat.record.evlist,
+					  process_synthesized_stat, true);
+	if (ret) {
+		pr_err("Failed to truncate stat temporary file\n");
+		return -1;
+	}
+
+	rec->stat.record.write_stat = write_stat_event;
+
+	perf_stat_record__read(&rec->stat.record, &rec->opts.target, false, &rec->tool);
+
+	write_stat_round_event(&rec->tool, 0, PERF_STAT_ROUND_TYPE__FINAL);
+	return 0;
+}
+
+static void stat_delete(struct record *rec)
+{
+	struct perf_session *session = rec->session;
+	struct perf_data_file *file = &session->stat_file;
+
+	perf_data_file__remove(file);
+	free((char *) file->path);
 }
 
 static void
@@ -610,6 +720,10 @@ record__finish_output(struct record *rec)
 		if (rec->buildid_all)
 			dsos__hit_all(rec->session);
 	}
+
+	if (rec->stat.enabled)
+		stat_read(rec);
+
 	perf_session__write_header(rec->session, rec->evlist, fd, true);
 
 	return;
@@ -919,6 +1033,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		goto out_child;
 	}
 
+	if (rec->stat.enabled && stat_open(rec)) {
+		err = -1;
+		goto out_child;
+	}
+
 	err = bpf__apply_obj_config();
 	if (err) {
 		char errbuf[BUFSIZ];
@@ -979,8 +1098,12 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	 * (apart from group members) have enable_on_exec=1 set,
 	 * so don't spoil it by prematurely enabling them.
 	 */
-	if (!target__none(&opts->target) && !opts->initial_delay)
+	if (!target__none(&opts->target) && !opts->initial_delay) {
 		perf_evlist__enable(rec->evlist);
+
+		if (rec->stat.enabled)
+			perf_evlist__enable(rec->stat.record.evlist);
+	}
 
 	/*
 	 * Let the child rip
@@ -1133,6 +1256,8 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		if (done && !disabled && !target__none(&opts->target)) {
 			trigger_off(&auxtrace_snapshot_trigger);
 			perf_evlist__disable(rec->evlist);
+			if (rec->stat.enabled)
+				perf_evlist__disable(rec->stat.record.evlist);
 			disabled = true;
 		}
 	}
@@ -1530,6 +1655,10 @@ static struct record record = {
 		.mmap2		= perf_event__process_mmap2,
 		.ordered_events	= true,
 	},
+	.stat.record.config = {
+		.aggr_mode	= AGGR_GLOBAL,
+		.opts.scale	= true,
+	},
 };
 
 const char record_callchain_help[] = CALLCHAIN_RECORD_HELP
@@ -1683,11 +1812,37 @@ static struct option __record_options[] = {
 
 struct option *record_options = __record_options;
 
+static const struct option stat_options[] = {
+	OPT_CALLBACK('e', "event", &record.stat.record.evlist, "event",
+		     "event selector. use 'perf list' to list available events",
+		     parse_events_option),
+	OPT_END()
+};
+
+static const char * const record_stat_usage[] = {
+	"perf record stat [<options>]",
+	NULL,
+};
+
+static int __cmd_stat(struct record *rec, int argc, const char **argv __maybe_unused)
+{
+	rec->stat.record.evlist = perf_evlist__new();
+	if (rec->stat.record.evlist == NULL)
+		return -ENOMEM;
+
+	argc = parse_options(argc, argv, stat_options, record_stat_usage,
+			     PARSE_OPT_STOP_AT_NON_OPTION);
+
+	rec->stat.enabled = true;
+	return argc;
+}
+
 int cmd_record(int argc, const char **argv)
 {
 	int err;
 	struct record *rec = &record;
 	char errbuf[BUFSIZ];
+	const char * const subcommands[] = { "stat" };
 
 	setlocale(LC_ALL, "");
 
@@ -1720,10 +1875,17 @@ int cmd_record(int argc, const char **argv)
 	if (err)
 		return err;
 
-	argc = parse_options(argc, argv, record_options, record_usage,
-			    PARSE_OPT_STOP_AT_NON_OPTION);
+	argc = parse_options_subcommand(argc, argv, record_options, subcommands,
+					(const char **) record_usage,
+					PARSE_OPT_STOP_AT_NON_OPTION);
 	if (quiet)
 		perf_quiet_option();
+
+	if (argc && !strncmp(argv[0], "stat", 4)) {
+		argc = __cmd_stat(rec, argc, argv);
+		if (argc < 0)
+			return -1;
+	}
 
 	/* Make system wide (-a) the default target. */
 	if (!argc && target__none(&rec->opts.target))
@@ -1870,11 +2032,22 @@ int cmd_record(int argc, const char **argv)
 		goto out;
 	}
 
+	if (rec->stat.enabled) {
+		perf_evlist__set_maps(rec->stat.record.evlist, rec->evlist->cpus,
+				      rec->evlist->threads);
+
+		err = perf_evlist__alloc_stats(rec->stat.record.evlist, false);
+		if (err)
+			goto out;
+	}
+
 	err = __cmd_record(&record, argc, argv);
 out:
 	perf_evlist__delete(rec->evlist);
+	perf_evlist__delete(rec->stat.record.evlist);
 	symbol__exit();
 	auxtrace_record__free(rec->itr);
+	stat_delete(&record);
 	return err;
 }
 
