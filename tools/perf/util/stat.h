@@ -252,4 +252,7 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 			    struct target *_target,
 			    struct timespec *ts,
 			    int argc, const char **argv);
+
+extern const char *top_attrs;
+extern const char *top_full_attrs;
 #endif
