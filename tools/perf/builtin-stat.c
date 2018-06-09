@@ -205,7 +205,7 @@ static volatile int done = 0;
 
 static struct perf_stat_config stat_config = {
 	.aggr_mode	= AGGR_GLOBAL,
-	.scale		= true,
+	.opts.scale	= true,
 };
 
 static bool is_duration_time(struct perf_evsel *evsel)
@@ -242,7 +242,7 @@ static int create_perf_stat_counter(struct perf_evsel *evsel,
 	struct perf_event_attr *attr = &evsel->attr;
 	struct perf_evsel *leader = evsel->leader;
 
-	if (stat_config.scale) {
+	if (opts->scale) {
 		attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 				    PERF_FORMAT_TOTAL_TIME_RUNNING;
 	}
@@ -1949,7 +1949,7 @@ static const struct option stat_options[] = {
 		    "system-wide collection from all CPUs"),
 	OPT_BOOLEAN('g', "group", &group,
 		    "put the counters into a counter group"),
-	OPT_BOOLEAN('c', "scale", &stat_config.scale, "scale/normalize counters"),
+	OPT_BOOLEAN('c', "scale", &stat_config.opts.scale, "scale/normalize counters"),
 	OPT_INCR('v', "verbose", &verbose,
 		    "be more verbose (show counter open errors, etc)"),
 	OPT_INTEGER('r', "repeat", &run_count,
