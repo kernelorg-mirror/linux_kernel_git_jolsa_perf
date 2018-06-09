@@ -185,4 +185,8 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp);
 
 extern const char *top_attrs;
 extern const char *top_full_attrs;
+
+int create_perf_stat_counter(struct perf_evsel *evsel,
+			     struct stat_opts *opts,
+			     struct target *target);
 #endif
