@@ -84,6 +84,7 @@ struct record_opts {
 struct stat_opts {
 	unsigned	initial_delay;
 	bool		no_inherit;
+	bool		scale;
 };
 
 struct option;

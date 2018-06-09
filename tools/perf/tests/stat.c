@@ -41,7 +41,7 @@ static int process_stat_config_event(struct perf_tool *tool __maybe_unused,
 	perf_event__read_stat_config(&stat_config, config);
 
 	TEST_ASSERT_VAL("wrong aggr_mode", stat_config.aggr_mode == AGGR_CORE);
-	TEST_ASSERT_VAL("wrong scale",     stat_config.scale == 1);
+	TEST_ASSERT_VAL("wrong scale",     stat_config.opts.scale == 1);
 	TEST_ASSERT_VAL("wrong interval",  stat_config.interval == 1);
 	return 0;
 }
@@ -50,7 +50,7 @@ int test__synthesize_stat_config(struct test *test __maybe_unused, int subtest _
 {
 	struct perf_stat_config stat_config = {
 		.aggr_mode	= AGGR_CORE,
-		.scale		= 1,
+		.opts.scale	= 1,
 		.interval	= 1,
 	};
 

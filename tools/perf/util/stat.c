@@ -314,7 +314,7 @@ process_counter_values(struct perf_stat_config *config, struct perf_evsel *evsel
 	case AGGR_NONE:
 		if (!evsel->snapshot)
 			perf_evsel__compute_deltas(evsel, cpu, thread, count);
-		perf_counts_values__scale(count, config->scale, NULL);
+		perf_counts_values__scale(count, config->opts.scale, NULL);
 		if (config->aggr_mode == AGGR_NONE)
 			perf_stat__update_shadow_stats(evsel, count->val, cpu,
 						       &rt_stat);
@@ -329,7 +329,7 @@ process_counter_values(struct perf_stat_config *config, struct perf_evsel *evsel
 		break;
 	case AGGR_GLOBAL:
 		aggr->val += count->val;
-		if (config->scale) {
+		if (config->opts.scale) {
 			aggr->ena += count->ena;
 			aggr->run += count->run;
 		}
@@ -394,7 +394,7 @@ int perf_stat_process_counter(struct perf_stat_config *config,
 
 	if (!counter->snapshot)
 		perf_evsel__compute_deltas(counter, -1, -1, aggr);
-	perf_counts_values__scale(aggr, config->scale, &counter->counts->scaled);
+	perf_counts_values__scale(aggr, config->opts.scale, &counter->counts->scaled);
 
 	for (i = 0; i < 3; i++)
 		update_stats(&ps->res_stats[i], count[i]);
@@ -468,7 +468,7 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp)
 
 	ret  = fprintf(fp, "\n");
 	ret += fprintf(fp, "... aggr_mode %d\n", sc.aggr_mode);
-	ret += fprintf(fp, "... scale     %d\n", sc.scale);
+	ret += fprintf(fp, "... scale     %d\n", sc.opts.scale);
 	ret += fprintf(fp, "... interval  %u\n", sc.interval);
 
 	return ret;

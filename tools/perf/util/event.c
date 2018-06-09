@@ -1156,7 +1156,7 @@ int perf_event__synthesize_stat_config(struct perf_tool *tool,
 
 	ADD(AGGR_MODE,	config->aggr_mode)
 	ADD(INTERVAL,	config->interval)
-	ADD(SCALE,	config->scale)
+	ADD(SCALE,	config->opts.scale)
 
 	WARN_ONCE(i != PERF_STAT_CONFIG_TERM__MAX,
 		  "stat config terms unbalanced\n");
@@ -1221,7 +1221,7 @@ void perf_event__read_stat_config(struct perf_stat_config *config,
 			break;
 
 		CASE(AGGR_MODE, aggr_mode)
-		CASE(SCALE,     scale)
+		CASE(SCALE,     opts.scale)
 		CASE(INTERVAL,  interval)
 #undef CASE
 		default:
