@@ -166,7 +166,6 @@ static bool			group				= false;
 static const char		*pre_cmd			= NULL;
 static const char		*post_cmd			= NULL;
 static bool			sync_run			= false;
-static unsigned int		initial_delay			= 0;
 static unsigned int		unit_width			= 4; /* strlen("unit") */
 static bool			forever				= false;
 static bool			metric_only			= false;
@@ -238,7 +237,8 @@ static void perf_stat__reset_stats(void)
 		perf_stat__reset_shadow_per_stat(&stat_config.stats[i]);
 }
 
-static int create_perf_stat_counter(struct perf_evsel *evsel)
+static int create_perf_stat_counter(struct perf_evsel *evsel,
+				    struct stat_opts *opts)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	struct perf_evsel *leader = evsel->leader;
@@ -288,7 +288,7 @@ static int create_perf_stat_counter(struct perf_evsel *evsel)
 		 * In case of initial_delay we enable tracee
 		 * events manually.
 		 */
-		if (target__none(&target) && !initial_delay)
+		if (target__none(&target) && !opts->initial_delay)
 			attr->enable_on_exec = 1;
 	}
 
@@ -430,15 +430,15 @@ static void process_interval(void)
 
 static void enable_counters(void)
 {
-	if (initial_delay)
-		usleep(initial_delay * USEC_PER_MSEC);
+	if (stat_config.opts.initial_delay)
+		usleep(stat_config.opts.initial_delay * USEC_PER_MSEC);
 
 	/*
 	 * We need to enable counters only if:
 	 * - we don't have tracee (attaching to task or cpu)
 	 * - we have initial delay configured
 	 */
-	if (!target__none(&target) || initial_delay)
+	if (!target__none(&target) || stat_config.opts.initial_delay)
 		perf_evlist__enable(evsel_list);
 }
 
@@ -580,7 +580,7 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 
 	evlist__for_each_entry(evsel_list, counter) {
 try_again:
-		if (create_perf_stat_counter(counter) < 0) {
+		if (create_perf_stat_counter(counter, &stat_config.opts) < 0) {
 
 			/* Weak group failed. Reset the group. */
 			if ((errno == EINVAL || errno == EBADF) &&
@@ -1998,7 +1998,7 @@ static const struct option stat_options[] = {
 		     "aggregate counts per physical processor core", AGGR_CORE),
 	OPT_SET_UINT(0, "per-thread", &stat_config.aggr_mode,
 		     "aggregate counts per thread", AGGR_THREAD),
-	OPT_UINTEGER('D', "delay", &initial_delay,
+	OPT_UINTEGER('D', "delay", &stat_config.opts.initial_delay,
 		     "ms to wait before starting measurement after program start"),
 	OPT_CALLBACK_NOOPT(0, "metric-only", &metric_only, NULL,
 			"Only print computed metrics. No raw values", enable_metric_only),
