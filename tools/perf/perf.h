@@ -81,6 +81,10 @@ struct record_opts {
 	unsigned int proc_map_timeout;
 };
 
+struct stat_opts {
+	unsigned	initial_delay;
+};
+
 struct option;
 extern const char * const *record_usage;
 extern struct option *record_options;
