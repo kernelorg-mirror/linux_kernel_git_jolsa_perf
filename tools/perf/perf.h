@@ -85,6 +85,7 @@ struct stat_opts {
 	unsigned	initial_delay;
 	bool		no_inherit;
 	bool		scale;
+	bool		identifier;
 };
 
 struct option;

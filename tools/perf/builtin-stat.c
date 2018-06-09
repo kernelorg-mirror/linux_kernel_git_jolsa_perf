@@ -266,13 +266,8 @@ static int create_perf_stat_counter(struct perf_evsel *evsel,
 	/*
 	 * But set sample_type to PERF_SAMPLE_IDENTIFIER, which should be harmless
 	 * while avoiding that older tools show confusing messages.
-	 *
-	 * However for pipe sessions we need to keep it zero,
-	 * because script's perf_evsel__check_attr is triggered
-	 * by attr->sample_type != 0, and we can't run it on
-	 * stat sessions.
 	 */
-	if (!(STAT_RECORD && perf_stat.data.is_pipe))
+	if (opts->identifier)
 		attr->sample_type = PERF_SAMPLE_IDENTIFIER;
 
 	/*
@@ -3039,6 +3034,17 @@ int cmd_stat(int argc, const char **argv)
 
 	if (perf_stat_init_aggr_mode())
 		goto out;
+
+	/*
+	 * But set sample_type to PERF_SAMPLE_IDENTIFIER, which should be harmless
+	 * while avoiding that older tools show confusing messages.
+	 *
+	 * However for pipe sessions we need to keep it zero,
+	 * because script's perf_evsel__check_attr is triggered
+	 * by attr->sample_type != 0, and we can't run it on
+	 * stat sessions.
+	 */
+	stat_config.opts.identifier = !(STAT_RECORD && perf_stat.data.is_pipe);
 
 	/*
 	 * We dont want to block the signals - that would cause
