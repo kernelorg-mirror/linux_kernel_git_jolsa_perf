@@ -296,6 +296,56 @@ static int do_read_bitmap(struct feat_fd *ff, unsigned long **pset, u64 *psize)
 	return 0;
 }
 
+static int do_write_file(struct feat_fd *ff, int fd)
+{
+	struct stat st;
+	char *buf;
+	int err;
+	u64 size;
+
+	err = fstat(fd, &st);
+	if (err)
+		return err;
+
+	size = st.st_size;
+	err = do_write(ff, &size, sizeof(size));
+	if (err < 0)
+		return err;
+
+	if (!ff->buf) {
+		off_t off;
+
+		off = lseek(ff->fd, 0, SEEK_CUR);
+		return copyfile_offset(fd, 0, ff->fd, off, size);
+	}
+
+	err = fd__read_str(fd, &buf, (size_t*) &size);
+	if (err)
+		return err;
+
+	return __do_write_buf(ff, buf, size);
+}
+
+static int do_read_file(struct feat_fd *ff, int fd)
+{
+	u64 size;
+	int err;
+
+	err = do_read_u64(ff, &size);
+	if (err)
+		return err;
+
+	if (!ff->buf) {
+		off_t off;
+
+		off = lseek(ff->fd, 0, SEEK_CUR);
+		return copyfile_offset(ff->fd, off, fd, 0, size);
+	}
+
+	ff->offset += size;
+	return write(fd, ff->buf + ff->offset, size);
+}
+
 static int write_tracing_data(struct feat_fd *ff,
 			      struct perf_evlist *evlist)
 {
@@ -1420,6 +1470,16 @@ out:
 	return ret;
 }
 
+static int write_stat_data(struct feat_fd *ff,
+		      struct perf_evlist *evlist __maybe_unused)
+{
+	struct perf_session *session;
+
+	session = container_of(ff->ph, struct perf_session, header);
+
+	return do_write_file(ff, session->stat_file.fd);
+}
+
 static void print_hostname(struct feat_fd *ff, FILE *fp)
 {
 	fprintf(fp, "# hostname : %s\n", ff->ph->env.hostname);
@@ -1688,6 +1748,11 @@ static void print_auxtrace(struct feat_fd *ff __maybe_unused, FILE *fp)
 static void print_stat(struct feat_fd *ff __maybe_unused, FILE *fp)
 {
 	fprintf(fp, "# contains stat data\n");
+}
+
+static void print_stat_data(struct feat_fd *ff, FILE *fp)
+{
+	print_stat(ff, fp);
 }
 
 static void print_cache(struct feat_fd *ff, FILE *fp __maybe_unused)
@@ -2534,6 +2599,19 @@ out:
 	return ret;
 }
 
+static int process_stat_data(struct feat_fd *ff __maybe_unused,
+			     void *data __maybe_unused)
+{
+	struct perf_session *session;
+
+	session = container_of(ff->ph, struct perf_session, header);
+
+	if (perf_data_file__mkstemp(&session->stat_file, "/tmp/perf-stat-data-XXXXXX"))
+		return -1;
+
+	return do_read_file(ff, session->stat_file.fd);
+}
+
 struct feature_ops {
 	int (*write)(struct feat_fd *ff, struct perf_evlist *evlist);
 	void (*print)(struct feat_fd *ff, FILE *fp);
@@ -2590,6 +2668,7 @@ static const struct feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPN(GROUP_DESC,	group_desc,	false),
 	FEAT_OPN(AUXTRACE,	auxtrace,	false),
 	FEAT_OPN(STAT,		stat,		false),
+	FEAT_OPN(STAT_DATA,	stat_data,	false),
 	FEAT_OPN(CACHE,		cache,		true),
 	FEAT_OPR(SAMPLE_TIME,	sample_time,	false),
 	FEAT_OPR(MEM_TOPOLOGY,	mem_topology,	true),

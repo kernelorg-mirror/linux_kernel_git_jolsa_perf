@@ -123,6 +123,7 @@ struct perf_session *perf_session__new(struct perf_data *data,
 
 	session->repipe = repipe;
 	session->tool   = tool;
+	session->stat_file.fd = -1;
 	INIT_LIST_HEAD(&session->auxtrace_index);
 	machines__init(&session->machines);
 	ordered_events__init(&session->ordered_events, ordered_events__deliver_event);
