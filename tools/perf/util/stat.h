@@ -7,6 +7,7 @@
 #include "xyarray.h"
 #include "rblist.h"
 #include "perf.h"
+#include "event.h"
 
 struct stats {
 	double n, mean, M2;
@@ -189,4 +190,9 @@ extern const char *top_full_attrs;
 int create_perf_stat_counter(struct perf_evsel *evsel,
 			     struct stat_opts *opts,
 			     struct target *target);
+int perf_stat_synthesize_config(struct perf_stat_config *config,
+				struct perf_tool *tool,
+				struct perf_evlist *evlist,
+				perf_event__handler_t process,
+				bool attrs);
 #endif
