@@ -258,9 +258,28 @@ static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 				 char *metric_expr,
 				 char *metric_name)
 {
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
 	struct perf_pmu_alias *alias;
 	int ret;
 	int num;
+	int cmp;
+
+	p = &pmu->rb_root.rb_node;
+
+	while (*p != NULL) {
+		parent = *p;
+		alias = rb_entry(parent, struct perf_pmu_alias, rb_node);
+
+		cmp = strcmp(alias->name, name);
+		if (!cmp)
+			return 0;
+
+		if (cmp < 0)
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
 
 	alias = malloc(sizeof(*alias));
 	if (!alias)
@@ -306,6 +325,8 @@ static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 
 	list_add_tail(&alias->list, &pmu->aliases);
 
+	rb_link_node(&alias->rb_node, parent, p);
+	rb_insert_color(&alias->rb_node, &pmu->rb_root);
 	return 0;
 }
 
@@ -738,6 +759,7 @@ static struct perf_pmu *pmu_lookup(const char *name)
 
 	INIT_LIST_HEAD(&pmu->format);
 	INIT_LIST_HEAD(&pmu->aliases);
+	pmu->rb_root = RB_ROOT;
 
 	if (pmu_aliases(pmu, name)) {
 		free(pmu);

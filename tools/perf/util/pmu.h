@@ -29,6 +29,7 @@ struct perf_pmu {
 	struct list_head format;  /* HEAD struct perf_pmu_format -> list */
 	struct list_head aliases; /* HEAD struct perf_pmu_alias -> list */
 	struct list_head list;    /* ELEM */
+	struct rb_root rb_root;   /* alias tree */
 	int (*set_drv_config)	(struct perf_evsel_config_term *term);
 };
 
@@ -51,6 +52,7 @@ struct perf_pmu_alias {
 	char *str;
 	struct list_head terms; /* HEAD struct parse_events_term -> list */
 	struct list_head list;  /* ELEM */
+	struct rb_node rb_node;    /* name sorted list */
 	char unit[UNIT_MAX_LEN+1];
 	double scale;
 	bool per_pkg;
