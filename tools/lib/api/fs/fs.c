@@ -355,16 +355,12 @@ int filename__read_ull(const char *filename, unsigned long long *value)
 
 #define STRERR_BUFSIZE  128     /* For the buffer size of strerror_r */
 
-int filename__read_str(const char *filename, char **buf, size_t *sizep)
+int fd__read_str(int fd, char **buf, size_t *sizep)
 {
 	size_t size = 0, alloc_size = 0;
 	void *bf = NULL, *nbf;
-	int fd, n, err = 0;
+	int n, err = 0;
 	char sbuf[STRERR_BUFSIZE];
-
-	fd = open(filename, O_RDONLY);
-	if (fd < 0)
-		return -errno;
 
 	do {
 		if (size == alloc_size) {
@@ -398,6 +394,19 @@ int filename__read_str(const char *filename, char **buf, size_t *sizep)
 		*buf   = bf;
 	} else
 		free(bf);
+
+	return err;
+}
+
+int filename__read_str(const char *filename, char **buf, size_t *sizep)
+{
+	int err, fd;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0)
+		return -errno;
+
+	err = fd__read_str(fd, buf, sizep);
 
 	close(fd);
 	return err;
