@@ -234,7 +234,7 @@ static int perf_pmu__parse_snapshot(struct perf_pmu_alias *alias,
 	return 0;
 }
 
-static int __perf_pmu__new_alias(struct list_head *list, char *dir, char *name,
+static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 				 char *desc, char *val,
 				 char *long_desc, char *topic,
 				 char *unit, char *perpkg,
@@ -287,12 +287,12 @@ static int __perf_pmu__new_alias(struct list_head *list, char *dir, char *name,
 	alias->per_pkg = perpkg && sscanf(perpkg, "%d", &num) == 1 && num == 1;
 	alias->str = strdup(val);
 
-	list_add_tail(&alias->list, list);
+	list_add_tail(&alias->list, &pmu->aliases);
 
 	return 0;
 }
 
-static int perf_pmu__new_alias(struct list_head *list, char *dir, char *name, FILE *file)
+static int perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name, FILE *file)
 {
 	char buf[256];
 	int ret;
@@ -303,7 +303,7 @@ static int perf_pmu__new_alias(struct list_head *list, char *dir, char *name, FI
 
 	buf[ret] = 0;
 
-	return __perf_pmu__new_alias(list, dir, name, NULL, buf, NULL, NULL, NULL,
+	return __perf_pmu__new_alias(pmu, dir, name, NULL, buf, NULL, NULL, NULL,
 				     NULL, NULL, NULL);
 }
 
@@ -328,7 +328,7 @@ static inline bool pmu_alias_info_file(char *name)
  * Process all the sysfs attributes located under the directory
  * specified in 'dir' parameter.
  */
-static int pmu_aliases_parse(char *dir, struct list_head *head)
+static int pmu_aliases_parse(struct perf_pmu *pmu, char *dir)
 {
 	struct dirent *evt_ent;
 	DIR *event_dir;
@@ -359,7 +359,7 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
 			continue;
 		}
 
-		if (perf_pmu__new_alias(head, dir, name, file) < 0)
+		if (perf_pmu__new_alias(pmu, dir, name, file) < 0)
 			pr_debug("Cannot set up %s\n", name);
 		fclose(file);
 	}
@@ -372,7 +372,7 @@ static int pmu_aliases_parse(char *dir, struct list_head *head)
  * Reading the pmu event aliases definition, which should be located at:
  * /sys/bus/event_source/devices/<dev>/events as sysfs group attributes.
  */
-static int pmu_aliases(const char *name, struct list_head *head)
+static int pmu_aliases(struct perf_pmu *pmu, const char *name)
 {
 	struct stat st;
 	char path[PATH_MAX];
@@ -387,7 +387,7 @@ static int pmu_aliases(const char *name, struct list_head *head)
 	if (stat(path, &st) < 0)
 		return 0;	 /* no error if 'events' does not exist */
 
-	if (pmu_aliases_parse(path, head))
+	if (pmu_aliases_parse(pmu, path))
 		return -1;
 
 	return 0;
@@ -657,7 +657,7 @@ struct pmu_events_map *perf_pmu__find_map(struct perf_pmu *pmu)
  * to the current running CPU. Then, add all PMU events from that table
  * as aliases.
  */
-static void pmu_add_cpu_aliases(struct list_head *head, struct perf_pmu *pmu)
+static void pmu_add_cpu_aliases(struct perf_pmu *pmu)
 {
 	int i;
 	struct pmu_events_map *map;
@@ -689,7 +689,7 @@ static void pmu_add_cpu_aliases(struct list_head *head, struct perf_pmu *pmu)
 		}
 
 		/* need type casts to override 'const' */
-		__perf_pmu__new_alias(head, NULL, (char *)pe->name,
+		__perf_pmu__new_alias(pmu, NULL, (char *)pe->name,
 				(char *)pe->desc, (char *)pe->event,
 				(char *)pe->long_desc, (char *)pe->topic,
 				(char *)pe->unit, (char *)pe->perpkg,
@@ -708,7 +708,6 @@ static struct perf_pmu *pmu_lookup(const char *name)
 {
 	struct perf_pmu *pmu;
 	LIST_HEAD(format);
-	LIST_HEAD(aliases);
 	__u32 type;
 
 	/*
@@ -725,23 +724,26 @@ static struct perf_pmu *pmu_lookup(const char *name)
 	if (pmu_type(name, &type))
 		return NULL;
 
-	if (pmu_aliases(name, &aliases))
-		return NULL;
-
 	pmu = zalloc(sizeof(*pmu));
 	if (!pmu)
 		return NULL;
+
+	INIT_LIST_HEAD(&pmu->format);
+	INIT_LIST_HEAD(&pmu->aliases);
+
+	if (pmu_aliases(pmu, name)) {
+		free(pmu);
+		return NULL;
+	}
 
 	pmu->cpus = pmu_cpumask(name);
 	pmu->name = strdup(name);
 	pmu->type = type;
 	pmu->is_uncore = pmu_is_uncore(name);
-	pmu_add_cpu_aliases(&aliases, pmu);
+	pmu_add_cpu_aliases(pmu);
 
-	INIT_LIST_HEAD(&pmu->format);
-	INIT_LIST_HEAD(&pmu->aliases);
 	list_splice(&format, &pmu->format);
-	list_splice(&aliases, &pmu->aliases);
+
 	list_add_tail(&pmu->list, &pmus);
 
 	pmu->default_config = perf_pmu__get_default_config(pmu);
