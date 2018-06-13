@@ -32,6 +32,7 @@ int filename__read_int(const char *filename, int *value);
 int filename__read_ull(const char *filename, unsigned long long *value);
 int filename__read_xll(const char *filename, unsigned long long *value);
 int filename__read_str(const char *filename, char **buf, size_t *sizep);
+int fd__read_str(int fd, char **buf, size_t *sizep);
 
 int filename__write_int(const char *filename, int value);
 
