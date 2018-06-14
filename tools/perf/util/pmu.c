@@ -251,6 +251,66 @@ static void aliases_delete(struct perf_pmu *pmu)
 	}
 }
 
+static int alias_check(struct perf_pmu_alias *alias,
+		       char *desc, char *val,
+		       char *long_desc, char *topic,
+		       char *unit, char *perpkg,
+		       char *metric_expr,
+		       char *metric_name)
+{
+	double scale;
+	int per_pkg;
+
+	pr_debug("Duplicate alias detected: %s\n", alias->name);
+
+#define __CMP(__t, __va, __v)						\
+	if (__v) {							\
+		if (alias->__va && strcmp(alias->__va, __v)) {		\
+			pr_err(" - different %s: '%s' - '%s'\n",	\
+				__t, alias->__va, __v);			\
+			free(alias->__va);				\
+			alias->__va = strdup(__v);			\
+		} else if (!alias->__va) {				\
+			alias->__va = strdup(__v);			\
+		}							\
+	}
+
+#define CMP(__t, __v) __CMP(__t, __v, __v);
+
+	CMP("description",		desc)
+	CMP("long description",		long_desc)
+	CMP("topic",			topic)
+	CMP("metric expression",	metric_expr)
+	CMP("metric name",		metric_name)
+	__CMP("value",			str, val)
+
+	if (unit) {
+		if (convert_scale(unit, &unit, &scale) < 0)
+			return -1;
+
+		if (strcmp(alias->unit, unit)) {
+			pr_err(" - different unit: %s - %s\n",
+				alias->unit, unit);
+			snprintf(alias->unit, sizeof(alias->unit), "%s", unit);
+		}
+
+		if (scale != alias->scale) {
+			pr_err(" - different scale: %f - %f\n",
+				alias->scale, scale);
+			alias->scale = scale;
+		}
+	}
+
+	per_pkg = perpkg && sscanf(perpkg, "%d", &per_pkg) == 1 && per_pkg == 1;
+	if (per_pkg != alias->per_pkg) {
+		pr_err(" - different per_pkg: %d - %d\n",
+			alias->per_pkg, per_pkg);
+		alias->per_pkg = per_pkg;
+	}
+
+	return 0;
+}
+
 static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 				 char *desc, char *val,
 				 char *long_desc, char *topic,
@@ -272,8 +332,11 @@ static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 		alias = rb_entry(parent, struct perf_pmu_alias, rb_node);
 
 		cmp = strcmp(alias->name, name);
-		if (!cmp)
-			return 0;
+		if (!cmp) {
+			return alias_check(alias, desc, val, long_desc,
+					   topic, unit, perpkg, metric_expr,
+					   metric_name);
+		}
 
 		if (cmp < 0)
 			p = &(*p)->rb_left;
