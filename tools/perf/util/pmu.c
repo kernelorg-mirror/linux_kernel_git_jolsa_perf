@@ -79,7 +79,7 @@ int perf_pmu__format_parse(char *dir, struct list_head *head)
  * located at:
  * /sys/bus/event_source/devices/<dev>/format as sysfs group attributes.
  */
-static int pmu_format(const char *name, struct list_head *format)
+static int pmu_format(struct perf_pmu *pmu, const char *name)
 {
 	struct stat st;
 	char path[PATH_MAX];
@@ -94,7 +94,7 @@ static int pmu_format(const char *name, struct list_head *format)
 	if (stat(path, &st) < 0)
 		return 0;	/* no error if format does not exist */
 
-	if (perf_pmu__format_parse(path, format))
+	if (perf_pmu__format_parse(path, &pmu->format))
 		return -1;
 
 	return 0;
@@ -232,6 +232,23 @@ static int perf_pmu__parse_snapshot(struct perf_pmu_alias *alias,
 	alias->snapshot = true;
 	close(fd);
 	return 0;
+}
+
+static void aliases_delete(struct perf_pmu *pmu)
+{
+	struct perf_pmu_alias *alias, *tmp;
+
+	list_for_each_entry_safe(alias, tmp, &pmu->aliases, list) {
+		list_del(&alias->list);
+		free(alias->name);
+		free(alias->str);
+		free(alias->desc);
+		free(alias->long_desc);
+		free(alias->metric_expr);
+		free(alias->metric_name);
+		free(alias->topic);
+		free(alias);
+	}
 }
 
 static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
@@ -707,16 +724,7 @@ perf_pmu__get_default_config(struct perf_pmu *pmu __maybe_unused)
 static struct perf_pmu *pmu_lookup(const char *name)
 {
 	struct perf_pmu *pmu;
-	LIST_HEAD(format);
 	__u32 type;
-
-	/*
-	 * The pmu data we store & need consists of the pmu
-	 * type value and format definitions. Load both right
-	 * now.
-	 */
-	if (pmu_format(name, &format))
-		return NULL;
 
 	/*
 	 * Check the type first to avoid unnecessary work.
@@ -736,13 +744,17 @@ static struct perf_pmu *pmu_lookup(const char *name)
 		return NULL;
 	}
 
+	if (pmu_format(pmu, name)) {
+		aliases_delete(pmu);
+		free(pmu);
+		return NULL;
+	}
+
 	pmu->cpus = pmu_cpumask(name);
 	pmu->name = strdup(name);
 	pmu->type = type;
 	pmu->is_uncore = pmu_is_uncore(name);
 	pmu_add_cpu_aliases(pmu);
-
-	list_splice(&format, &pmu->format);
 
 	list_add_tail(&pmu->list, &pmus);
 
