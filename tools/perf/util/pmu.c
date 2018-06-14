@@ -766,6 +766,12 @@ static void pmu_add_cpu_aliases(struct perf_pmu *pmu)
 	const char *name = pmu->name;
 	const char *pname;
 
+	if (pmu->type == PERF_TYPE_SOFTWARE ||
+	    pmu->type == PERF_TYPE_TRACEPOINT ||
+	    pmu->type == PERF_TYPE_HW_CACHE ||
+	    pmu->type == PERF_TYPE_BREAKPOINT)
+		return;
+
 	map = perf_pmu__find_map(pmu);
 	if (!map)
 		return;
