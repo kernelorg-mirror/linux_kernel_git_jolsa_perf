@@ -1821,12 +1821,12 @@ fetch_mmaped_event(struct perf_session *session,
 #endif
 
 static int __perf_session__process_events(struct perf_session *session,
+					  struct perf_data_file *file,
 					  u64 data_offset, u64 data_size,
 					  u64 file_size)
 {
 	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
-	int fd = perf_data__fd(session->data);
 	u64 head, page_offset, file_offset, file_pos, size;
 	int err, mmap_prot, mmap_flags, map_idx = 0;
 	size_t	mmap_size;
@@ -1865,7 +1865,7 @@ static int __perf_session__process_events(struct perf_session *session,
 		mmap_flags = MAP_PRIVATE;
 	}
 remap:
-	buf = mmap(NULL, mmap_size, mmap_prot, mmap_flags, fd,
+	buf = mmap(NULL, mmap_size, mmap_prot, mmap_flags, file->fd,
 		   file_offset);
 	if (buf == MAP_FAILED) {
 		pr_err("failed to mmap file\n");
@@ -1951,7 +1951,7 @@ int perf_session__process_events(struct perf_session *session)
 		return -ENOMEM;
 
 	if (!perf_data__is_pipe(session->data))
-		err = __perf_session__process_events(session,
+		err = __perf_session__process_events(session, &session->data->file,
 						     session->header.data_offset,
 						     session->header.data_size, size);
 	else
