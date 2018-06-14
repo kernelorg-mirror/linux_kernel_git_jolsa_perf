@@ -53,6 +53,8 @@ ssize_t perf_data__write(struct perf_data *data,
 			      void *buf, size_t size);
 ssize_t perf_data_file__write(struct perf_data_file *file,
 			      void *buf, size_t size);
+int perf_data_file__mkstemp(struct perf_data_file *file,
+			    const char *templ);
 /*
  * If at_exit is set, only rename current perf.data to
  * perf.data.<postfix>, continue write on original data.
