@@ -1320,27 +1320,26 @@ int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 	while ((pmu = perf_pmu__scan(pmu)) != NULL) {
 		struct perf_pmu_alias *alias;
 
-		list_for_each_entry(alias, &pmu->aliases, list) {
-			if (!strcasecmp(alias->name, str)) {
-				head = malloc(sizeof(struct list_head));
-				if (!head)
-					return -1;
-				INIT_LIST_HEAD(head);
-				if (parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_USER,
-							   str, 1, false, &str, NULL) < 0)
-					return -1;
-				list_add_tail(&term->list, head);
+		alias = perf_pmu__find_alias(pmu, str);
+		if (alias) {
+			head = malloc(sizeof(struct list_head));
+			if (!head)
+				return -1;
+			INIT_LIST_HEAD(head);
+			if (parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_USER,
+						   str, 1, false, &str, NULL) < 0)
+				return -1;
+			list_add_tail(&term->list, head);
 
-				if (!parse_events_add_pmu(parse_state, list,
-							  pmu->name, head,
-							  true, true)) {
-					pr_debug("%s -> %s/%s/\n", str,
-						 pmu->name, alias->str);
-					ok++;
-				}
-
-				parse_events_terms__delete(head);
+			if (!parse_events_add_pmu(parse_state, list,
+						  pmu->name, head,
+						  true, true)) {
+				pr_debug("%s -> %s/%s/\n", str,
+					 pmu->name, alias->str);
+				ok++;
 			}
+
+			parse_events_terms__delete(head);
 		}
 	}
 	if (!ok)

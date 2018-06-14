@@ -311,6 +311,33 @@ static int alias_check(struct perf_pmu_alias *alias,
 	return 0;
 }
 
+struct perf_pmu_alias*
+perf_pmu__find_alias(struct perf_pmu *pmu, char *name)
+{
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
+	struct perf_pmu_alias *alias;
+	int cmp;
+
+	p = &pmu->rb_root.rb_node;
+
+	while (*p != NULL) {
+		parent = *p;
+		alias = rb_entry(parent, struct perf_pmu_alias, rb_node);
+
+		cmp = strcmp(alias->name, name);
+		if (!cmp)
+			return alias;
+
+		if (cmp < 0)
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
+
+	return NULL;
+}
+
 static int __perf_pmu__new_alias(struct perf_pmu *pmu, char *dir, char *name,
 				 char *desc, char *val,
 				 char *long_desc, char *topic,
