@@ -187,3 +187,21 @@ out:
 	free(new_filepath);
 	return ret;
 }
+
+int perf_data_file__mkstemp(struct perf_data_file *file,
+			    const char *templ)
+{
+	char *path = strdup(templ);
+
+	if (!path)
+		return -ENOMEM;
+
+	file->fd = mkstemp(path);
+	if (file->fd < 0) {
+		pr_err("Failed to create temporary file\n");
+		return -1;
+	}
+
+	file->path = (const char *) path;
+	return 0;
+}
