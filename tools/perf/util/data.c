@@ -205,3 +205,12 @@ int perf_data_file__mkstemp(struct perf_data_file *file,
 	file->path = (const char *) path;
 	return 0;
 }
+
+void perf_data_file__remove(struct perf_data_file *file)
+{
+	if (file->fd < 0)
+		return;
+
+	close(file->fd);
+	unlink(file->path);
+}
