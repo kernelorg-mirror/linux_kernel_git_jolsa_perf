@@ -111,6 +111,7 @@ struct perf_stat_config {
 	bool			 metric_only;
 	unsigned int		 unit_width;
 	int			 run_count;
+	unsigned int		 metric_only_len;
 };
 
 void update_stats(struct stats *stats, u64 val);
