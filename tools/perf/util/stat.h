@@ -115,6 +115,7 @@ struct perf_stat_config {
 	struct stats		*walltime_nsecs_stats;
 	bool			 null_run;
 	int			 print_free_counters_hint;
+	int			 print_mixed_hw_group_error;
 };
 
 void update_stats(struct stats *stats, u64 val);
