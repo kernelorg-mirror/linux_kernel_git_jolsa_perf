@@ -105,6 +105,8 @@ struct perf_stat_config {
 	struct runtime_stat	*stats;
 	int			 stats_num;
 	struct stat_opts	 opts;
+	const char		*csv_sep;
+	bool			 csv_output;
 };
 
 void update_stats(struct stats *stats, u64 val);
