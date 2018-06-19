@@ -33,6 +33,7 @@
 #include "util/parse-events.h"
 
 #include "util/thread.h"
+#include "util/thread_map.h"
 #include "util/sort.h"
 #include "util/hist.h"
 #include "util/data.h"
@@ -41,6 +42,8 @@
 #include "util/auxtrace.h"
 #include "util/units.h"
 #include "util/branch.h"
+#include "util/stat.h"
+#include <asm/bug.h>
 
 #include <dlfcn.h>
 #include <errno.h>
@@ -85,6 +88,14 @@ struct report {
 	int			socket_filter;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 	struct branch_type_stat	brtype_stat;
+
+	struct {
+		struct perf_evlist	*evlist;
+		struct cpu_map		*cpus;
+		struct thread_map	*threads;
+		struct perf_stat_config	 config;
+		bool			 maps_allocated;
+	} stat;
 };
 
 static int report__config(const char *var, const char *value, void *cb)
@@ -793,6 +804,156 @@ static int tasks_print(struct report *rep, FILE *fp)
 	return 0;
 }
 
+static int stat_process_attr(struct perf_tool *tool,
+			     union perf_event *event,
+			     struct perf_evlist **pevlist __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+
+	return perf_event__process_attr(tool, event, &rep->stat.evlist);
+}
+
+static int stat_process_event_update(struct perf_tool *tool,
+				     union perf_event *event,
+				     struct perf_evlist **pevlist __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+
+	return perf_event__process_event_update(tool, event, &rep->stat.evlist);
+}
+
+static int set_maps(struct report *rep)
+{
+	if (!rep->stat.cpus || !rep->stat.threads)
+		return 0;
+
+	if (WARN_ONCE(rep->stat.maps_allocated, "stats double allocation\n"))
+		return -EINVAL;
+
+	if (WARN_ONCE(!rep->stat.evlist, "no event added\n"))
+		return -EINVAL;
+
+	perf_evlist__set_maps(rep->stat.evlist, rep->stat.cpus, rep->stat.threads);
+
+	if (perf_evlist__alloc_stats(rep->stat.evlist, true))
+		return -ENOMEM;
+
+	rep->stat.maps_allocated = true;
+	return 0;
+}
+
+static int stat_process_thread_map(struct perf_tool *tool,
+				   union perf_event *event,
+				   struct perf_session *session __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+
+	if (rep->stat.threads) {
+		pr_warning("Extra thread map event, ignoring.\n");
+		return 0;
+	}
+
+	rep->stat.threads = thread_map__new_event(&event->thread_map);
+	if (!rep->stat.threads)
+		return -ENOMEM;
+
+	return set_maps(rep);
+}
+
+static int stat_process_cpu_map(struct perf_tool *tool,
+				union perf_event *event,
+				struct perf_session *session __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+
+	if (rep->stat.cpus) {
+		pr_warning("Extra cpu map event, ignoring.\n");
+		return 0;
+	}
+
+	rep->stat.cpus = cpu_map__new_data(&event->cpu_map.data);
+	if (!rep->stat.cpus)
+		return -ENOMEM;
+
+	return set_maps(rep);
+}
+
+static int stat_process_config(struct perf_tool *tool,
+			       union perf_event *event,
+			       struct perf_session *session __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+
+	perf_event__read_stat_config(&rep->stat.config, &event->stat_config);
+	return 0;
+}
+
+static int stat_process_stat(struct perf_tool *tool,
+			     union perf_event *event,
+			     struct perf_session *session __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+	struct perf_counts_values count;
+	struct stat_event *st = &event->stat;
+	struct perf_evsel *counter;
+
+	count.val = st->val;
+	count.ena = st->ena;
+	count.run = st->run;
+
+	counter = perf_evlist__id2evsel(rep->stat.evlist, st->id);
+	if (!counter) {
+		pr_err("Failed to resolve counter for stat event.\n");
+		return -EINVAL;
+	}
+
+	*perf_counts(counter->counts, st->cpu, st->thread) = count;
+	counter->supported = true;
+	return 0;
+}
+
+static int stat_process_round(struct perf_tool *tool,
+			      union perf_event *event __maybe_unused,
+			      struct perf_session *session __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+	struct perf_evsel *counter;
+
+	evlist__for_each_entry(rep->stat.evlist, counter)
+		perf_stat_process_counter(&rep->stat.config, counter);
+
+	return 0;
+}
+
+static int process_stat_data(struct report *rep)
+{
+	struct perf_env *env = &rep->session->header.env;
+	struct target target = { 0 };
+
+	rep->tool.attr		= stat_process_attr;
+	rep->tool.event_update	= stat_process_event_update;
+	rep->tool.thread_map	= stat_process_thread_map;
+	rep->tool.cpu_map	= stat_process_cpu_map;
+	rep->tool.stat_config	= stat_process_config;
+	rep->tool.stat		= stat_process_stat;
+	rep->tool.stat_round	= stat_process_round;
+
+	perf_stat__init_shadow_stats();
+
+	if (perf_session__process_stat_data(rep->session))
+		return -1;
+
+	rep->stat.config.walltime_nsecs_stats = &walltime_nsecs_stats;
+	rep->stat.config.output = stdout;
+
+	perf_evlist__print_counters(rep->stat.evlist,
+				    &rep->stat.config,
+				    &target, NULL,
+				    env->nr_cmdline,
+				    env->cmdline_argv);
+	return 0;
+}
+
 static int __cmd_report(struct report *rep)
 {
 	int ret;
@@ -835,6 +996,9 @@ static int __cmd_report(struct report *rep)
 		ui__error("failed to process sample\n");
 		return ret;
 	}
+
+	if (perf_header__has_feat(&session->header, HEADER_STAT_DATA))
+		process_stat_data(rep);
 
 	if (rep->stats_mode)
 		return stats_print(rep);
@@ -1274,6 +1438,8 @@ repeat:
 		pr_err("Error: --tasks and --mmaps can't be used together with --stats\n");
 		goto error;
 	}
+	if (perf_header__has_feat(&session->header, HEADER_STAT_DATA))
+		use_browser = 0;
 
 	if (strcmp(input_name, "-") != 0)
 		setup_browser(true);
