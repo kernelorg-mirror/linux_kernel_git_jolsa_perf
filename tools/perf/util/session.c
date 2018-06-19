@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "evlist.h"
 #include "evsel.h"
@@ -1959,6 +1962,18 @@ int perf_session__process_events(struct perf_session *session)
 		err = __perf_session__process_pipe_events(session);
 
 	return err;
+}
+
+int perf_session__process_stat_data(struct perf_session *session)
+{
+	struct perf_data_file *file = &session->stat_file;
+	struct stat st;
+
+	if (fstat(file->fd, &st) < 0)
+		return -1;
+
+	return __perf_session__process_events(session, file, 0,
+					      st.st_size, st.st_size);
 }
 
 bool perf_session__has_traces(struct perf_session *session, const char *msg)
