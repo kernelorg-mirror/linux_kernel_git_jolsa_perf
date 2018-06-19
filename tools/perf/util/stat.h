@@ -114,6 +114,7 @@ struct perf_stat_config {
 	unsigned int		 metric_only_len;
 	struct stats		*walltime_nsecs_stats;
 	bool			 null_run;
+	int			 print_free_counters_hint;
 };
 
 void update_stats(struct stats *stats, u64 val);

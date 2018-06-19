@@ -172,7 +172,6 @@ static bool			append_file;
 static bool			interval_count;
 static const char		*output_name;
 static int			output_fd;
-static int			print_free_counters_hint;
 static int			print_mixed_hw_group_error;
 static u64			*walltime_run;
 static bool			ru_display			= false;
@@ -1094,7 +1093,7 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 			config->csv_sep);
 
 		if (counter->supported) {
-			print_free_counters_hint = 1;
+			config->print_free_counters_hint = 1;
 			if (is_mixed_hw_group(counter))
 				print_mixed_hw_group_error = 1;
 		}
@@ -1753,7 +1752,7 @@ static void print_footer(struct perf_stat_config *config)
 	}
 	fprintf(output, "\n\n");
 
-	if (print_free_counters_hint &&
+	if (config->print_free_counters_hint &&
 	    sysctl__read_int("kernel/nmi_watchdog", &n) >= 0 &&
 	    n > 0)
 		fprintf(output,
