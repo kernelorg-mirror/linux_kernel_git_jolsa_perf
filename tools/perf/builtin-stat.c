@@ -197,11 +197,12 @@ static struct perf_stat		perf_stat;
 static volatile int done = 0;
 
 static struct perf_stat_config stat_config = {
-	.aggr_mode	= AGGR_GLOBAL,
-	.opts.scale	= true,
-	.unit_width	= 4, /* strlen("unit") */
-	.run_count	= 1,
-	.metric_only_len = METRIC_ONLY_LEN,
+	.aggr_mode		= AGGR_GLOBAL,
+	.opts.scale		= true,
+	.unit_width		= 4, /* strlen("unit") */
+	.run_count		= 1,
+	.metric_only_len	= METRIC_ONLY_LEN,
+	.walltime_nsecs_stats	= &walltime_nsecs_stats,
 };
 
 static bool is_duration_time(struct perf_evsel *evsel)
@@ -1717,7 +1718,7 @@ static double timeval2double(struct timeval *t)
 
 static void print_footer(struct perf_stat_config *config)
 {
-	double avg = avg_stats(&walltime_nsecs_stats) / NSEC_PER_SEC;
+	double avg = avg_stats(config->walltime_nsecs_stats) / NSEC_PER_SEC;
 	FILE *output = config->output;
 	int n;
 
@@ -1736,7 +1737,7 @@ static void print_footer(struct perf_stat_config *config)
 			fprintf(output, " %17.9f seconds sys\n", ru_stime);
 		}
 	} else {
-		double sd = stddev_stats(&walltime_nsecs_stats) / NSEC_PER_SEC;
+		double sd = stddev_stats(config->walltime_nsecs_stats) / NSEC_PER_SEC;
 		/*
 		 * Display at most 2 more significant
 		 * digits than the stddev inaccuracy.
