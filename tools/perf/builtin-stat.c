@@ -962,17 +962,18 @@ static void nsec_printout(struct perf_stat_config *config,
 		fprintf(output, "%s%s", config->csv_sep, evsel->cgrp->name);
 }
 
-static int first_shadow_cpu(struct perf_evsel *evsel, int id)
+static int first_shadow_cpu(struct perf_stat_config *config,
+			    struct perf_evsel *evsel, int id)
 {
 	int i;
 
 	if (!aggr_get_id)
 		return 0;
 
-	if (stat_config.aggr_mode == AGGR_NONE)
+	if (config->aggr_mode == AGGR_NONE)
 		return id;
 
-	if (stat_config.aggr_mode == AGGR_GLOBAL)
+	if (config->aggr_mode == AGGR_GLOBAL)
 		return 0;
 
 	for (i = 0; i < perf_evsel__nr_cpus(evsel); i++) {
@@ -1137,7 +1138,7 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 	}
 
 	perf_stat__print_shadow_stats(config, counter, uval,
-				first_shadow_cpu(counter, id),
+				first_shadow_cpu(config, counter, id),
 				&out, &metric_events, st);
 	if (!config->csv_output && !config->metric_only) {
 		print_noise(config, counter, noise);
@@ -1145,7 +1146,7 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 	}
 }
 
-static void aggr_update_shadow(void)
+static void aggr_update_shadow(struct perf_stat_config *config)
 {
 	int cpu, s2, id, s;
 	u64 val;
@@ -1162,7 +1163,7 @@ static void aggr_update_shadow(void)
 				val += perf_counts(counter->counts, cpu, 0)->val;
 			}
 			perf_stat__update_shadow_stats(counter, val,
-					first_shadow_cpu(counter, id),
+					first_shadow_cpu(config, counter, id),
 					&rt_stat);
 		}
 	}
@@ -1284,7 +1285,7 @@ static void print_aggr(struct perf_stat_config *config,
 	if (!(aggr_map || aggr_get_id))
 		return;
 
-	aggr_update_shadow();
+	aggr_update_shadow(config);
 
 	/*
 	 * With metric_only everything is on a single line.
