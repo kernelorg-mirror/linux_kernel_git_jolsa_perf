@@ -1694,7 +1694,10 @@ static void print_footer(void)
 			"the same PMU. Try reorganizing the group.\n");
 }
 
-static void print_counters(struct timespec *ts, int argc, const char **argv)
+static void
+perf_evlist__print_counters(struct perf_evlist *evlist,
+			    struct timespec *ts,
+			    int argc, const char **argv)
 {
 	int interval = stat_config.interval;
 	struct perf_evsel *counter;
@@ -1726,14 +1729,14 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 		print_aggr(prefix);
 		break;
 	case AGGR_THREAD:
-		evlist__for_each_entry(evsel_list, counter) {
+		evlist__for_each_entry(evlist, counter) {
 			if (is_duration_time(counter))
 				continue;
 			print_aggr_thread(counter, prefix);
 		}
 		break;
 	case AGGR_GLOBAL:
-		evlist__for_each_entry(evsel_list, counter) {
+		evlist__for_each_entry(evlist, counter) {
 			if (is_duration_time(counter))
 				continue;
 			print_counter_aggr(counter, prefix);
@@ -1745,7 +1748,7 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 		if (metric_only)
 			print_no_aggr_metric(prefix);
 		else {
-			evlist__for_each_entry(evsel_list, counter) {
+			evlist__for_each_entry(evlist, counter) {
 				if (is_duration_time(counter))
 					continue;
 				print_counter(counter, prefix);
@@ -1761,6 +1764,11 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 		print_footer();
 
 	fflush(stat_config.output);
+}
+
+static void print_counters(struct timespec *ts, int argc, const char **argv)
+{
+	perf_evlist__print_counters(evsel_list, ts, argc, argv);
 }
 
 static volatile int signr = -1;
