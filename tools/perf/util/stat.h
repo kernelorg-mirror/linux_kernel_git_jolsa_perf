@@ -108,6 +108,7 @@ struct perf_stat_config {
 	const char		*csv_sep;
 	bool			 csv_output;
 	bool			 interval_clear;
+	bool			 metric_only;
 };
 
 void update_stats(struct stats *stats, u64 val);
