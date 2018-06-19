@@ -178,7 +178,6 @@ static int			print_mixed_hw_group_error;
 static u64			*walltime_run;
 static bool			ru_display			= false;
 static struct rusage		ru_data;
-static unsigned int		metric_only_len			= METRIC_ONLY_LEN;
 
 struct perf_stat {
 	bool			 record;
@@ -202,6 +201,7 @@ static struct perf_stat_config stat_config = {
 	.opts.scale	= true,
 	.unit_width	= 4, /* strlen("unit") */
 	.run_count	= 1,
+	.metric_only_len = METRIC_ONLY_LEN,
 };
 
 static bool is_duration_time(struct perf_evsel *evsel)
@@ -868,14 +868,14 @@ static const char *fixunit(char *buf, struct perf_evsel *evsel,
 	return unit;
 }
 
-static void print_metric_only(struct perf_stat_config *config __maybe_unused,
+static void print_metric_only(struct perf_stat_config *config,
 			      void *ctx, const char *color, const char *fmt,
 			      const char *unit, double val)
 {
 	struct outstate *os = ctx;
 	FILE *out = os->fh;
 	char buf[1024], str[1024];
-	unsigned mlen = metric_only_len;
+	unsigned mlen = config->metric_only_len;
 
 	if (!valid_only_metric(unit))
 		return;
@@ -916,7 +916,7 @@ static void new_line_metric(struct perf_stat_config *config __maybe_unused,
 {
 }
 
-static void print_metric_header(struct perf_stat_config *config __maybe_unused,
+static void print_metric_header(struct perf_stat_config *config,
 				void *ctx, const char *color __maybe_unused,
 				const char *fmt __maybe_unused,
 				const char *unit, double val __maybe_unused)
@@ -930,7 +930,7 @@ static void print_metric_header(struct perf_stat_config *config __maybe_unused,
 	if (config->csv_output)
 		fprintf(os->fh, "%s%s", unit, config->csv_sep);
 	else
-		fprintf(os->fh, "%*s ", metric_only_len, unit);
+		fprintf(os->fh, "%*s ", config->metric_only_len, unit);
 }
 
 static void nsec_printout(struct perf_stat_config *config,
@@ -2385,7 +2385,7 @@ static int add_default_attributes(void)
 		}
 		if (!force_metric_only)
 			stat_config.metric_only = true;
-		metric_only_len = 10;
+		stat_config.metric_only_len = 10;
 		return 0;
 	}
 
