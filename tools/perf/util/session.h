@@ -52,6 +52,7 @@ int perf_session__peek_event(struct perf_session *session, off_t file_offset,
 			     struct perf_sample *sample);
 
 int perf_session__process_events(struct perf_session *session);
+int perf_session__process_stat_data(struct perf_session *session);
 
 int perf_session__queue_event(struct perf_session *s, union perf_event *event,
 			      u64 timestamp, u64 file_offset);
