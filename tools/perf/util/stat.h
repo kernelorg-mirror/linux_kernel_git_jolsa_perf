@@ -100,6 +100,9 @@ struct runtime_stat {
 	struct rblist value_list;
 };
 
+typedef int (*aggr_get_id_t)(struct perf_stat_config *config,
+			     struct cpu_map *m, int cpu);
+
 struct perf_stat_config {
 	enum aggr_mode		 aggr_mode;
 	FILE			*output;
@@ -122,6 +125,10 @@ struct perf_stat_config {
 	int			 print_mixed_hw_group_error;
 	bool			 ru_display;
 	struct rusage		 ru_data;
+	struct cpu_map		*aggr_map;
+	aggr_get_id_t		 aggr_get_id;
+	struct cpu_map		*cpus_aggr_map;
+	struct perf_env		*aggr_env;
 };
 
 void update_stats(struct stats *stats, u64 val);
