@@ -131,6 +131,8 @@ struct perf_stat_config {
 	struct perf_env		*aggr_env;
 	bool			 big_num;
 	bool			 no_merge;
+	bool			 walltime_run_table;
+	u64			*walltime_run;
 };
 
 void update_stats(struct stats *stats, u64 val);
