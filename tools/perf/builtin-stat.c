@@ -1679,7 +1679,8 @@ static int get_precision(double num)
 	return lround(ceil(-log10(num)));
 }
 
-static void print_table(FILE *output, int precision, double avg)
+static void print_table(struct perf_stat_config *config,
+			FILE *output, int precision, double avg)
 {
 	char tmp[64];
 	int idx, indent = 0;
@@ -1690,7 +1691,7 @@ static void print_table(FILE *output, int precision, double avg)
 
 	fprintf(output, "%*s# Table of individual measurements:\n", indent, "");
 
-	for (idx = 0; idx < stat_config.run_count; idx++) {
+	for (idx = 0; idx < config->run_count; idx++) {
 		double run = (double) walltime_run[idx] / NSEC_PER_SEC;
 		int h, n = 1 + abs((int) (100.0 * (run - avg)/run) / 5);
 
@@ -1740,7 +1741,7 @@ static void print_footer(struct perf_stat_config *config)
 		int precision = get_precision(sd) + 2;
 
 		if (walltime_run_table)
-			print_table(output, precision, avg);
+			print_table(config, output, precision, avg);
 
 		fprintf(output, " %17.*f +- %.*f seconds time elapsed",
 			precision, avg, precision, sd);
