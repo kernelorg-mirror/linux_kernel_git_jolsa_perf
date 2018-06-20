@@ -4,6 +4,10 @@
 
 #include <linux/types.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include "xyarray.h"
 #include "rblist.h"
 #include "perf.h"
@@ -116,6 +120,8 @@ struct perf_stat_config {
 	bool			 null_run;
 	int			 print_free_counters_hint;
 	int			 print_mixed_hw_group_error;
+	bool			 ru_display;
+	struct rusage		 ru_data;
 };
 
 void update_stats(struct stats *stats, u64 val);
