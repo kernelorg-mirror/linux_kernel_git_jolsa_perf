@@ -133,6 +133,7 @@ struct perf_stat_config {
 	bool			 no_merge;
 	bool			 walltime_run_table;
 	u64			*walltime_run;
+	struct rblist		 metric_events;
 };
 
 void update_stats(struct stats *stats, u64 val);
