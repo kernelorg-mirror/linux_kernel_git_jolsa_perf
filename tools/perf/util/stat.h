@@ -129,6 +129,7 @@ struct perf_stat_config {
 	aggr_get_id_t		 aggr_get_id;
 	struct cpu_map		*cpus_aggr_map;
 	struct perf_env		*aggr_env;
+	bool			 big_num;
 };
 
 void update_stats(struct stats *stats, u64 val);
