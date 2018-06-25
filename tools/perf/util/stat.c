@@ -681,7 +681,8 @@ try_again:
  */
 static int read_counter(struct perf_stat_record *record,
 			struct perf_evsel *counter,
-			struct target *target)
+			struct target *target,
+			struct perf_tool *tool)
 {
 	int nthreads = thread_map__nr(record->evlist->threads);
 	int ncpus, cpu, thread;
@@ -718,7 +719,7 @@ static int read_counter(struct perf_stat_record *record,
 			count->loaded = false;
 
 			if (record->write_stat) {
-				if (record->write_stat(counter, cpu, thread, count)) {
+				if (record->write_stat(counter, cpu, thread, count, tool)) {
 					pr_err("failed to write stat event\n");
 					return -1;
 				}
@@ -738,13 +739,14 @@ static int read_counter(struct perf_stat_record *record,
 }
 
 int perf_stat_record__read(struct perf_stat_record *record,
-			   struct target *target, bool process)
+			   struct target *target, bool process,
+			   struct perf_tool *tool)
 {
 	struct perf_evsel *counter;
 	int ret;
 
 	evlist__for_each_entry(record->evlist, counter) {
-		ret = read_counter(record, counter, target);
+		ret = read_counter(record, counter, target, tool);
 		if (ret)
 			pr_debug("failed to read counter %s\n", counter->name);
 
