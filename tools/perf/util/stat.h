@@ -138,9 +138,13 @@ struct perf_stat_config {
 	struct perf_stat_line	 line;
 };
 
+typedef int (*write_stat_t)(struct perf_evsel *counter, u32 cpu, u32 thread,
+			    struct perf_counts_values *count);
+
 struct perf_stat_record {
 	struct perf_stat_config	 config;
 	struct perf_evlist	*evlist;
+	write_stat_t		 write_stat;
 };
 
 void update_stats(struct stats *stats, u64 val);
