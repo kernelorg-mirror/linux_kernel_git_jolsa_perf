@@ -138,6 +138,7 @@ struct perf_stat_config {
 
 struct perf_stat_record {
 	struct perf_stat_config	 config;
+	struct perf_evlist	*evlist;
 };
 
 void update_stats(struct stats *stats, u64 val);
