@@ -138,6 +138,10 @@ struct perf_stat_config {
 	struct perf_stat_line	 line;
 };
 
+struct perf_stat_record {
+	struct perf_stat_config	 config;
+};
+
 void update_stats(struct stats *stats, u64 val);
 double avg_stats(struct stats *stats);
 double stddev_stats(struct stats *stats);
