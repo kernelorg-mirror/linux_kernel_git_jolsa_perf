@@ -223,9 +223,8 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp);
 extern const char *top_attrs;
 extern const char *top_full_attrs;
 
-int create_perf_stat_counter(struct perf_evsel *evsel,
-			     struct stat_opts *opts,
-			     struct target *target);
+int perf_stat_record__open(struct perf_stat_record *record,
+			   struct target *target, bool store_id);
 int perf_stat_synthesize_config(struct perf_stat_config *config,
 				struct perf_tool *tool,
 				struct perf_evlist *evlist,
