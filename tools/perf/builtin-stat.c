@@ -288,8 +288,8 @@ static int read_counter(struct perf_evsel *counter)
 
 			count->loaded = false;
 
-			if (STAT_RECORD) {
-				if (perf_evsel__write_stat_event(counter, cpu, thread, count)) {
+			if (stat_record.write_stat) {
+				if (stat_record.write_stat(counter, cpu, thread, count)) {
 					pr_err("failed to write stat event\n");
 					return -1;
 				}
@@ -312,6 +312,9 @@ static void read_counters(void)
 {
 	struct perf_evsel *counter;
 	int ret;
+
+	if (STAT_RECORD)
+		stat_record.write_stat = perf_evsel__write_stat_event;
 
 	evlist__for_each_entry(stat_record.evlist, counter) {
 		ret = read_counter(counter);
