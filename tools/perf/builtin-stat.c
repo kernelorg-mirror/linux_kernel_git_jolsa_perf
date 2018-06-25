@@ -239,7 +239,8 @@ static int write_stat_round_event(u64 tm, u64 type)
 
 static int
 perf_evsel__write_stat_event(struct perf_evsel *counter, u32 cpu, u32 thread,
-			     struct perf_counts_values *count)
+			     struct perf_counts_values *count,
+			     struct perf_tool *tool __maybe_unused)
 {
 	struct perf_sample_id *sid = SID(counter, cpu, thread);
 
@@ -252,7 +253,7 @@ static void read_counters(void)
 	if (STAT_RECORD)
 		stat_record.write_stat = perf_evsel__write_stat_event;
 
-	perf_stat_record__read(&stat_record, &target, true);
+	perf_stat_record__read(&stat_record, &target, true, NULL);
 }
 
 static void process_interval(void)
