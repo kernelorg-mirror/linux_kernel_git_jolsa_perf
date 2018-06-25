@@ -133,8 +133,6 @@ static const char *smi_cost_attrs = {
 	"}"
 };
 
-static struct perf_evlist	*evsel_list;
-
 static struct target target = {
 	.uid	= UINT_MAX,
 };
@@ -206,7 +204,7 @@ static void perf_stat__reset_stats(void)
 {
 	int i;
 
-	perf_evlist__reset_stats(evsel_list);
+	perf_evlist__reset_stats(stat_record.evlist);
 	perf_stat__reset_shadow_stats();
 
 	for (i = 0; i < stat_record.config.stats_num; i++)
@@ -255,7 +253,7 @@ perf_evsel__write_stat_event(struct perf_evsel *counter, u32 cpu, u32 thread,
  */
 static int read_counter(struct perf_evsel *counter)
 {
-	int nthreads = thread_map__nr(evsel_list->threads);
+	int nthreads = thread_map__nr(stat_record.evlist->threads);
 	int ncpus, cpu, thread;
 
 	if (target__has_cpu(&target) && !target__has_per_thread(&target))
@@ -314,7 +312,7 @@ static void read_counters(void)
 	struct perf_evsel *counter;
 	int ret;
 
-	evlist__for_each_entry(evsel_list, counter) {
+	evlist__for_each_entry(stat_record.evlist, counter) {
 		ret = read_counter(counter);
 		if (ret)
 			pr_debug("failed to read counter %s\n", counter->name);
@@ -354,7 +352,7 @@ static void enable_counters(void)
 	 * - we have initial delay configured
 	 */
 	if (!target__none(&target) || stat_record.config.opts.initial_delay)
-		perf_evlist__enable(evsel_list);
+		perf_evlist__enable(stat_record.evlist);
 }
 
 static void disable_counters(void)
@@ -365,7 +363,7 @@ static void disable_counters(void)
 	 * from counting before reading their constituent counters.
 	 */
 	if (!target__none(&target))
-		perf_evlist__disable(evsel_list);
+		perf_evlist__disable(stat_record.evlist);
 }
 
 static volatile int workload_exec_errno;
@@ -399,7 +397,7 @@ static struct perf_evsel *perf_evsel__reset_weak_group(struct perf_evsel *evsel)
 	 * for_each_group_member doesn't work here because it doesn't
 	 * include the first entry.
 	 */
-	evlist__for_each_entry(evsel_list, c2) {
+	evlist__for_each_entry(stat_record.evlist, c2) {
 		if (c2 == evsel)
 			is_open = false;
 		if (c2->leader == leader) {
@@ -439,18 +437,18 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 	}
 
 	if (forks) {
-		if (perf_evlist__prepare_workload(evsel_list, &target, argv, is_pipe,
+		if (perf_evlist__prepare_workload(stat_record.evlist, &target, argv, is_pipe,
 						  workload_exec_failed_signal) < 0) {
 			perror("failed to prepare workload");
 			return -1;
 		}
-		child_pid = evsel_list->workload.pid;
+		child_pid = stat_record.evlist->workload.pid;
 	}
 
 	if (group)
-		perf_evlist__set_leader(evsel_list);
+		perf_evlist__set_leader(stat_record.evlist);
 
-	evlist__for_each_entry(evsel_list, counter) {
+	evlist__for_each_entry(stat_record.evlist, counter) {
 try_again:
 		if (create_perf_stat_counter(counter, &stat_record.config.opts, &target) < 0) {
 
@@ -482,15 +480,15 @@ try_again:
                                         ui__warning("%s\n", msg);
                                 goto try_again;
 			} else if (target__has_per_thread(&target) &&
-				   evsel_list->threads &&
-				   evsel_list->threads->err_thread != -1) {
+				   stat_record.evlist->threads &&
+				   stat_record.evlist->threads->err_thread != -1) {
 				/*
 				 * For global --per-thread case, skip current
 				 * error thread.
 				 */
-				if (!thread_map__remove(evsel_list->threads,
-							evsel_list->threads->err_thread)) {
-					evsel_list->threads->err_thread = -1;
+				if (!thread_map__remove(stat_record.evlist->threads,
+							stat_record.evlist->threads->err_thread)) {
+					stat_record.evlist->threads->err_thread = -1;
 					goto try_again;
 				}
 			}
@@ -511,18 +509,18 @@ try_again:
 			stat_record.config.unit_width = l;
 
 		if (perf_evsel__should_store_id(counter) &&
-		    perf_evsel__store_ids(counter, evsel_list))
+		    perf_evsel__store_ids(counter, stat_record.evlist))
 			return -1;
 	}
 
-	if (perf_evlist__apply_filters(evsel_list, &counter)) {
+	if (perf_evlist__apply_filters(stat_record.evlist, &counter)) {
 		pr_err("failed to set filter \"%s\" on event %s with %d (%s)\n",
 			counter->filter, perf_evsel__name(counter), errno,
 			str_error_r(errno, msg, sizeof(msg)));
 		return -1;
 	}
 
-	if (perf_evlist__apply_drv_configs(evsel_list, &counter, &err_term)) {
+	if (perf_evlist__apply_drv_configs(stat_record.evlist, &counter, &err_term)) {
 		pr_err("failed to set config \"%s\" on event %s with %d (%s)\n",
 		      err_term->val.drv_cfg, perf_evsel__name(counter), errno,
 		      str_error_r(errno, msg, sizeof(msg)));
@@ -535,14 +533,14 @@ try_again:
 		if (is_pipe) {
 			err = perf_header__write_pipe(perf_data__fd(&perf_stat.data));
 		} else {
-			err = perf_session__write_header(perf_stat.session, evsel_list,
+			err = perf_session__write_header(perf_stat.session, stat_record.evlist,
 							 fd, false);
 		}
 
 		if (err < 0)
 			return err;
 
-		err = perf_stat_synthesize_config(&stat_record.config, NULL, evsel_list,
+		err = perf_stat_synthesize_config(&stat_record.config, NULL, stat_record.evlist,
 						  process_synthesized_event, is_pipe);
 		if (err < 0)
 			return err;
@@ -555,7 +553,7 @@ try_again:
 	clock_gettime(CLOCK_MONOTONIC, &ref_time);
 
 	if (forks) {
-		perf_evlist__start_workload(evsel_list);
+		perf_evlist__start_workload(stat_record.evlist);
 		enable_counters();
 
 		if (interval || timeout) {
@@ -608,7 +606,7 @@ try_again:
 	 * group leaders.
 	 */
 	read_counters();
-	perf_evlist__close(evsel_list);
+	perf_evlist__close(stat_record.evlist);
 
 	return WEXITSTATUS(status);
 }
@@ -645,7 +643,7 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 	if (STAT_RECORD && perf_stat.data.is_pipe)
 		return;
 
-	perf_evlist__print_counters(evsel_list, &stat_record.config, &target,
+	perf_evlist__print_counters(stat_record.evlist, &stat_record.config, &target,
 				    ts, argc, argv);
 }
 
@@ -717,10 +715,10 @@ static int parse_metric_groups(const struct option *opt,
 static const struct option stat_options[] = {
 	OPT_BOOLEAN('T', "transaction", &transaction_run,
 		    "hardware transaction statistics"),
-	OPT_CALLBACK('e', "event", &evsel_list, "event",
+	OPT_CALLBACK('e', "event", &stat_record.evlist, "event",
 		     "event selector. use 'perf list' to list available events",
 		     parse_events_option),
-	OPT_CALLBACK(0, "filter", &evsel_list, "filter",
+	OPT_CALLBACK(0, "filter", &stat_record.evlist, "filter",
 		     "event filter", parse_filter),
 	OPT_BOOLEAN('i', "no-inherit", &stat_record.config.opts.no_inherit,
 		    "child tasks do not inherit counters"),
@@ -755,7 +753,7 @@ static const struct option stat_options[] = {
 	OPT_BOOLEAN(0, "no-merge", &stat_record.config.no_merge, "Do not merge identical named events"),
 	OPT_STRING('x', "field-separator", &stat_record.config.csv_sep, "separator",
 		   "print counts with custom separator"),
-	OPT_CALLBACK('G', "cgroup", &evsel_list, "name",
+	OPT_CALLBACK('G', "cgroup", &stat_record.evlist, "name",
 		     "monitor event in cgroup name only", parse_cgroups),
 	OPT_STRING('o', "output", &output_name, "file", "output file name"),
 	OPT_BOOLEAN(0, "append", &append_file, "append to the output file"),
@@ -790,7 +788,7 @@ static const struct option stat_options[] = {
 			"measure SMI cost"),
 	OPT_BOOLEAN(0, "top", &top_run, "show CPU utilization"),
 	OPT_BOOLEAN(0, "top-full", &top_run_full, "show extended CPU utilization"),
-	OPT_CALLBACK('M', "metrics", &evsel_list, "metric/metric group list",
+	OPT_CALLBACK('M', "metrics", &stat_record.evlist, "metric/metric group list",
 		     "monitor specified metrics or metric groups (separated by ,)",
 		     parse_metric_groups),
 	OPT_END()
@@ -854,14 +852,14 @@ static int perf_stat_init_aggr_mode(void)
 
 	switch (stat_record.config.aggr_mode) {
 	case AGGR_SOCKET:
-		if (cpu_map__build_socket_map(evsel_list->cpus, &stat_record.config.aggr_map)) {
+		if (cpu_map__build_socket_map(stat_record.evlist->cpus, &stat_record.config.aggr_map)) {
 			perror("cannot build socket map");
 			return -1;
 		}
 		stat_record.config.aggr_get_id = perf_stat__get_socket_cached;
 		break;
 	case AGGR_CORE:
-		if (cpu_map__build_core_map(evsel_list->cpus, &stat_record.config.aggr_map)) {
+		if (cpu_map__build_core_map(stat_record.evlist->cpus, &stat_record.config.aggr_map)) {
 			perror("cannot build core map");
 			return -1;
 		}
@@ -876,11 +874,11 @@ static int perf_stat_init_aggr_mode(void)
 	}
 
 	/*
-	 * The evsel_list->cpus is the base we operate on,
+	 * The stat_record.evlist->cpus is the base we operate on,
 	 * taking the highest cpu number to be the size of
 	 * the aggregation translate cpumap.
 	 */
-	nr = cpu_map__get_max(evsel_list->cpus);
+	nr = cpu_map__get_max(stat_record.evlist->cpus);
 	stat_record.config.cpus_aggr_map = cpu_map__empty_new(nr + 1);
 	return stat_record.config.cpus_aggr_map ? 0 : -ENOMEM;
 }
@@ -966,14 +964,14 @@ static int perf_stat_init_aggr_mode_file(struct perf_stat *st)
 
 	switch (stat_record.config.aggr_mode) {
 	case AGGR_SOCKET:
-		if (perf_env__build_socket_map(env, evsel_list->cpus, &stat_record.config.aggr_map)) {
+		if (perf_env__build_socket_map(env, stat_record.evlist->cpus, &stat_record.config.aggr_map)) {
 			perror("cannot build socket map");
 			return -1;
 		}
 		stat_record.config.aggr_get_id = perf_stat__get_socket_file;
 		break;
 	case AGGR_CORE:
-		if (perf_env__build_core_map(env, evsel_list->cpus, &stat_record.config.aggr_map)) {
+		if (perf_env__build_core_map(env, stat_record.evlist->cpus, &stat_record.config.aggr_map)) {
 			perror("cannot build core map");
 			return -1;
 		}
@@ -1168,10 +1166,10 @@ static int add_default_attributes(void)
 	if (transaction_run) {
 		if (pmu_have_event("cpu", "cycles-ct") &&
 		    pmu_have_event("cpu", "el-start"))
-			err = parse_events(evsel_list, transaction_attrs,
+			err = parse_events(stat_record.evlist, transaction_attrs,
 					   &errinfo);
 		else
-			err = parse_events(evsel_list,
+			err = parse_events(stat_record.evlist,
 					   transaction_limited_attrs,
 					   &errinfo);
 		if (err) {
@@ -1185,7 +1183,7 @@ static int add_default_attributes(void)
 	if (top_run || top_run_full) {
 		const char *attrs = top_run ? top_attrs : top_full_attrs;
 
-		err = parse_events(evsel_list, attrs, &errinfo);
+		err = parse_events(stat_record.evlist, attrs, &errinfo);
 		if (err) {
 			fprintf(stderr, "Cannot set up cputime events\n");
 			parse_events_print_error(&errinfo, attrs);
@@ -1217,7 +1215,7 @@ static int add_default_attributes(void)
 		    pmu_have_event("msr", "smi")) {
 			if (!force_metric_only)
 				stat_record.config.metric_only = true;
-			err = parse_events(evsel_list, smi_cost_attrs, &errinfo);
+			err = parse_events(stat_record.evlist, smi_cost_attrs, &errinfo);
 		} else {
 			fprintf(stderr, "To measure SMI cost, it needs "
 				"msr/aperf/, msr/smi/ and cpu/cycles/ support\n");
@@ -1256,7 +1254,7 @@ static int add_default_attributes(void)
 		if (topdown_attrs[0] && str) {
 			if (warn)
 				arch_topdown_group_warn();
-			err = parse_events(evsel_list, str, &errinfo);
+			err = parse_events(stat_record.evlist, str, &errinfo);
 			if (err) {
 				fprintf(stderr,
 					"Cannot set up top down events %s: %d\n",
@@ -1272,23 +1270,23 @@ static int add_default_attributes(void)
 		free(str);
 	}
 
-	if (!evsel_list->nr_entries) {
+	if (!stat_record.evlist->nr_entries) {
 		if (target__has_cpu(&target))
 			default_attrs0[0].config = PERF_COUNT_SW_CPU_CLOCK;
 
-		if (perf_evlist__add_default_attrs(evsel_list, default_attrs0) < 0)
+		if (perf_evlist__add_default_attrs(stat_record.evlist, default_attrs0) < 0)
 			return -1;
 		if (pmu_have_event("cpu", "stalled-cycles-frontend")) {
-			if (perf_evlist__add_default_attrs(evsel_list,
+			if (perf_evlist__add_default_attrs(stat_record.evlist,
 						frontend_attrs) < 0)
 				return -1;
 		}
 		if (pmu_have_event("cpu", "stalled-cycles-backend")) {
-			if (perf_evlist__add_default_attrs(evsel_list,
+			if (perf_evlist__add_default_attrs(stat_record.evlist,
 						backend_attrs) < 0)
 				return -1;
 		}
-		if (perf_evlist__add_default_attrs(evsel_list, default_attrs1) < 0)
+		if (perf_evlist__add_default_attrs(stat_record.evlist, default_attrs1) < 0)
 			return -1;
 	}
 
@@ -1298,21 +1296,21 @@ static int add_default_attributes(void)
 		return 0;
 
 	/* Append detailed run extra attributes: */
-	if (perf_evlist__add_default_attrs(evsel_list, detailed_attrs) < 0)
+	if (perf_evlist__add_default_attrs(stat_record.evlist, detailed_attrs) < 0)
 		return -1;
 
 	if (detailed_run < 2)
 		return 0;
 
 	/* Append very detailed run extra attributes: */
-	if (perf_evlist__add_default_attrs(evsel_list, very_detailed_attrs) < 0)
+	if (perf_evlist__add_default_attrs(stat_record.evlist, very_detailed_attrs) < 0)
 		return -1;
 
 	if (detailed_run < 3)
 		return 0;
 
 	/* Append very, very detailed run extra attributes: */
-	return perf_evlist__add_default_attrs(evsel_list, very_very_detailed_attrs);
+	return perf_evlist__add_default_attrs(stat_record.evlist, very_very_detailed_attrs);
 }
 
 static const char * const stat_record_usage[] = {
@@ -1357,7 +1355,7 @@ static int __cmd_record(int argc, const char **argv)
 
 	init_features(session);
 
-	session->evlist   = evsel_list;
+	session->evlist   = stat_record.evlist;
 	perf_stat.session = session;
 	perf_stat.record  = true;
 	return argc;
@@ -1373,7 +1371,7 @@ static int process_stat_round_event(struct perf_tool *tool __maybe_unused,
 	const char **argv = session->header.env.cmdline_argv;
 	int argc = session->header.env.nr_cmdline;
 
-	evlist__for_each_entry(evsel_list, counter)
+	evlist__for_each_entry(stat_record.evlist, counter)
 		perf_stat_process_counter(&stat_record.config, counter);
 
 	if (stat_round->type == PERF_STAT_ROUND_TYPE__FINAL)
@@ -1423,9 +1421,9 @@ static int set_maps(struct perf_stat *st)
 	if (WARN_ONCE(st->maps_allocated, "stats double allocation\n"))
 		return -EINVAL;
 
-	perf_evlist__set_maps(evsel_list, st->cpus, st->threads);
+	perf_evlist__set_maps(stat_record.evlist, st->cpus, st->threads);
 
-	if (perf_evlist__alloc_stats(evsel_list, true))
+	if (perf_evlist__alloc_stats(stat_record.evlist, true))
 		return -ENOMEM;
 
 	st->maps_allocated = true;
@@ -1553,7 +1551,7 @@ static int __cmd_report(int argc, const char **argv)
 
 	perf_stat.session  = session;
 	stat_record.config.output = stderr;
-	evsel_list         = session->evlist;
+	stat_record.evlist         = session->evlist;
 
 	ret = perf_session__process_events(session);
 	if (ret)
@@ -1582,12 +1580,12 @@ static void setup_system_wide(int forks)
 	else {
 		struct perf_evsel *counter;
 
-		evlist__for_each_entry(evsel_list, counter) {
+		evlist__for_each_entry(stat_record.evlist, counter) {
 			if (!counter->system_wide)
 				return;
 		}
 
-		if (evsel_list->nr_entries)
+		if (stat_record.evlist->nr_entries)
 			target.system_wide = true;
 	}
 }
@@ -1606,15 +1604,15 @@ int cmd_stat(int argc, const char **argv)
 
 	setlocale(LC_ALL, "");
 
-	evsel_list = perf_evlist__new();
-	if (evsel_list == NULL)
+	stat_record.evlist = perf_evlist__new();
+	if (stat_record.evlist == NULL)
 		return -ENOMEM;
 
 	parse_events__shrink_config_terms();
 	argc = parse_options_subcommand(argc, argv, stat_options, stat_subcommands,
 					(const char **) stat_usage,
 					PARSE_OPT_STOP_AT_NON_OPTION);
-	perf_stat__collect_metric_expr(evsel_list);
+	perf_stat__collect_metric_expr(stat_record.evlist);
 	perf_stat__init_shadow_stats();
 
 	if (stat_record.config.csv_sep) {
@@ -1769,7 +1767,7 @@ int cmd_stat(int argc, const char **argv)
 	if ((stat_record.config.aggr_mode == AGGR_THREAD) && (target.system_wide))
 		target.per_thread = true;
 
-	if (perf_evlist__create_maps(evsel_list, &target) < 0) {
+	if (perf_evlist__create_maps(stat_record.evlist, &target) < 0) {
 		if (target__has_task(&target)) {
 			pr_err("Problems finding threads of monitor\n");
 			parse_options_usage(stat_usage, stat_options, "p", 1);
@@ -1787,10 +1785,10 @@ int cmd_stat(int argc, const char **argv)
 	 * so we could print it out on output.
 	 */
 	if (stat_record.config.aggr_mode == AGGR_THREAD) {
-		thread_map__read_comms(evsel_list->threads);
+		thread_map__read_comms(stat_record.evlist->threads);
 		if (target.system_wide) {
 			if (runtime_stat_new(&stat_record.config,
-				thread_map__nr(evsel_list->threads))) {
+				thread_map__nr(stat_record.evlist->threads))) {
 				goto out;
 			}
 		}
@@ -1823,7 +1821,7 @@ int cmd_stat(int argc, const char **argv)
 		goto out;
 	}
 
-	if (perf_evlist__alloc_stats(evsel_list, interval))
+	if (perf_evlist__alloc_stats(stat_record.evlist, interval))
 		goto out;
 
 	if (perf_stat_init_aggr_mode())
@@ -1898,21 +1896,21 @@ int cmd_stat(int argc, const char **argv)
 
 		if (!perf_stat.data.is_pipe) {
 			perf_stat.session->header.data_size += perf_stat.bytes_written;
-			perf_session__write_header(perf_stat.session, evsel_list, fd, true);
+			perf_session__write_header(perf_stat.session, stat_record.evlist, fd, true);
 		}
 
 		perf_session__delete(perf_stat.session);
 	}
 
 	perf_stat__exit_aggr_mode();
-	perf_evlist__free_stats(evsel_list);
+	perf_evlist__free_stats(stat_record.evlist);
 out:
 	free(stat_record.config.walltime_run);
 
 	if (smi_cost && smi_reset)
 		sysfs__write_int(FREEZE_ON_SMI_PATH, 0);
 
-	perf_evlist__delete(evsel_list);
+	perf_evlist__delete(stat_record.evlist);
 
 	runtime_stat_delete(&stat_record.config);
 
