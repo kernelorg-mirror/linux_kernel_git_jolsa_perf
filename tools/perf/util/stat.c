@@ -674,3 +674,86 @@ try_again:
 
 	return 0;
 }
+
+/*
+ * Read out the results of a single counter:
+ * do not aggregate counts across CPUs in system-wide mode
+ */
+static int read_counter(struct perf_stat_record *record,
+			struct perf_evsel *counter,
+			struct target *target)
+{
+	int nthreads = thread_map__nr(record->evlist->threads);
+	int ncpus, cpu, thread;
+
+	if (target__has_cpu(target) && !target__has_per_thread(target))
+		ncpus = perf_evsel__nr_cpus(counter);
+	else
+		ncpus = 1;
+
+	if (!counter->supported)
+		return -ENOENT;
+
+	if (counter->system_wide)
+		nthreads = 1;
+
+	for (thread = 0; thread < nthreads; thread++) {
+		for (cpu = 0; cpu < ncpus; cpu++) {
+			struct perf_counts_values *count;
+
+			count = perf_counts(counter->counts, cpu, thread);
+
+			/*
+			 * The leader's group read loads data into its group members
+			 * (via perf_evsel__read_counter) and sets threir count->loaded.
+			 */
+			if (!count->loaded &&
+			    perf_evsel__read_counter(counter, cpu, thread)) {
+				counter->counts->scaled = -1;
+				perf_counts(counter->counts, cpu, thread)->ena = 0;
+				perf_counts(counter->counts, cpu, thread)->run = 0;
+				return -1;
+			}
+
+			count->loaded = false;
+
+			if (record->write_stat) {
+				if (record->write_stat(counter, cpu, thread, count)) {
+					pr_err("failed to write stat event\n");
+					return -1;
+				}
+			}
+
+			if (verbose > 1) {
+				fprintf(record->config.output,
+					"%s: %d: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+						perf_evsel__name(counter),
+						cpu,
+						count->val, count->ena, count->run);
+			}
+		}
+	}
+
+	return 0;
+}
+
+int perf_stat_record__read(struct perf_stat_record *record,
+			   struct target *target, bool process)
+{
+	struct perf_evsel *counter;
+	int ret;
+
+	evlist__for_each_entry(record->evlist, counter) {
+		ret = read_counter(record, counter, target);
+		if (ret)
+			pr_debug("failed to read counter %s\n", counter->name);
+
+		if (!process)
+			continue;
+
+		if (ret == 0 && perf_stat_process_counter(&record->config, counter))
+			pr_warning("failed to process counter %s\n", counter->name);
+	}
+
+	return 0;
+}

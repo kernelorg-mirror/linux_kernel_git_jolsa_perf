@@ -229,6 +229,8 @@ extern const char *top_full_attrs;
 
 int perf_stat_record__open(struct perf_stat_record *record,
 			   struct target *target, bool store_id);
+int perf_stat_record__read(struct perf_stat_record *record,
+			   struct target *target, bool process);
 int perf_stat_synthesize_config(struct perf_stat_config *config,
 				struct perf_tool *tool,
 				struct perf_evlist *evlist,

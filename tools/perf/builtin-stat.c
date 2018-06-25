@@ -248,82 +248,12 @@ perf_evsel__write_stat_event(struct perf_evsel *counter, u32 cpu, u32 thread,
 					   process_synthesized_event, NULL);
 }
 
-/*
- * Read out the results of a single counter:
- * do not aggregate counts across CPUs in system-wide mode
- */
-static int read_counter(struct perf_evsel *counter)
-{
-	int nthreads = thread_map__nr(stat_record.evlist->threads);
-	int ncpus, cpu, thread;
-
-	if (target__has_cpu(&target) && !target__has_per_thread(&target))
-		ncpus = perf_evsel__nr_cpus(counter);
-	else
-		ncpus = 1;
-
-	if (!counter->supported)
-		return -ENOENT;
-
-	if (counter->system_wide)
-		nthreads = 1;
-
-	for (thread = 0; thread < nthreads; thread++) {
-		for (cpu = 0; cpu < ncpus; cpu++) {
-			struct perf_counts_values *count;
-
-			count = perf_counts(counter->counts, cpu, thread);
-
-			/*
-			 * The leader's group read loads data into its group members
-			 * (via perf_evsel__read_counter) and sets threir count->loaded.
-			 */
-			if (!count->loaded &&
-			    perf_evsel__read_counter(counter, cpu, thread)) {
-				counter->counts->scaled = -1;
-				perf_counts(counter->counts, cpu, thread)->ena = 0;
-				perf_counts(counter->counts, cpu, thread)->run = 0;
-				return -1;
-			}
-
-			count->loaded = false;
-
-			if (stat_record.write_stat) {
-				if (stat_record.write_stat(counter, cpu, thread, count)) {
-					pr_err("failed to write stat event\n");
-					return -1;
-				}
-			}
-
-			if (verbose > 1) {
-				fprintf(stat_record.config.output,
-					"%s: %d: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
-						perf_evsel__name(counter),
-						cpu,
-						count->val, count->ena, count->run);
-			}
-		}
-	}
-
-	return 0;
-}
-
 static void read_counters(void)
 {
-	struct perf_evsel *counter;
-	int ret;
-
 	if (STAT_RECORD)
 		stat_record.write_stat = perf_evsel__write_stat_event;
 
-	evlist__for_each_entry(stat_record.evlist, counter) {
-		ret = read_counter(counter);
-		if (ret)
-			pr_debug("failed to read counter %s\n", counter->name);
-
-		if (ret == 0 && perf_stat_process_counter(&stat_record.config, counter))
-			pr_warning("failed to process counter %s\n", counter->name);
-	}
+	perf_stat_record__read(&stat_record, &target, true);
 }
 
 static void process_interval(void)
