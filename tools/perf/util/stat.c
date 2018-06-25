@@ -474,9 +474,9 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp)
 	return ret;
 }
 
-int create_perf_stat_counter(struct perf_evsel *evsel,
-			     struct stat_opts *opts,
-			     struct target *target)
+static int create_perf_stat_counter(struct perf_evsel *evsel,
+				    struct stat_opts *opts,
+				    struct target *target)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	struct perf_evsel *leader = evsel->leader;
@@ -568,6 +568,108 @@ int perf_stat_synthesize_config(struct perf_stat_config *config,
 	if (err < 0) {
 		pr_err("Couldn't synthesize config.\n");
 		return err;
+	}
+
+	return 0;
+}
+
+static struct perf_evsel *perf_evsel__reset_weak_group(struct perf_evsel *evsel)
+{
+	struct perf_evsel *c2, *leader;
+	bool is_open = true;
+
+	leader = evsel->leader;
+	pr_debug("Weak group for %s/%d failed\n",
+			leader->name, leader->nr_members);
+
+	/*
+	 * for_each_group_member doesn't work here because it doesn't
+	 * include the first entry.
+	 */
+	evlist__for_each_entry(evsel->evlist, c2) {
+		if (c2 == evsel)
+			is_open = false;
+		if (c2->leader == leader) {
+			if (is_open)
+				perf_evsel__close(c2);
+			c2->leader = c2;
+			c2->nr_members = 0;
+		}
+	}
+	return leader;
+}
+
+static bool perf_evsel__should_store_id(struct perf_evsel *counter)
+{
+	return counter->attr.read_format & PERF_FORMAT_ID;
+}
+
+int perf_stat_record__open(struct perf_stat_record *record,
+			   struct target *target, bool store_id)
+{
+	struct perf_evsel *counter;
+	char msg[BUFSIZ];
+	size_t l;
+
+	evlist__for_each_entry(record->evlist, counter) {
+try_again:
+		if (create_perf_stat_counter(counter, &record->config.opts, target) < 0) {
+
+			/* Weak group failed. Reset the group. */
+			if ((errno == EINVAL || errno == EBADF) &&
+			    counter->leader != counter &&
+			    counter->weak_group) {
+				counter = perf_evsel__reset_weak_group(counter);
+				goto try_again;
+			}
+
+			/*
+			 * PPC returns ENXIO for HW counters until 2.6.37
+			 * (behavior changed with commit b0a873e).
+			 */
+			if (errno == EINVAL || errno == ENOSYS ||
+			    errno == ENOENT || errno == EOPNOTSUPP ||
+			    errno == ENXIO) {
+				if (verbose > 0)
+					ui__warning("%s event is not supported by the kernel.\n",
+						    perf_evsel__name(counter));
+				counter->supported = false;
+
+				if ((counter->leader != counter) ||
+				    !(counter->leader->nr_members > 1))
+					continue;
+			} else if (perf_evsel__fallback(counter, errno, msg, sizeof(msg))) {
+                                if (verbose > 0)
+                                        ui__warning("%s\n", msg);
+                                goto try_again;
+			} else if (target__has_per_thread(target) &&
+				   record->evlist->threads &&
+				   record->evlist->threads->err_thread != -1) {
+				/*
+				 * For global --per-thread case, skip current
+				 * error thread.
+				 */
+				if (!thread_map__remove(record->evlist->threads,
+							record->evlist->threads->err_thread)) {
+					record->evlist->threads->err_thread = -1;
+					goto try_again;
+				}
+			}
+
+			perf_evsel__open_strerror(counter, target,
+						  errno, msg, sizeof(msg));
+			ui__error("%s\n", msg);
+			return -1;
+		}
+		counter->supported = true;
+
+		l = strlen(counter->unit);
+		if (l > record->config.unit_width)
+			record->config.unit_width = l;
+
+		if ((store_id || perf_evsel__should_store_id(counter)) &&
+		    perf_evsel__store_ids(counter, record->evlist))
+			return -1;
 	}
 
 	return 0;

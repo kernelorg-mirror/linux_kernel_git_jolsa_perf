@@ -380,37 +380,6 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 	workload_exec_errno = info->si_value.sival_int;
 }
 
-static bool perf_evsel__should_store_id(struct perf_evsel *counter)
-{
-	return STAT_RECORD || counter->attr.read_format & PERF_FORMAT_ID;
-}
-
-static struct perf_evsel *perf_evsel__reset_weak_group(struct perf_evsel *evsel)
-{
-	struct perf_evsel *c2, *leader;
-	bool is_open = true;
-
-	leader = evsel->leader;
-	pr_debug("Weak group for %s/%d failed\n",
-			leader->name, leader->nr_members);
-
-	/*
-	 * for_each_group_member doesn't work here because it doesn't
-	 * include the first entry.
-	 */
-	evlist__for_each_entry(stat_record.evlist, c2) {
-		if (c2 == evsel)
-			is_open = false;
-		if (c2->leader == leader) {
-			if (is_open)
-				perf_evsel__close(c2);
-			c2->leader = c2;
-			c2->nr_members = 0;
-		}
-	}
-	return leader;
-}
-
 static int __run_perf_stat(int argc, const char **argv, int run_idx)
 {
 	int interval = stat_record.config.interval;
@@ -420,7 +389,6 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 	unsigned long long t0, t1;
 	struct perf_evsel *counter;
 	struct timespec ts;
-	size_t l;
 	int status = 0;
 	const bool forks = (argc > 0);
 	bool is_pipe = STAT_RECORD ? perf_stat.data.is_pipe : false;
@@ -449,69 +417,10 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 	if (group)
 		perf_evlist__set_leader(stat_record.evlist);
 
-	evlist__for_each_entry(stat_record.evlist, counter) {
-try_again:
-		if (create_perf_stat_counter(counter, &stat_record.config.opts, &target) < 0) {
-
-			/* Weak group failed. Reset the group. */
-			if ((errno == EINVAL || errno == EBADF) &&
-			    counter->leader != counter &&
-			    counter->weak_group) {
-				counter = perf_evsel__reset_weak_group(counter);
-				goto try_again;
-			}
-
-			/*
-			 * PPC returns ENXIO for HW counters until 2.6.37
-			 * (behavior changed with commit b0a873e).
-			 */
-			if (errno == EINVAL || errno == ENOSYS ||
-			    errno == ENOENT || errno == EOPNOTSUPP ||
-			    errno == ENXIO) {
-				if (verbose > 0)
-					ui__warning("%s event is not supported by the kernel.\n",
-						    perf_evsel__name(counter));
-				counter->supported = false;
-
-				if ((counter->leader != counter) ||
-				    !(counter->leader->nr_members > 1))
-					continue;
-			} else if (perf_evsel__fallback(counter, errno, msg, sizeof(msg))) {
-                                if (verbose > 0)
-                                        ui__warning("%s\n", msg);
-                                goto try_again;
-			} else if (target__has_per_thread(&target) &&
-				   stat_record.evlist->threads &&
-				   stat_record.evlist->threads->err_thread != -1) {
-				/*
-				 * For global --per-thread case, skip current
-				 * error thread.
-				 */
-				if (!thread_map__remove(stat_record.evlist->threads,
-							stat_record.evlist->threads->err_thread)) {
-					stat_record.evlist->threads->err_thread = -1;
-					goto try_again;
-				}
-			}
-
-			perf_evsel__open_strerror(counter, &target,
-						  errno, msg, sizeof(msg));
-			ui__error("%s\n", msg);
-
-			if (child_pid != -1)
-				kill(child_pid, SIGTERM);
-
-			return -1;
-		}
-		counter->supported = true;
-
-		l = strlen(counter->unit);
-		if (l > stat_record.config.unit_width)
-			stat_record.config.unit_width = l;
-
-		if (perf_evsel__should_store_id(counter) &&
-		    perf_evsel__store_ids(counter, stat_record.evlist))
-			return -1;
+	if (perf_stat_record__open(&stat_record, &target, STAT_RECORD)) {
+		if (child_pid != -1)
+			kill(child_pid, SIGTERM);
+		return -1;
 	}
 
 	if (perf_evlist__apply_filters(stat_record.evlist, &counter)) {
