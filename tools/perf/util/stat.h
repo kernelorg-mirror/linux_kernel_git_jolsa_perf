@@ -139,7 +139,8 @@ struct perf_stat_config {
 };
 
 typedef int (*write_stat_t)(struct perf_evsel *counter, u32 cpu, u32 thread,
-			    struct perf_counts_values *count);
+			    struct perf_counts_values *count,
+			    struct perf_tool *tool);
 
 struct perf_stat_record {
 	struct perf_stat_config	 config;
@@ -227,7 +228,8 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp);
 int perf_stat_record__open(struct perf_stat_record *record,
 			   struct target *target, bool store_id);
 int perf_stat_record__read(struct perf_stat_record *record,
-			   struct target *target, bool process);
+			   struct target *target, bool process,
+			   struct perf_tool *tool);
 int perf_stat_synthesize_config(struct perf_stat_config *config,
 				struct perf_tool *tool,
 				struct perf_evlist *evlist,
