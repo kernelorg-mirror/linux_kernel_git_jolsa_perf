@@ -69,6 +69,7 @@
 #include <sys/uio.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
+#include <locale.h>
 
 #include <linux/stringify.h>
 #include <linux/time64.h>
@@ -78,6 +79,89 @@
 
 static volatile int done;
 static volatile int resize;
+
+static int stat_read(struct perf_top *top)
+{
+	struct perf_stat_record *record = &top->stat.record;
+	struct target *target = &top->record_opts.target;
+
+	record->config.walltime_nsecs_stats = &walltime_nsecs_stats;
+	perf_stat_record__read(record, target, true, &top->tool);
+	perf_evlist__print_counters(record->evlist, &record->config, target, NULL, 0, NULL);
+	perf_evlist__reset_stats(record->evlist);
+	return 30;
+}
+
+#define DEFAULT_SEPARATOR	" "
+
+static int stat_open(struct perf_top *top)
+{
+	struct perf_stat_config *config = &top->stat.record.config;
+	struct record_opts *opts = &top->record_opts;
+	int err;
+
+	config->opts.initial_delay = opts->initial_delay;
+	config->opts.no_inherit    = opts->no_inherit;
+	config->opts.scale         = true;
+	config->aggr_mode          = AGGR_GLOBAL;
+	config->output		   = stdout;
+	config->csv_sep		   = DEFAULT_SEPARATOR;
+	config->big_num		   = true;
+
+	perf_evlist__set_maps(top->stat.record.evlist, top->evlist->cpus,
+			      top->evlist->threads);
+
+	err = perf_evlist__alloc_stats(top->stat.record.evlist, true);
+	if (err)
+		return err;
+
+	if (perf_stat_record__open(&top->stat.record, &opts->target, true))
+		return -1;
+
+	setlocale(LC_ALL, "");
+	perf_stat__init_shadow_stats(&config->rt_stat);
+	return 0;
+}
+
+static const char * const top_stat_usage[] = {
+	"perf top stat [<options>]",
+	NULL,
+};
+
+static int __cmd_stat(struct perf_top *top, int argc, const char **argv)
+{
+	const struct option stat_options[] = {
+		OPT_CALLBACK('e', "event", &top->stat.record.evlist, "event",
+			     "event selector. use 'perf list' to list available events",
+			     parse_events_option),
+		OPT_END()
+	};
+	struct parse_events_error errinfo;
+
+	top->stat.record.evlist = perf_evlist__new();
+	if (top->stat.record.evlist == NULL)
+		return -ENOMEM;
+
+	argc = parse_options(argc, argv, stat_options, top_stat_usage,
+			     PARSE_OPT_STOP_AT_NON_OPTION);
+	if (argc < 0)
+		return argc;
+
+	if (!top->stat.record.evlist->nr_entries) {
+		int err;
+
+		err = parse_events(top->stat.record.evlist,
+				   "cpu-clock", &errinfo);
+		if (err) {
+			fprintf(stderr, "Cannot set up stat events\n");
+			parse_events_print_error(&errinfo, "cpu-clock");
+			return -1;
+		}
+	}
+
+	top->stat.enabled = true;
+	return argc;
+}
 
 #define HEADER_LINE_NR  5
 
@@ -275,6 +359,8 @@ static void perf_top__print_sym_table(struct perf_top *top)
 	perf_top__reset_sample_counters(top);
 
 	printf("%-*.*s\n", win_width, win_width, graph_dotted_line);
+
+	printed += top->stat.enabled ? stat_read(top) : 0;
 
 	if (!top->record_opts.overwrite &&
 	    (hists->stats.nr_lost_warned !=
@@ -1131,8 +1217,10 @@ static int __cmd_top(struct perf_top *top)
 	 * XXX 'top' still doesn't start workloads like record, trace, but should,
 	 * so leave the check here.
 	 */
-        if (!target__none(&opts->target))
+        if (!target__none(&opts->target)) {
                 perf_evlist__enable(top->evlist);
+                perf_evlist__enable(top->stat.record.evlist);
+	}
 
 	/* Wait for a minimal set of events before starting the snapshot */
 	perf_evlist__poll(top->evlist, 100);
@@ -1377,6 +1465,7 @@ int cmd_top(int argc, const char **argv)
 			"number of thread to run event synthesize"),
 	OPT_END()
 	};
+	const char * const subcommands[] = { "stat" };
 	const char * const top_usage[] = {
 		"perf top [<options>]",
 		NULL
@@ -1397,7 +1486,16 @@ int cmd_top(int argc, const char **argv)
 	if (status)
 		return status;
 
-	argc = parse_options(argc, argv, options, top_usage, 0);
+	argc = parse_options_subcommand(argc, argv, options, subcommands,
+					(const char **) top_usage,
+					PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (argc && !strncmp(argv[0], "stat", 4)) {
+		argc = __cmd_stat(&top, argc, argv);
+		if (argc < 0)
+			goto out_delete_evlist;
+	}
+
 	if (argc)
 		usage_with_options(top_usage, options);
 
@@ -1502,10 +1600,14 @@ int cmd_top(int argc, const char **argv)
 		signal(SIGWINCH, winch_sig);
 	}
 
+	if (top.stat.enabled && stat_open(&top))
+		goto out_delete_evlist;
+
 	status = __cmd_top(&top);
 
 out_delete_evlist:
 	perf_evlist__delete(top.evlist);
+	perf_evlist__delete(top.stat.record.evlist);
 
 	return status;
 }
