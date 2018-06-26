@@ -79,6 +79,49 @@
 static volatile int done;
 static volatile int resize;
 
+static void stat_read(struct perf_top *top)
+{
+	perf_stat_record__read(&top->stat.record, &top->record_opts.target,
+			       true, &top->tool);
+
+}
+
+static int stat_open(struct perf_top *top)
+{
+	struct perf_stat_config *config = &top->stat.record.config;
+	struct record_opts *opts = &top->record_opts;
+	struct parse_events_error errinfo;
+	int err;
+
+	top->stat.record.evlist = perf_evlist__new();
+	if (top->stat.record.evlist == NULL)
+		return -ENOMEM;
+
+	err = parse_events(top->stat.record.evlist,
+			   "cpu-clock", &errinfo);
+	if (err) {
+		fprintf(stderr, "Cannot set up stat events\n");
+		parse_events_print_error(&errinfo, "cpu-clock");
+		return -1;
+	}
+
+	config->opts.initial_delay = opts->initial_delay;
+	config->opts.no_inherit    = opts->no_inherit;
+
+	perf_evlist__set_maps(top->stat.record.evlist, top->evlist->cpus,
+			      top->evlist->threads);
+
+	err = perf_evlist__alloc_stats(top->stat.record.evlist, false);
+	if (err)
+		return err;
+
+	if (perf_stat_record__open(&top->stat.record, &opts->target, true))
+		return -1;
+
+	perf_stat__init_shadow_stats();
+	return 0;
+}
+
 #define HEADER_LINE_NR  5
 
 static void perf_top__update_print_entries(struct perf_top *top)
@@ -650,6 +693,7 @@ repeat:
 	getc(stdin);
 
 	while (!done) {
+		stat_read(top);
 		perf_top__print_sym_table(top);
 		/*
 		 * Either timeout expired or we got an EINTR due to SIGWINCH,
@@ -1131,8 +1175,10 @@ static int __cmd_top(struct perf_top *top)
 	 * XXX 'top' still doesn't start workloads like record, trace, but should,
 	 * so leave the check here.
 	 */
-        if (!target__none(&opts->target))
+        if (!target__none(&opts->target)) {
                 perf_evlist__enable(top->evlist);
+                perf_evlist__enable(top->stat.record.evlist);
+	}
 
 	/* Wait for a minimal set of events before starting the snapshot */
 	perf_evlist__poll(top->evlist, 100);
@@ -1470,6 +1516,11 @@ int cmd_top(int argc, const char **argv)
 		top.delay_secs = 1;
 
 	if (record_opts__config(opts)) {
+		status = -EINVAL;
+		goto out_delete_evlist;
+	}
+
+	if (stat_open(&top)) {
 		status = -EINVAL;
 		goto out_delete_evlist;
 	}
