@@ -1063,6 +1063,9 @@ void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 		 */
 		ratio = min(1., ratio);
 
+		if (perf_stat_evsel__is(evsel, CPUTIME_IDLE))
+			update_runtime_ratio(st, STAT_RATIO_IDLE, 0, cpu, ratio * 100.);
+
 		if (total)
 			print_metric(config, ctxp, color, "%8.1f%%", name, ratio * 100.);
 		else
