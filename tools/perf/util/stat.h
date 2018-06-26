@@ -244,4 +244,6 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 			    struct target *_target,
 			    struct timespec *ts,
 			    int argc, const char **argv);
+double runtime_stat__get_ratio(struct runtime_stat *rt_stat,
+			       enum stat_type type, int cpu);
 #endif

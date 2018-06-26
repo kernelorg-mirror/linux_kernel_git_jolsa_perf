@@ -28,6 +28,7 @@ struct saved_value {
 	int cpu;
 	struct runtime_stat *stat;
 	struct stats stats;
+	double ratio;
 };
 
 static int saved_value_cmp(struct rb_node *rb_node, const void *entry)
@@ -122,6 +123,19 @@ static struct saved_value *saved_value_lookup(struct perf_evsel *evsel,
 	return NULL;
 }
 
+double runtime_stat__get_ratio(struct runtime_stat *rt_stat,
+			       enum stat_type type, int cpu)
+{
+	struct saved_value *v = saved_value_lookup(NULL, cpu, false,
+						   type, 0, rt_stat);
+	double ratio = 0.0;
+
+	if (v)
+		ratio = v->ratio;
+
+	return ratio;
+}
+
 void runtime_stat__init(struct runtime_stat *st)
 {
 	struct rblist *rblist = &st->value_list;
@@ -169,11 +183,13 @@ static void reset_stat(struct runtime_stat *st)
 	rblist = &st->value_list;
 	next = rb_first(&rblist->entries);
 	while (next) {
+		struct saved_value *v;
+
 		pos = next;
+		v= container_of(pos, struct saved_value, rb_node);
 		next = rb_next(pos);
-		memset(&container_of(pos, struct saved_value, rb_node)->stats,
-		       0,
-		       sizeof(struct stats));
+		memset(&v->stats, 0, sizeof(struct stats));
+		v->ratio = 0;
 	}
 }
 
@@ -186,6 +202,18 @@ void perf_stat__reset_shadow_stats(struct runtime_stat *rt_stat)
 void perf_stat__reset_shadow_per_stat(struct runtime_stat *st)
 {
 	reset_stat(st);
+}
+
+__maybe_unused
+static void update_runtime_ratio(struct runtime_stat *st,
+				 enum stat_type type,
+				 int ctx, int cpu, double ratio)
+{
+	struct saved_value *v = saved_value_lookup(NULL, cpu, true,
+						   type, ctx, st);
+
+	if (v)
+		v->ratio = ratio;
 }
 
 static void update_runtime_stat(struct runtime_stat *st,
