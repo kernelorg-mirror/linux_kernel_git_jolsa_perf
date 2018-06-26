@@ -4,6 +4,7 @@
 
 #include "tool.h"
 #include "annotate.h"
+#include "stat.h"
 #include <linux/types.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -40,6 +41,9 @@ struct perf_top {
 	const char	   *sym_filter;
 	float		   min_percent;
 	unsigned int	   nr_threads_synthesize;
+	struct {
+		struct perf_stat_record	record;
+	} stat;
 };
 
 #define CONSOLE_CLEAR "[H[2J"
