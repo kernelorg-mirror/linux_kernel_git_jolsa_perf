@@ -18,7 +18,6 @@
  */
 static bool have_frontend_stalled;
 
-struct runtime_stat rt_stat;
 struct stats walltime_nsecs_stats;
 
 struct saved_value {
@@ -138,10 +137,10 @@ void runtime_stat__exit(struct runtime_stat *st)
 	rblist__exit(&st->value_list);
 }
 
-void perf_stat__init_shadow_stats(void)
+void perf_stat__init_shadow_stats(struct runtime_stat *rt_stat)
 {
 	have_frontend_stalled = pmu_have_event("cpu", "stalled-cycles-frontend");
-	runtime_stat__init(&rt_stat);
+	runtime_stat__init(rt_stat);
 }
 
 static int evsel_context(struct perf_evsel *evsel)
@@ -178,9 +177,9 @@ static void reset_stat(struct runtime_stat *st)
 	}
 }
 
-void perf_stat__reset_shadow_stats(void)
+void perf_stat__reset_shadow_stats(struct runtime_stat *rt_stat)
 {
-	reset_stat(&rt_stat);
+	reset_stat(rt_stat);
 	memset(&walltime_nsecs_stats, 0, sizeof(walltime_nsecs_stats));
 }
 
