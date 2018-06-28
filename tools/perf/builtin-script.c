@@ -1595,18 +1595,18 @@ static void perf_sample__fprint_metric(struct perf_script *script,
 	u64 val;
 
 	if (!init) {
-		perf_stat__init_shadow_stats();
+		perf_stat__init_shadow_stats(&stat_config.rt_stat);
 		init = true;
 	}
 	if (!evsel->stats)
 		perf_evlist__alloc_stats(script->session->evlist, false);
 	if (evsel_script(evsel->leader)->gnum++ == 0)
-		perf_stat__reset_shadow_stats();
+		perf_stat__reset_shadow_stats(&stat_config.rt_stat);
 	val = sample->period * evsel->scale;
 	perf_stat__update_shadow_stats(evsel,
 				       val,
 				       sample->cpu,
-				       &rt_stat);
+				       &stat_config.rt_stat);
 	evsel_script(evsel)->val = val;
 	if (evsel_script(evsel->leader)->gnum == evsel->leader->nr_members) {
 		for_each_group_member (ev2, evsel->leader) {
@@ -1615,7 +1615,7 @@ static void perf_sample__fprint_metric(struct perf_script *script,
 						      sample->cpu,
 						      &ctx,
 						      NULL,
-						      &rt_stat);
+						      &stat_config.rt_stat);
 		}
 		evsel_script(evsel->leader)->gnum = 0;
 	}

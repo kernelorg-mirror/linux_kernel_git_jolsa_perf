@@ -206,7 +206,7 @@ static void perf_stat__reset_stats(void)
 	int i;
 
 	perf_evlist__reset_stats(evsel_list);
-	perf_stat__reset_shadow_stats();
+	perf_stat__reset_shadow_stats(&stat_config.rt_stat);
 
 	for (i = 0; i < stat_config.stats_num; i++)
 		perf_stat__reset_shadow_per_stat(&stat_config.stats[i]);
@@ -1614,7 +1614,7 @@ int cmd_stat(int argc, const char **argv)
 					(const char **) stat_usage,
 					PARSE_OPT_STOP_AT_NON_OPTION);
 	perf_stat__collect_metric_expr(evsel_list);
-	perf_stat__init_shadow_stats();
+	perf_stat__init_shadow_stats(&stat_config.rt_stat);
 
 	if (stat_config.csv_sep) {
 		stat_config.csv_output = true;

@@ -485,7 +485,7 @@ static void aggr_update_shadow(struct perf_stat_config *config,
 			}
 			perf_stat__update_shadow_stats(counter, val,
 					first_shadow_cpu(config, counter, id),
-					&rt_stat);
+					&config->rt_stat);
 		}
 	}
 }
@@ -641,7 +641,7 @@ static void print_aggr(struct perf_stat_config *config,
 
 			uval = val * counter->scale;
 			printout(config, id, nr, counter, uval, prefix,
-				 run, ena, 1.0, &rt_stat);
+				 run, ena, 1.0, &config->rt_stat);
 			if (!metric_only)
 				fputc('\n', output);
 		}
@@ -733,7 +733,7 @@ static void print_aggr_thread(struct perf_stat_config *config,
 		else
 			printout(config, id, 0, buf[thread].counter, buf[thread].uval,
 				 prefix, buf[thread].run, buf[thread].ena, 1.0,
-				 &rt_stat);
+				 &config->rt_stat);
 		fputc('\n', output);
 	}
 
@@ -776,7 +776,7 @@ static void print_counter_aggr(struct perf_stat_config *config,
 
 	uval = cd.avg * counter->scale;
 	printout(config, -1, 0, counter, uval, prefix, cd.avg_running, cd.avg_enabled,
-		 cd.avg, &rt_stat);
+		 cd.avg, &config->rt_stat);
 	if (!metric_only)
 		fprintf(output, "\n");
 }
@@ -818,7 +818,7 @@ static void print_counter(struct perf_stat_config *config,
 
 		uval = val * counter->scale;
 		printout(config, cpu, 0, counter, uval, prefix, run, ena, 1.0,
-			 &rt_stat);
+			 &config->rt_stat);
 
 		fputc('\n', output);
 	}
@@ -853,7 +853,7 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 
 			uval = val * counter->scale;
 			printout(config, cpu, 0, counter, uval, prefix, run, ena, 1.0,
-				 &rt_stat);
+				 &config->rt_stat);
 		}
 		fputc('\n', config->output);
 	}
@@ -911,7 +911,7 @@ static void print_metric_headers(struct perf_stat_config *config,
 					      0,
 					      &out,
 					      &config->metric_events,
-					      &rt_stat);
+					      &config->rt_stat);
 	}
 	fputc('\n', config->output);
 }

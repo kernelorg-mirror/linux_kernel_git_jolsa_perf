@@ -134,6 +134,7 @@ struct perf_stat_config {
 	bool			 walltime_run_table;
 	u64			*walltime_run;
 	struct rblist		 metric_events;
+	struct runtime_stat	 rt_stat;
 };
 
 void update_stats(struct stats *stats, u64 val);
@@ -168,7 +169,6 @@ bool __perf_evsel_stat__is(struct perf_evsel *evsel,
 #define perf_stat_evsel__is(evsel, id) \
 	__perf_evsel_stat__is(evsel, PERF_STAT_EVSEL_ID__ ## id)
 
-extern struct runtime_stat rt_stat;
 extern struct stats walltime_nsecs_stats;
 
 typedef void (*print_metric_t)(struct perf_stat_config *config,
@@ -178,8 +178,8 @@ typedef void (*new_line_t)(struct perf_stat_config *config, void *ctx);
 
 void runtime_stat__init(struct runtime_stat *st);
 void runtime_stat__exit(struct runtime_stat *st);
-void perf_stat__init_shadow_stats(void);
-void perf_stat__reset_shadow_stats(void);
+void perf_stat__init_shadow_stats(struct runtime_stat *st);
+void perf_stat__reset_shadow_stats(struct runtime_stat *st);
 void perf_stat__reset_shadow_per_stat(struct runtime_stat *st);
 void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 count,
 				    int cpu, struct runtime_stat *st);
