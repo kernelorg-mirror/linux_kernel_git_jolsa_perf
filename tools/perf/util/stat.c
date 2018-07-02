@@ -400,8 +400,9 @@ int perf_stat_process_counter(struct perf_stat_config *config,
 		update_stats(&ps->res_stats[i], count[i]);
 
 	if (verbose > 0) {
-		fprintf(config->output, "%s: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
-			perf_evsel__name(counter), count[0], count[1], count[2]);
+		fprintf(config->output ?: stderr,
+			"process %s: %f %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+			perf_evsel__name(counter), ps ? avg_stats(&ps->res_stats[0]) : 0, count[0], count[1], count[2]);
 	}
 
 	/*
@@ -726,8 +727,8 @@ static int read_counter(struct perf_stat_record *record,
 			}
 
 			if (verbose > 1) {
-				fprintf(record->config.output,
-					"%s: %d: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+				fprintf(record->config.output ?: stderr,
+					"read %s: %d: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
 						perf_evsel__name(counter),
 						cpu,
 						count->val, count->ena, count->run);
