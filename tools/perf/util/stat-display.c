@@ -23,6 +23,22 @@ static int P(struct perf_stat_config *config,
 	va_list args;
 	int ret = 0;
 
+	if (config->line.cb) {
+		char *buf = config->line.buf;
+
+		if (!buf) {
+			buf = config->line.buf = malloc(1024);
+			if (!buf)
+				return -ENOMEM;
+		}
+
+		va_start(args, fmt);
+		ret = vsnprintf(buf, 1024, fmt, args);
+		va_end(args);
+
+		config->line.cb(config->line.type, buf);
+	}
+
 	if (config->output) {
 		va_start(args, fmt);
 		ret = vfprintf(config->output, fmt, args);
@@ -32,7 +48,7 @@ static int P(struct perf_stat_config *config,
 	return ret;
 }
 
-static int __c(struct perf_stat_config *config,
+static int C(struct perf_stat_config *config,
 	       const char *color,
 	       const char *fmt, ...)
 {
@@ -183,7 +199,7 @@ static void print_metric_std(struct perf_stat_config *config,
 
 	n = P(config, " # ");
 	if (color)
-		n += __c(config, color, fmt, val);
+		n += C(config, color, fmt, val);
 	else
 		n += P(config, fmt, val);
 	P(config, " %-*s", METRIC_LEN - n - 1, unit);
@@ -1195,6 +1211,9 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 
 	if (!interval && !config->csv_output)
 		print_footer(config);
+
+	if (config->line.cb)
+		zfree(&config->line.buf);
 
 	fflush(config->output);
 }

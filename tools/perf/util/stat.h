@@ -104,6 +104,15 @@ struct runtime_stat {
 typedef int (*aggr_get_id_t)(struct perf_stat_config *config,
 			     struct cpu_map *m, int cpu);
 
+enum {
+	STAT_LINE__HEADER,
+	STAT_LINE__EVENT,
+	STAT_LINE__METRIC,
+	STAT_LINE
+};
+
+typedef int (*stat_line_t)(int type, char *line);
+
 struct perf_stat_config {
 	enum aggr_mode		 aggr_mode;
 	FILE			*output;
@@ -136,6 +145,11 @@ struct perf_stat_config {
 	u64			*walltime_run;
 	struct rblist		 metric_events;
 	struct runtime_stat	 rt_stat;
+	struct {
+		stat_line_t	 cb;
+		char		*buf;
+		int		 type;
+	} line;
 };
 
 typedef int (*write_stat_t)(struct perf_evsel *counter, u32 cpu, u32 thread,

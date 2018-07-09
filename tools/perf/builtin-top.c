@@ -80,6 +80,12 @@
 static volatile int done;
 static volatile int resize;
 
+static int stat_line(int type __maybe_unused, char *line)
+{
+	fprintf(stdout, "%s", line);
+	return 0;
+}
+
 static int stat_read(struct perf_top *top)
 {
 	struct perf_stat_record *record = &top->stat.record;
@@ -104,9 +110,11 @@ static int stat_open(struct perf_top *top)
 	config->opts.no_inherit    = opts->no_inherit;
 	config->opts.scale         = true;
 	config->aggr_mode          = AGGR_GLOBAL;
-	config->output		   = stdout;
+	config->output		   = NULL;
 	config->csv_sep		   = DEFAULT_SEPARATOR;
 	config->big_num		   = true;
+	config->line.cb		   = stat_line;
+	config->line.buf	   = NULL;
 
 	perf_evlist__set_maps(top->stat.record.evlist, top->evlist->cpus,
 			      top->evlist->threads);
@@ -1219,7 +1227,8 @@ static int __cmd_top(struct perf_top *top)
 	 */
         if (!target__none(&opts->target)) {
                 perf_evlist__enable(top->evlist);
-                perf_evlist__enable(top->stat.record.evlist);
+		if (top->stat.enabled)
+	                perf_evlist__enable(top->stat.record.evlist);
 	}
 
 	/* Wait for a minimal set of events before starting the snapshot */
