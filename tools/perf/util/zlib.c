@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <zlib.h>
 #include <linux/compiler.h>
+#include <unistd.h>
 
 #include "util/compress.h"
 #include "util/util.h"
@@ -81,7 +82,17 @@ out_close:
 	return ret == Z_STREAM_END ? 0 : -1;
 }
 
-int gzip_is_compressed(const char *input __maybe_unused)
+int gzip_is_compressed(const char *input)
 {
-	return 0;
+	int fd = open(input, O_RDONLY);
+	const uint8_t magic[2] = { 0x1f, 0x8b };
+	char buf[2] = { 0 };
+	ssize_t rc;
+
+	if (fd < 0)
+		return -1;
+
+	rc = read(fd, buf, sizeof(buf));
+	close(fd);
+	return rc == sizeof(buf) ? memcmp(buf, magic, sizeof(buf)) == 0 : -1;
 }
