@@ -192,14 +192,15 @@ int dso__read_binary_type_filename(const struct dso *dso,
 static const struct {
 	const char *fmt;
 	int (*decompress)(const char *input, int output);
+	int (*is_compressed)(const char *input);
 } compressions[] = {
 #ifdef HAVE_ZLIB_SUPPORT
-	{ "gz", gzip_decompress_to_file },
+	{ "gz", gzip_decompress_to_file, gzip_is_compressed },
 #endif
 #ifdef HAVE_LZMA_SUPPORT
-	{ "xz", lzma_decompress_to_file },
+	{ "xz", lzma_decompress_to_file, lzma_is_compressed },
 #endif
-	{ NULL, NULL },
+	{ NULL, NULL, NULL },
 };
 
 static int is_supported_compression(const char *ext)
@@ -245,8 +246,10 @@ bool dso__needs_decompress(struct dso *dso)
 		dso->symtab_type == DSO_BINARY_TYPE__GUEST_KMODULE_COMP;
 }
 
-static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
+static int decompress_kmodule(struct dso *dso, const char *name, char *tmp)
 {
+	char tmpbuf[] = KMOD_DECOMP_NAME;
+	bool remove = !tmp;
 	int fd = -1;
 
 	if (!dso__needs_decompress(dso))
@@ -255,7 +258,10 @@ static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
 	if (dso->comp_id == COMP_ID__NONE)
 		return -1;
 
-	fd = mkstemp(tmpbuf);
+	if (compressions[dso->comp_id].is_compressed(name))
+		return open(name, O_RDONLY);
+
+	fd = mkstemp(tmp ?: tmpbuf);
 	if (fd < 0) {
 		dso->load_errno = errno;
 		return -1;
@@ -267,17 +273,14 @@ static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
 		fd = -1;
 	}
 
+	if (remove)
+		unlink(tmpbuf);
 	return fd;
 }
 
 int dso__decompress_kmodule_fd(struct dso *dso, const char *name)
 {
-	char tmpbuf[] = KMOD_DECOMP_NAME;
-	int fd;
-
-	fd = decompress_kmodule(dso, name, tmpbuf);
-	unlink(tmpbuf);
-	return fd;
+	return decompress_kmodule(dso, name, NULL);
 }
 
 int dso__decompress_kmodule_path(struct dso *dso, const char *name,
