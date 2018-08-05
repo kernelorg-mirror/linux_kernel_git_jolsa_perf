@@ -260,10 +260,11 @@ int dso__decompress_kmodule_path(struct dso *dso, const char *name,
 #define KMOD_DECOMP_LEN   sizeof(KMOD_DECOMP_NAME)
 
 struct kmod_path {
-	char *name;
-	char *ext;
-	bool  comp;
-	bool  kmod;
+	char		*name;
+	char		*ext;
+	bool		 comp;
+	unsigned int	 comp_id;
+	bool		 kmod;
 };
 
 int __kmod_path__parse(struct kmod_path *m, const char *path,
