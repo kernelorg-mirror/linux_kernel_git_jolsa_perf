@@ -3,6 +3,9 @@
 #include <lzma.h>
 #include <stdio.h>
 #include <linux/compiler.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "compress.h"
 #include "util.h"
 #include "debug.h"
@@ -102,5 +105,14 @@ err_fclose:
 
 int lzma_is_compressed(const char *input __maybe_unused)
 {
-	return 0;
+	int fd = open(input, O_RDONLY);
+	const uint8_t magic[6] = { 0xFD, '7', 'z', 'X', 'Z', 0x00 };
+	char buf[6] = { 0 };
+
+	if (fd < 0)
+		return -1;
+
+	read(fd, buf, sizeof(buf));
+	close(fd);
+	return memcmp(buf, magic, sizeof(buf));
 }
