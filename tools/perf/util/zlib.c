@@ -83,5 +83,14 @@ out_close:
 
 int gzip_is_compressed(const char *input __maybe_unused)
 {
-	return 0;
+	int fd = open(input, O_RDONLY);
+	const uint8_t magic[2] = { 0x1f, 0x8b };
+	char buf[2] = { 0 };
+
+	if (fd < 0)
+		return -1;
+
+	read(fd, buf, sizeof(buf));
+	close(fd);
+	return memcmp(buf, magic, sizeof(buf));
 }
