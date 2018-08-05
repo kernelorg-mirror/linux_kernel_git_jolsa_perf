@@ -259,11 +259,18 @@ int dso__decompress_kmodule_path(struct dso *dso, const char *name,
 #define KMOD_DECOMP_NAME  "/tmp/perf-kmod-XXXXXX"
 #define KMOD_DECOMP_LEN   sizeof(KMOD_DECOMP_NAME)
 
+enum {
+	COMP_ID__NONE = -1,
+	COMP_ID__GZ   = 0,
+	COMP_ID__XZ   = 1,
+};
+
 struct kmod_path {
-	char *name;
-	char *ext;
-	bool  comp;
-	bool  kmod;
+	char		*name;
+	char		*ext;
+	bool		 comp;
+	unsigned int	 comp_id;
+	bool		 kmod;
 };
 
 int __kmod_path__parse(struct kmod_path *m, const char *path,

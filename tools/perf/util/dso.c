@@ -202,15 +202,15 @@ static const struct {
 	{ NULL, NULL },
 };
 
-static bool is_supported_compression(const char *ext)
+static int is_supported_compression(const char *ext)
 {
 	unsigned i;
 
 	for (i = 0; compressions[i].fmt; i++) {
 		if (!strcmp(ext, compressions[i].fmt))
-			return true;
+			return i;
 	}
-	return false;
+	return -1;
 }
 
 bool is_kernel_module(const char *pathname, int cpumode)
@@ -338,6 +338,7 @@ int __kmod_path__parse(struct kmod_path *m, const char *path,
 	const char *name = strrchr(path, '/');
 	const char *ext  = strrchr(path, '.');
 	bool is_simple_name = false;
+	int comp_id;
 
 	memset(m, 0x0, sizeof(*m));
 	name = name ? name + 1 : path;
@@ -373,8 +374,10 @@ int __kmod_path__parse(struct kmod_path *m, const char *path,
 		return 0;
 	}
 
-	if (is_supported_compression(ext + 1)) {
+	comp_id = is_supported_compression(ext + 1);
+	if (comp_id > COMP_ID__NONE) {
 		m->comp = true;
+		m->comp_id = comp_id;
 		ext -= 3;
 	}
 
