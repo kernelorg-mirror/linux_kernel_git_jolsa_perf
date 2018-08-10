@@ -264,6 +264,9 @@ OPTIONS
 --phys-data::
 	Record the sample physical addresses.
 
+--page-size::
+	Record the sample page size
+
 -T::
 --timestamp::
 	Record the sample timestamps. Use it with 'perf report -D' to see the
