@@ -46,6 +46,8 @@ extern struct sort_entry sort_srcline;
 extern enum sort_type sort__first_dimension;
 extern const char default_mem_sort_order[];
 
+#define MAX_SORT_ORDER_STR	128
+
 struct he_stat {
 	u64			period;
 	u64			period_sys;
