@@ -1080,6 +1080,22 @@ static void dump_event(struct perf_evlist *evlist, union perf_event *event,
 	       event->header.size, perf_event__name(event->header.type));
 }
 
+const char *get_page_size_name(u64 level)
+{
+	switch (level) {
+	case PERF_MEM_PAGE_SIZE_4K:
+		return "4K";
+	case PERF_MEM_PAGE_SIZE_2M:
+		return "2M";
+	case PERF_MEM_PAGE_SIZE_1G:
+		return "1G";
+	case PERF_MEM_PAGE_SIZE_512G:
+		return "512G";
+	default:
+		return "N/A";
+	}
+}
+
 static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
 			struct perf_sample *sample)
 {
@@ -1117,6 +1133,9 @@ static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
 
 	if (sample_type & PERF_SAMPLE_PHYS_ADDR)
 		printf(" .. phys_addr: 0x%"PRIx64"\n", sample->phys_addr);
+
+	if (sample_type & PERF_SAMPLE_PAGE_SIZE)
+		printf(" .. page size: %s\n", get_page_size_name(sample->page_size));
 
 	if (sample_type & PERF_SAMPLE_TRANSACTION)
 		printf("... transaction: %" PRIx64 "\n", sample->transaction);
