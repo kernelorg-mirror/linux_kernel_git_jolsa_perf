@@ -141,8 +141,9 @@ enum perf_event_sample_format {
 	PERF_SAMPLE_TRANSACTION			= 1U << 17,
 	PERF_SAMPLE_REGS_INTR			= 1U << 18,
 	PERF_SAMPLE_PHYS_ADDR			= 1U << 19,
+	PERF_SAMPLE_PAGE_SIZE			= 1U << 20,
 
-	PERF_SAMPLE_MAX = 1U << 20,		/* non-ABI */
+	PERF_SAMPLE_MAX = 1U << 21,		/* non-ABI */
 
 	__PERF_SAMPLE_CALLCHAIN_EARLY		= 1ULL << 63,
 };
@@ -861,6 +862,7 @@ enum perf_event_type {
 	 *	{ u64			abi; # enum perf_sample_regs_abi
 	 *	  u64			regs[weight(mask)]; } && PERF_SAMPLE_REGS_INTR
 	 *	{ u64			phys_addr;} && PERF_SAMPLE_PHYS_ADDR
+	 *	{ u64			page_size;} && PERF_SAMPLE_PAGE_SIZE
 	 * };
 	 */
 	PERF_RECORD_SAMPLE			= 9,
@@ -1098,6 +1100,15 @@ union perf_mem_data_src {
 
 #define PERF_MEM_S(a, s) \
 	(((__u64)PERF_MEM_##a##_##s) << PERF_MEM_##a##_SHIFT)
+
+
+enum perf_mem_page_size {
+	PERF_MEM_PAGE_SIZE_NONE,
+	PERF_MEM_PAGE_SIZE_4K,
+	PERF_MEM_PAGE_SIZE_2M,
+	PERF_MEM_PAGE_SIZE_1G,
+	PERF_MEM_PAGE_SIZE_512G,
+};
 
 /*
  * single taken branch record layout:
