@@ -250,8 +250,10 @@ bool dso__needs_decompress(struct dso *dso)
 		dso->symtab_type == DSO_BINARY_TYPE__GUEST_KMODULE_COMP;
 }
 
-static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
+static int decompress_kmodule(struct dso *dso, const char *name, char *tmp)
 {
+	char tmpbuf[] = KMOD_DECOMP_NAME;
+	bool remove = !tmp;
 	int fd = -1;
 
 	if (!dso__needs_decompress(dso))
@@ -260,7 +262,7 @@ static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
 	if (dso->comp == COMP_ID__NONE)
 		return -1;
 
-	fd = mkstemp(tmpbuf);
+	fd = mkstemp(tmp ?: tmpbuf);
 	if (fd < 0) {
 		dso->load_errno = errno;
 		return -1;
@@ -272,17 +274,14 @@ static int decompress_kmodule(struct dso *dso, const char *name, char *tmpbuf)
 		fd = -1;
 	}
 
+	if (remove)
+		unlink(tmpbuf);
 	return fd;
 }
 
 int dso__decompress_kmodule_fd(struct dso *dso, const char *name)
 {
-	char tmpbuf[] = KMOD_DECOMP_NAME;
-	int fd;
-
-	fd = decompress_kmodule(dso, name, tmpbuf);
-	unlink(tmpbuf);
-	return fd;
+	return decompress_kmodule(dso, name, NULL);
 }
 
 int dso__decompress_kmodule_path(struct dso *dso, const char *name,
