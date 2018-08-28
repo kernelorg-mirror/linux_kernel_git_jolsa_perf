@@ -1,0 +1,107 @@
+perf-daemon(1)
+==============
+
+NAME
+----
+perf-daemon - Run record sessions on background
+
+SYNOPSIS
+--------
+[verse]
+'perf daemon'
+'perf daemon' [<options>]
+
+DESCRIPTION
+-----------
+This command allows to run simple daemon process that starts and
+monitors configured record sessions.
+
+Each session represents one perf record process.
+
+These sessions are configured through config file, see CONFIG FILE
+section with EXAMPLES.
+
+OPTIONS
+-------
+--config=<PATH>::
+	Config file path.
+
+-f::
+--foreground::
+	Do not put the process in background.
+
+-v::
+--verbose::
+	Be more verbose.
+
+CONFIG FILE
+-----------
+The daemon is configured within standard perf config file by
+following new variables:
+
+daemon.base:
+	Base path for daemon data. All sessions data are
+	stored under this path.
+
+session-<NAME>.run:
+	Defines new record session. The value is record's command
+	line without the 'record' keyword.
+
+Each perf record session is run in daemon.base/<NAME> directory.
+
+EXAMPLES
+--------
+Example with 2 record sessions:
+
+  # cat config.daemon
+  [daemon]
+  base=/opt/perfdata
+
+  [session-1]
+  run = -m 10M -e cycles --overwrite --switch-output -a
+
+  [session-2]
+  run = -m 20M -e sched:* --overwrite --switch-output -a
+
+
+Default perf config has the same daemon base:
+
+  # cat ~/.perfconfig
+  [daemon]
+  base=/opt/perfdata
+
+
+Starting the daemon:
+
+  # perf daemon --config config.daemon
+
+
+Check sessions:
+
+  # perf daemon
+  [623827:daemon] base: /opt/perfdata
+  [623844:1] perf record -m 10M -e cycles --overwrite --switch-output -a
+  [623829:2] perf record -m 10M -e sched:* --overwrite --switch-output -a
+
+First line is daemon process info with configured daemon base.
+
+
+Check sessions with more info:
+
+  # perf daemon -v
+  [623827:daemon] base: /opt/perfdata
+    output:  /opt/perfdata/output
+  [623844:1] perf record -m 1M -e cycles --overwrite --switch-output -a
+    base:    /opt/perfdata/1
+    output:  /opt/perfdata/1/output
+  [623829:2] perf record -m 1M -e sched:* --overwrite --switch-output -a
+    base:    /opt/perfdata/2
+    output:  /opt/perfdata/2/output
+
+The 'base' path is daemon/session base.
+The 'output' file is perf record output for specific session.
+
+
+SEE ALSO
+--------
+linkperf:perf-record[1], linkperf:perf-config[1]
