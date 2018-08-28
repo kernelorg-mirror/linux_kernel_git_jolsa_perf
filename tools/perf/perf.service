@@ -1,0 +1,14 @@
+[Unit]
+Description=perf daemon
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+ExecStart=/opt/perf/bin/perf daemon -c /opt/perf/config
+
+[Install]
+WantedBy=multi-user.target
