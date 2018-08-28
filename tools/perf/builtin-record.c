@@ -63,6 +63,11 @@ struct switch_output {
 	bool		 set;
 };
 
+struct working_dir {
+	const char	*new;
+	char		 saved[PATH_MAX];
+};
+
 struct record {
 	struct perf_tool	tool;
 	struct record_opts	opts;
@@ -81,6 +86,7 @@ struct record {
 	bool			timestamp_boundary;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
+	struct working_dir	dir;
 };
 
 static volatile int auxtrace_record__snapshot_started;
@@ -1678,6 +1684,8 @@ static struct option __record_options[] = {
 			  "signal"),
 	OPT_BOOLEAN(0, "dry-run", &dry_run,
 		    "Parse options then exit"),
+	OPT_STRING(0, "working-dir", &record.dir.new,
+		   "dir", "working directory"),
 	OPT_END()
 };
 
@@ -1728,6 +1736,24 @@ int cmd_record(int argc, const char **argv)
 	/* Make system wide (-a) the default target. */
 	if (!argc && target__none(&rec->opts.target))
 		rec->opts.target.system_wide = true;
+
+	if (rec->dir.new) {
+		if (!getcwd(rec->dir.saved, PATH_MAX)) {
+			ui__error("Failed to get current directory: %s\n",
+				  strerror(errno));
+			parse_options_usage(record_usage, record_options,
+					    "working-dir", 0);
+			return -1;
+		}
+
+		if (chdir(rec->dir.new)) {
+			ui__error("Failed to change directory: %s\n",
+				  strerror(errno));
+			parse_options_usage(record_usage, record_options,
+					    "working-dir", 0);
+			return -1;
+		}
+	}
 
 	if (nr_cgroups && !rec->opts.target.system_wide) {
 		usage_with_options_msg(record_usage, record_options,
@@ -1875,6 +1901,8 @@ out:
 	perf_evlist__delete(rec->evlist);
 	symbol__exit();
 	auxtrace_record__free(rec->itr);
+	if (rec->dir.new && chdir(rec->dir.saved))
+		ui__error("Failed to change direcotory: %s\n", strerror(errno));
 	return err;
 }
 
