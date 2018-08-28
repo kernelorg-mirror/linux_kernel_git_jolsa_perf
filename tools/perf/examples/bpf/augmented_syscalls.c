@@ -131,4 +131,14 @@ struct syscall_enter_connect_args {
 
 augmented_sockaddr_syscall_enter(connect);
 
+struct syscall_enter_bind_args {
+	unsigned long long common_tp_fields;
+	long		   syscall_nr;
+	long		   fd;
+	struct sockaddr	   *addr_ptr;
+	unsigned long	   addrlen;
+};
+
+augmented_sockaddr_syscall_enter(bind);
+
 license(GPL);
