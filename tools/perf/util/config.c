@@ -707,6 +707,18 @@ struct perf_config_set *perf_config_set__new(void)
 	return set;
 }
 
+struct perf_config_set *perf_config_set__new_file(const char *file)
+{
+	struct perf_config_set *set = zalloc(sizeof(*set));
+
+	if (set) {
+		INIT_LIST_HEAD(&set->sections);
+		perf_config_from_file(collect_config, file, set);
+	}
+
+	return set;
+}
+
 static int perf_config__init(void)
 {
 	if (config_set == NULL)
@@ -715,17 +727,15 @@ static int perf_config__init(void)
 	return config_set == NULL;
 }
 
-int perf_config(config_fn_t fn, void *data)
+int perf_config_set(struct perf_config_set *set,
+		    config_fn_t fn, void *data)
 {
 	int ret = 0;
 	char key[BUFSIZ];
 	struct perf_config_section *section;
 	struct perf_config_item *item;
 
-	if (config_set == NULL && perf_config__init())
-		return -1;
-
-	perf_config_set__for_each_entry(config_set, section, item) {
+	perf_config_set__for_each_entry(set, section, item) {
 		char *value = item->value;
 
 		if (value) {
@@ -741,6 +751,14 @@ int perf_config(config_fn_t fn, void *data)
 	}
 
 	return ret;
+}
+
+int perf_config(config_fn_t fn, void *data)
+{
+	if (config_set == NULL && perf_config__init())
+		return -1;
+
+	return perf_config_set(config_set, fn, data);
 }
 
 void perf_config__exit(void)

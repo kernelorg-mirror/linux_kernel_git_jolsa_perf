@@ -28,6 +28,8 @@ extern const char *config_exclusive_filename;
 typedef int (*config_fn_t)(const char *, const char *, void *);
 int perf_default_config(const char *, const char *, void *);
 int perf_config(config_fn_t fn, void *);
+int perf_config_set(struct perf_config_set *set,
+		    config_fn_t fn, void *data);
 int perf_config_int(int *dest, const char *, const char *);
 int perf_config_u64(u64 *dest, const char *, const char *);
 int perf_config_bool(const char *, const char *);
@@ -35,6 +37,7 @@ int config_error_nonbool(const char *);
 const char *perf_etc_perfconfig(void);
 
 struct perf_config_set *perf_config_set__new(void);
+struct perf_config_set *perf_config_set__new_file(const char *file);
 void perf_config_set__delete(struct perf_config_set *set);
 int perf_config_set__collect(struct perf_config_set *set, const char *file_name,
 			     const char *var, const char *value);
