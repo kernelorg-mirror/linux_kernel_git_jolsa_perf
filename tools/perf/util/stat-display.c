@@ -507,33 +507,6 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 	}
 }
 
-static void aggr_update_shadow(struct perf_stat_config *config,
-			       struct perf_evlist *evlist)
-{
-	int cpu, s2, id, s;
-	u64 val;
-	struct perf_evsel *counter;
-
-	for (s = 0; s < config->aggr_map->nr; s++) {
-		id = config->aggr_map->map[s];
-		evlist__for_each_entry(evlist, counter) {
-			int first_cpu = -1;
-
-			val = 0;
-			for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
-				s2 = config->aggr_get_id(config, evlist->cpus, cpu);
-				if (s2 != id)
-					continue;
-				val += perf_counts(counter->counts, cpu, 0)->val;
-				if (first_cpu == -1)
-					cpu = first_cpu;
-			}
-			perf_stat__update_shadow_stats(counter, val,
-					first_cpu, &config->rt_stat);
-		}
-	}
-}
-
 static void uniquify_event_name(struct perf_evsel *counter)
 {
 	char *new_name;
@@ -649,8 +622,6 @@ static void print_aggr(struct perf_stat_config *config,
 
 	if (!(config->aggr_map || config->aggr_get_id))
 		return;
-
-	aggr_update_shadow(config, evlist);
 
 	/*
 	 * With metric_only everything is on a single line.
