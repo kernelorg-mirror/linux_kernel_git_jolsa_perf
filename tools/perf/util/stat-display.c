@@ -517,16 +517,19 @@ static void aggr_update_shadow(struct perf_stat_config *config,
 	for (s = 0; s < config->aggr_map->nr; s++) {
 		id = config->aggr_map->map[s];
 		evlist__for_each_entry(evlist, counter) {
+			int first_cpu = -1;
+
 			val = 0;
 			for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
 				s2 = config->aggr_get_id(config, evlist->cpus, cpu);
 				if (s2 != id)
 					continue;
 				val += perf_counts(counter->counts, cpu, 0)->val;
+				if (first_cpu == -1)
+					cpu = first_cpu;
 			}
 			perf_stat__update_shadow_stats(counter, val,
-					first_shadow_cpu(config, counter, id),
-					&config->rt_stat);
+					first_cpu, &config->rt_stat);
 		}
 	}
 }
