@@ -324,6 +324,34 @@ static int process_counter_maps(struct perf_stat_config *config,
 	return 0;
 }
 
+static void aggr_update_shadow(struct perf_stat_config *config,
+			       struct perf_evsel *counter)
+{
+	struct perf_evlist *evlist = counter->evlist;
+	int cpu, s2, id, s;
+	u64 val;
+
+	if (!(config->aggr_map || config->aggr_get_id))
+		return;
+
+	for (s = 0; s < config->aggr_map->nr; s++) {
+		int first_cpu = -1;
+
+		id = config->aggr_map->map[s];
+		val = 0;
+		for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
+			s2 = config->aggr_get_id(config, evlist->cpus, cpu);
+			if (s2 != id)
+				continue;
+			val += perf_counts(counter->counts, cpu, 0)->val;
+			if (first_cpu == -1)
+				first_cpu = s2;
+		}
+		perf_stat__update_shadow_stats(counter, val,
+				first_cpu, &config->rt_stat);
+	}
+}
+
 int perf_stat_process_counter(struct perf_stat_config *config,
 			      struct perf_evsel *counter)
 {
@@ -350,6 +378,12 @@ int perf_stat_process_counter(struct perf_stat_config *config,
 	ret = process_counter_maps(config, counter);
 	if (ret)
 		return ret;
+
+	if (config->aggr_mode == AGGR_CORE ||
+	    config->aggr_mode == AGGR_SOCKET) {
+		aggr_update_shadow(config, counter);
+		return 0;
+	}
 
 	if (config->aggr_mode != AGGR_GLOBAL)
 		return 0;
