@@ -22,6 +22,14 @@ static void perf_stat_line__clean(struct perf_stat_line *line)
 	line->cnt = 0;
 }
 
+static void perf_stat_line__metric(struct perf_stat_line *line,
+				   const char *name, double val)
+{
+	line->metrics[line->cnt].name = name;
+	line->metrics[line->cnt].val  = val;
+	line->cnt++;
+}
+
 static int P(struct perf_stat_config *config,
 	       const char *fmt, ...)
 {
@@ -195,6 +203,8 @@ static void print_metric_std(struct perf_stat_config *config,
 	else
 		n += P(config, fmt, val);
 	P(config, " %-*s", METRIC_LEN - n - 1, unit);
+
+	perf_stat_line__metric(&config->line, unit, val);
 }
 
 static void new_line_csv(struct perf_stat_config *config, void *ctx)
@@ -275,6 +285,8 @@ static void print_metric_only(struct perf_stat_config *config,
 
 	color_snprintf(str, sizeof(str), color ?: "", fmt, val);
 	P(config, "%*s ", mlen, str);
+
+	perf_stat_line__metric(&config->line, unit, val);
 }
 
 static void print_metric_only_csv(struct perf_stat_config *config __maybe_unused,
