@@ -1102,33 +1102,13 @@ static void print_footer(struct perf_stat_config *config)
 			"the same PMU. Try reorganizing the group.\n");
 }
 
-void
-perf_evlist__print_counters(struct perf_evlist *evlist,
-			    struct perf_stat_config *config,
-			    struct target *_target,
-			    struct timespec *ts,
-			    int argc, const char **argv)
+static void
+perf_evlist__stat_output(struct perf_evlist *evlist,
+			 struct perf_stat_config *config,
+			 struct target *target,
+			 char *prefix)
 {
-	bool metric_only = config->metric_only;
-	int interval = config->interval;
 	struct perf_evsel *counter;
-	char buf[64], *prefix = NULL;
-
-	if (interval)
-		print_interval(config, evlist, prefix = buf, ts);
-	else
-		print_header(config, _target, argc, argv);
-
-	if (metric_only) {
-		static int num_print_iv;
-
-		if (num_print_iv == 0 && !interval)
-			print_metric_headers(config, evlist, prefix, false);
-		if (num_print_iv++ == 25)
-			num_print_iv = 0;
-		if (config->aggr_mode == AGGR_GLOBAL && prefix)
-			P(config, "%s", prefix);
-	}
 
 	switch (config->aggr_mode) {
 	case AGGR_CORE:
@@ -1139,7 +1119,7 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 		evlist__for_each_entry(evlist, counter) {
 			if (is_duration_time(counter))
 				continue;
-			print_aggr_thread(config, _target, counter, prefix);
+			print_aggr_thread(config, target, counter, prefix);
 		}
 		break;
 	case AGGR_GLOBAL:
@@ -1148,11 +1128,11 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 				continue;
 			print_counter_aggr(config, counter, prefix);
 		}
-		if (metric_only)
+		if (config->metric_only)
 			P(config, "\n");
 		break;
 	case AGGR_NONE:
-		if (metric_only)
+		if (config->metric_only)
 			print_no_aggr_metric(config, evlist, prefix);
 		else {
 			evlist__for_each_entry(evlist, counter) {
@@ -1166,6 +1146,35 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 	default:
 		break;
 	}
+}
+
+void
+perf_evlist__print_counters(struct perf_evlist *evlist,
+			    struct perf_stat_config *config,
+			    struct target *_target,
+			    struct timespec *ts,
+			    int argc, const char **argv)
+{
+	int interval = config->interval;
+	char buf[64], *prefix = NULL;
+
+	if (interval)
+		print_interval(config, evlist, prefix = buf, ts);
+	else
+		print_header(config, _target, argc, argv);
+
+	if (config->metric_only) {
+		static int num_print_iv;
+
+		if (num_print_iv == 0 && !interval)
+			print_metric_headers(config, evlist, prefix, false);
+		if (num_print_iv++ == 25)
+			num_print_iv = 0;
+		if (config->aggr_mode == AGGR_GLOBAL && prefix)
+			P(config, "%s", prefix);
+	}
+
+	perf_evlist__stat_output(evlist, config, _target, prefix);
 
 	if (!interval && !config->csv_output)
 		print_footer(config);
