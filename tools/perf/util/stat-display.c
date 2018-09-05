@@ -17,6 +17,11 @@
 #define CNTR_NOT_SUPPORTED	"<not supported>"
 #define CNTR_NOT_COUNTED	"<not counted>"
 
+static void perf_stat_line__clean(struct perf_stat_line *line)
+{
+	line->cnt = 0;
+}
+
 static int P(struct perf_stat_config *config,
 	       const char *fmt, ...)
 {
@@ -47,6 +52,9 @@ static int C(struct perf_stat_config *config,
 
 	return ret;
 }
+
+typedef int (stat_output_cb_t)(struct perf_stat_config *config,
+			       struct perf_stat_line *line);
 
 static bool is_duration_time(struct perf_evsel *evsel)
 {
@@ -611,7 +619,8 @@ static void aggr_cb(struct perf_stat_config *config,
 
 static void print_aggr(struct perf_stat_config *config,
 		       struct perf_evlist *evlist,
-		       char *prefix)
+		       char *prefix,
+		       stat_output_cb_t cb)
 {
 	bool metric_only = config->metric_only;
 	struct perf_evsel *counter;
@@ -638,6 +647,7 @@ static void print_aggr(struct perf_stat_config *config,
 			if (is_duration_time(counter))
 				continue;
 
+			perf_stat_line__clean(&config->line);
 			ad.val = ad.ena = ad.run = 0;
 			ad.nr = 0;
 			if (!collect_data(config, counter, aggr_cb, &ad))
@@ -658,6 +668,8 @@ static void print_aggr(struct perf_stat_config *config,
 				 run, ena, 1.0, &config->rt_stat);
 			if (!metric_only)
 				P(config, "\n");
+
+			cb(config, &config->line);
 		}
 		if (metric_only)
 			P(config, "\n");
@@ -774,11 +786,14 @@ static void counter_aggr_cb(struct perf_stat_config *config __maybe_unused,
  * aggregated counts in system-wide mode
  */
 static void print_counter_aggr(struct perf_stat_config *config,
-			       struct perf_evsel *counter, char *prefix)
+			       struct perf_evsel *counter, char *prefix,
+			       stat_output_cb_t cb)
 {
 	bool metric_only = config->metric_only;
 	double uval;
 	struct caggr_data cd = { .avg = 0.0 };
+
+	perf_stat_line__clean(&config->line);
 
 	if (!collect_data(config, counter, counter_aggr_cb, &cd))
 		return;
@@ -791,6 +806,8 @@ static void print_counter_aggr(struct perf_stat_config *config,
 		 cd.avg, &config->rt_stat);
 	if (!metric_only)
 		P(config, "\n");
+
+	cb(config, &config->line);
 }
 
 static void counter_cb(struct perf_stat_config *config __maybe_unused,
@@ -809,7 +826,8 @@ static void counter_cb(struct perf_stat_config *config __maybe_unused,
  * does not use aggregated count in system-wide
  */
 static void print_counter(struct perf_stat_config *config,
-			  struct perf_evsel *counter, char *prefix)
+			  struct perf_evsel *counter, char *prefix,
+			  stat_output_cb_t cb)
 {
 	u64 ena, run, val;
 	double uval;
@@ -817,6 +835,8 @@ static void print_counter(struct perf_stat_config *config,
 
 	for (cpu = 0; cpu < perf_evsel__nr_cpus(counter); cpu++) {
 		struct aggr_data ad = { .cpu = cpu };
+
+		perf_stat_line__clean(&config->line);
 
 		if (!collect_data(config, counter, counter_cb, &ad))
 			return;
@@ -832,6 +852,8 @@ static void print_counter(struct perf_stat_config *config,
 			 &config->rt_stat);
 
 		P(config, "\n");
+
+		cb(config, &config->line);
 	}
 }
 
@@ -1106,14 +1128,15 @@ static void
 perf_evlist__stat_output(struct perf_evlist *evlist,
 			 struct perf_stat_config *config,
 			 struct target *target,
-			 char *prefix)
+			 char *prefix,
+			 stat_output_cb_t cb)
 {
 	struct perf_evsel *counter;
 
 	switch (config->aggr_mode) {
 	case AGGR_CORE:
 	case AGGR_SOCKET:
-		print_aggr(config, evlist, prefix);
+		print_aggr(config, evlist, prefix, cb);
 		break;
 	case AGGR_THREAD:
 		evlist__for_each_entry(evlist, counter) {
@@ -1126,7 +1149,7 @@ perf_evlist__stat_output(struct perf_evlist *evlist,
 		evlist__for_each_entry(evlist, counter) {
 			if (is_duration_time(counter))
 				continue;
-			print_counter_aggr(config, counter, prefix);
+			print_counter_aggr(config, counter, prefix, cb);
 		}
 		if (config->metric_only)
 			P(config, "\n");
@@ -1138,7 +1161,7 @@ perf_evlist__stat_output(struct perf_evlist *evlist,
 			evlist__for_each_entry(evlist, counter) {
 				if (is_duration_time(counter))
 					continue;
-				print_counter(config, counter, prefix);
+				print_counter(config, counter, prefix, cb);
 			}
 		}
 		break;
@@ -1146,6 +1169,12 @@ perf_evlist__stat_output(struct perf_evlist *evlist,
 	default:
 		break;
 	}
+}
+
+static int print_cb(struct perf_stat_config *config __maybe_unused,
+		    struct perf_stat_line *line __maybe_unused)
+{
+	return 0;
 }
 
 void
@@ -1174,7 +1203,7 @@ perf_evlist__print_counters(struct perf_evlist *evlist,
 			P(config, "%s", prefix);
 	}
 
-	perf_evlist__stat_output(evlist, config, _target, prefix);
+	perf_evlist__stat_output(evlist, config, _target, prefix, print_cb);
 
 	if (!interval && !config->csv_output)
 		print_footer(config);

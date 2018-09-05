@@ -93,6 +93,14 @@ struct runtime_stat {
 typedef int (*aggr_get_id_t)(struct perf_stat_config *config,
 			     struct cpu_map *m, int cpu);
 
+struct perf_stat_line {
+	int	 cnt;
+	struct {
+		const char	*name;
+		double		 val;
+	} metrics[10];
+};
+
 struct perf_stat_config {
 	enum aggr_mode		 aggr_mode;
 	bool			 scale;
@@ -127,6 +135,7 @@ struct perf_stat_config {
 	u64			*walltime_run;
 	struct rblist		 metric_events;
 	struct runtime_stat	 rt_stat;
+	struct perf_stat_line	 line;
 };
 
 void update_stats(struct stats *stats, u64 val);
