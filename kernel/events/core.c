@@ -7759,6 +7759,13 @@ static int __perf_event_overflow(struct perf_event *event,
 		perf_event_disable_inatomic(event);
 	}
 
+	/*
+	 * Event is accounted for, we can bail out if we are not
+	 * interested in the sample for owner.
+	 */
+	if (event->attr.exclude_owner && current == event->owner)
+		return 0;
+
 	READ_ONCE(event->overflow_handler)(event, data, regs);
 
 	if (*perf_event_fasync(event) && event->pending_kill) {
