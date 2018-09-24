@@ -281,6 +281,15 @@ static int test__checkevent_exclude_guest_modifier(struct perf_evlist *evlist)
 	return test__checkevent_symbolic_name(evlist);
 }
 
+static int test__checkevent_exclude_owner_modifier(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel = perf_evlist__first(evlist);
+
+	TEST_ASSERT_VAL("wrong exclude owner", evsel->attr.exclude_owner);
+
+	return test__checkevent_symbolic_name(evlist);
+}
+
 static int test__checkevent_symbolic_alias_modifier(struct perf_evlist *evlist)
 {
 	struct perf_evsel *evsel = perf_evlist__first(evlist);
@@ -1670,7 +1679,12 @@ static struct evlist_test test__events[] = {
 		.name  = "cycles/name='COMPLEX_CYCLES_NAME:orig=cycles,desc=chip-clock-ticks'/Duk",
 		.check = test__checkevent_complex_name,
 		.id    = 53
-	}
+	},
+	{
+		.name  = "instructions:O",
+		.check = test__checkevent_exclude_owner_modifier,
+		.id    = 54,
+	},
 };
 
 static struct evlist_test test__events_pmu[] = {
