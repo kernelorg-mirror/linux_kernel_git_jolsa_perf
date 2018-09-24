@@ -1614,6 +1614,7 @@ int perf_event_attr__fprintf(FILE *fp, struct perf_event_attr *attr,
 	PRINT_ATTRf(exclude_kernel, p_unsigned);
 	PRINT_ATTRf(exclude_hv, p_unsigned);
 	PRINT_ATTRf(exclude_idle, p_unsigned);
+	PRINT_ATTRf(exclude_owner, p_unsigned);
 	PRINT_ATTRf(mmap, p_unsigned);
 	PRINT_ATTRf(comm, p_unsigned);
 	PRINT_ATTRf(freq, p_unsigned);

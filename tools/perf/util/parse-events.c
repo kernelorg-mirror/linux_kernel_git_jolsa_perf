@@ -1505,6 +1505,7 @@ struct event_modifier {
 	int eH;
 	int eG;
 	int eI;
+	int eO;
 	int precise;
 	int precise_max;
 	int exclude_GH;
@@ -1522,6 +1523,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	int eH = evsel ? evsel->attr.exclude_host : 0;
 	int eG = evsel ? evsel->attr.exclude_guest : 0;
 	int eI = evsel ? evsel->attr.exclude_idle : 0;
+	int eO = 0;
 	int precise = evsel ? evsel->attr.precise_ip : 0;
 	int precise_max = 0;
 	int sample_read = 0;
@@ -1569,6 +1571,8 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 			pinned = 1;
 		} else if (*str == 'W') {
 			weak = 1;
+		} else if (*str == 'O') {
+			eO = 1;
 		} else
 			break;
 
@@ -1594,6 +1598,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	mod->eH = eH;
 	mod->eG = eG;
 	mod->eI = eI;
+	mod->eO = eO;
 	mod->precise = precise;
 	mod->precise_max = precise_max;
 	mod->exclude_GH = exclude_GH;
@@ -1613,7 +1618,7 @@ static int check_modifier(char *str)
 	char *p = str;
 
 	/* The sizeof includes 0 byte as well. */
-	if (strlen(str) > (sizeof("ukhGHpppPSDIW") - 1))
+	if (strlen(str) > (sizeof("ukhGHpppPSDIWO") - 1))
 		return -1;
 
 	while (*p) {
@@ -1650,6 +1655,7 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->attr.exclude_host   = mod.eH;
 		evsel->attr.exclude_guest  = mod.eG;
 		evsel->attr.exclude_idle   = mod.eI;
+		evsel->attr.exclude_owner  = mod.eO;
 		evsel->exclude_GH          = mod.exclude_GH;
 		evsel->sample_read         = mod.sample_read;
 		evsel->precise_max         = mod.precise_max;
