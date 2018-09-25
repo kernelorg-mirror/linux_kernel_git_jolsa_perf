@@ -827,4 +827,15 @@ extern const struct bpf_func_proto bpf_get_local_storage_proto;
 void bpf_user_rnd_init_once(void);
 u64 bpf_user_rnd_u32(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5);
 
+#ifdef CONFIG_AUDIT
+struct audit_buffer*
+audit_bpf_prog_action(struct bpf_prog *prog, const char *action);
+#else
+struct audit_buffer;
+static inline struct audit_buffer*
+audit_bpf_prog_action(struct bpf_prog *prog, const char *action)
+{
+}
+#endif /* CONFIG_AUDIT */
+
 #endif /* _LINUX_BPF_H */

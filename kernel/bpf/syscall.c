@@ -32,6 +32,7 @@
 #include <linux/ctype.h>
 #include <linux/btf.h>
 #include <linux/nospec.h>
+#include <linux/audit.h>
 
 #define IS_FD_ARRAY(map) ((map)->map_type == BPF_MAP_TYPE_PROG_ARRAY || \
 			   (map)->map_type == BPF_MAP_TYPE_PERF_EVENT_ARRAY || \
@@ -49,6 +50,52 @@ static DEFINE_IDR(map_idr);
 static DEFINE_SPINLOCK(map_idr_lock);
 
 int sysctl_unprivileged_bpf_disabled __read_mostly;
+
+#ifdef CONFIG_AUDIT
+struct audit_buffer*
+audit_bpf_prog_action(struct bpf_prog *prog, const char *action)
+{
+	struct audit_buffer *ab;
+
+	if (audit_enabled == AUDIT_OFF)
+		return NULL;
+
+	ab = audit_log_start(NULL, GFP_KERNEL, AUDIT_BPF);
+	if (ab == NULL)
+		return NULL;
+
+	audit_log_format(ab, "action=%s name=", action);
+	audit_log_n_string(ab, prog->aux->name, BPF_OBJ_NAME_LEN);
+	audit_log_format(ab, "type=%u tag=", prog->type);
+	audit_log_n_hex(ab, prog->tag, BPF_TAG_SIZE);
+
+	return ab;
+}
+
+static void audit_bpf(struct bpf_prog *prog, const char *action)
+{
+	struct audit_buffer *ab = audit_bpf_prog_action(prog, action);
+
+	if (ab)
+		audit_log_end(ab);
+}
+
+static void audit_bpf_load(struct bpf_prog *prog)
+{
+	audit_bpf(prog, "LOAD");
+}
+
+static void audit_bpf_unload(struct bpf_prog *prog)
+{
+	audit_bpf(prog, "UNLOAD");
+}
+#else
+static void audit_bpf_load(struct bpf_prog *prog)
+{ }
+
+static void audit_bpf_unload(struct bpf_prog *prog)
+{ }
+#endif /* CONFIG_AUDIT */
 
 static const struct bpf_map_ops * const bpf_map_types[] = {
 #define BPF_PROG_TYPE(_id, _ops)
@@ -1119,6 +1166,7 @@ static int bpf_prog_release(struct inode *inode, struct file *filp)
 {
 	struct bpf_prog *prog = filp->private_data;
 
+	audit_bpf_load(prog);
 	bpf_prog_put(prog);
 	return 0;
 }
@@ -1440,6 +1488,7 @@ static int bpf_prog_load(union bpf_attr *attr)
 		return err;
 	}
 
+	audit_bpf_unload(prog);
 	bpf_prog_kallsyms_add(prog);
 	return err;
 
