@@ -8500,6 +8500,40 @@ static void perf_event_free_filter(struct perf_event *event)
 }
 
 #ifdef CONFIG_BPF_SYSCALL
+#ifdef CONFIG_AUDIT
+static void audit_perf_detach_bpf(struct perf_event *event)
+{
+	struct bpf_prog *prog = event->prog;
+	char prog_name[KSYM_NAME_LEN];
+	const char *name = "perf";
+	struct audit_buffer *ab;
+
+	if (!prog)
+		return;
+
+	if (audit_enabled == AUDIT_OFF)
+		return;
+
+	ab = audit_log_start(NULL, GFP_KERNEL, AUDIT_PERF_DETACH_BPF);
+	if (!ab)
+		return;
+
+	bpf_get_prog_name(prog, prog_name);
+
+	if (perf_event_is_tracing(event))
+		name = trace_event_name(event->tp_event);
+
+	audit_log_format(ab, "event=%s prog_name=%s prog_type=%u",
+			 name, prog_name, prog->type);
+	audit_log_end(ab);
+}
+
+#else
+static void audit_perf_detach_bpf(struct perf_event *event)
+{
+}
+#endif /* CONFIG_AUDIT */
+
 static void bpf_overflow_handler(struct perf_event *event,
 				 struct perf_sample_data *data,
 				 struct pt_regs *regs)
@@ -8647,6 +8681,8 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 
 static void perf_event_free_bpf_prog(struct perf_event *event)
 {
+	audit_perf_detach_bpf(event);
+
 	if (!perf_event_is_tracing(event)) {
 		perf_event_free_bpf_handler(event);
 		return;
