@@ -50,6 +50,7 @@
 #include <linux/sched/mm.h>
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
+#include <linux/audit.h>
 
 #include "internal.h"
 
@@ -8492,6 +8493,46 @@ static void perf_event_free_filter(struct perf_event *event)
 }
 
 #ifdef CONFIG_BPF_SYSCALL
+#ifdef CONFIG_AUDIT
+static inline bool perf_event_is_tracing(struct perf_event *event);
+
+static void audit_bpf(struct bpf_prog *prog, struct perf_event *event,
+		      const char *action)
+{
+	struct audit_buffer *ab = audit_bpf_prog_action(prog, action);
+	const char *name = "perf";
+
+	if (!ab)
+		return;
+
+	if (perf_event_is_tracing(event))
+		name = trace_event_name(event->tp_event);
+
+	audit_log_format(ab, "event=%s id=%llu", name, event->id);
+	audit_log_end(ab);
+}
+
+static void audit_bpf_attach(struct perf_event *event)
+{
+	if (event->prog)
+		audit_bpf(event->prog, event, "ATTACH");
+}
+
+static void audit_bpf_detach(struct perf_event *event)
+{
+	if (event->prog)
+		audit_bpf(event->prog, event, "DETACH");
+}
+#else
+static void audit_bpf_attach(struct perf_event *event)
+{
+}
+
+static void audit_bpf_detach(struct perf_event *event)
+{
+}
+#endif /* CONFIG_AUDIT */
+
 static void bpf_overflow_handler(struct perf_event *event,
 				 struct perf_sample_data *data,
 				 struct pt_regs *regs)
@@ -8536,6 +8577,7 @@ static int perf_event_set_bpf_handler(struct perf_event *event, u32 prog_fd)
 	event->prog = prog;
 	event->orig_overflow_handler = READ_ONCE(event->overflow_handler);
 	WRITE_ONCE(event->overflow_handler, bpf_overflow_handler);
+	audit_bpf_attach(event);
 	return 0;
 }
 
@@ -8626,6 +8668,8 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 	ret = perf_event_attach_bpf_prog(event, prog);
 	if (ret)
 		bpf_prog_put(prog);
+	else
+		audit_bpf_attach(event);
 	return ret;
 }
 
@@ -8635,6 +8679,7 @@ static void perf_event_free_bpf_prog(struct perf_event *event)
 		perf_event_free_bpf_handler(event);
 		return;
 	}
+	audit_bpf_detach(event);
 	perf_event_detach_bpf_prog(event);
 }
 
