@@ -29,6 +29,7 @@
 #include "symbol.h"
 #include "debug.h"
 #include "cpumap.h"
+#include "thread_map.h"
 #include "pmu.h"
 #include "vdso.h"
 #include "strbuf.h"
@@ -3578,6 +3579,11 @@ perf_event__synthesize_event_update_cpus(struct perf_tool *tool,
 
 	if (!evsel->own_cpus)
 		return 0;
+
+	if (!evsel->id ||
+	    perf_evsel__alloc_id(evsel, cpu_map__nr(evsel->cpus),
+				 thread_map__nr(evsel->threads)))
+		return -ENOMEM;
 
 	ev = cpu_map_data__alloc(evsel->own_cpus, &size, &type, &max);
 	if (!ev)
