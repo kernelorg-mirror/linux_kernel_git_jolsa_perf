@@ -32,6 +32,7 @@
 #include <linux/ctype.h>
 #include <linux/btf.h>
 #include <linux/nospec.h>
+#include <linux/audit.h>
 
 #define IS_FD_ARRAY(map) ((map)->map_type == BPF_MAP_TYPE_PROG_ARRAY || \
 			   (map)->map_type == BPF_MAP_TYPE_PERF_EVENT_ARRAY || \
@@ -2423,5 +2424,6 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		break;
 	}
 
+	audit_bpf(cmd, &attr, err);
 	return err;
 }

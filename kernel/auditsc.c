@@ -75,6 +75,7 @@
 #include <linux/uaccess.h>
 #include <linux/fsnotify_backend.h>
 #include <uapi/linux/limits.h>
+#include <linux/bpf.h>
 
 #include "audit.h"
 
@@ -1286,6 +1287,9 @@ static void show_special(struct audit_context *context, int *call_panic)
 			audit_log_format(ab, "(null)");
 
 		break;
+	case AUDIT_BPF:
+		audit_log_format(ab, "cmd=%d", context->bpf.cmd);
+		break;
 	}
 	audit_log_end(ab);
 }
@@ -2425,6 +2429,15 @@ void __audit_fanotify(unsigned int response)
 {
 	audit_log(audit_context(), GFP_KERNEL,
 		AUDIT_FANOTIFY,	"resp=%u", response);
+}
+
+void __audit_bpf(int cmd, union bpf_attr *attr, int err)
+{
+	struct audit_context *context = audit_context();
+
+	context->type    = AUDIT_BPF;
+	context->bpf.cmd = cmd;
+	context->bpf.err = err;
 }
 
 static void audit_log_task(struct audit_buffer *ab)

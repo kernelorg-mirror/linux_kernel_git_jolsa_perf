@@ -47,6 +47,7 @@ struct mqstat;
 struct audit_watch;
 struct audit_tree;
 struct sk_buff;
+union bpf_attr;
 
 struct audit_krule {
 	u32			pflags;
@@ -356,6 +357,7 @@ extern void __audit_log_capset(const struct cred *new, const struct cred *old);
 extern void __audit_mmap_fd(int fd, int flags);
 extern void __audit_log_kern_module(char *name);
 extern void __audit_fanotify(unsigned int response);
+extern void __audit_bpf(int cmd, union bpf_attr *attr, int err);
 
 static inline void audit_ipc_obj(struct kern_ipc_perm *ipcp)
 {
@@ -456,6 +458,12 @@ static inline void audit_fanotify(unsigned int response)
 {
 	if (!audit_dummy_context())
 		__audit_fanotify(response);
+}
+
+static inline void audit_bpf(int cmd, union bpf_attr *attr, int err)
+{
+	if (!audit_dummy_context())
+		__audit_bpf(cmd, attr, err);
 }
 
 extern int audit_n_rules;
@@ -586,6 +594,10 @@ static inline void audit_fanotify(unsigned int response)
 
 static inline void audit_ptrace(struct task_struct *t)
 { }
+
+static inline void audit_bpf(int cmd, union bpf_attr *attr, int err)
+{ }
+
 #define audit_n_rules 0
 #define audit_signals 0
 #endif /* CONFIG_AUDITSYSCALL */

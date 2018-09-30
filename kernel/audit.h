@@ -24,6 +24,8 @@
 #include <linux/skbuff.h>
 #include <uapi/linux/mqueue.h>
 #include <linux/tty.h>
+#include <linux/kallsyms.h>
+#include <linux/bpf.h>
 
 /* AUDIT_NAMES is the number of slots we reserve in the audit_context
  * for saving names from getname().  If we get more names we will allocate
@@ -203,6 +205,10 @@ struct audit_context {
 		struct {
 			char			*name;
 		} module;
+		struct {
+			int			cmd;
+			int			err;
+		} bpf;
 	};
 	int fds[2];
 	struct audit_proctitle proctitle;
