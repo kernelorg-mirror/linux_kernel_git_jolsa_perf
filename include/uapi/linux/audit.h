@@ -115,6 +115,7 @@
 #define AUDIT_KERN_MODULE	1330	/* Kernel Module events */
 #define AUDIT_FANOTIFY		1331	/* Fanotify access decision */
 #define AUDIT_BPF		1332	/* BPF syscall */
+#define AUDIT_PERF_ATTACH_BPF	1333	/* perf ioctl SET_BPF command */
 
 #define AUDIT_AVC		1400	/* SE Linux avc denial or grant */
 #define AUDIT_SELINUX_ERR	1401	/* Internal SE Linux Errors */

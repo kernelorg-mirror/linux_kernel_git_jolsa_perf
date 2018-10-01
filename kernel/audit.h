@@ -215,6 +215,11 @@ struct audit_context {
 			int			err;
 			struct audit_bpf_prog	prog;
 		} bpf;
+		struct {
+			int			err;
+			struct audit_bpf_prog	prog;
+			char			*event;
+		} perf_bpf;
 	};
 	int fds[2];
 	struct audit_proctitle proctitle;

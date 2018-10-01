@@ -77,6 +77,7 @@
 #include <uapi/linux/limits.h>
 #include <linux/bpf.h>
 #include <linux/filter.h>
+#include <linux/perf_event.h>
 
 #include "audit.h"
 
@@ -1300,6 +1301,20 @@ static void show_special(struct audit_context *context, int *call_panic)
 					 context->bpf.prog.type);
 		}
 		break;
+	case AUDIT_PERF_ATTACH_BPF:
+		if (context->perf_bpf.event) {
+			audit_log_format(ab, "event=%s", context->perf_bpf.event);
+			kfree(context->perf_bpf.event);
+		} else {
+			audit_log_format(ab, "event=N/A");
+		}
+
+		if (context->bpf.err >= 0) {
+			audit_log_format(ab, " prog_name=%s, prog_type=%u",
+					 context->perf_bpf.prog.name,
+					 context->perf_bpf.prog.type);
+		}
+		break;
 	}
 	audit_log_end(ab);
 }
@@ -2465,6 +2480,26 @@ void __audit_bpf(int cmd, union bpf_attr *attr, int err)
 		prog = bpf_prog_get(err);
 
 	load_audit_bpf_prog(ap, prog);
+}
+
+void __audit_perf_attach_bpf(struct perf_event *event, int err)
+{
+	struct audit_context *context = audit_context();
+	struct audit_bpf_prog *ap = &context->perf_bpf.prog;
+	const char *name = "perf";
+
+	context->type         = AUDIT_PERF_ATTACH_BPF;
+	context->perf_bpf.err = err;
+	memset(ap, 0, sizeof(*ap));
+
+	load_audit_bpf_prog(ap, event->prog);
+
+	if (perf_event_is_tracing(event))
+		name = trace_event_name(event->tp_event);
+
+	context->perf_bpf.event = kstrdup(name, GFP_KERNEL);
+	if (!context->perf_bpf.event)
+		audit_log_lost("out of memory in __audit_perf_attach_bpf");
 }
 
 static void audit_log_task(struct audit_buffer *ab)

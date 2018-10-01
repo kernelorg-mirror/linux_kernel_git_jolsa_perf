@@ -50,6 +50,7 @@
 #include <linux/sched/mm.h>
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
+#include <linux/audit.h>
 
 #include "internal.h"
 
@@ -8586,7 +8587,7 @@ bool perf_event_is_tracing(struct perf_event *event)
 	return false;
 }
 
-static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
+static int __perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 {
 	bool is_kprobe, is_tracepoint, is_syscall_tp;
 	struct bpf_prog *prog;
@@ -8634,6 +8635,14 @@ static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
 	if (ret)
 		bpf_prog_put(prog);
 	return ret;
+}
+
+static int perf_event_set_bpf_prog(struct perf_event *event, u32 prog_fd)
+{
+	int err = __perf_event_set_bpf_prog(event, prog_fd);
+
+	audit_perf_attach_bpf(event, err);
+	return err;
 }
 
 static void perf_event_free_bpf_prog(struct perf_event *event)

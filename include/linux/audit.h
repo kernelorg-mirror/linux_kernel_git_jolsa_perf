@@ -48,6 +48,7 @@ struct audit_watch;
 struct audit_tree;
 struct sk_buff;
 union bpf_attr;
+struct perf_event;
 
 struct audit_krule {
 	u32			pflags;
@@ -358,6 +359,7 @@ extern void __audit_mmap_fd(int fd, int flags);
 extern void __audit_log_kern_module(char *name);
 extern void __audit_fanotify(unsigned int response);
 extern void __audit_bpf(int cmd, union bpf_attr *attr, int err);
+extern void __audit_perf_attach_bpf(struct perf_event *event, int err);
 
 static inline void audit_ipc_obj(struct kern_ipc_perm *ipcp)
 {
@@ -464,6 +466,12 @@ static inline void audit_bpf(int cmd, union bpf_attr *attr, int err)
 {
 	if (!audit_dummy_context())
 		__audit_bpf(cmd, attr, err);
+}
+
+static inline void audit_perf_attach_bpf(struct perf_event *event, int err)
+{
+	if (!audit_dummy_context())
+		__audit_perf_attach_bpf(event, err);
 }
 
 extern int audit_n_rules;
@@ -596,6 +604,9 @@ static inline void audit_ptrace(struct task_struct *t)
 { }
 
 static inline void audit_bpf(int cmd, union bpf_attr *attr, int err)
+{ }
+
+static inline void audit_perf_attach_bpf(struct perf_event *event, int err)
 { }
 
 #define audit_n_rules 0
