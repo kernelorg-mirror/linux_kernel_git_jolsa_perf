@@ -76,6 +76,7 @@
 #include <linux/fsnotify_backend.h>
 #include <uapi/linux/limits.h>
 #include <linux/bpf.h>
+#include <linux/filter.h>
 
 #include "audit.h"
 
@@ -1289,6 +1290,15 @@ static void show_special(struct audit_context *context, int *call_panic)
 		break;
 	case AUDIT_BPF:
 		audit_log_format(ab, "cmd=%d", context->bpf.cmd);
+
+		if (context->bpf.cmd != BPF_PROG_LOAD)
+			break;
+
+		if (context->bpf.err >= 0) {
+			audit_log_format(ab, " prog_name=%s, prog_type=%u",
+					 context->bpf.prog.name,
+					 context->bpf.prog.type);
+		}
 		break;
 	}
 	audit_log_end(ab);
@@ -2431,13 +2441,30 @@ void __audit_fanotify(unsigned int response)
 		AUDIT_FANOTIFY,	"resp=%u", response);
 }
 
+static void load_audit_bpf_prog(struct audit_bpf_prog *ap,
+				struct bpf_prog *prog)
+{
+	if (prog) {
+		bpf_get_prog_name(prog, ap->name);
+		ap->type = prog->type;
+	}
+}
+
 void __audit_bpf(int cmd, union bpf_attr *attr, int err)
 {
 	struct audit_context *context = audit_context();
+	struct audit_bpf_prog *ap = &context->bpf.prog;
+	struct bpf_prog *prog = NULL;
 
 	context->type    = AUDIT_BPF;
 	context->bpf.cmd = cmd;
 	context->bpf.err = err;
+	memset(ap, 0, sizeof(*ap));
+
+	if (cmd == BPF_PROG_LOAD)
+		prog = bpf_prog_get(err);
+
+	load_audit_bpf_prog(ap, prog);
 }
 
 static void audit_log_task(struct audit_buffer *ab)

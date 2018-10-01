@@ -108,6 +108,11 @@ struct audit_proctitle {
 	char	*value;	/* the cmdline field */
 };
 
+struct audit_bpf_prog {
+	char		name[KSYM_NAME_LEN];
+	unsigned int	type;
+};
+
 /* The per-task audit context. */
 struct audit_context {
 	int		    dummy;	/* must be the first element */
@@ -208,6 +213,7 @@ struct audit_context {
 		struct {
 			int			cmd;
 			int			err;
+			struct audit_bpf_prog	prog;
 		} bpf;
 	};
 	int fds[2];
