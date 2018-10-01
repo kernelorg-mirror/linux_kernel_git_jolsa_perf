@@ -8571,7 +8571,7 @@ static void perf_event_free_bpf_handler(struct perf_event *event)
  * returns true if the event is a tracepoint, or a kprobe/upprobe created
  * with perf_event_open()
  */
-static inline bool perf_event_is_tracing(struct perf_event *event)
+bool perf_event_is_tracing(struct perf_event *event)
 {
 	if (event->pmu == &perf_tracepoint)
 		return true;
