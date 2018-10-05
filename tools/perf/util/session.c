@@ -2228,7 +2228,6 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	return READER_OK;
 }
 
-
 static int
 reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
@@ -2301,6 +2300,100 @@ out_err:
 	return err;
 }
 
+/*
+ * This function reads, merge and process directory data.
+ * It assumens the version 1 of directory data, where each
+ * data file holds per-cpu data, already sorted by kernel.
+ */
+static int __perf_session__process_dir_events(struct perf_session *session)
+{
+	struct perf_data *data = session->data;
+	struct perf_tool *tool = session->tool;
+	int i, ret = 0, rmax = 1, readers;
+	struct ui_progress prog;
+	u64 total_size = perf_data__size(session->data);
+	struct reader rd[data->dir.nr + 1];
+
+	perf_tool__fill_defaults(tool);
+
+	ui_progress__init_size(&prog, total_size, "Sorting events...");
+
+	memset(&rd, 0, (1 + data->dir.nr) * sizeof(rd[0]));
+
+	rd[0] = (struct reader) {
+		.fd		= perf_data__fd(session->data),
+		.path		= session->data->file.path,
+		.data_size	= session->header.data_size,
+		.data_offset	= session->header.data_offset,
+	};
+
+	reader__init(&rd[0], session);
+
+	if (reader__mmap(&rd[0], session) != READER_OK)
+		goto out_err;
+
+	for (i = 0; i < data->dir.nr ; i++) {
+		struct perf_data_file *file = &data->dir.files[i];
+
+		if (file->size == 0)
+			continue;
+
+		rd[rmax] = (struct reader) {
+			.fd		= file->fd,
+			.path		= file->path,
+			.data_size	= file->size,
+			.data_offset	= 0,
+		};
+
+		reader__init(&rd[rmax], session);
+
+		if (reader__mmap(&rd[rmax], session) != READER_OK)
+			goto out_err;
+
+		rmax++;
+	}
+
+	readers = rmax;
+	i = 0;
+
+	while ((ret >= 0) && readers) {
+		if (session_done())
+			return 0;
+
+		if (rd[i].state.eof) {
+			i = (i + 1) % rmax;
+			continue;
+		}
+
+		ret = reader__read_event(&rd[i], session, &prog);
+		if (ret < 0)
+			break;
+		if (ret == READER_EOF) {
+			ret = reader__mmap(&rd[i], session);
+			if (ret < 0)
+				goto out_err;
+			if (ret == READER_EOF)
+				readers--;
+		}
+
+		i = (i + 1) % rmax;
+	}
+
+	/* ... and flush everything out. */
+	ret = ordered_events__flush(&session->ordered_events, OE_FLUSH__FINAL);
+
+out_err:
+	if (!tool->no_warn)
+		perf_session__warn_about_errors(session);
+
+	/*
+	 * We may switching perf.data output, make ordered_events
+	 * reusable.
+	 */
+	ordered_events__reinit(&session->ordered_events);
+	return ret;
+}
+
 int perf_session__process_events(struct perf_session *session)
 {
 	if (perf_session__register_idle_thread(session) < 0)
@@ -2308,6 +2401,9 @@ int perf_session__process_events(struct perf_session *session)
 
 	if (perf_data__is_pipe(session->data))
 		return __perf_session__process_pipe_events(session);
+
+	if (perf_data__is_dir(session->data))
+		return __perf_session__process_dir_events(session);
 
 	return __perf_session__process_events(session);
 }
