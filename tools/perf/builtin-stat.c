@@ -474,7 +474,7 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 		enable_counters();
 		while (!done) {
 			nanosleep(&ts, NULL);
-			if (!is_target_alive(&target, evsel_list->threads))
+			if (!is_target_alive(&target, stat_record.evlist->threads))
 				break;
 			if (timeout)
 				break;
