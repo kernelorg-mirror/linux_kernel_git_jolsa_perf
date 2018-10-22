@@ -801,6 +801,7 @@ static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_STAT_ROUND]	  = perf_event__stat_round_swap,
 	[PERF_RECORD_EVENT_UPDATE]	  = perf_event__event_update_swap,
 	[PERF_RECORD_TIME_CONV]		  = perf_event__all64_swap,
+	[PERF_RECORD_FORK_USER]		  = perf_event__task_swap,
 	[PERF_RECORD_HEADER_MAX]	  = NULL,
 };
 
@@ -1269,6 +1270,7 @@ static int machines__deliver_event(struct machines *machines,
 	case PERF_RECORD_NAMESPACES:
 		return tool->namespaces(tool, event, sample, machine);
 	case PERF_RECORD_FORK:
+	case PERF_RECORD_FORK_USER:
 		return tool->fork(tool, event, sample, machine);
 	case PERF_RECORD_EXIT:
 		return tool->exit(tool, event, sample, machine);
@@ -1398,6 +1400,12 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 	}
 }
 
+static bool process_user(union perf_event *event)
+{
+	return event->header.type >= PERF_RECORD_USER_TYPE_START &&
+	       event->header.type != PERF_RECORD_FORK_USER;
+}
+
 int perf_session__deliver_synth_event(struct perf_session *session,
 				      union perf_event *event,
 				      struct perf_sample *sample)
@@ -1407,7 +1415,7 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 
 	events_stats__inc(&evlist->stats, event->header.type);
 
-	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
+	if (process_user(event))
 		return perf_session__process_user_event(session, event, 0);
 
 	return machines__deliver_event(&session->machines, evlist, event, sample, tool, 0);
@@ -1492,7 +1500,7 @@ static s64 perf_session__process_event(struct perf_session *session,
 
 	events_stats__inc(&evlist->stats, event->header.type);
 
-	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
+	if (process_user(event))
 		return perf_session__process_user_event(session, event, file_offset);
 
 	if (tool->ordered_events) {

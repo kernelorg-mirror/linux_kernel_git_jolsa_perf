@@ -60,6 +60,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_EVENT_UPDATE]		= "EVENT_UPDATE",
 	[PERF_RECORD_TIME_CONV]			= "TIME_CONV",
 	[PERF_RECORD_HEADER_FEATURE]		= "FEATURE",
+	[PERF_RECORD_FORK_USER]			= "FORK_USER",
 };
 
 static const char *perf_ns__names[] = {
@@ -307,7 +308,7 @@ static int perf_event__synthesize_fork(struct perf_tool *tool,
 	}
 	event->fork.pid  = tgid;
 	event->fork.tid  = pid;
-	event->fork.header.type = PERF_RECORD_FORK;
+	event->fork.header.type = PERF_RECORD_FORK_USER;
 
 	event->fork.header.size = (sizeof(event->fork) + machine->id_hdr_size);
 

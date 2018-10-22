@@ -1702,6 +1702,7 @@ void machine__remove_thread(struct machine *machine, struct thread *th)
 int machine__process_fork_event(struct machine *machine, union perf_event *event,
 				struct perf_sample *sample)
 {
+	bool user = event->header.type == PERF_RECORD_FORK_USER;
 	struct thread *thread = machine__find_thread(machine,
 						     event->fork.pid,
 						     event->fork.tid);
@@ -1738,7 +1739,7 @@ int machine__process_fork_event(struct machine *machine, union perf_event *event
 					 event->fork.tid);
 
 	if (thread == NULL || parent == NULL ||
-	    thread__fork(thread, parent, sample->time) < 0) {
+	    thread__fork(thread, parent, sample->time, user) < 0) {
 		dump_printf("problem processing PERF_RECORD_FORK, skipping event.\n");
 		err = -1;
 	}

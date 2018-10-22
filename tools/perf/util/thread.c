@@ -332,10 +332,6 @@ static int thread__prepare_access(struct thread *thread)
 static int thread__clone_map_groups(struct thread *thread,
 				    struct thread *parent)
 {
-	/* This is new thread, we share map groups for process. */
-	if (thread->pid_ == parent->pid_)
-		return thread__prepare_access(thread);
-
 	if (thread->mg == parent->mg) {
 		pr_debug("broken map groups on thread %d/%d parent %d/%d\n",
 			 thread->pid_, thread->tid, parent->pid_, parent->tid);
@@ -343,13 +339,11 @@ static int thread__clone_map_groups(struct thread *thread,
 	}
 
 	/* But this one is new process, copy maps. */
-	if (map_groups__clone(thread, parent->mg) < 0)
-		return -ENOMEM;
-
-	return 0;
+	return map_groups__clone(thread, parent->mg);
 }
 
-int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp)
+int thread__fork(struct thread *thread, struct thread *parent,
+		 u64 timestamp, bool user)
 {
 	if (parent->comm_set) {
 		const char *comm = thread__comm_str(parent);
@@ -362,6 +356,15 @@ int thread__fork(struct thread *thread, struct thread *parent, u64 timestamp)
 	}
 
 	thread->ppid = parent->tid;
+
+	/* This is new thread, we share map groups for process. */
+	if (thread->pid_ == parent->pid_)
+		return thread__prepare_access(thread);
+
+	/* Do not clone maps for user space fork event. */
+	if (user)
+		return 0;
+
 	return thread__clone_map_groups(thread, parent);
 }
 
