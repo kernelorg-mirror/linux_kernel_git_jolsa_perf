@@ -1397,6 +1397,9 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->time_conv(session, event);
 	case PERF_RECORD_HEADER_FEATURE:
 		return tool->feature(session, event);
+	case PERF_RECORD_DATA_SORTED:
+		tool->ordered_events = false;
+		return 0;
 	default:
 		return -EINVAL;
 	}
