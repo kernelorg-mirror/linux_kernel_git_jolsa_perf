@@ -34,6 +34,7 @@ struct perf_inject {
 	struct perf_session	*session;
 	bool			build_ids;
 	bool			sched_stat;
+	bool			sort;
 	bool			have_auxtrace;
 	bool			strip;
 	bool			jit_mode;
@@ -628,6 +629,11 @@ static void strip_fini(struct perf_inject *inject)
 	}
 }
 
+static struct perf_event_header sorted_data_event = {
+	.size = sizeof(struct perf_event_header),
+	.type = PERF_RECORD_DATA_SORTED,
+};
+
 static int __cmd_inject(struct perf_inject *inject)
 {
 	int ret = -EINVAL;
@@ -690,6 +696,13 @@ static int __cmd_inject(struct perf_inject *inject)
 
 	if (!data_out->is_pipe)
 		lseek(fd, output_data_offset, SEEK_SET);
+
+	if (inject->tool.ordered_events) {
+		ret = perf_data__write(data_out, &sorted_data_event,
+				       sizeof(sorted_data_event));
+		if (ret != sizeof(sorted_data_event))
+			return ret;
+	}
 
 	ret = perf_session__process_events(session);
 	if (ret)
@@ -803,6 +816,7 @@ int cmd_inject(int argc, const char **argv)
 				    itrace_parse_synth_opts),
 		OPT_BOOLEAN(0, "strip", &inject.strip,
 			    "strip non-synthesized events (use with --itrace)"),
+		OPT_BOOLEAN(0, "sort", &inject.sort, "sort the output data"),
 		OPT_END()
 	};
 	const char * const inject_usage[] = {
@@ -830,7 +844,7 @@ int cmd_inject(int argc, const char **argv)
 		return -1;
 	}
 
-	inject.tool.ordered_events = inject.sched_stat;
+	inject.tool.ordered_events = inject.sched_stat || inject.sort;
 
 	data.path = inject.input_name;
 	inject.session = perf_session__new(&data, true, &inject.tool);
