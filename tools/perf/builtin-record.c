@@ -80,6 +80,7 @@ struct switch_output {
 enum {
 	RECORD__THREADS_TYPE_ONE,
 	RECORD__THREADS_TYPE_ALL,
+	RECORD__THREADS_TYPE_USER,
 };
 
 enum {
@@ -1782,12 +1783,54 @@ out:
 }
 
 static int
+record__threads_type_user(struct record *rec)
+{
+	struct thread_cfg *cfg, *cfgs = rec->threads.cfgs;
+	struct evlist *evlist = rec->evlist;
+	cpu_set_t mask, mask_threads, mask_evlist, mask_tmp;
+	int i;
+
+	mask_evlist = perf_cpu_map__mask(evlist->core.cpus);
+	CPU_ZERO(&mask_threads);
+
+	for (i = 0; i < rec->threads.cnt; i++) {
+		cfg = cfgs + i;
+		mask = perf_cpu_map__mask(cfg->monitor);
+
+		/* make sure maps do not overloap among threads */
+		CPU_AND(&mask_tmp, &mask, &mask_threads);
+		if (CPU_COUNT(&mask_tmp)) {
+			char buf[100];
+
+			cpu_map__snprint(cfg->monitor, buf, sizeof(buf));
+			pr_err("threads failed: maps overlap %s\n", buf);
+			return -1;
+		}
+
+		CPU_OR(&mask_threads, &mask_threads, &mask);
+	}
+
+	/* make sure we monitor all the maps */
+	if (!CPU_EQUAL(&mask_evlist, &mask_threads)) {
+		char buf[100];
+
+		cpu_map__snprint(evlist->core.cpus, buf, sizeof(buf));
+		pr_err("threads failed: thread maps do not match map config %s\n", buf);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
 record__threads_type(struct record *rec)
 {
 	if (rec->threads.type == RECORD__THREADS_TYPE_ONE)
 		return record__threads_type_one(rec);
 	if (rec->threads.type == RECORD__THREADS_TYPE_ALL)
 		return record__threads_type_all(rec);
+	if (rec->threads.type == RECORD__THREADS_TYPE_USER)
+		return record__threads_type_user(rec);
 
 	return -1;
 }
@@ -2831,9 +2874,71 @@ enabled:
 	return 0;
 }
 
+static int threads__add_config(struct record *rec,
+			       char *monitor, char *allowed)
+{
+	struct thread_cfg *config = rec->threads.cfgs;
+	struct perf_cpu_map *maps;
+	struct perf_cpu_map *cpus;
+
+	maps = perf_cpu_map__new(monitor);
+	if (!maps)
+		return -ENOMEM;
+
+	cpus = perf_cpu_map__new(allowed);
+	if (!cpus) {
+		perf_cpu_map__put(maps);
+		return -ENOMEM;
+	}
+
+	config = realloc(config, sizeof(*config) * (rec->threads.cnt + 1));
+	if (!config) {
+		perf_cpu_map__put(maps);
+		perf_cpu_map__put(cpus);
+		return -ENOMEM;
+	}
+
+	pr_debug("threads: %d. monitor %s, allowed %s\n",
+		 rec->threads.cnt, monitor, allowed ?: "N/A");
+
+	rec->threads.cfgs = config;
+	config = &config[rec->threads.cnt];
+	config->monitor = maps;
+	config->allowed = cpus;
+	rec->threads.cnt++;
+	return 0;
+}
+
+static int parse_threads_user(const char *str, struct record *rec)
+{
+	char *buf, *monitor, *p;
+	int ret = -1;
+
+	buf = p = strdup(str);
+	if (!buf)
+		goto out;
+
+	while ((monitor = strtok_r(p, ":", &p)) != NULL) {
+		char *allowed = strchr(monitor, '/');
+
+		if (allowed)
+			*allowed++ = 0;
+
+		ret = threads__add_config(rec, monitor, allowed);
+		if (ret)
+			goto out;
+	}
+
+	rec->threads.type = RECORD__THREADS_TYPE_USER;
+out:
+	free(buf);
+	return ret;
+}
+
 /*
  *
  * --threads[=all]                         - all 1 map per 1 thread
+ * --threads=1-10,11-20
  */
 static int
 parse_threads(const struct option *opt, const char *str, int unset)
@@ -2848,7 +2953,7 @@ parse_threads(const struct option *opt, const char *str, int unset)
 		return 0;
 	}
 
-	return -1;
+	return parse_threads_user(str, rec);
 }
 
 static const char * const __record_usage[] = {
