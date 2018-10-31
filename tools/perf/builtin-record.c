@@ -79,6 +79,7 @@ struct switch_output {
 
 enum {
 	RECORD__THREADS_TYPE_ONE,
+	RECORD__THREADS_TYPE_ALL,
 };
 
 enum {
@@ -856,7 +857,31 @@ static int record__mmap_evlist(struct record *rec,
 	return 0;
 }
 
-static int record__mmap_dir_data(struct record *rec)
+static int record__mmap_dir_data_threads(struct record *rec)
+{
+	struct thread_obj *objs = rec->threads.objs;
+	struct perf_data *data = &rec->data;
+	int i, ret, cnt = rec->threads.cnt;
+
+	ret = perf_data__create_dir(data, cnt);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < cnt; i++) {
+		struct thread_obj *th = objs + i;
+		int j;
+
+		for (j = 0; j < th->mmap_nr; j++) {
+			struct mmap *map = th->mmap[j];
+
+			map->file = &data->dir.files[i];
+		}
+	}
+
+	return 0;
+}
+
+static int record__mmap_dir_data_single(struct record *rec)
 {
 	struct evlist *evlist = rec->evlist;
 	struct perf_data *data = &rec->data;
@@ -873,6 +898,14 @@ static int record__mmap_dir_data(struct record *rec)
 	}
 
 	return 0;
+}
+
+static int record__mmap_dir_data(struct record *rec)
+{
+	if (rec->threads.type != RECORD__THREADS_TYPE_ONE)
+		return record__mmap_dir_data_threads(rec);
+
+	return record__mmap_dir_data_single(rec);
 }
 
 static int record__mmap(struct record *rec)
@@ -1682,6 +1715,16 @@ static cpu_set_t perf_cpu_map__mask(struct perf_cpu_map *cpus)
 	return mask;
 }
 
+static struct perf_cpu_map *cpu_map__cpu_new(int cpu)
+{
+	struct perf_cpu_map *map = perf_cpu_map__empty_new(1);
+
+	if (map)
+		map->map[0] = cpu;
+
+	return map;
+}
+
 static int
 record__threads_type_one(struct record *rec)
 {
@@ -1704,10 +1747,47 @@ record__threads_type_one(struct record *rec)
 }
 
 static int
+record__threads_type_all(struct record *rec)
+{
+	struct evlist *evlist = rec->evlist;
+	struct perf_cpu_map *cpus = evlist->core.cpus;
+	struct thread_cfg *config;
+	int i, nr = cpus->nr;
+
+	config = zalloc(sizeof(*config) * nr);
+	if (!config)
+		return -ENOMEM;
+
+	for (i = 0; i < nr; i++) {
+		struct perf_cpu_map *map;
+
+		map = cpu_map__cpu_new(cpus->map[i]);
+		if (!map)
+			goto out;
+
+		config[i].monitor = map;
+		config[i].allowed = perf_cpu_map__get(map);
+	}
+
+	rec->threads.cfgs = config;
+	rec->threads.cnt = nr;
+	return 0;
+
+out:
+	while (i--) {
+		perf_cpu_map__put(config[i].monitor);
+	}
+	free(config);
+	return -ENOMEM;
+}
+
+static int
 record__threads_type(struct record *rec)
 {
 	if (rec->threads.type == RECORD__THREADS_TYPE_ONE)
 		return record__threads_type_one(rec);
+	if (rec->threads.type == RECORD__THREADS_TYPE_ALL)
+		return record__threads_type_all(rec);
 
 	return -1;
 }
@@ -2751,6 +2831,26 @@ enabled:
 	return 0;
 }
 
+/*
+ *
+ * --threads[=all]                         - all 1 map per 1 thread
+ */
+static int
+parse_threads(const struct option *opt, const char *str, int unset)
+{
+	struct record *rec = opt->value;
+
+	if (unset)
+		return 0;
+
+	if (!str || !strcmp(str, "all")) {
+		rec->threads.type = RECORD__THREADS_TYPE_ALL;
+		return 0;
+	}
+
+	return -1;
+}
+
 static const char * const __record_usage[] = {
 	"perf record [<options>] [<command>]",
 	"perf record [<options>] -- <command> [<options>]",
@@ -2997,6 +3097,9 @@ static struct option __record_options[] = {
 		     "size", "Limit the maximum size of the output file", parse_output_max_size),
 	OPT_BOOLEAN(0, "dir", &record.data.is_dir,
 		    "Store data into directory perf.data"),
+	OPT_CALLBACK_OPTARG(0, "threads", &record, NULL, "count|mode|list",
+		"threads setup," " use --threads ? to list threads options",
+		parse_threads),
 	OPT_END()
 };
 
@@ -3092,6 +3195,9 @@ int cmd_record(int argc, const char **argv)
 		if (!rec->switch_output.filenames)
 			return -EINVAL;
 	}
+
+	if (rec->threads.type != RECORD__THREADS_TYPE_ONE)
+		rec->data.is_dir = true;
 
 	/*
 	 * Allow aliases to facilitate the lookup of symbols for address
