@@ -106,10 +106,12 @@ struct thread_obj {
 	int			  state;
 	struct thread_stat	  stats;
 	struct thread_stat	  stats_sec;
+	struct perf_cpu_map	 *allowed;
 };
 
 struct thread_cfg {
 	struct perf_cpu_map	*monitor;
+	struct perf_cpu_map	*allowed;
 };
 
 struct record {
@@ -1507,12 +1509,14 @@ thread_obj__clean(struct thread_obj *th)
 {
 	free(th->mmap);
 	free(th->ovw_mmap);
+	perf_cpu_map__put(th->allowed);
 }
 
 static void
 thread_cfg__clean(struct thread_cfg *cfg)
 {
 	perf_cpu_map__put(cfg->monitor);
+	perf_cpu_map__put(cfg->allowed);
 }
 
 static void
@@ -1533,11 +1537,13 @@ record__threads_clean(struct record *rec)
 	free(cfgs);
 }
 
-static void thread_obj__init(struct thread_obj *th, struct record *rec)
+static void thread_obj__init(struct thread_obj *th, struct perf_cpu_map *allowed,
+			     struct record *rec)
 {
 	memset(th, 0, sizeof(*th));
 	fdarray__init(&th->pollfd, 64);
 	th->rec = rec;
+	th->allowed = perf_cpu_map__get(allowed);
 }
 
 static int
@@ -1646,18 +1652,34 @@ record__threads_create_poll(struct record *rec)
 static int
 record__threads_create(struct record *rec)
 {
+	struct thread_cfg *cfgs = rec->threads.cfgs;
 	struct thread_obj *objs;
 	int i, cnt = rec->threads.cnt;
 
 	objs = zalloc(sizeof(*objs) * cnt);
 	if (objs) {
-		for (i = 0; i < cnt; i++)
-			thread_obj__init(objs + i, rec);
+		for (i = 0; i < cnt; i++) {
+			struct thread_cfg *cfg = cfgs + i;
+
+			thread_obj__init(objs + i, cfg->allowed, rec);
+		}
 
 		rec->threads.objs = objs;
 	}
 
 	return objs ? 0 : -ENOMEM;
+}
+
+static cpu_set_t perf_cpu_map__mask(struct perf_cpu_map *cpus)
+{
+	cpu_set_t mask;
+	int i;
+
+	CPU_ZERO(&mask);
+	for (i = 0; i < cpus->nr; i++)
+		CPU_SET(cpus->map[i], &mask);
+
+	return mask;
 }
 
 static int
@@ -1783,6 +1805,20 @@ static void wait_for_signal(struct record *rec)
 	pthread_mutex_unlock(&rec->threads.signal_mutex);
 }
 
+static void set_thread_affinity(struct perf_cpu_map *allowed)
+{
+	if (allowed) {
+		cpu_set_t mask = perf_cpu_map__mask(allowed);
+
+		if (sched_setaffinity(0, sizeof(mask), &mask)) {
+			char buf[100];
+
+			cpu_map__snprint(allowed, buf, sizeof(buf));
+			pr_err("threads: failed to set affinity %s\n", buf);
+		}
+	}
+}
+
 static void *worker(void *arg)
 {
 	struct thread_obj *th = arg;
@@ -1793,6 +1829,7 @@ static void *worker(void *arg)
 	thread->state = RECORD_THREAD__RUNNING;
 
 	signal_main(rec);
+	set_thread_affinity(th->allowed);
 
 	return thread_obj__process(rec);
 }
@@ -1813,6 +1850,7 @@ static int record__threads_start(struct record *rec)
 	if (rec->threads.cnt > 1)
 		wait_for_signal(rec);
 
+	set_thread_affinity(thread->allowed);
 	return err;
 }
 
