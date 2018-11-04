@@ -6,11 +6,15 @@
 
 struct perf_sample;
 
-struct ordered_event {
-	u64			timestamp;
+struct queued_event {
 	u64			file_offset;
 	union perf_event	*event;
 	struct list_head	list;
+};
+
+struct ordered_event {
+	struct queued_event	qevent;
+	u64			timestamp;
 };
 
 enum oe_flush {
