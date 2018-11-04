@@ -78,4 +78,7 @@ void ordered_events__set_copy_on_queue(struct ordered_events *oe, bool copy)
 {
 	oe->qe.copy_on_queue = copy;
 }
+
+void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
+			 unsigned int priv_size);
 #endif /* __ORDERED_EVENTS_H */

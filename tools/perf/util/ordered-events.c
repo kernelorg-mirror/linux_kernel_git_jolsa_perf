@@ -332,18 +332,22 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	return err;
 }
 
-void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t deliver)
+void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
+			 unsigned int priv_size)
 {
-	struct queued_events *qe = &oe->qe;
-
 	INIT_LIST_HEAD(&qe->events);
 	INIT_LIST_HEAD(&qe->cache);
 	INIT_LIST_HEAD(&qe->to_free);
 	qe->max_alloc_size = (u64) -1;
 	qe->cur_alloc_size = 0;
 	qe->deliver	   = deliver;
-	qe->priv_size	   = sizeof(struct ordered_event);
+	qe->priv_size	   = priv_size ?: sizeof(struct queued_event);
 	qe->buffer_max	   = 64 * 1024 / qe->priv_size;
+}
+
+void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t deliver)
+{
+	queued_events__init(&oe->qe, deliver, sizeof(struct ordered_event));
 }
 
 static void
