@@ -16,6 +16,7 @@
 
 static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 {
+	struct queued_event *qnew = &new->qevent;
 	struct ordered_event *last = oe->last;
 	u64 timestamp = new->timestamp;
 	struct list_head *p;
@@ -26,7 +27,7 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 	pr_oe_time2(timestamp, "queue_event nr_events %u\n", oe->nr_events);
 
 	if (!last) {
-		list_add(&new->list, &oe->events);
+		list_add(&qnew->list, &oe->events);
 		oe->max_timestamp = timestamp;
 		return;
 	}
@@ -38,25 +39,25 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 	 */
 	if (last->timestamp <= timestamp) {
 		while (last->timestamp <= timestamp) {
-			p = last->list.next;
+			p = last->qevent.list.next;
 			if (p == &oe->events) {
-				list_add_tail(&new->list, &oe->events);
+				list_add_tail(&qnew->list, &oe->events);
 				oe->max_timestamp = timestamp;
 				return;
 			}
-			last = list_entry(p, struct ordered_event, list);
+			last = list_entry(p, struct ordered_event, qevent.list);
 		}
-		list_add_tail(&new->list, &last->list);
+		list_add_tail(&qnew->list, &last->qevent.list);
 	} else {
 		while (last->timestamp > timestamp) {
-			p = last->list.prev;
+			p = last->qevent.list.prev;
 			if (p == &oe->events) {
-				list_add(&new->list, &oe->events);
+				list_add(&qnew->list, &oe->events);
 				return;
 			}
-			last = list_entry(p, struct ordered_event, list);
+			last = list_entry(p, struct ordered_event, qevent.list);
 		}
-		list_add(&new->list, &last->list);
+		list_add(&qnew->list, &last->qevent.list);
 	}
 }
 
@@ -137,8 +138,8 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 	size = sizeof(*oe->buffer) + MAX_SAMPLE_BUFFER * sizeof(*new);
 
 	if (!list_empty(cache)) {
-		new = list_entry(cache->next, struct ordered_event, list);
-		list_del(&new->list);
+		new = list_entry(cache->next, struct ordered_event, qevent.list);
+		list_del(&new->qevent.list);
 	} else if (oe->buffer) {
 		new = &oe->buffer->event[oe->buffer_idx];
 		if (++oe->buffer_idx == MAX_SAMPLE_BUFFER)
@@ -163,7 +164,7 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 		return NULL;
 	}
 
-	new->event = new_event;
+	new->qevent.event = new_event;
 	return new;
 }
 
@@ -184,10 +185,10 @@ ordered_events__new_event(struct ordered_events *oe, u64 timestamp,
 
 void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event)
 {
-	list_move(&event->list, &oe->cache);
+	list_move(&event->qevent.list, &oe->cache);
 	oe->nr_events--;
-	free_dup_event(oe, event->event);
-	event->event = NULL;
+	free_dup_event(oe, event->qevent.event);
+	event->qevent.event = NULL;
 }
 
 int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
@@ -215,7 +216,7 @@ int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
 	if (!oevent)
 		return -ENOMEM;
 
-	oevent->file_offset = file_offset;
+	oevent->qevent.file_offset = file_offset;
 	return 0;
 }
 
@@ -235,7 +236,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 	if (show_progress)
 		ui_progress__init(&prog, oe->nr_events, "Processing time ordered events...");
 
-	list_for_each_entry_safe(iter, tmp, head, list) {
+	list_for_each_entry_safe(iter, tmp, head, qevent.list) {
 		if (session_done())
 			return 0;
 
@@ -255,7 +256,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 	if (list_empty(head))
 		oe->last = NULL;
 	else if (last_ts <= limit)
-		oe->last = list_entry(head->prev, struct ordered_event, list);
+		oe->last = list_entry(head->prev, struct ordered_event, qevent.list);
 
 	if (show_progress)
 		ui_progress__finish();
@@ -286,7 +287,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 		struct ordered_event *first, *last;
 		struct list_head *head = &oe->events;
 
-		first = list_entry(head->next, struct ordered_event, list);
+		first = list_entry(head->next, struct ordered_event, qevent.list);
 		last = oe->last;
 
 		/* Warn if we are called before any event got allocated. */
@@ -342,7 +343,7 @@ ordered_events_buffer__free(struct ordered_events_buffer *buffer,
 		unsigned int i;
 
 		for (i = 0; i < max; i++)
-			__free_dup_event(oe, buffer->event[i].event);
+			__free_dup_event(oe, buffer->event[i].qevent.event);
 	}
 
 	free(buffer);

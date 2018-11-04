@@ -109,8 +109,8 @@ static int ordered_events__deliver_event(struct ordered_events *oe,
 	struct perf_session *session = container_of(oe, struct perf_session,
 						    ordered_events);
 
-	return perf_session__deliver_event(session, event->event,
-					   session->tool, event->file_offset);
+	return perf_session__deliver_event(session, event->qevent.event,
+					   session->tool, event->qevent.file_offset);
 }
 
 struct perf_session *perf_session__new(struct perf_data *data,
