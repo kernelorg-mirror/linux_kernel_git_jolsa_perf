@@ -43,6 +43,7 @@ struct queued_events {
 	struct ordered_events_buffer	*buffer;
 	ordered_events__deliver_t	 deliver;
 	int				 buffer_idx;
+	int				 buffer_max;
 	unsigned int			 nr_events;
 	bool				 copy_on_queue;
 };
