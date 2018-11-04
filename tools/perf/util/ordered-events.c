@@ -97,7 +97,6 @@ static void free_dup_event(struct ordered_events *oe, union perf_event *event)
 		__free_dup_event(oe, event);
 }
 
-#define MAX_SAMPLE_BUFFER	(64 * 1024 / sizeof(struct ordered_event))
 static struct ordered_event *alloc_event(struct ordered_events *oe,
 					 union perf_event *event)
 {
@@ -138,14 +137,14 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 	 * Removal of ordered event object moves it from events to
 	 * the cache list.
 	 */
-	size = sizeof(*qe->buffer) + MAX_SAMPLE_BUFFER * sizeof(*new);
+	size = sizeof(*qe->buffer) + qe->buffer_max * sizeof(*new);
 
 	if (!list_empty(cache)) {
 		new = list_entry(cache->next, struct ordered_event, qevent.list);
 		list_del(&new->qevent.list);
 	} else if (qe->buffer) {
 		new = &qe->buffer->event[qe->buffer_idx];
-		if (++qe->buffer_idx == MAX_SAMPLE_BUFFER)
+		if (++qe->buffer_idx == qe->buffer_max)
 			qe->buffer = NULL;
 	} else if ((qe->cur_alloc_size + size) < qe->max_alloc_size) {
 		qe->buffer = malloc(size);
@@ -338,6 +337,7 @@ void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t d
 	qe->max_alloc_size = (u64) -1;
 	qe->cur_alloc_size = 0;
 	qe->deliver	   = deliver;
+	qe->buffer_max	   = 64 * 1024 / sizeof(struct ordered_event);
 }
 
 static void
@@ -372,7 +372,7 @@ void ordered_events__free(struct ordered_events *oe)
 	/* ... and continue with the rest */
 	list_for_each_entry_safe(buffer, tmp, &qe->to_free, list) {
 		list_del(&buffer->list);
-		ordered_events_buffer__free(buffer, MAX_SAMPLE_BUFFER, oe);
+		ordered_events_buffer__free(buffer, qe->buffer_max, oe);
 	}
 }
 
