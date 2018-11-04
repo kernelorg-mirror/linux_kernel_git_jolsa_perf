@@ -31,7 +31,7 @@ typedef int (*ordered_events__deliver_t)(struct ordered_events *oe,
 
 struct ordered_events_buffer {
 	struct list_head	list;
-	struct ordered_event	event[0];
+	unsigned char		data[0];
 };
 
 struct queued_events {
@@ -46,6 +46,7 @@ struct queued_events {
 	int				 buffer_max;
 	unsigned int			 nr_events;
 	bool				 copy_on_queue;
+	unsigned int			 priv_size;
 };
 
 struct ordered_events {
