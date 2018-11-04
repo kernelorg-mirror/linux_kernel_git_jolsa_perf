@@ -16,18 +16,19 @@
 
 static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 {
+	struct queued_events *qe = &oe->qe;
 	struct queued_event *qnew = &new->qevent;
 	struct ordered_event *last = oe->last;
 	u64 timestamp = new->timestamp;
 	struct list_head *p;
 
-	++oe->nr_events;
+	++qe->nr_events;
 	oe->last = new;
 
-	pr_oe_time2(timestamp, "queue_event nr_events %u\n", oe->nr_events);
+	pr_oe_time2(timestamp, "queue_event nr_events %u\n", qe->nr_events);
 
 	if (!last) {
-		list_add(&qnew->list, &oe->events);
+		list_add(&qnew->list, &qe->events);
 		oe->max_timestamp = timestamp;
 		return;
 	}
@@ -40,8 +41,8 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 	if (last->timestamp <= timestamp) {
 		while (last->timestamp <= timestamp) {
 			p = last->qevent.list.next;
-			if (p == &oe->events) {
-				list_add_tail(&qnew->list, &oe->events);
+			if (p == &qe->events) {
+				list_add_tail(&qnew->list, &qe->events);
 				oe->max_timestamp = timestamp;
 				return;
 			}
@@ -51,8 +52,8 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 	} else {
 		while (last->timestamp > timestamp) {
 			p = last->qevent.list.prev;
-			if (p == &oe->events) {
-				list_add(&qnew->list, &oe->events);
+			if (p == &qe->events) {
+				list_add(&qnew->list, &qe->events);
 				return;
 			}
 			last = list_entry(p, struct ordered_event, qevent.list);
@@ -64,12 +65,13 @@ static void queue_event(struct ordered_events *oe, struct ordered_event *new)
 static union perf_event *__dup_event(struct ordered_events *oe,
 				     union perf_event *event)
 {
+	struct queued_events *qe = &oe->qe;
 	union perf_event *new_event = NULL;
 
-	if (oe->cur_alloc_size < oe->max_alloc_size) {
+	if (qe->cur_alloc_size < qe->max_alloc_size) {
 		new_event = memdup(event, event->header.size);
 		if (new_event)
-			oe->cur_alloc_size += event->header.size;
+			qe->cur_alloc_size += event->header.size;
 	}
 
 	return new_event;
@@ -78,20 +80,20 @@ static union perf_event *__dup_event(struct ordered_events *oe,
 static union perf_event *dup_event(struct ordered_events *oe,
 				   union perf_event *event)
 {
-	return oe->copy_on_queue ? __dup_event(oe, event) : event;
+	return oe->qe.copy_on_queue ? __dup_event(oe, event) : event;
 }
 
 static void __free_dup_event(struct ordered_events *oe, union perf_event *event)
 {
 	if (event) {
-		oe->cur_alloc_size -= event->header.size;
+		oe->qe.cur_alloc_size -= event->header.size;
 		free(event);
 	}
 }
 
 static void free_dup_event(struct ordered_events *oe, union perf_event *event)
 {
-	if (oe->copy_on_queue)
+	if (oe->qe.copy_on_queue)
 		__free_dup_event(oe, event);
 }
 
@@ -99,7 +101,8 @@ static void free_dup_event(struct ordered_events *oe, union perf_event *event)
 static struct ordered_event *alloc_event(struct ordered_events *oe,
 					 union perf_event *event)
 {
-	struct list_head *cache = &oe->cache;
+	struct queued_events *qe = &oe->qe;
+	struct list_head *cache = &qe->cache;
 	struct ordered_event *new = NULL;
 	union perf_event *new_event;
 	size_t size;
@@ -135,32 +138,32 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 	 * Removal of ordered event object moves it from events to
 	 * the cache list.
 	 */
-	size = sizeof(*oe->buffer) + MAX_SAMPLE_BUFFER * sizeof(*new);
+	size = sizeof(*qe->buffer) + MAX_SAMPLE_BUFFER * sizeof(*new);
 
 	if (!list_empty(cache)) {
 		new = list_entry(cache->next, struct ordered_event, qevent.list);
 		list_del(&new->qevent.list);
-	} else if (oe->buffer) {
-		new = &oe->buffer->event[oe->buffer_idx];
-		if (++oe->buffer_idx == MAX_SAMPLE_BUFFER)
-			oe->buffer = NULL;
-	} else if ((oe->cur_alloc_size + size) < oe->max_alloc_size) {
-		oe->buffer = malloc(size);
-		if (!oe->buffer) {
+	} else if (qe->buffer) {
+		new = &qe->buffer->event[qe->buffer_idx];
+		if (++qe->buffer_idx == MAX_SAMPLE_BUFFER)
+			qe->buffer = NULL;
+	} else if ((qe->cur_alloc_size + size) < qe->max_alloc_size) {
+		qe->buffer = malloc(size);
+		if (!qe->buffer) {
 			free_dup_event(oe, new_event);
 			return NULL;
 		}
 
 		pr("alloc size %" PRIu64 "B (+%zu), max %" PRIu64 "B\n",
-		   oe->cur_alloc_size, size, oe->max_alloc_size);
+		   qe->cur_alloc_size, size, qe->max_alloc_size);
 
-		oe->cur_alloc_size += size;
-		list_add(&oe->buffer->list, &oe->to_free);
+		qe->cur_alloc_size += size;
+		list_add(&qe->buffer->list, &qe->to_free);
 
-		oe->buffer_idx = 1;
-		new = &oe->buffer->event[0];
+		qe->buffer_idx = 1;
+		new = &qe->buffer->event[0];
 	} else {
-		pr("allocation limit reached %" PRIu64 "B\n", oe->max_alloc_size);
+		pr("allocation limit reached %" PRIu64 "B\n", qe->max_alloc_size);
 		return NULL;
 	}
 
@@ -185,8 +188,8 @@ ordered_events__new_event(struct ordered_events *oe, u64 timestamp,
 
 void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event)
 {
-	list_move(&event->qevent.list, &oe->cache);
-	oe->nr_events--;
+	list_move(&event->qevent.list, &oe->qe.cache);
+	oe->qe.nr_events--;
 	free_dup_event(oe, event->qevent.event);
 	event->qevent.event = NULL;
 }
@@ -222,7 +225,7 @@ int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
 
 static int __ordered_events__flush(struct ordered_events *oe)
 {
-	struct list_head *head = &oe->events;
+	struct list_head *head = &oe->qe.events;
 	struct ordered_event *tmp, *iter;
 	u64 limit = oe->next_flush;
 	u64 last_ts = oe->last ? oe->last->timestamp : 0ULL;
@@ -234,7 +237,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 		return 0;
 
 	if (show_progress)
-		ui_progress__init(&prog, oe->nr_events, "Processing time ordered events...");
+		ui_progress__init(&prog, oe->qe.nr_events, "Processing time ordered events...");
 
 	list_for_each_entry_safe(iter, tmp, head, qevent.list) {
 		if (session_done())
@@ -242,7 +245,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 
 		if (iter->timestamp > limit)
 			break;
-		ret = oe->deliver(oe, iter);
+		ret = oe->qe.deliver(oe, iter);
 		if (ret)
 			return ret;
 
@@ -274,7 +277,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	};
 	int err;
 
-	if (oe->nr_events == 0)
+	if (oe->qe.nr_events == 0)
 		return 0;
 
 	switch (how) {
@@ -285,7 +288,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	case OE_FLUSH__HALF:
 	{
 		struct ordered_event *first, *last;
-		struct list_head *head = &oe->events;
+		struct list_head *head = &oe->qe.events;
 
 		first = list_entry(head->next, struct ordered_event, qevent.list);
 		last = oe->last;
@@ -306,7 +309,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	};
 
 	pr_oe_time(oe->next_flush, "next_flush - ordered_events__flush PRE  %s, nr_events %u\n",
-		   str[how], oe->nr_events);
+		   str[how], oe->qe.nr_events);
 	pr_oe_time(oe->max_timestamp, "max_timestamp\n");
 
 	err = __ordered_events__flush(oe);
@@ -319,7 +322,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	}
 
 	pr_oe_time(oe->next_flush, "next_flush - ordered_events__flush POST %s, nr_events %u\n",
-		   str[how], oe->nr_events);
+		   str[how], oe->qe.nr_events);
 	pr_oe_time(oe->last_flush, "last_flush\n");
 
 	return err;
@@ -327,19 +330,21 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 
 void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t deliver)
 {
-	INIT_LIST_HEAD(&oe->events);
-	INIT_LIST_HEAD(&oe->cache);
-	INIT_LIST_HEAD(&oe->to_free);
-	oe->max_alloc_size = (u64) -1;
-	oe->cur_alloc_size = 0;
-	oe->deliver	   = deliver;
+	struct queued_events *qe = &oe->qe;
+
+	INIT_LIST_HEAD(&qe->events);
+	INIT_LIST_HEAD(&qe->cache);
+	INIT_LIST_HEAD(&qe->to_free);
+	qe->max_alloc_size = (u64) -1;
+	qe->cur_alloc_size = 0;
+	qe->deliver	   = deliver;
 }
 
 static void
 ordered_events_buffer__free(struct ordered_events_buffer *buffer,
 			    unsigned int max, struct ordered_events *oe)
 {
-	if (oe->copy_on_queue) {
+	if (oe->qe.copy_on_queue) {
 		unsigned int i;
 
 		for (i = 0; i < max; i++)
@@ -352,19 +357,20 @@ ordered_events_buffer__free(struct ordered_events_buffer *buffer,
 void ordered_events__free(struct ordered_events *oe)
 {
 	struct ordered_events_buffer *buffer, *tmp;
+	struct queued_events *qe = &oe->qe;
 
-	if (list_empty(&oe->to_free))
+	if (list_empty(&qe->to_free))
 		return;
 
 	/*
 	 * Current buffer might not have all the events allocated
 	 * yet, we need to free only allocated ones ...
 	 */
-	list_del(&oe->buffer->list);
-	ordered_events_buffer__free(oe->buffer, oe->buffer_idx, oe);
+	list_del(&qe->buffer->list);
+	ordered_events_buffer__free(qe->buffer, qe->buffer_idx, oe);
 
 	/* ... and continue with the rest */
-	list_for_each_entry_safe(buffer, tmp, &oe->to_free, list) {
+	list_for_each_entry_safe(buffer, tmp, &qe->to_free, list) {
 		list_del(&buffer->list);
 		ordered_events_buffer__free(buffer, MAX_SAMPLE_BUFFER, oe);
 	}
@@ -372,7 +378,7 @@ void ordered_events__free(struct ordered_events *oe)
 
 void ordered_events__reinit(struct ordered_events *oe)
 {
-	ordered_events__deliver_t old_deliver = oe->deliver;
+	ordered_events__deliver_t old_deliver = oe->qe.deliver;
 
 	ordered_events__free(oe);
 	memset(oe, '\0', sizeof(*oe));

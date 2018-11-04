@@ -34,23 +34,27 @@ struct ordered_events_buffer {
 	struct ordered_event	event[0];
 };
 
-struct ordered_events {
-	u64				 last_flush;
-	u64				 next_flush;
-	u64				 max_timestamp;
+struct queued_events {
 	u64				 max_alloc_size;
 	u64				 cur_alloc_size;
 	struct list_head		 events;
 	struct list_head		 cache;
 	struct list_head		 to_free;
 	struct ordered_events_buffer	*buffer;
-	struct ordered_event		*last;
 	ordered_events__deliver_t	 deliver;
 	int				 buffer_idx;
 	unsigned int			 nr_events;
+	bool				 copy_on_queue;
+};
+
+struct ordered_events {
+	struct queued_events		 qe;
+	u64				 last_flush;
+	u64				 next_flush;
+	u64				 max_timestamp;
+	struct ordered_event		*last;
 	enum oe_flush			 last_flush_type;
 	u32				 nr_unordered_events;
-	bool				 copy_on_queue;
 };
 
 int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
@@ -64,12 +68,12 @@ void ordered_events__reinit(struct ordered_events *oe);
 static inline
 void ordered_events__set_alloc_size(struct ordered_events *oe, u64 size)
 {
-	oe->max_alloc_size = size;
+	oe->qe.max_alloc_size = size;
 }
 
 static inline
 void ordered_events__set_copy_on_queue(struct ordered_events *oe, bool copy)
 {
-	oe->copy_on_queue = copy;
+	oe->qe.copy_on_queue = copy;
 }
 #endif /* __ORDERED_EVENTS_H */
