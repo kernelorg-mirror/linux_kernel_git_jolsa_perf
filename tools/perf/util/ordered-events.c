@@ -97,6 +97,11 @@ static void free_dup_event(struct ordered_events *oe, union perf_event *event)
 		__free_dup_event(oe, event);
 }
 
+static struct ordered_event *buffer_data(struct queued_events *qe, int idx)
+{
+	return (void *) &qe->buffer->data[0] + idx * qe->priv_size;
+}
+
 static struct ordered_event *alloc_event(struct ordered_events *oe,
 					 union perf_event *event)
 {
@@ -137,13 +142,13 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 	 * Removal of ordered event object moves it from events to
 	 * the cache list.
 	 */
-	size = sizeof(*qe->buffer) + qe->buffer_max * sizeof(*new);
+	size = sizeof(*qe->buffer) + qe->buffer_max * qe->priv_size;
 
 	if (!list_empty(cache)) {
 		new = list_entry(cache->next, struct ordered_event, qevent.list);
 		list_del(&new->qevent.list);
 	} else if (qe->buffer) {
-		new = &qe->buffer->event[qe->buffer_idx];
+		new = buffer_data(qe, qe->buffer_idx);
 		if (++qe->buffer_idx == qe->buffer_max)
 			qe->buffer = NULL;
 	} else if ((qe->cur_alloc_size + size) < qe->max_alloc_size) {
@@ -160,7 +165,7 @@ static struct ordered_event *alloc_event(struct ordered_events *oe,
 		list_add(&qe->buffer->list, &qe->to_free);
 
 		qe->buffer_idx = 1;
-		new = &qe->buffer->event[0];
+		new = buffer_data(qe, 0);
 	} else {
 		pr("allocation limit reached %" PRIu64 "B\n", qe->max_alloc_size);
 		return NULL;
@@ -337,7 +342,8 @@ void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t d
 	qe->max_alloc_size = (u64) -1;
 	qe->cur_alloc_size = 0;
 	qe->deliver	   = deliver;
-	qe->buffer_max	   = 64 * 1024 / sizeof(struct ordered_event);
+	qe->priv_size	   = sizeof(struct ordered_event);
+	qe->buffer_max	   = 64 * 1024 / qe->priv_size;
 }
 
 static void
@@ -348,7 +354,7 @@ ordered_events_buffer__free(struct ordered_events_buffer *buffer,
 		unsigned int i;
 
 		for (i = 0; i < max; i++)
-			__free_dup_event(oe, buffer->event[i].qevent.event);
+			__free_dup_event(oe, buffer_data(&oe->qe, i)->qevent.event);
 	}
 
 	free(buffer);
