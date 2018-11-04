@@ -82,4 +82,6 @@ void ordered_events__set_copy_on_queue(struct ordered_events *oe, bool copy)
 void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
 			 unsigned int priv_size);
 void queued_events__free(struct queued_events *qe);
+int queued_events__queue(struct queued_events *qe, union perf_event *event,
+			 u64 file_offset);
 #endif /* __ORDERED_EVENTS_H */

@@ -196,6 +196,21 @@ ordered_events__new_event(struct ordered_events *oe, u64 timestamp,
 	return new;
 }
 
+int queued_events__queue(struct queued_events *qe, union perf_event *event,
+			 u64 file_offset)
+{
+	struct queued_event *new;
+
+	new = alloc_event(qe, event);
+	if (new) {
+		list_add(&new->list, &qe->events);
+		new->file_offset = file_offset;
+		qe->nr_events++;
+	}
+
+	return 0;
+}
+
 void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event)
 {
 	list_move(&event->qevent.list, &oe->qe.cache);
