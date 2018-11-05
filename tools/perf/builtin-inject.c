@@ -626,11 +626,6 @@ static void strip_fini(struct perf_inject *inject)
 	}
 }
 
-static struct perf_event_header sorted_data_event = {
-	.size = sizeof(struct perf_event_header),
-	.type = PERF_RECORD_DATA_SORTED,
-};
-
 static int __cmd_inject(struct perf_inject *inject)
 {
 	int ret = -EINVAL;
@@ -693,13 +688,6 @@ static int __cmd_inject(struct perf_inject *inject)
 
 	if (!data_out->is_pipe)
 		lseek(fd, output_data_offset, SEEK_SET);
-
-	if (inject->tool.ordered_events) {
-		ret = perf_data__write(data_out, &sorted_data_event,
-				       sizeof(sorted_data_event));
-		if (ret)
-			return ret;
-	}
 
 	ret = perf_session__process_events(session);
 	if (ret)
