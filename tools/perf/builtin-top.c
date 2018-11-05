@@ -815,9 +815,12 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 	while ((event = perf_mmap__read_event(md)) != NULL) {
 		int ret;
 
-		pthread_mutex_lock(&top->qe.lock);
 		ret = queued_events__queue(top->qe.in, event, 0);
-		pthread_mutex_unlock(&top->qe.lock);
+
+		if (top->qe.rotate) {
+			top->qe.rotate = false;
+			pthread_cond_signal(&top->qe.cond);
+		}
 
 		perf_mmap__consume(md);
 		if (ret)
@@ -825,6 +828,7 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 	}
 
 	perf_mmap__read_done(md);
+	pthread_cond_signal(&top->qe.cond);
 }
 
 static void perf_top__mmap_read(struct perf_top *top)
@@ -1033,13 +1037,16 @@ static void *process_thread(void *arg)
 		struct queued_events *out, *in = top->qe.in;
 
 		if (!in->nr_events) {
-			usleep(100);
+			usleep(500);
 			continue;
 		}
 
-		pthread_mutex_lock(&top->qe.lock);
 		out = rotate_queues(top);
-		pthread_mutex_unlock(&top->qe.lock);
+		top->qe.rotate = true;
+
+		pthread_mutex_lock(&top->qe.mutex);
+		pthread_cond_wait(&top->qe.cond, &top->qe.mutex);
+		pthread_mutex_unlock(&top->qe.mutex);
 
 		if (queued_events__flush(out))
 			pr_err("failed to process event\n");
@@ -1125,7 +1132,8 @@ static void init_process_thread(struct perf_top *top)
 	queued_events__init(&top->qe.data[0], deliver_event, sizeof(struct queued_event), top);
 	queued_events__init(&top->qe.data[1], deliver_event, sizeof(struct queued_event), top);
 	top->qe.in = &top->qe.data[0];
-	pthread_mutex_init(&top->qe.lock, NULL);
+	pthread_mutex_init(&top->qe.mutex, NULL);
+	pthread_cond_init(&top->qe.cond, NULL);
 }
 
 static int __cmd_top(struct perf_top *top)
@@ -1246,6 +1254,7 @@ static int __cmd_top(struct perf_top *top)
 out_join:
 	pthread_join(thread, NULL);
 out_join_thread:
+	pthread_cond_signal(&top->qe.cond);
 	pthread_join(thread_process, NULL);
 out_delete:
 	perf_session__delete(top->session);
