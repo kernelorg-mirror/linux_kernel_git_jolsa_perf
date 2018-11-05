@@ -249,7 +249,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 
 		if (iter->timestamp > limit)
 			break;
-		ret = oe->qe.deliver(oe, iter);
+		ret = oe->qe.deliver(&oe->qe, &iter->qevent);
 		if (ret)
 			return ret;
 
@@ -332,7 +332,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	return err;
 }
 
-void ordered_events__init(struct ordered_events *oe, ordered_events__deliver_t deliver)
+void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t deliver)
 {
 	struct queued_events *qe = &oe->qe;
 
@@ -384,7 +384,7 @@ void ordered_events__free(struct ordered_events *oe)
 
 void ordered_events__reinit(struct ordered_events *oe)
 {
-	ordered_events__deliver_t old_deliver = oe->qe.deliver;
+	queued_events__deliver_t old_deliver = oe->qe.deliver;
 
 	ordered_events__free(oe);
 	memset(oe, '\0', sizeof(*oe));
