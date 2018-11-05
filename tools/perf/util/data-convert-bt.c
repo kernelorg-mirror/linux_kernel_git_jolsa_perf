@@ -1624,8 +1624,8 @@ int bt_convert__perf2ctf(const char *input, const char *path,
 		goto free_writer;
 
 	if (c.queue_size) {
-		ordered_events__set_alloc_size(&session->ordered_events,
-					       c.queue_size);
+		queued_events__set_alloc_size(&session->ordered_events.qe,
+					      c.queue_size);
 	}
 
 	/* CTF writer env/clock setup  */
