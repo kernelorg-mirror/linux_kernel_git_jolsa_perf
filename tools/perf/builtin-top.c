@@ -868,6 +868,8 @@ static void perf_top__mmap_read_idx(struct perf_top *top, int idx)
 		} else if (event->header.type < PERF_RECORD_MAX) {
 			hists__inc_nr_events(evsel__hists(evsel), event->header.type);
 			machine__process_event(machine, event, &sample);
+			if (event->header.type == PERF_RECORD_LOST)
+				top->lost += event->lost.lost;
 		} else
 			++session->evlist->stats.nr_unknown_events;
 next_event:
