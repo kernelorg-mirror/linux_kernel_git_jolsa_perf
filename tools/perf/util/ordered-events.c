@@ -101,8 +101,8 @@ static struct queued_event *buffer_data(struct queued_events *qe, int idx)
 	return (void *) &qe->buffer->data[0] + idx * qe->priv_size;
 }
 
-static struct queued_event *alloc_event(struct queued_events *qe,
-					union perf_event *event)
+struct queued_event *queued_event__alloc(struct queued_events *qe,
+					 union perf_event *event)
 {
 	struct list_head *cache = &qe->cache;
 	struct queued_event *new = NULL;
@@ -176,7 +176,7 @@ static struct queued_event *alloc_event(struct queued_events *qe,
 static struct ordered_event *
 alloc_ordered_event(struct ordered_events *oe, union perf_event *event)
 {
-	struct queued_event *qevent = alloc_event(&oe->qe, event);
+	struct queued_event *qevent = queued_event__alloc(&oe->qe, event);
 
 	return qevent ? container_of(qevent, struct ordered_event, qevent) : NULL;
 }
@@ -201,7 +201,7 @@ int queued_events__queue(struct queued_events *qe, union perf_event *event,
 {
 	struct queued_event *new;
 
-	new = alloc_event(qe, event);
+	new = queued_event__alloc(qe, event);
 	if (new) {
 		list_add(&new->list, &qe->events);
 		new->file_offset = file_offset;

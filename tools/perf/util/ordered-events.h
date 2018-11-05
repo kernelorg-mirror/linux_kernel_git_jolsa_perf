@@ -84,4 +84,5 @@ void queued_events__free(struct queued_events *qe);
 int queued_events__queue(struct queued_events *qe, union perf_event *event,
 			 u64 file_offset);
 int queued_events__flush(struct queued_events *qe);
+struct queued_event* queued_event__alloc(struct queued_events *qe, union perf_event *event);
 #endif /* __ORDERED_EVENTS_H */
