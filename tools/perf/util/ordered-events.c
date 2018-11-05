@@ -211,7 +211,7 @@ int queued_events__queue(struct queued_events *qe, union perf_event *event,
 	return 0;
 }
 
-static void queued_events__delete(struct queued_events *qe, struct queued_event *event)
+void queued_event__delete(struct queued_events *qe, struct queued_event *event)
 {
 	list_move(&event->list, &qe->cache);
 	qe->nr_events--;
@@ -274,7 +274,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 		if (ret)
 			return ret;
 
-		queued_events__delete(&oe->qe, &iter->qevent);
+		queued_event__delete(&oe->qe, &iter->qevent);
 		oe->last_flush = iter->timestamp;
 
 		if (show_progress)
@@ -367,7 +367,7 @@ int queued_events__flush(struct queued_events *qe)
 		if (ret)
 			return ret;
 
-		queued_events__delete(qe, iter);
+		queued_event__delete(qe, iter);
 	}
 
 	return 0;
