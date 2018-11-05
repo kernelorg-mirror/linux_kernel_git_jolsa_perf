@@ -1195,8 +1195,8 @@ repeat:
 		return -1;
 
 	if (report.queue_size) {
-		ordered_events__set_alloc_size(&session->ordered_events,
-					       report.queue_size);
+		queued_events__set_alloc_size(&session->ordered_events.qe,
+					      report.queue_size);
 	}
 
 	session->itrace_synth_opts = &itrace_synth_opts;

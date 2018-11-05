@@ -67,15 +67,15 @@ void ordered_events__free(struct ordered_events *oe);
 void ordered_events__reinit(struct ordered_events *oe);
 
 static inline
-void ordered_events__set_alloc_size(struct ordered_events *oe, u64 size)
+void queued_events__set_alloc_size(struct queued_events *qe, u64 size)
 {
-	oe->qe.max_alloc_size = size;
+	qe->max_alloc_size = size;
 }
 
 static inline
-void ordered_events__set_copy_on_queue(struct ordered_events *oe, bool copy)
+void queued_events__set_copy_on_queue(struct queued_events *qe, bool copy)
 {
-	oe->qe.copy_on_queue = copy;
+	qe->copy_on_queue = copy;
 }
 
 void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
