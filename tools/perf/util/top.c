@@ -46,7 +46,7 @@ size_t perf_top__header_snprintf(struct perf_top *top, char *bf, size_t size)
 							samples_per_sec;
 		ret = SNPRINTF(bf, size,
 			       "   PerfTop:%8.0f irqs/sec  kernel:%4.1f%%"
-			       "  exact: %4.1f%% lost: %lu [", samples_per_sec,
+			       "  exact: %4.1f%% lost: %" PRIu64 " [", samples_per_sec,
 			       ksamples_percent, esamples_percent, top->lost);
 	} else {
 		float us_samples_per_sec = top->us_samples / top->delay_secs;
