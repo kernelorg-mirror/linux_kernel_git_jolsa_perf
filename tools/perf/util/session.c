@@ -103,14 +103,15 @@ static void perf_session__set_comm_exec(struct perf_session *session)
 	machines__set_comm_exec(&session->machines, comm_exec);
 }
 
-static int ordered_events__deliver_event(struct ordered_events *oe,
-					 struct ordered_event *event)
+static int queued_events__deliver_event(struct queued_events *qe,
+					struct queued_event *event)
 {
+	struct ordered_events *oe = container_of(qe, struct ordered_events, qe);
 	struct perf_session *session = container_of(oe, struct perf_session,
 						    ordered_events);
 
-	return perf_session__deliver_event(session, event->qevent.event,
-					   session->tool, event->qevent.file_offset);
+	return perf_session__deliver_event(session, event->event,
+					   session->tool, event->file_offset);
 }
 
 struct perf_session *perf_session__new(struct perf_data *data,
@@ -125,7 +126,7 @@ struct perf_session *perf_session__new(struct perf_data *data,
 	session->tool   = tool;
 	INIT_LIST_HEAD(&session->auxtrace_index);
 	machines__init(&session->machines);
-	ordered_events__init(&session->ordered_events, ordered_events__deliver_event);
+	ordered_events__init(&session->ordered_events, queued_events__deliver_event);
 
 	if (data) {
 		if (perf_data__open(data))
