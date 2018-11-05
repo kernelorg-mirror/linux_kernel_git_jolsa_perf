@@ -221,7 +221,7 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 
 void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t deliver)
 {
-	queued_events__init(&oe->qe, deliver, sizeof(struct ordered_event));
+	queued_events__init(&oe->qe, deliver, sizeof(struct ordered_event), NULL);
 }
 
 void ordered_events__free(struct ordered_events *oe)

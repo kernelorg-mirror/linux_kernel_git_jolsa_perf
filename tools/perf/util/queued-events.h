@@ -33,6 +33,7 @@ struct queued_events {
 	unsigned int			 nr_events;
 	bool				 copy_on_queue;
 	unsigned int			 priv_size;
+	void				*data;
 };
 
 static inline
@@ -48,7 +49,7 @@ void queued_events__set_copy_on_queue(struct queued_events *qe, bool copy)
 }
 
 void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
-			 unsigned int priv_size);
+			 unsigned int priv_size, void *data);
 void queued_events__free(struct queued_events *qe);
 int queued_events__queue(struct queued_events *qe, union perf_event *event,
 			 u64 file_offset);

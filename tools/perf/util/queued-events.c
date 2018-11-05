@@ -169,7 +169,7 @@ int queued_events__flush(struct queued_events *qe)
 }
 
 void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
-			 unsigned int priv_size)
+			 unsigned int priv_size, void *data)
 {
 	INIT_LIST_HEAD(&qe->events);
 	INIT_LIST_HEAD(&qe->cache);
@@ -179,6 +179,7 @@ void queued_events__init(struct queued_events *qe, queued_events__deliver_t deli
 	qe->deliver	   = deliver;
 	qe->priv_size	   = priv_size;
 	qe->buffer_max	   = 64 * 1024 / priv_size;
+	qe->data	   = data;
 }
 
 static void
