@@ -29,7 +29,7 @@ struct queued_events;
 typedef int (*queued_events__deliver_t)(struct queued_events *qe,
 					struct queued_event *event);
 
-struct ordered_events_buffer {
+struct queued_events_buffer {
 	struct list_head	list;
 	unsigned char		data[0];
 };
@@ -40,7 +40,7 @@ struct queued_events {
 	struct list_head		 events;
 	struct list_head		 cache;
 	struct list_head		 to_free;
-	struct ordered_events_buffer	*buffer;
+	struct queued_events_buffer	*buffer;
 	queued_events__deliver_t	 deliver;
 	int				 buffer_idx;
 	int				 buffer_max;

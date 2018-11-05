@@ -392,8 +392,8 @@ void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t de
 }
 
 static void
-ordered_events_buffer__free(struct ordered_events_buffer *buffer,
-			    unsigned int max, struct queued_events *qe)
+queued_events_buffer__free(struct queued_events_buffer *buffer,
+			   unsigned int max, struct queued_events *qe)
 {
 	if (qe->copy_on_queue) {
 		unsigned int i;
@@ -407,7 +407,7 @@ ordered_events_buffer__free(struct ordered_events_buffer *buffer,
 
 void queued_events__free(struct queued_events *qe)
 {
-	struct ordered_events_buffer *buffer, *tmp;
+	struct queued_events_buffer *buffer, *tmp;
 
 	if (list_empty(&qe->to_free))
 		return;
@@ -417,12 +417,12 @@ void queued_events__free(struct queued_events *qe)
 	 * yet, we need to free only allocated ones ...
 	 */
 	list_del(&qe->buffer->list);
-	ordered_events_buffer__free(qe->buffer, qe->buffer_idx, qe);
+	queued_events_buffer__free(qe->buffer, qe->buffer_idx, qe);
 
 	/* ... and continue with the rest */
 	list_for_each_entry_safe(buffer, tmp, &qe->to_free, list) {
 		list_del(&buffer->list);
-		ordered_events_buffer__free(buffer, qe->buffer_max, qe);
+		queued_events_buffer__free(buffer, qe->buffer_max, qe);
 	}
 }
 
