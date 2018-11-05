@@ -44,6 +44,7 @@ perf-y += map.o
 perf-y += pstack.o
 perf-y += session.o
 perf-$(CONFIG_TRACE) += syscalltbl.o
+perf-y += queued-events.o
 perf-y += ordered-events.o
 perf-y += namespaces.o
 perf-y += comm.o
