@@ -61,7 +61,6 @@ struct ordered_events {
 
 int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
 			  u64 timestamp, u64 file_offset);
-void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event);
 int ordered_events__flush(struct ordered_events *oe, enum oe_flush how);
 void ordered_events__init(struct ordered_events *oe, queued_events__deliver_t deliver);
 void ordered_events__free(struct ordered_events *oe);
@@ -84,4 +83,5 @@ void queued_events__init(struct queued_events *qe, queued_events__deliver_t deli
 void queued_events__free(struct queued_events *qe);
 int queued_events__queue(struct queued_events *qe, union perf_event *event,
 			 u64 file_offset);
+int queued_events__flush(struct queued_events *qe);
 #endif /* __ORDERED_EVENTS_H */
