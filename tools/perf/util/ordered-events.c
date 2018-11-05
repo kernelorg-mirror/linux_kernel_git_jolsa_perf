@@ -211,12 +211,12 @@ int queued_events__queue(struct queued_events *qe, union perf_event *event,
 	return 0;
 }
 
-void ordered_events__delete(struct ordered_events *oe, struct ordered_event *event)
+static void queued_events__delete(struct queued_events *qe, struct queued_event *event)
 {
-	list_move(&event->qevent.list, &oe->qe.cache);
-	oe->qe.nr_events--;
-	free_dup_event(&oe->qe, event->qevent.event);
-	event->qevent.event = NULL;
+	list_move(&event->list, &qe->cache);
+	qe->nr_events--;
+	free_dup_event(qe, event->event);
+	event->event = NULL;
 }
 
 int ordered_events__queue(struct ordered_events *oe, union perf_event *event,
@@ -274,7 +274,7 @@ static int __ordered_events__flush(struct ordered_events *oe)
 		if (ret)
 			return ret;
 
-		ordered_events__delete(oe, iter);
+		queued_events__delete(&oe->qe, &iter->qevent);
 		oe->last_flush = iter->timestamp;
 
 		if (show_progress)
@@ -351,6 +351,26 @@ int ordered_events__flush(struct ordered_events *oe, enum oe_flush how)
 	pr_oe_time(oe->last_flush, "last_flush\n");
 
 	return err;
+}
+
+int queued_events__flush(struct queued_events *qe)
+{
+	struct list_head *head = &qe->events;
+	struct queued_event *tmp, *iter;
+	int ret;
+
+	list_for_each_entry_safe(iter, tmp, head, list) {
+		if (session_done())
+			return 0;
+
+		ret = qe->deliver(qe, iter);
+		if (ret)
+			return ret;
+
+		queued_events__delete(qe, iter);
+	}
+
+	return 0;
 }
 
 void queued_events__init(struct queued_events *qe, queued_events__deliver_t deliver,
