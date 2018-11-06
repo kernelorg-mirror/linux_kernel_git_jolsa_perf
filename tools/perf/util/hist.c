@@ -2510,9 +2510,10 @@ int __hists__scnprintf_title(struct hists *hists, char *bf, size_t size, bool sh
 
 	nr_samples = convert_unit(nr_samples, &unit);
 	printed = scnprintf(bf, size,
-			   "Samples: %lu%c of event%s '%s',%s%sEvent count (approx.): %" PRIu64,
+			   "Samples: %lu%c of event%s '%s',%s%sEvent count (approx.): %" PRIu64 ", lost: %" PRIu64,
 			   nr_samples, unit, evsel->nr_members > 1 ? "s" : "",
-			   ev_name, sample_freq_str, enable_ref ? ref : " ", nr_events);
+			   ev_name, sample_freq_str, enable_ref ? ref : " ", nr_events,
+			   hists->stats.total_lost);
 
 
 	if (hists->uid_filter_str)
