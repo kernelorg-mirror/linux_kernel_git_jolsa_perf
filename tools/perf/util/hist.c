@@ -17,6 +17,10 @@
 #include <math.h>
 #include <inttypes.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <api/fs/fs.h>
 
 static bool hists__filter_entry_by_dso(struct hists *hists,
 				       struct hist_entry *he);
@@ -275,10 +279,18 @@ static void hists__delete_entry(struct hists *hists, struct hist_entry *he);
 
 static bool hists__decay_entry(struct hists *hists, struct hist_entry *he)
 {
+	struct stat st;
+	char path[PATH_MAX];
 	u64 prev_period = he->stat.period;
 	u64 diff;
 
 	if (prev_period == 0)
+		return true;
+
+	scnprintf(path, PATH_MAX, "%s/%d", procfs__mountpoint(),
+                  he->thread->tid);
+
+	if (stat(path, &st))
 		return true;
 
 	he_stat__decay(&he->stat);
