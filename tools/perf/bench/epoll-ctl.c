@@ -19,6 +19,7 @@
 #include <sys/resource.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <inttypes.h>
 
 #include "../util/stat.h"
 #include <subcmd/parse-options.h>
@@ -201,7 +202,7 @@ static void *workerfn(void *arg)
 
 static void init_fdmaps(struct worker *w, int pct)
 {
-	ssize_t i;
+	unsigned int i;
 	int inc;
 	struct epoll_event ev;
 
@@ -302,7 +303,7 @@ int bench_epoll_ctl(int argc, const char **argv)
 	struct worker *worker = NULL;
 	struct cpu_map *cpu;
 	struct rlimit rl, prevrl;
-	ssize_t i;
+	unsigned int i;
 
 	argc = parse_options(argc, argv, options, bench_epoll_ctl_usage, 0);
 	if (argc) {
@@ -340,7 +341,7 @@ int bench_epoll_ctl(int argc, const char **argv)
 	if (getrlimit(RLIMIT_NOFILE, &prevrl))
 	    err(EXIT_FAILURE, "getrlimit");
 	rl.rlim_cur = rl.rlim_max = nfds * nthreads * 2 + 50;
-	printinfo("Setting RLIMIT_NOFILE rlimit from %lu to: %lu\n",
+	printinfo("Setting RLIMIT_NOFILE rlimit from %" PRIu64 " to: %" PRIu64 "\n",
 		  prevrl.rlim_max, rl.rlim_max);
 	if (setrlimit(RLIMIT_NOFILE, &rl) < 0)
 		err(EXIT_FAILURE, "setrlimit");

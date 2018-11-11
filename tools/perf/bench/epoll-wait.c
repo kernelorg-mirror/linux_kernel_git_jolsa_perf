@@ -73,6 +73,7 @@
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/types.h>
+#include <inttypes.h>
 
 #include "../util/stat.h"
 #include <subcmd/parse-options.h>
@@ -395,7 +396,7 @@ static void *writerfn(void *p)
 		nanosleep(&ts, NULL);
 	}
 
-	printinfo("exiting writer-thread (total full-loops: %ld)\n", iter);
+	printinfo("exiting writer-thread (total full-loops: %ld)\n", (long int) iter);
 	return NULL;
 }
 
@@ -459,7 +460,8 @@ int bench_epoll_wait(int argc, const char **argv)
 	if (getrlimit(RLIMIT_NOFILE, &prevrl))
 		err(EXIT_FAILURE, "getrlimit");
 	rl.rlim_cur = rl.rlim_max = nfds * nthreads * 2 + 50;
-	printinfo("Setting RLIMIT_NOFILE rlimit from %lu to: %lu\n", prevrl.rlim_max, rl.rlim_max);
+	printinfo("Setting RLIMIT_NOFILE rlimit from %" PRIu64 " to: %" PRIu64" \n",
+		  prevrl.rlim_max, rl.rlim_max);
 	if (setrlimit(RLIMIT_NOFILE, &rl) < 0)
 		err(EXIT_FAILURE, "setrlimit");
 
