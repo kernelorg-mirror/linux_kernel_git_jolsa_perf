@@ -2470,7 +2470,7 @@ done:
 static struct event_constraint *
 intel_bts_constraints(struct perf_event *event)
 {
-	if (unlikely(intel_pmu_has_bts(event)))
+	if (unlikely(x86_pmu_has_bts(event)))
 		return &bts_constraint;
 
 	return NULL;
@@ -3118,7 +3118,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 		/*
 		 * BTS is set up earlier in this path, so don't account twice
 		 */
-		if (!intel_pmu_has_bts(event)) {
+		if (!x86_pmu_has_bts(event)) {
 			/* disallow lbr if conflicting events are present */
 			if (x86_add_exclusive(x86_lbr_exclusive_lbr))
 				return -EBUSY;
