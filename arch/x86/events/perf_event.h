@@ -646,6 +646,8 @@ struct x86_pmu {
 	 * Intel host/guest support (KVM)
 	 */
 	struct perf_guest_switch_msr *(*guest_get_msrs)(int *nr);
+
+	u64		event_mask;
 };
 
 struct x86_perf_task_context {
