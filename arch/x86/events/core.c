@@ -416,8 +416,12 @@ int x86_setup_perfctr(struct perf_event *event)
 		local64_set(&hwc->period_left, hwc->sample_period);
 	}
 
-	if (attr->type == PERF_TYPE_RAW)
-		return x86_pmu_extra_regs(event->attr.config, event);
+	if (attr->type == PERF_TYPE_RAW) {
+		int err = x86_pmu_extra_regs(event->attr.config, event);
+		if (err)
+			return err;
+		goto check_branch;
+	}
 
 	if (attr->type == PERF_TYPE_HW_CACHE)
 		return set_ext_hw_attr(hwc, event);
@@ -438,11 +442,13 @@ int x86_setup_perfctr(struct perf_event *event)
 	if (config == -1LL)
 		return -EINVAL;
 
+	hwc->config |= config;
+
+check_branch:
 	/*
 	 * Branch tracing:
 	 */
-	if (attr->config == PERF_COUNT_HW_BRANCH_INSTRUCTIONS &&
-	    !attr->freq && hwc->sample_period == 1) {
+	if (x86_pmu_has_bts(event)) {
 		/* BTS is not supported by this architecture. */
 		if (!x86_pmu.bts_active)
 			return -EOPNOTSUPP;
@@ -457,8 +463,6 @@ int x86_setup_perfctr(struct perf_event *event)
 
 		event->destroy = hw_perf_lbr_event_destroy;
 	}
-
-	hwc->config |= config;
 
 	return 0;
 }
