@@ -62,7 +62,8 @@ FILES=                                          \
          test-clang.bin				\
          test-llvm.bin				\
          test-llvm-version.bin			\
-         test-libaio.bin
+         test-libaio.bin			\
+         test-libxed.bin
 
 FILES := $(addprefix $(OUTPUT),$(FILES))
 
@@ -271,6 +272,9 @@ $(OUTPUT)test-jvmti.bin:
 
 $(OUTPUT)test-jvmti-cmlr.bin:
 	$(BUILD)
+
+$(OUTPUT)test-libxed.bin:
+	$(BUILD) -lxed
 
 $(OUTPUT)test-llvm.bin:
 	$(BUILDXX) -std=gnu++11 				\

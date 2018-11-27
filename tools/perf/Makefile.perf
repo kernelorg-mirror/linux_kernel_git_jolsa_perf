@@ -108,6 +108,7 @@ include ../scripts/utilities.mak
 # streaming for record mode. Currently Posix AIO trace streaming is
 # supported only when linking with glibc.
 #
+# Define NO_LIBXED if you do not want xed support.
 
 # As per kernel Makefile, avoid funny character set dependencies
 unexport LC_ALL

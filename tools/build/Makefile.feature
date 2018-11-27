@@ -71,7 +71,8 @@ FEATURE_TESTS_BASIC :=                  \
         sdt				\
         setns				\
         libopencsd			\
-        libaio
+        libaio				\
+        libxed
 
 # FEATURE_TESTS_BASIC + FEATURE_TESTS_EXTRA is the complete list
 # of all feature tests
