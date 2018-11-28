@@ -1377,6 +1377,8 @@ void print_pmu_events(const char *event_glob, bool name_only, bool quiet_flag,
 			if (!aliases[j].name)
 				goto out_enomem;
 
+			fprintf(stderr, "KRAVA %s\n", aliases[j].name);
+
 			aliases[j].desc = long_desc ? alias->long_desc :
 						alias->desc;
 			aliases[j].topic = alias->topic;
