@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
+#ifdef HAVE_LIBXED_SUPPORT
+#include <xed/xed-interface.h>
+#endif
 #include "builtin.h"
 
 #include "perf.h"
@@ -1225,21 +1228,125 @@ static int perf_sample__fprintf_callindent(struct perf_sample *sample,
 	return len + dlen;
 }
 
+#ifdef HAVE_LIBXED_SUPPORT
+static void xed_init(void)
+{
+	xed_format_options_t format_options;
+
+	memset(&format_options, 0, sizeof(format_options));
+	format_options.hex_address_before_symbolic_name = 0;
+	format_options.xml_a =0;
+	format_options.omit_unit_scale = 0;
+	format_options.no_sign_extend_signed_immediates = 0;
+
+	xed_tables_init();
+	xed_format_set_options(format_options);
+}
+
+static int perf_sample__scnprintf_insnxed(struct perf_sample *sample,
+					  char *buffer, size_t size)
+{
+	static int xed_initialized;
+	const char *err = NULL;
+	xed_decoded_inst_t xedd;
+	xed_error_enum_t error;
+	xed_bool_t ok;
+
+	if (!xed_initialized) {
+		xed_initialized = 1;
+		xed_init();
+	}
+
+	xed_decoded_inst_zero(&xedd);
+	xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64,
+					 XED_ADDRESS_WIDTH_64b);
+
+	error = xed_decode(&xedd, (const xed_uint8_t *) sample->insn,
+			   sample->insn_len);
+	if (error != XED_ERROR_NONE) {
+		err = "xed decode failed";
+	} else {
+		ok = xed_format_context(XED_SYNTAX_INTEL, &xedd, buffer,
+					size, 0, 0, 0);
+		if (!ok)
+			err = "xed format failed";
+	}
+
+	if (err)
+		return scnprintf(buffer, size, " %s", err);
+
+	return strlen(buffer);
+}
+
+static int perf_sample__fprintf_insnxed(struct perf_sample *sample, FILE *fp)
+{
+	char buffer[100];
+
+	perf_sample__scnprintf_insnxed(sample, buffer, sizeof(buffer));
+	return fprintf(fp, " %s", buffer);
+}
+#else
+static int perf_sample__scnprintf_insnxed(struct perf_sample *sample __maybe_unused,
+					  char *buffer __maybe_unused,
+					  size_t size __maybe_unused)
+{
+	return 0;
+}
+static int perf_sample__fprintf_insnxed(struct perf_sample *sample __maybe_unused,
+					FILE *fp __maybe_unused)
+{
+	return 0;
+}
+#endif /* HAVE_LIBXED_SUPPORT */
+
+struct perf_script {
+	struct perf_tool	tool;
+	struct perf_session	*session;
+	bool			show_task_events;
+	bool			show_mmap_events;
+	bool			show_switch_events;
+	bool			show_namespace_events;
+	bool			show_lost_events;
+	bool			show_round_events;
+	bool			allocated;
+	bool			per_event_dump;
+	bool			xed_insn;
+	struct cpu_map		*cpus;
+	struct thread_map	*threads;
+	int			name_width;
+	const char              *time_str;
+	struct perf_time_interval *ptime_range;
+	int			range_size;
+	int			range_num;
+};
+
+static int
+__perf_sample__fprintf_insn(struct perf_sample *sample, FILE *fp)
+{
+	int i, printed = 0;
+
+	printed += fprintf(fp, " insn:");
+	for (i = 0; i < sample->insn_len; i++)
+		printed += fprintf(fp, " %02x", (unsigned char)sample->insn[i]);
+
+	return printed;
+}
+
 static int perf_sample__fprintf_insn(struct perf_sample *sample,
 				     struct perf_event_attr *attr,
 				     struct thread *thread,
-				     struct machine *machine, FILE *fp)
+				     struct machine *machine,
+				     struct perf_script *script, FILE *fp)
 {
 	int printed = 0;
 
 	if (PRINT_FIELD(INSNLEN))
 		printed += fprintf(fp, " ilen: %d", sample->insn_len);
 	if (PRINT_FIELD(INSN)) {
-		int i;
-
-		printed += fprintf(fp, " insn:");
-		for (i = 0; i < sample->insn_len; i++)
-			printed += fprintf(fp, " %02x", (unsigned char)sample->insn[i]);
+		if (script->xed_insn)
+			printed += perf_sample__fprintf_insnxed(sample, fp);
+		else
+			printed += __perf_sample__fprintf_insn(sample, fp);
 	}
 	if (PRINT_FIELD(BRSTACKINSN))
 		printed += perf_sample__fprintf_brstackinsn(sample, thread, attr, machine, fp);
@@ -1251,7 +1358,8 @@ static int perf_sample__fprintf_bts(struct perf_sample *sample,
 				    struct perf_evsel *evsel,
 				    struct thread *thread,
 				    struct addr_location *al,
-				    struct machine *machine, FILE *fp)
+				    struct machine *machine,
+				    struct perf_script *script, FILE *fp)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	unsigned int type = output_type(attr->type);
@@ -1294,7 +1402,8 @@ static int perf_sample__fprintf_bts(struct perf_sample *sample,
 	if (print_srcline_last)
 		printed += map__fprintf_srcline(al->map, al->addr, "\n  ", fp);
 
-	printed += perf_sample__fprintf_insn(sample, attr, thread, machine, fp);
+	printed += perf_sample__fprintf_insn(sample, attr, thread, machine,
+					     script, fp);
 	printed += fprintf(fp, "\n");
 	if (PRINT_FIELD(SRCCODE)) {
 		int ret = map__fprintf_srccode(al->map, al->addr, stdout,
@@ -1576,26 +1685,6 @@ static int perf_sample__fprintf_synth(struct perf_sample *sample,
 	return 0;
 }
 
-struct perf_script {
-	struct perf_tool	tool;
-	struct perf_session	*session;
-	bool			show_task_events;
-	bool			show_mmap_events;
-	bool			show_switch_events;
-	bool			show_namespace_events;
-	bool			show_lost_events;
-	bool			show_round_events;
-	bool			allocated;
-	bool			per_event_dump;
-	struct cpu_map		*cpus;
-	struct thread_map	*threads;
-	int			name_width;
-	const char              *time_str;
-	struct perf_time_interval *ptime_range;
-	int			range_size;
-	int			range_num;
-};
-
 static int perf_evlist__max_name_len(struct perf_evlist *evlist)
 {
 	struct perf_evsel *evsel;
@@ -1790,7 +1879,8 @@ static void process_event(struct perf_script *script,
 		perf_sample__fprintf_flags(sample->flags, fp);
 
 	if (is_bts_event(attr)) {
-		perf_sample__fprintf_bts(sample, evsel, thread, al, machine, fp);
+		perf_sample__fprintf_bts(sample, evsel, thread, al,
+					 machine, script, fp);
 		return;
 	}
 
@@ -1838,7 +1928,7 @@ static void process_event(struct perf_script *script,
 
 	if (perf_evsel__is_bpf_output(evsel) && PRINT_FIELD(BPF_OUTPUT))
 		perf_sample__fprintf_bpf_output(sample, fp);
-	perf_sample__fprintf_insn(sample, attr, thread, machine, fp);
+	perf_sample__fprintf_insn(sample, attr, thread, machine, script, fp);
 
 	if (PRINT_FIELD(PHYS_ADDR))
 		fprintf(fp, "%16" PRIx64, sample->phys_addr);
@@ -3232,7 +3322,13 @@ static int parse_xed(const struct option *opt __maybe_unused,
 		     const char *str __maybe_unused,
 		     int unset __maybe_unused)
 {
+#ifdef HAVE_LIBXED_SUPPORT
+	struct perf_script *script = opt->value;
+
+	script->xed_insn = true;
+#else
 	force_pager("xed -F insn: -A -64 | less");
+#endif
 	return 0;
 }
 
@@ -3345,7 +3441,7 @@ int cmd_script(int argc, const char **argv)
 		   "only consider these symbols"),
 	OPT_CALLBACK_OPTARG(0, "insn-trace", &itrace_synth_opts, NULL, NULL,
 			"Decode instructions from itrace", parse_insn_trace),
-	OPT_CALLBACK_OPTARG(0, "xed", NULL, NULL, NULL,
+	OPT_CALLBACK_OPTARG(0, "xed", &script, NULL, NULL,
 			"Run xed disassembler on output", parse_xed),
 	OPT_CALLBACK_OPTARG(0, "call-trace", &itrace_synth_opts, NULL, NULL,
 			"Decode calls from from itrace", parse_call_trace),
