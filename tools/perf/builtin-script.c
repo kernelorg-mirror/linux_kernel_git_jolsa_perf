@@ -100,6 +100,7 @@ enum perf_output_field {
 	PERF_OUTPUT_METRIC	    = 1U << 28,
 	PERF_OUTPUT_MISC            = 1U << 29,
 	PERF_OUTPUT_SRCCODE	    = 1U << 30,
+	PERF_OUTPUT_PTCYCLES	    = 1U << 31,
 };
 
 struct output_option {
@@ -137,6 +138,7 @@ struct output_option {
 	{.str = "metric", .field = PERF_OUTPUT_METRIC},
 	{.str = "misc", .field = PERF_OUTPUT_MISC},
 	{.str = "srccode", .field = PERF_OUTPUT_SRCCODE},
+	{.str = "ptcycles", .field = PERF_OUTPUT_PTCYCLES},
 };
 
 enum {
@@ -1878,6 +1880,9 @@ static void process_event(struct perf_script *script,
 	if (print_flags)
 		perf_sample__fprintf_flags(sample->flags, fp);
 
+	if (PRINT_FIELD(PTCYCLES))
+		fprintf(fp, "%16" PRIu64 " ", sample->pt_cycles);
+
 	if (is_bts_event(attr)) {
 		perf_sample__fprintf_bts(sample, evsel, thread, al,
 					 machine, script, fp);
@@ -3336,7 +3341,7 @@ static int parse_call_trace(const struct option *opt __maybe_unused,
 			    const char *str __maybe_unused,
 			    int unset __maybe_unused)
 {
-	parse_output_fields(NULL, "-ip,-addr,-event,-period,+callindent", 0);
+	parse_output_fields(NULL, "-ip,-addr,-event,-period,+callindent,+ptcycles", 0);
 	itrace_parse_synth_opts(opt, "cewp", 0);
 	nanosecs = true;
 	return 0;

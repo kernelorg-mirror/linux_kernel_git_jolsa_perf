@@ -85,6 +85,7 @@ struct intel_pt_state {
 	uint64_t pwre_payload;
 	uint64_t pwrx_payload;
 	uint64_t cbr_payload;
+	uint64_t cycles;
 	uint32_t flags;
 	enum intel_pt_insn_op insn_op;
 	int insn_len;

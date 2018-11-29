@@ -159,6 +159,8 @@ struct intel_pt_queue {
 	u32 flags;
 	u16 insn_len;
 	u64 last_insn_cnt;
+	u64 cycles;
+	u64 last_cycles;
 	char insn[INTEL_PT_INSN_BUF_SZ];
 };
 
@@ -930,6 +932,9 @@ static void intel_pt_sample_flags(struct intel_pt_queue *ptq)
 		ptq->flags |= PERF_IP_FLAG_TRACE_BEGIN;
 	if (ptq->state->type & INTEL_PT_TRACE_END)
 		ptq->flags |= PERF_IP_FLAG_TRACE_END;
+
+	ptq->cycles = ptq->state->cycles - ptq->last_cycles;
+	ptq->last_cycles = ptq->state->cycles;
 }
 
 static int intel_pt_setup_queue(struct intel_pt *pt,
@@ -1088,6 +1093,7 @@ static void intel_pt_prep_b_sample(struct intel_pt *pt,
 	sample->flags = ptq->flags;
 	sample->insn_len = ptq->insn_len;
 	memcpy(sample->insn, ptq->insn, INTEL_PT_INSN_BUF_SZ);
+	sample->pt_cycles = ptq->cycles;
 
 	event->sample.header.type = PERF_RECORD_SAMPLE;
 	event->sample.header.misc = sample->cpumode;

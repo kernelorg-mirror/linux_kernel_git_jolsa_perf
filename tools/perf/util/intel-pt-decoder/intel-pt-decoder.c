@@ -1592,6 +1592,8 @@ static int intel_pt_walk_psbend(struct intel_pt_decoder *decoder)
 			break;
 
 		case INTEL_PT_CYC:
+			decoder->state.cycles += decoder->packet.payload;
+			__fallthrough;
 		case INTEL_PT_VMCS:
 		case INTEL_PT_MNT:
 		case INTEL_PT_PAD:
@@ -1695,6 +1697,7 @@ static int intel_pt_walk_fup_tip(struct intel_pt_decoder *decoder)
 			break;
 
 		case INTEL_PT_CYC:
+			decoder->state.cycles += decoder->packet.payload;
 			intel_pt_calc_cyc_timestamp(decoder);
 			break;
 
@@ -1848,6 +1851,7 @@ next:
 			break;
 
 		case INTEL_PT_CYC:
+			decoder->state.cycles += decoder->packet.payload;
 			intel_pt_calc_cyc_timestamp(decoder);
 			break;
 
@@ -2018,6 +2022,7 @@ static int intel_pt_walk_psb(struct intel_pt_decoder *decoder)
 			break;
 
 		case INTEL_PT_CYC:
+			decoder->state.cycles += decoder->packet.payload;
 			intel_pt_calc_cyc_timestamp(decoder);
 			break;
 
@@ -2117,6 +2122,7 @@ static int intel_pt_walk_to_ip(struct intel_pt_decoder *decoder)
 			break;
 
 		case INTEL_PT_CYC:
+			decoder->state.cycles += decoder->packet.payload;
 			intel_pt_calc_cyc_timestamp(decoder);
 			break;
 
