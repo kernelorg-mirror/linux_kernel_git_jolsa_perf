@@ -8,6 +8,7 @@
 
 #include <linux/module.h>
 #include <linux/kprobes.h>
+#include <linux/syscalls.h>
 #include "trace.h"
 #include "trace_probe.h"
 
@@ -84,6 +85,9 @@ static int perf_trace_event_perm(struct trace_event_call *tp_event,
 	 */
 	if (perf_paranoid_tracepoint_raw() && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
+
+	if (p_event->attr.block && !is_syscall_trace_event(tp_event))
+		return -EINVAL;
 
 	return 0;
 }

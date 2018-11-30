@@ -6489,6 +6489,23 @@ void perf_prepare_sample(struct perf_event_header *header,
 		data->phys_addr = perf_virt_to_phys(data->addr);
 }
 
+static bool perf_event_is_blocked(struct perf_event *event)
+{
+	bool blocked = event->attr.block && event->blocked;
+
+	if (blocked)
+		event->blocked = false;
+	return blocked;
+}
+
+static void perf_event_set_blocked(struct perf_event *event)
+{
+	if (event->attr.block) {
+		current->perf_blocked_cnt++;
+		event->blocked = true;
+	}
+}
+
 static __always_inline void
 __perf_event_output(struct perf_event *event,
 		    struct perf_sample_data *data,
@@ -6505,8 +6522,10 @@ __perf_event_output(struct perf_event *event,
 
 	perf_prepare_sample(&header, data, event, regs);
 
-	if (output_begin(&handle, event, header.size))
+	if (output_begin(&handle, event, header.size)) {
+		perf_event_set_blocked(event);
 		goto exit;
+	}
 
 	perf_output_sample(&handle, &header, data, event);
 
@@ -8264,7 +8283,7 @@ void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
 			       struct pt_regs *regs, struct hlist_head *head,
 			       struct task_struct *task)
 {
-	if (bpf_prog_array_valid(call)) {
+	if (!current->perf_blocked && bpf_prog_array_valid(call)) {
 		*(struct pt_regs **)raw_data = regs;
 		if (!trace_call_bpf(call, raw_data) || hlist_empty(head)) {
 			perf_swevent_put_recursion_context(rctx);
@@ -8296,6 +8315,8 @@ void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 	perf_trace_buf_update(record, event_type);
 
 	hlist_for_each_entry_rcu(event, head, hlist_entry) {
+		if (current->perf_blocked && !perf_event_is_blocked(event))
+			continue;
 		if (perf_tp_event_match(event, &data, regs))
 			perf_swevent_event(event, count, &data, regs);
 	}
@@ -8314,6 +8335,8 @@ void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 			goto unlock;
 
 		list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
+			if (current->perf_blocked && !perf_event_is_blocked(event))
+				continue;
 			if (event->cpu != smp_processor_id())
 				continue;
 			if (event->attr.type != PERF_TYPE_TRACEPOINT)
@@ -10458,6 +10481,19 @@ SYSCALL_DEFINE5(perf_event_open,
 			return -EINVAL;
 	} else {
 		if (attr.sample_period & (1ULL << 63))
+			return -EINVAL;
+	}
+
+	if (attr.block) {
+		/*
+		 * Allow only syscall tracepoints, check for syscall class
+		 * is made in the tracepoint event_init callback.
+		 */
+		if (attr.type != PERF_TYPE_TRACEPOINT)
+			return -EINVAL;
+
+		/* Allow to block only if we attach to a process. */
+		if (pid == -1)
 			return -EINVAL;
 	}
 

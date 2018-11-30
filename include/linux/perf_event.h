@@ -695,6 +695,8 @@ struct perf_event {
 #endif
 
 	struct list_head		sb_list;
+
+	bool				blocked;
 #endif /* CONFIG_PERF_EVENTS */
 };
 

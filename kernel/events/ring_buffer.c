@@ -223,7 +223,9 @@ __perf_output_begin(struct perf_output_handle *handle,
 	return 0;
 
 fail:
-	local_inc(&rb->lost);
+	/* Do not count lost if we are going to block and try again. */
+	if (!event->attr.block)
+		local_inc(&rb->lost);
 	perf_output_put_handle(handle);
 out:
 	rcu_read_unlock();

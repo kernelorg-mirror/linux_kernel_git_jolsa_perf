@@ -1296,4 +1296,6 @@ static inline unsigned int ksys_personality(unsigned int personality)
 	return old;
 }
 
+void perf_trace_syscall_enter(struct pt_regs *regs);
+void perf_trace_syscall_exit(struct pt_regs *regs);
 #endif

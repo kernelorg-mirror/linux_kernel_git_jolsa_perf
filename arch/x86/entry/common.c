@@ -60,6 +60,32 @@ static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
 	}
 }
 
+static void trace_block_syscall(struct pt_regs *regs, bool enter)
+{
+	current->perf_blocked = true;
+
+	do {
+		schedule_timeout(100 * HZ);
+		current->perf_blocked_cnt = 0;
+
+		if (enter) {
+			/* perf syscalls:* enter */
+			perf_trace_syscall_enter(regs);
+
+			/* perf raw_syscalls:* enter */
+			perf_trace_sys_enter(&event_sys_enter, regs, regs->orig_ax);
+		} else {
+			/* perf syscalls:* enter */
+			perf_trace_syscall_exit(regs);
+
+			/* perf raw_syscalls:* enter */
+			perf_trace_sys_exit(&event_sys_exit, regs, regs->ax);
+		}
+	} while (current->perf_blocked_cnt);
+
+	current->perf_blocked = false;
+}
+
 /*
  * Returns the syscall nr to run (which should match regs->orig_ax) or -1
  * to skip the syscall.
@@ -123,8 +149,11 @@ static long syscall_trace_enter(struct pt_regs *regs)
 	}
 #endif
 
-	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))
+	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT))) {
 		trace_sys_enter(regs, regs->orig_ax);
+		if (current->perf_blocked_cnt)
+			trace_block_syscall(regs, true);
+	}
 
 	do_audit_syscall_entry(regs, arch);
 
@@ -224,8 +253,11 @@ static void syscall_slow_exit_work(struct pt_regs *regs, u32 cached_flags)
 
 	audit_syscall_exit(regs);
 
-	if (cached_flags & _TIF_SYSCALL_TRACEPOINT)
+	if (cached_flags & _TIF_SYSCALL_TRACEPOINT) {
 		trace_sys_exit(regs, regs->ax);
+		if (current->perf_blocked_cnt)
+			trace_block_syscall(regs, false);
+	}
 
 	/*
 	 * If TIF_SYSCALL_EMU is set, we only get here because of
