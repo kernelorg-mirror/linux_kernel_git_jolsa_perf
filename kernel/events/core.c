@@ -6505,8 +6505,11 @@ __perf_event_output(struct perf_event *event,
 
 	perf_prepare_sample(&header, data, event, regs);
 
-	if (output_begin(&handle, event, header.size))
+	if (output_begin(&handle, event, header.size)) {
+		if (event->attr.block)
+			event->blocked = current->perf_block = true;
 		goto exit;
+	}
 
 	perf_output_sample(&handle, &header, data, event);
 
@@ -8262,7 +8265,7 @@ static int perf_tp_event_match(struct perf_event *event,
 void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
 			       struct trace_event_call *call, u64 count,
 			       struct pt_regs *regs, struct hlist_head *head,
-			       struct task_struct *task)
+			       struct task_struct *task, bool blocked)
 {
 	if (bpf_prog_array_valid(call)) {
 		*(struct pt_regs **)raw_data = regs;
@@ -8272,13 +8275,22 @@ void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
 		}
 	}
 	perf_tp_event(call->event.type, count, raw_data, size, regs, head,
-		      rctx, task);
+		      rctx, task, blocked);
 }
 EXPORT_SYMBOL_GPL(perf_trace_run_bpf_submit);
 
+static bool perf_event_blocked(struct perf_event *event)
+{
+	bool blocked = event->attr.block && event->blocked;
+
+	if (blocked)
+		event->blocked = false;
+	return blocked;
+}
+
 void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 		   struct pt_regs *regs, struct hlist_head *head, int rctx,
-		   struct task_struct *task)
+		   struct task_struct *task, bool blocked)
 {
 	struct perf_sample_data data;
 	struct perf_event *event;
@@ -8296,6 +8308,9 @@ void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 	perf_trace_buf_update(record, event_type);
 
 	hlist_for_each_entry_rcu(event, head, hlist_entry) {
+		if (blocked && !perf_event_blocked(event))
+			continue;
+
 		if (perf_tp_event_match(event, &data, regs))
 			perf_swevent_event(event, count, &data, regs);
 	}
@@ -8314,6 +8329,8 @@ void perf_tp_event(u16 event_type, u64 count, void *record, int entry_size,
 			goto unlock;
 
 		list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
+			if (blocked && !perf_event_blocked(event))
+				continue;
 			if (event->cpu != smp_processor_id())
 				continue;
 			if (event->attr.type != PERF_TYPE_TRACEPOINT)
@@ -10460,6 +10477,9 @@ SYSCALL_DEFINE5(perf_event_open,
 		if (attr.sample_period & (1ULL << 63))
 			return -EINVAL;
 	}
+
+	if (attr.block && attr.type != PERF_TYPE_TRACEPOINT)
+		return -EINVAL;
 
 	/* Only privileged users can get physical addresses */
 	if ((attr.sample_type & PERF_SAMPLE_PHYS_ADDR) &&

@@ -123,8 +123,14 @@ static long syscall_trace_enter(struct pt_regs *regs)
 	}
 #endif
 
-	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))
+	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT))) {
 		trace_sys_enter(regs, regs->orig_ax);
+		while (current->perf_block) {
+			schedule_timeout(100 * HZ);
+			current->perf_block = false;
+			perf_trace_sys_enter_blocked(regs, regs->orig_ax);
+		}
+	}
 
 	do_audit_syscall_entry(regs, arch);
 
@@ -224,8 +230,14 @@ static void syscall_slow_exit_work(struct pt_regs *regs, u32 cached_flags)
 
 	audit_syscall_exit(regs);
 
-	if (cached_flags & _TIF_SYSCALL_TRACEPOINT)
+	if (cached_flags & _TIF_SYSCALL_TRACEPOINT) {
 		trace_sys_exit(regs, regs->ax);
+		while (current->perf_block) {
+			schedule_timeout(100 * HZ);
+			current->perf_block = false;
+			perf_trace_sys_exit_blocked(regs, regs->ax);
+		}
+	}
 
 	/*
 	 * If TIF_SYSCALL_EMU is set, we only get here because of

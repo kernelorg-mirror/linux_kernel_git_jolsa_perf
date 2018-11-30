@@ -578,7 +578,7 @@ static int perf_call_bpf_enter(struct trace_event_call *call, struct pt_regs *re
 	return trace_call_bpf(call, &param);
 }
 
-static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
+static void __perf_syscall_enter(struct pt_regs *regs, long id, bool blocked)
 {
 	struct syscall_metadata *sys_data;
 	struct syscall_trace_enter *rec;
@@ -625,7 +625,17 @@ static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
 
 	perf_trace_buf_submit(rec, size, rctx,
 			      sys_data->enter_event->event.type, 1, regs,
-			      head, NULL);
+			      head, NULL, blocked);
+}
+
+static void perf_syscall_enter(void *ignore, struct pt_regs *regs, long id)
+{
+	__perf_syscall_enter(regs, id, false);
+}
+
+void perf_trace_sys_enter_blocked(struct pt_regs *regs, long id)
+{
+	__perf_syscall_enter(regs, id, true);
 }
 
 static int perf_sysenter_enable(struct trace_event_call *call)
@@ -677,7 +687,7 @@ static int perf_call_bpf_exit(struct trace_event_call *call, struct pt_regs *reg
 	return trace_call_bpf(call, &param);
 }
 
-static void perf_syscall_exit(void *ignore, struct pt_regs *regs, long ret)
+static void __perf_syscall_exit(struct pt_regs *regs, long ret, bool blocked)
 {
 	struct syscall_metadata *sys_data;
 	struct syscall_trace_exit *rec;
@@ -721,7 +731,17 @@ static void perf_syscall_exit(void *ignore, struct pt_regs *regs, long ret)
 	}
 
 	perf_trace_buf_submit(rec, size, rctx, sys_data->exit_event->event.type,
-			      1, regs, head, NULL);
+			      1, regs, head, NULL, blocked);
+}
+
+static void perf_syscall_exit(void *ignore, struct pt_regs *regs, long ret)
+{
+	__perf_syscall_exit(regs, ret, false);
+}
+
+void perf_trace_sys_exit_blocked(struct pt_regs *regs, long ret)
+{
+	__perf_syscall_exit(regs, ret, true);
 }
 
 static int perf_sysexit_enable(struct trace_event_call *call)

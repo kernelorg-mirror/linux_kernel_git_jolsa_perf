@@ -1296,4 +1296,6 @@ static inline unsigned int ksys_personality(unsigned int personality)
 	return old;
 }
 
+void perf_trace_sys_enter_blocked(struct pt_regs *regs, long id);
+void perf_trace_sys_exit_blocked(struct pt_regs *regs, long ret);
 #endif

@@ -618,14 +618,14 @@ void bpf_trace_run12(struct bpf_prog *prog, u64 arg1, u64 arg2,
 void perf_trace_run_bpf_submit(void *raw_data, int size, int rctx,
 			       struct trace_event_call *call, u64 count,
 			       struct pt_regs *regs, struct hlist_head *head,
-			       struct task_struct *task);
+			       struct task_struct *task, bool blocked);
 
 static inline void
 perf_trace_buf_submit(void *raw_data, int size, int rctx, u16 type,
 		       u64 count, struct pt_regs *regs, void *head,
-		       struct task_struct *task)
+		       struct task_struct *task, bool blocked)
 {
-	perf_tp_event(type, count, raw_data, size, regs, head, rctx, task);
+	perf_tp_event(type, count, raw_data, size, regs, head, rctx, task, blocked);
 }
 
 #endif

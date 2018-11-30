@@ -695,6 +695,8 @@ struct perf_event {
 #endif
 
 	struct list_head		sb_list;
+
+	bool				blocked;
 #endif /* CONFIG_PERF_EVENTS */
 };
 
@@ -1198,7 +1200,7 @@ extern void perf_event_init(void);
 extern void perf_tp_event(u16 event_type, u64 count, void *record,
 			  int entry_size, struct pt_regs *regs,
 			  struct hlist_head *head, int rctx,
-			  struct task_struct *task);
+			  struct task_struct *task, bool blocked);
 extern void perf_bp_event(struct perf_event *event, void *data);
 
 #ifndef perf_misc_flags
