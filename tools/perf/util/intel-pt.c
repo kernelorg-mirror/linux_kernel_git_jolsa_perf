@@ -73,6 +73,8 @@ struct intel_pt {
 	u64 kernel_start;
 	u64 switch_ip;
 	u64 ptss_ip;
+	u64 indirect_thunk_start;
+	u64 indirect_thunk_end;
 
 	struct perf_tsc_conversion tc;
 	bool cap_user_time_zero;
@@ -1461,6 +1463,12 @@ static inline bool intel_pt_is_switch_ip(struct intel_pt_queue *ptq, u64 ip)
 			       PERF_IP_FLAG_INTERRUPT | PERF_IP_FLAG_TX_ABORT));
 }
 
+static bool addr_is_retpoline(struct intel_pt *pt, u64 ip)
+{
+	return (ip >= pt->indirect_thunk_start) &&
+	       (ip < pt->indirect_thunk_end);
+}
+
 #define INTEL_PT_PWR_EVT (INTEL_PT_MWAIT_OP | INTEL_PT_PWR_ENTRY | \
 			  INTEL_PT_EX_STOP | INTEL_PT_PWR_EXIT | \
 			  INTEL_PT_CBR_CHG)
@@ -1528,7 +1536,8 @@ static int intel_pt_sample(struct intel_pt_queue *ptq)
 	if (pt->synth_opts.callchain || pt->synth_opts.thread_stack)
 		thread_stack__event(ptq->thread, ptq->cpu, ptq->flags, state->from_ip,
 				    state->to_ip, ptq->insn_len,
-				    state->trace_nr);
+				    state->trace_nr,
+				    addr_is_retpoline(pt, state->from_ip));
 	else
 		thread_stack__set_trace_nr(ptq->thread, ptq->cpu, state->trace_nr);
 
@@ -1623,6 +1632,47 @@ static u64 intel_pt_switch_ip(struct intel_pt *pt, u64 *ptss_ip)
 	return switch_ip;
 }
 
+static void intel_pt_retpoline_range(struct intel_pt *pt)
+{
+	struct machine *machine = pt->machine;
+	struct map *map;
+	struct symbol *sym, *start;
+	u64 ip, it_start = 0, it_end = 0;
+
+	map = machine__kernel_map(machine);
+	if (!map)
+		return;
+
+	if (map__load(map))
+		return;
+
+	start = dso__first_symbol(map->dso);
+
+	for (sym = start; sym; sym = dso__next_symbol(sym)) {
+		if (!it_start && sym->binding == STB_GLOBAL &&
+		    !strcmp(sym->name, "__indirect_thunk_start")) {
+			ip = map->unmap_ip(map, sym->start);
+			if (ip >= map->start && ip < map->end)
+				it_start = ip;
+		}
+		if (!it_end && sym->binding == STB_GLOBAL &&
+		    !strcmp(sym->name, "__indirect_thunk_end")) {
+			ip = map->unmap_ip(map, sym->start);
+			if (ip >= map->start && ip < map->end)
+				it_end = ip;
+		}
+
+		if (it_end && it_end)
+			break;
+	}
+
+	if (!it_start || !it_end)
+		return;
+
+	pt->indirect_thunk_start = it_start;
+	pt->indirect_thunk_end = it_end;
+}
+
 static void intel_pt_enable_sync_switch(struct intel_pt *pt)
 {
 	unsigned int i;
@@ -1657,6 +1707,9 @@ static int intel_pt_run_decoder(struct intel_pt_queue *ptq, u64 *timestamp)
 				intel_pt_enable_sync_switch(pt);
 			}
 		}
+
+		if (pt->synth_opts.thread_stack)
+			intel_pt_retpoline_range(pt);
 	}
 
 	intel_pt_log("queue %u decoding cpu %d pid %d tid %d\n",
