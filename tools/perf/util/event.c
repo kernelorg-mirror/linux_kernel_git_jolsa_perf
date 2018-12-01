@@ -1694,6 +1694,10 @@ bool sample_addr_correlates_sym(struct perf_event_attr *attr)
 	if (is_bts_event(attr))
 		return true;
 
+	if (attr->type == PERF_TYPE_HARDWARE &&
+	    (attr->config == PERF_COUNT_HW_INSTRUCTIONS))
+		return true;
+
 	return false;
 }
 

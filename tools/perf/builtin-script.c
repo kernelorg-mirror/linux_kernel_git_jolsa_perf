@@ -101,6 +101,7 @@ enum perf_output_field {
 	PERF_OUTPUT_MISC            = 1U << 29,
 	PERF_OUTPUT_SRCCODE	    = 1U << 30,
 	PERF_OUTPUT_PTCYCLES	    = 1U << 31,
+	PERF_OUTPUT_PTGRAPH	    = 1UL << 32,
 };
 
 struct output_option {
@@ -139,6 +140,7 @@ struct output_option {
 	{.str = "misc", .field = PERF_OUTPUT_MISC},
 	{.str = "srccode", .field = PERF_OUTPUT_SRCCODE},
 	{.str = "ptcycles", .field = PERF_OUTPUT_PTCYCLES},
+	{.str = "ptgraph", .field = PERF_OUTPUT_PTGRAPH},
 };
 
 enum {
@@ -1687,6 +1689,70 @@ static int perf_sample__fprintf_synth(struct perf_sample *sample,
 	return 0;
 }
 
+static int sample__scnprintf_sym(struct perf_sample *sample,
+				 struct addr_location *al,
+				 char *buf, size_t size)
+{
+	u64 flags = EVSEL__PRINT_IP  |
+		    EVSEL__PRINT_SYM |
+		    EVSEL__PRINT_SYMOFFSET;
+	int printed = 0;
+	FILE *memfp;
+
+	memfp = fmemopen(buf, size, "w+");
+	if (memfp) {
+		printed = sample__fprintf_sym(sample, al, 0, flags,
+					      NULL, memfp);
+		fclose(memfp);
+	}
+
+	return printed;
+}
+
+static int perf_sample__fprintf_ptgraph(struct perf_sample *sample,
+					struct perf_evsel *evsel,
+					struct thread *thread,
+					struct addr_location *al, FILE *fp)
+{
+	size_t depth = thread_stack__depth(thread, sample->cpu);
+	const char *name = NULL;
+	static int spacing;
+	int len = 0;
+	u64 ip = 0;
+	char buffer[100];
+	char sym[50];
+
+	if (sample__scnprintf_sym(sample, al, sym, sizeof(sym)))
+		len += fprintf(fp, "%-*s  | ", (int) sizeof(sym), sym);
+
+	if (thread->ts && sample->flags & PERF_IP_FLAG_CALL) {
+		name = resolve_branch_sym(sample, evsel, thread, al, &ip);
+		if (name)
+			len += fprintf(fp, "%*scall %s {", (int)depth * 4, "", name);
+		else if (ip)
+			len += fprintf(fp, "%*s%16" PRIx64 " {", (int)depth * 4, "", ip);
+
+	} else {
+		bool is_ret = thread->ts && sample->flags & PERF_IP_FLAG_RETURN;
+
+		if (is_ret) {
+			depth = depth > 0 ? depth - 1 : 0;
+			len += fprintf(fp, "%*s}", (int) depth  * 4, "");
+		} else {
+			perf_sample__scnprintf_insnxed(sample, buffer, sizeof(buffer));
+			len += fprintf(fp, "%*s%s", (int)depth * 4, "", buffer);
+		}
+	}
+
+	if (len > spacing || (len && len < spacing - 52))
+		spacing = round_up(len + 4, 5);
+
+	if (len < spacing)
+		len += fprintf(fp, "%*s", spacing - len, "");
+
+	return len;
+}
+
 static int perf_evlist__max_name_len(struct perf_evlist *evlist)
 {
 	struct perf_evsel *evsel;
@@ -1882,6 +1948,9 @@ static void process_event(struct perf_script *script,
 
 	if (PRINT_FIELD(PTCYCLES))
 		fprintf(fp, "%16" PRIu64 " ", sample->pt_cycles);
+
+	if (PRINT_FIELD(PTGRAPH))
+		perf_sample__fprintf_ptgraph(sample, evsel, thread, al, fp);
 
 	if (is_bts_event(attr)) {
 		perf_sample__fprintf_bts(sample, evsel, thread, al,
@@ -3357,6 +3426,16 @@ static int parse_callret_trace(const struct option *opt __maybe_unused,
 	return 0;
 }
 
+static int parse_call_insn_trace(const struct option *opt __maybe_unused,
+				 const char *str __maybe_unused,
+				 int unset __maybe_unused)
+{
+	parse_output_fields(NULL, "comm,cpu,tid,time,ptgraph,ptcycles", 0);
+	itrace_parse_synth_opts(opt, "i0", 0);
+	nanosecs = true;
+	return 0;
+}
+
 int cmd_script(int argc, const char **argv)
 {
 	bool show_full_info = false;
@@ -3452,6 +3531,8 @@ int cmd_script(int argc, const char **argv)
 			"Decode calls from from itrace", parse_call_trace),
 	OPT_CALLBACK_OPTARG(0, "call-ret-trace", &itrace_synth_opts, NULL, NULL,
 			"Decode calls and returns from itrace", parse_callret_trace),
+	OPT_CALLBACK_OPTARG(0, "call-insn-trace", &itrace_synth_opts, NULL, NULL,
+			"Decode calls from from itrace with instructions", parse_call_insn_trace),
 	OPT_STRING(0, "graph-function", &symbol_conf.graph_function, "symbol[,symbol...]",
 			"Only print symbols and callees with --call-trace/--call-ret-trace"),
 	OPT_STRING(0, "stop-bt", &symbol_conf.bt_stop_list_str, "symbol[,symbol...]",
@@ -3712,6 +3793,7 @@ int cmd_script(int argc, const char **argv)
 	script__setup_sample_type(&script);
 
 	if ((output[PERF_TYPE_HARDWARE].fields & PERF_OUTPUT_CALLINDENT) ||
+	    (output[PERF_TYPE_HARDWARE].fields & PERF_OUTPUT_PTGRAPH) ||
 	    symbol_conf.graph_function)
 		itrace_synth_opts.thread_stack = true;
 
