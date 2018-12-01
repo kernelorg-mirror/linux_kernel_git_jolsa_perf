@@ -129,11 +129,11 @@ static int thread_stack__push(struct thread_stack *ts, u64 ret_addr,
 
 	ts->stack[ts->cnt].trace_end = trace_end;
 	ts->stack[ts->cnt++].ret_addr = ret_addr;
-
 	return err;
 }
 
-static void thread_stack__pop(struct thread_stack *ts, u64 ret_addr)
+static void thread_stack__pop(struct thread_stack *ts, u64 ret_addr,
+			      bool dont_check __maybe_unused)
 {
 	size_t i;
 
@@ -147,7 +147,7 @@ static void thread_stack__pop(struct thread_stack *ts, u64 ret_addr)
 	 * seen for some reason) and leave the stack alone.
 	 */
 	for (i = ts->cnt; i; ) {
-		if (ts->stack[--i].ret_addr == ret_addr) {
+		if (ts->stack[--i].ret_addr == ret_addr || dont_check) {
 			ts->cnt = i;
 			return;
 		}
@@ -233,7 +233,8 @@ int thread_stack__flush(struct thread *thread)
 }
 
 int thread_stack__event(struct thread *thread, u32 flags, u64 from_ip,
-			u64 to_ip, u16 insn_len, u64 trace_nr)
+			u64 to_ip, u16 insn_len, u64 trace_nr,
+			bool is_retpoline)
 {
 	if (!thread)
 		return -EINVAL;
@@ -280,10 +281,10 @@ int thread_stack__event(struct thread *thread, u32 flags, u64 from_ip,
 		 * address, so try to pop that. Also, do not expect a call made
 		 * when the trace ended, to return, so pop that.
 		 */
-		thread_stack__pop(thread->ts, to_ip);
+		thread_stack__pop(thread->ts, to_ip, false);
 		thread_stack__pop_trace_end(thread->ts);
 	} else if ((flags & PERF_IP_FLAG_RETURN) && from_ip) {
-		thread_stack__pop(thread->ts, to_ip);
+		thread_stack__pop(thread->ts, to_ip, is_retpoline);
 	}
 
 	return 0;

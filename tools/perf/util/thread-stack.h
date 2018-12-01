@@ -81,7 +81,8 @@ struct call_return_processor {
 };
 
 int thread_stack__event(struct thread *thread, u32 flags, u64 from_ip,
-			u64 to_ip, u16 insn_len, u64 trace_nr);
+			u64 to_ip, u16 insn_len, u64 trace_nr,
+			bool is_retpoline);
 void thread_stack__set_trace_nr(struct thread *thread, u64 trace_nr);
 void thread_stack__sample(struct thread *thread, struct ip_callchain *chain,
 			  size_t sz, u64 ip, u64 kernel_start);
