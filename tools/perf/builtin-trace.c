@@ -127,6 +127,11 @@ struct trace {
 	bool			force;
 	bool			vfs_getname;
 	int			trace_pgfaults;
+
+	struct {
+		struct ordered_events	data;
+		u64			last;
+	} oe;
 };
 
 struct tp_field {
@@ -2656,6 +2661,43 @@ static int deliver_event(struct trace *trace, union perf_event *event)
 	return 0;
 }
 
+
+static int flush_ordered_events(struct trace *trace)
+{
+	u64 first = ordered_events__first_time(&trace->oe.data);
+	u64 flush = trace->oe.last - NSEC_PER_SEC;
+
+	/* Is there some thing to flush.. */
+	if (first && first < flush)
+		return ordered_events__flush_time(&trace->oe.data, flush);
+
+	return 0;
+}
+
+static int deliver_ordered_event(struct trace *trace, union perf_event *event)
+{
+	struct perf_evlist *evlist = trace->evlist;
+	int err;
+
+	err = perf_evlist__parse_sample_timestamp(evlist, event, &trace->oe.last);
+	if (err && err != -1)
+		return err;
+
+	err = ordered_events__queue(&trace->oe.data, event, trace->oe.last, 0);
+	if (err)
+		return err;
+
+	return flush_ordered_events(trace);
+}
+
+static int ordered_events__deliver_event(struct ordered_events *oe,
+					 struct ordered_event *event)
+{
+	struct trace *trace = container_of(oe, struct trace, oe.data);
+
+	return deliver_event(trace, event->event);
+}
+
 static int trace__run(struct trace *trace, int argc, const char **argv)
 {
 	struct perf_evlist *evlist = trace->evlist;
@@ -2823,7 +2865,13 @@ again:
 		while ((event = perf_mmap__read_event(md)) != NULL) {
 			++trace->nr_events;
 
-			deliver_event(trace, event);
+			if (trace->opts.block) {
+				err = deliver_ordered_event(trace, event);
+				if (err)
+					goto out_disable;
+			} else {
+				deliver_event(trace, event);
+			}
 
 			perf_mmap__consume(md);
 
@@ -2846,6 +2894,9 @@ again:
 				draining = true;
 
 			goto again;
+		} else {
+			if (trace->opts.block && flush_ordered_events(trace))
+				goto out_disable;
 		}
 	} else {
 		goto again;
@@ -2855,6 +2906,9 @@ out_disable:
 	thread__zput(trace->current);
 
 	perf_evlist__disable(evlist);
+
+	if (trace->opts.block)
+		ordered_events__flush(&trace->oe.data, OE_FLUSH__FINAL);
 
 	if (!err) {
 		if (trace->summary)
@@ -3520,6 +3574,9 @@ int cmd_trace(int argc, const char **argv)
 			pr_err("ERROR: Can't use --block on non task targets\n");
 			goto out;
 		}
+
+		ordered_events__init(&trace.oe.data, ordered_events__deliver_event, &trace);
+		ordered_events__set_copy_on_queue(&trace.oe.data, true);
 	}
 
 	evsel = bpf__setup_output_event(trace.evlist, "__augmented_syscalls__");
