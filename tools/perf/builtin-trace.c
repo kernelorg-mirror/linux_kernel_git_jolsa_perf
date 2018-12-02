@@ -2379,10 +2379,12 @@ static int trace__record(struct trace *trace, int argc, const char **argv)
 	unsigned int majpf_args_nr = ARRAY_SIZE(majpf_args);
 	const char * const minpf_args[] = { "-e", "minor-faults" };
 	unsigned int minpf_args_nr = ARRAY_SIZE(minpf_args);
+	const char * const block_args[] = { "--block", };
+	unsigned int block_args_nr = ARRAY_SIZE(block_args);
 
 	/* +1 is for the event string below */
 	rec_argc = ARRAY_SIZE(record_args) + sc_args_nr + 1 +
-		majpf_args_nr + minpf_args_nr + argc;
+		majpf_args_nr + minpf_args_nr + block_args_nr + argc;
 	rec_argv = calloc(rec_argc + 1, sizeof(char *));
 
 	if (rec_argv == NULL)
@@ -2415,6 +2417,9 @@ static int trace__record(struct trace *trace, int argc, const char **argv)
 	if (trace->trace_pgfaults & TRACE_PFMIN)
 		for (i = 0; i < minpf_args_nr; i++)
 			rec_argv[j++] = minpf_args[i];
+
+	if (trace->opts.block)
+		rec_argv[j++] = block_args[0];
 
 	for (i = 0; i < (unsigned int)argc; i++)
 		rec_argv[j++] = argv[i];
@@ -3409,6 +3414,8 @@ int cmd_trace(int argc, const char **argv)
 		     trace__parse_events_option),
 	OPT_BOOLEAN(0, "comm", &trace.show_comm,
 		    "show the thread COMM next to its id"),
+	OPT_BOOLEAN(0, "block", &trace.opts.block,
+		    "Request blocked tracing (for syscall tracepoints)"),
 	OPT_BOOLEAN(0, "tool_stats", &trace.show_tool_stats, "show tool stats"),
 	OPT_CALLBACK(0, "expr", &trace, "expr", "list of syscalls/events to trace",
 		     trace__parse_events_option),
@@ -3498,6 +3505,14 @@ int cmd_trace(int argc, const char **argv)
 	if ((nr_cgroups || trace.cgroup) && !trace.opts.target.system_wide) {
 		usage_with_options_msg(trace_usage, trace_options,
 				       "cgroup monitoring only available in system-wide mode");
+	}
+
+	if (trace.opts.block) {
+		if (!target__has_task(&trace.opts.target) &&
+		    !target__none(&trace.opts.target)) {
+			pr_err("ERROR: Can't use --block on non task targets\n");
+			goto out;
+		}
 	}
 
 	evsel = bpf__setup_output_event(trace.evlist, "__augmented_syscalls__");
