@@ -1937,6 +1937,8 @@ static struct option __record_options[] = {
 		    "append timestamp to output filename"),
 	OPT_BOOLEAN(0, "timestamp-boundary", &record.timestamp_boundary,
 		    "Record timestamp boundary (time of first/last samples)"),
+	OPT_BOOLEAN(0, "block", &record.opts.block,
+		    "Request blocked tracing (for syscall tracepoints)"),
 	OPT_STRING_OPTARG_SET(0, "switch-output", &record.switch_output.str,
 			  &record.switch_output.set, "signal,size,time",
 			  "Switch output when receive SIGUSR2 or cross size,time threshold",
@@ -2113,6 +2115,13 @@ int cmd_record(int argc, const char **argv)
 		ui__error("%s", errbuf);
 
 		err = -saved_errno;
+		goto out;
+	}
+
+	if (rec->opts.block &&
+	    !target__has_task(&rec->opts.target) &&
+	    !target__none(&rec->opts.target)) {
+		pr_err("Can't use --block on non task targets\n");
 		goto out;
 	}
 

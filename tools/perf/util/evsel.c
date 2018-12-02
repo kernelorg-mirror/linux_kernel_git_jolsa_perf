@@ -1045,6 +1045,9 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 	if (opts->sample_transaction)
 		perf_evsel__set_sample_bit(evsel, TRANSACTION);
 
+	if (opts->block)
+		attr->block = true;
+
 	if (opts->running_time) {
 		evsel->attr.read_format |=
 			PERF_FORMAT_TOTAL_TIME_ENABLED |
