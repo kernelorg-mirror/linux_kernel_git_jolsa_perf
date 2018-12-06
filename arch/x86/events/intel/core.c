@@ -2404,7 +2404,7 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 	struct cpu_hw_events *cpuc;
 	int loops;
 	u64 status;
-	int handled;
+	int handled = 0;
 	int pmu_enabled;
 
 	cpuc = this_cpu_ptr(&cpu_hw_events);
@@ -2423,8 +2423,10 @@ static int intel_pmu_handle_irq(struct pt_regs *regs)
 	intel_bts_disable_local();
 	cpuc->enabled = 0;
 	__intel_pmu_disable_all();
-	handled = intel_pmu_drain_bts_buffer();
-	handled += intel_bts_interrupt();
+	if (test_bit(INTEL_PMC_IDX_FIXED_BTS, cpuc->active_mask)) {
+		handled += intel_pmu_drain_bts_buffer();
+		handled += intel_bts_interrupt();
+	}
 	status = intel_pmu_get_status();
 	if (!status)
 		goto done;
