@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2018, Intel Corporation.
 
+from __future__ import print_function
 from __future__ import division
 import os
 import sys
@@ -38,14 +39,14 @@ def parse_iomem():
 			pmem.append(long(m[1], 16))
 
 def print_memory_type():
-	print "Event: %s" % (event_name)
-	print "%-40s  %10s  %10s\n" % ("Memory type", "count", "percentage"),
-	print "%-40s  %10s  %10s\n" % ("----------------------------------------", \
-					"-----------", "-----------"),
+	print("Event: %s" % (event_name))
+	print("%-40s  %10s  %10s\n" % ("Memory type", "count", "percentage")),
+	print("%-40s  %10s  %10s\n" % ("----------------------------------------", \
+					"-----------", "-----------")),
 	total = sum(load_mem_type_cnt.values())
 	for mem_type, count in sorted(load_mem_type_cnt.most_common(), \
-					key = lambda(k, v): (v, k), reverse = True):
-		print "%-40s  %10d  %10.1f%%\n" % (mem_type, count, 100 * count / total),
+					key = lambda k_v: (k_v[1], k_v[0]), reverse = True):
+		print("%-40s  %10d  %10.1f%%\n" % (mem_type, count, 100 * count / total)),
 
 def trace_begin():
 	parse_iomem()
