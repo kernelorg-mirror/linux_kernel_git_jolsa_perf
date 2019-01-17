@@ -1,4 +1,3 @@
-#!/usr/bin/python2
 # SPDX-License-Identifier: GPL-2.0
 # exported-sql-viewer.py: view data from sql database
 # Copyright (c) 2014-2018, Intel Corporation.
@@ -87,12 +86,12 @@
 #                                                                              7fab593ea94f 48 8b 05 1a 15 22 00                            movq  0x22151a(%rip), %rax
 #                                                                              7fab593ea956 48 89 15 3b 13 22 00                            movq  %rdx, 0x22133b(%rip)
 # 8107675243232  2    ls       22011  22011  hardware interrupt     No         7fab593ea956 _dl_start+0x26 (ld-2.19.so) -> ffffffff86a012e0 page_fault ([kernel])
+from __future__ import print_function
 
 import sys
 import weakref
 import threading
 import string
-import cPickle
 import re
 import os
 from PySide.QtCore import *
@@ -101,6 +100,11 @@ from PySide.QtSql import *
 from decimal import *
 from ctypes import *
 from multiprocessing import Process, Array, Value, Event
+
+if sys.version_info[0] < 3:
+    import cPickle
+else:
+    import _pickle as cPickle
 
 # Data formatting helpers
 
@@ -1560,7 +1564,7 @@ class SQLTableDialogDataItem():
 					return str(lower_id)
 
 	def ConvertRelativeTime(self, val):
-		print "val ", val
+		print("val ", val)
 		mult = 1
 		suffix = val[-2:]
 		if suffix == "ms":
@@ -1582,29 +1586,29 @@ class SQLTableDialogDataItem():
 		return str(val)
 
 	def ConvertTimeRange(self, vrange):
-		print "vrange ", vrange
+		print("vrange ", vrange)
 		if vrange[0] == "":
 			vrange[0] = str(self.first_time)
 		if vrange[1] == "":
 			vrange[1] = str(self.last_time)
 		vrange[0] = self.ConvertRelativeTime(vrange[0])
 		vrange[1] = self.ConvertRelativeTime(vrange[1])
-		print "vrange2 ", vrange
+		print("vrange2 ", vrange)
 		if not self.IsNumber(vrange[0]) or not self.IsNumber(vrange[1]):
 			return False
-		print "ok1"
+		print("ok1")
 		beg_range = max(int(vrange[0]), self.first_time)
 		end_range = min(int(vrange[1]), self.last_time)
 		if beg_range > self.last_time or end_range < self.first_time:
 			return False
-		print "ok2"
+		print("ok2")
 		vrange[0] = self.BinarySearchTime(0, self.last_id, beg_range, True)
 		vrange[1] = self.BinarySearchTime(1, self.last_id + 1, end_range, False)
-		print "vrange3 ", vrange
+		print("vrange3 ", vrange)
 		return True
 
 	def AddTimeRange(self, value, ranges):
-		print "value ", value
+		print("value ", value)
 		n = value.count("-")
 		if n == 1:
 			pass
