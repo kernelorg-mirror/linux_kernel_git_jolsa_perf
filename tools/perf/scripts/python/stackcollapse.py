@@ -18,6 +18,7 @@
 #
 # Written by Paolo Bonzini <pbonzini@redhat.com>
 # Based on Brendan Gregg's stackcollapse-perf.pl script.
+from __future__ import print_function
 
 import os
 import sys
@@ -123,4 +124,4 @@ def trace_end():
     list = lines.keys()
     list.sort()
     for stack in list:
-        print "%s %d" % (stack, lines[stack])
+        print("%s %d" % (stack, lines[stack]))
