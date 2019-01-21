@@ -74,6 +74,7 @@ struct feat_fd {
 	ssize_t			offset;
 	size_t			size;
 	struct perf_evsel	*events;
+	struct perf_evlist	*evlist;
 };
 
 void perf_header__set_feat(struct perf_header *header, int feat)
@@ -297,17 +298,17 @@ static int do_read_bitmap(struct feat_fd *ff, unsigned long **pset, u64 *psize)
 	return 0;
 }
 
-static int write_tracing_data(struct feat_fd *ff,
-			      struct perf_evlist *evlist)
+static int write_tracing_data(struct feat_fd *ff)
 {
+	struct perf_evlist *evlist = ff->evlist;
+
 	if (WARN(ff->buf, "Error: calling %s in pipe-mode.\n", __func__))
 		return -1;
 
 	return read_tracing_data(ff->fd, &evlist->entries);
 }
 
-static int write_build_id(struct feat_fd *ff,
-			  struct perf_evlist *evlist __maybe_unused)
+static int write_build_id(struct feat_fd *ff)
 {
 	struct perf_session *session;
 	int err;
@@ -330,8 +331,7 @@ static int write_build_id(struct feat_fd *ff,
 	return 0;
 }
 
-static int write_hostname(struct feat_fd *ff,
-			  struct perf_evlist *evlist __maybe_unused)
+static int write_hostname(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
@@ -343,8 +343,7 @@ static int write_hostname(struct feat_fd *ff,
 	return do_write_string(ff, uts.nodename);
 }
 
-static int write_osrelease(struct feat_fd *ff,
-			   struct perf_evlist *evlist __maybe_unused)
+static int write_osrelease(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
@@ -356,8 +355,7 @@ static int write_osrelease(struct feat_fd *ff,
 	return do_write_string(ff, uts.release);
 }
 
-static int write_arch(struct feat_fd *ff,
-		      struct perf_evlist *evlist __maybe_unused)
+static int write_arch(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
@@ -369,8 +367,7 @@ static int write_arch(struct feat_fd *ff,
 	return do_write_string(ff, uts.machine);
 }
 
-static int write_version(struct feat_fd *ff,
-			 struct perf_evlist *evlist __maybe_unused)
+static int write_version(struct feat_fd *ff)
 {
 	return do_write_string(ff, perf_version_string);
 }
@@ -432,8 +429,7 @@ done:
 	return ret;
 }
 
-static int write_cpudesc(struct feat_fd *ff,
-		       struct perf_evlist *evlist __maybe_unused)
+static int write_cpudesc(struct feat_fd *ff)
 {
 	const char *cpuinfo_procs[] = CPUINFO_PROC;
 	unsigned int i;
@@ -448,8 +444,7 @@ static int write_cpudesc(struct feat_fd *ff,
 }
 
 
-static int write_nrcpus(struct feat_fd *ff,
-			struct perf_evlist *evlist __maybe_unused)
+static int write_nrcpus(struct feat_fd *ff)
 {
 	long nr;
 	u32 nrc, nra;
@@ -470,9 +465,9 @@ static int write_nrcpus(struct feat_fd *ff,
 	return do_write(ff, &nra, sizeof(nra));
 }
 
-static int write_event_desc(struct feat_fd *ff,
-			    struct perf_evlist *evlist)
+static int write_event_desc(struct feat_fd *ff)
 {
+	struct perf_evlist *evlist = ff->evlist;
 	struct perf_evsel *evsel;
 	u32 nre, nri, sz;
 	int ret;
@@ -526,8 +521,7 @@ static int write_event_desc(struct feat_fd *ff,
 	return 0;
 }
 
-static int write_cmdline(struct feat_fd *ff,
-			 struct perf_evlist *evlist __maybe_unused)
+static int write_cmdline(struct feat_fd *ff)
 {
 	char pbuf[MAXPATHLEN], *buf;
 	int i, ret, n;
@@ -555,8 +549,7 @@ static int write_cmdline(struct feat_fd *ff,
 }
 
 
-static int write_cpu_topology(struct feat_fd *ff,
-			      struct perf_evlist *evlist __maybe_unused)
+static int write_cpu_topology(struct feat_fd *ff)
 {
 	struct cpu_topology *tp;
 	u32 i;
@@ -606,8 +599,7 @@ done:
 
 
 
-static int write_total_mem(struct feat_fd *ff,
-			   struct perf_evlist *evlist __maybe_unused)
+static int write_total_mem(struct feat_fd *ff)
 {
 	char *buf = NULL;
 	FILE *fp;
@@ -635,8 +627,7 @@ static int write_total_mem(struct feat_fd *ff,
 	return ret;
 }
 
-static int write_numa_topology(struct feat_fd *ff,
-			       struct perf_evlist *evlist __maybe_unused)
+static int write_numa_topology(struct feat_fd *ff)
 {
 	struct numa_topology *tp;
 	int ret = -1;
@@ -689,8 +680,7 @@ err:
  * };
  */
 
-static int write_pmu_mappings(struct feat_fd *ff,
-			      struct perf_evlist *evlist __maybe_unused)
+static int write_pmu_mappings(struct feat_fd *ff)
 {
 	struct perf_pmu *pmu = NULL;
 	u32 pmu_num = 0;
@@ -738,9 +728,9 @@ static int write_pmu_mappings(struct feat_fd *ff,
  *	}[nr_groups];
  * };
  */
-static int write_group_desc(struct feat_fd *ff,
-			    struct perf_evlist *evlist)
+static int write_group_desc(struct feat_fd *ff)
 {
+	struct perf_evlist *evlist = ff->evlist;
 	u32 nr_groups = evlist->nr_groups;
 	struct perf_evsel *evsel;
 	int ret;
@@ -820,8 +810,7 @@ int __weak get_cpuid(char *buffer __maybe_unused, size_t sz __maybe_unused)
 	return -1;
 }
 
-static int write_cpuid(struct feat_fd *ff,
-		       struct perf_evlist *evlist __maybe_unused)
+static int write_cpuid(struct feat_fd *ff)
 {
 	char buffer[64];
 	int ret;
@@ -833,14 +822,12 @@ static int write_cpuid(struct feat_fd *ff,
 	return do_write_string(ff, buffer);
 }
 
-static int write_branch_stack(struct feat_fd *ff __maybe_unused,
-			      struct perf_evlist *evlist __maybe_unused)
+static int write_branch_stack(struct feat_fd *ff __maybe_unused)
 {
 	return 0;
 }
 
-static int write_auxtrace(struct feat_fd *ff,
-			  struct perf_evlist *evlist __maybe_unused)
+static int write_auxtrace(struct feat_fd *ff)
 {
 	struct perf_session *session;
 	int err;
@@ -856,15 +843,13 @@ static int write_auxtrace(struct feat_fd *ff,
 	return err;
 }
 
-static int write_clockid(struct feat_fd *ff,
-			 struct perf_evlist *evlist __maybe_unused)
+static int write_clockid(struct feat_fd *ff)
 {
 	return do_write(ff, &ff->ph->env.clockid_res_ns,
 			sizeof(ff->ph->env.clockid_res_ns));
 }
 
-static int write_dir_format(struct feat_fd *ff,
-			    struct perf_evlist *evlist __maybe_unused)
+static int write_dir_format(struct feat_fd *ff)
 {
 	struct perf_session *session;
 	struct perf_data *data;
@@ -879,8 +864,7 @@ static int write_dir_format(struct feat_fd *ff,
 }
 
 #ifdef HAVE_LIBBPF_SUPPORT
-static int write_bpf_prog_info(struct feat_fd *ff,
-			       struct perf_evlist *evlist __maybe_unused)
+static int write_bpf_prog_info(struct feat_fd *ff)
 {
 	struct perf_env *env = &ff->ph->env;
 	struct rb_root *root;
@@ -928,8 +912,7 @@ static int write_bpf_prog_info(struct feat_fd *ff __maybe_unused,
 }
 #endif // HAVE_LIBBPF_SUPPORT
 
-static int write_bpf_btf(struct feat_fd *ff,
-			 struct perf_evlist *evlist __maybe_unused)
+static int write_bpf_btf(struct feat_fd *ff)
 {
 	struct perf_env *env = &ff->ph->env;
 	struct rb_root *root;
@@ -1102,8 +1085,7 @@ static int build_caches(struct cpu_cache_level caches[], u32 size, u32 *cntp)
 
 #define MAX_CACHES 2000
 
-static int write_cache(struct feat_fd *ff,
-		       struct perf_evlist *evlist __maybe_unused)
+static int write_cache(struct feat_fd *ff)
 {
 	struct cpu_cache_level caches[MAX_CACHES];
 	u32 cnt = 0, i, version = 1;
@@ -1154,15 +1136,14 @@ out:
 	return ret;
 }
 
-static int write_stat(struct feat_fd *ff __maybe_unused,
-		      struct perf_evlist *evlist __maybe_unused)
+static int write_stat(struct feat_fd *ff __maybe_unused)
 {
 	return 0;
 }
 
-static int write_sample_time(struct feat_fd *ff,
-			     struct perf_evlist *evlist)
+static int write_sample_time(struct feat_fd *ff)
 {
+	struct perf_evlist *evlist = ff->evlist;
 	int ret;
 
 	ret = do_write(ff, &evlist->first_sample_time,
@@ -1294,8 +1275,7 @@ static int build_mem_topology(struct memory_node *nodes, u64 size, u64 *cntp)
  * 40 - size             | size of bitmap
  * 48 - bitmap           | bitmap of memory indexes that belongs to node
  */
-static int write_mem_topology(struct feat_fd *ff __maybe_unused,
-			      struct perf_evlist *evlist __maybe_unused)
+static int write_mem_topology(struct feat_fd *ff __maybe_unused)
 {
 	static struct memory_node nodes[MAX_MEMORY_NODES];
 	u64 bsize, version = 1, i, nr;
@@ -2664,7 +2644,7 @@ static int process_bpf_btf(struct feat_fd *ff, void *data __maybe_unused)
 }
 
 struct feature_ops {
-	int (*write)(struct feat_fd *ff, struct perf_evlist *evlist);
+	int (*write)(struct feat_fd *ff);
 	void (*print)(struct feat_fd *ff, FILE *fp);
 	int (*process)(struct feat_fd *ff, void *data);
 	const char *name;
@@ -2807,8 +2787,7 @@ int perf_header__fprintf_info(struct perf_session *session, FILE *fp, bool full)
 }
 
 static int do_write_feat(struct feat_fd *ff, int type,
-			 struct perf_file_section **p,
-			 struct perf_evlist *evlist)
+			 struct perf_file_section **p)
 {
 	int err;
 	int ret = 0;
@@ -2822,7 +2801,7 @@ static int do_write_feat(struct feat_fd *ff, int type,
 
 		(*p)->offset = lseek(ff->fd, 0, SEEK_CUR);
 
-		err = feat_ops[type].write(ff, evlist);
+		err = feat_ops[type].write(ff);
 		if (err < 0) {
 			pr_debug("failed to write feature %s\n", feat_ops[type].name);
 
@@ -2849,8 +2828,9 @@ static int perf_header__adds_write(struct perf_header *header,
 	int err;
 
 	ff = (struct feat_fd){
-		.fd  = fd,
-		.ph = header,
+		.fd     = fd,
+		.ph     = header,
+		.evlist = evlist,
 	};
 
 	nr_sections = bitmap_weight(header->adds_features, HEADER_FEAT_BITS);
@@ -2867,7 +2847,7 @@ static int perf_header__adds_write(struct perf_header *header,
 	lseek(fd, sec_start + sec_size, SEEK_SET);
 
 	for_each_set_bit(feat, header->adds_features, HEADER_FEAT_BITS) {
-		if (do_write_feat(&ff, feat, &p, evlist))
+		if (do_write_feat(&ff, feat, &p))
 			perf_header__clear_feat(header, feat);
 	}
 
@@ -3544,6 +3524,7 @@ int perf_event__synthesize_features(struct perf_tool *tool,
 	if (!ff.buf)
 		return -ENOMEM;
 
+	ff.evlist = evlist;
 	ff.size = sz - sz_hdr;
 
 	for_each_set_bit(feat, header->adds_features, HEADER_FEAT_BITS) {
@@ -3554,7 +3535,7 @@ int perf_event__synthesize_features(struct perf_tool *tool,
 
 		ff.offset = sizeof(*fe);
 
-		ret = feat_ops[feat].write(&ff, evlist);
+		ret = feat_ops[feat].write(&ff);
 		if (ret || ff.offset <= (ssize_t)sizeof(*fe)) {
 			pr_debug("Error writing feature\n");
 			continue;
