@@ -189,6 +189,7 @@ struct addr_map_symbol {
 	u64	      addr;
 	u64	      al_addr;
 	u64	      phys_addr;
+	u64	      data_page_size;
 };
 
 struct branch_info {
