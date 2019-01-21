@@ -227,6 +227,7 @@ struct perf_sample {
 	u64 data_src;
 	u64 phys_addr;
 	u64 data_page_size;
+	u64 code_page_size;
 	u32 flags;
 	u16 insn_len;
 	u8  cpumode;
