@@ -865,4 +865,6 @@ extern int sysctl_perf_event_max_stack;
 extern int sysctl_perf_event_max_contexts_per_stack;
 extern unsigned int proc_map_timeout;
 
+const char *get_page_size_name(u64 level);
+
 #endif /* __PERF_RECORD_H */
