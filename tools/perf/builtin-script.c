@@ -67,38 +67,39 @@ static int			max_blocks;
 unsigned int scripting_max_stack = PERF_MAX_STACK_DEPTH;
 
 enum perf_output_field {
-	PERF_OUTPUT_COMM            = 1U << 0,
-	PERF_OUTPUT_TID             = 1U << 1,
-	PERF_OUTPUT_PID             = 1U << 2,
-	PERF_OUTPUT_TIME            = 1U << 3,
-	PERF_OUTPUT_CPU             = 1U << 4,
-	PERF_OUTPUT_EVNAME          = 1U << 5,
-	PERF_OUTPUT_TRACE           = 1U << 6,
-	PERF_OUTPUT_IP              = 1U << 7,
-	PERF_OUTPUT_SYM             = 1U << 8,
-	PERF_OUTPUT_DSO             = 1U << 9,
-	PERF_OUTPUT_ADDR            = 1U << 10,
-	PERF_OUTPUT_SYMOFFSET       = 1U << 11,
-	PERF_OUTPUT_SRCLINE         = 1U << 12,
-	PERF_OUTPUT_PERIOD          = 1U << 13,
-	PERF_OUTPUT_IREGS	    = 1U << 14,
-	PERF_OUTPUT_BRSTACK	    = 1U << 15,
-	PERF_OUTPUT_BRSTACKSYM	    = 1U << 16,
-	PERF_OUTPUT_DATA_SRC	    = 1U << 17,
-	PERF_OUTPUT_WEIGHT	    = 1U << 18,
-	PERF_OUTPUT_BPF_OUTPUT	    = 1U << 19,
-	PERF_OUTPUT_CALLINDENT	    = 1U << 20,
-	PERF_OUTPUT_INSN	    = 1U << 21,
-	PERF_OUTPUT_INSNLEN	    = 1U << 22,
-	PERF_OUTPUT_BRSTACKINSN	    = 1U << 23,
-	PERF_OUTPUT_BRSTACKOFF	    = 1U << 24,
-	PERF_OUTPUT_SYNTH           = 1U << 25,
-	PERF_OUTPUT_PHYS_ADDR       = 1U << 26,
-	PERF_OUTPUT_UREGS	    = 1U << 27,
-	PERF_OUTPUT_METRIC	    = 1U << 28,
-	PERF_OUTPUT_MISC            = 1U << 29,
-	PERF_OUTPUT_SRCCODE	    = 1U << 30,
-	PERF_OUTPUT_DATA_PAGE_SIZE  = 1U << 31,
+	PERF_OUTPUT_COMM            = 1UL << 0,
+	PERF_OUTPUT_TID             = 1UL << 1,
+	PERF_OUTPUT_PID             = 1UL << 2,
+	PERF_OUTPUT_TIME            = 1UL << 3,
+	PERF_OUTPUT_CPU             = 1UL << 4,
+	PERF_OUTPUT_EVNAME          = 1UL << 5,
+	PERF_OUTPUT_TRACE           = 1UL << 6,
+	PERF_OUTPUT_IP              = 1UL << 7,
+	PERF_OUTPUT_SYM             = 1UL << 8,
+	PERF_OUTPUT_DSO             = 1UL << 9,
+	PERF_OUTPUT_ADDR            = 1UL << 10,
+	PERF_OUTPUT_SYMOFFSET       = 1UL << 11,
+	PERF_OUTPUT_SRCLINE         = 1UL << 12,
+	PERF_OUTPUT_PERIOD          = 1UL << 13,
+	PERF_OUTPUT_IREGS	    = 1UL << 14,
+	PERF_OUTPUT_BRSTACK	    = 1UL << 15,
+	PERF_OUTPUT_BRSTACKSYM	    = 1UL << 16,
+	PERF_OUTPUT_DATA_SRC	    = 1UL << 17,
+	PERF_OUTPUT_WEIGHT	    = 1UL << 18,
+	PERF_OUTPUT_BPF_OUTPUT	    = 1UL << 19,
+	PERF_OUTPUT_CALLINDENT	    = 1UL << 20,
+	PERF_OUTPUT_INSN	    = 1UL << 21,
+	PERF_OUTPUT_INSNLEN	    = 1UL << 22,
+	PERF_OUTPUT_BRSTACKINSN	    = 1UL << 23,
+	PERF_OUTPUT_BRSTACKOFF	    = 1UL << 24,
+	PERF_OUTPUT_SYNTH           = 1UL << 25,
+	PERF_OUTPUT_PHYS_ADDR       = 1UL << 26,
+	PERF_OUTPUT_UREGS	    = 1UL << 27,
+	PERF_OUTPUT_METRIC	    = 1UL << 28,
+	PERF_OUTPUT_MISC            = 1UL << 29,
+	PERF_OUTPUT_SRCCODE	    = 1UL << 30,
+	PERF_OUTPUT_DATA_PAGE_SIZE  = 1UL << 31,
+	PERF_OUTPUT_CODE_PAGE_SIZE  = 1UL << 32,
 };
 
 struct output_option {
@@ -137,6 +138,7 @@ struct output_option {
 	{.str = "misc", .field = PERF_OUTPUT_MISC},
 	{.str = "srccode", .field = PERF_OUTPUT_SRCCODE},
 	{.str = "data_page_size", .field = PERF_OUTPUT_DATA_PAGE_SIZE},
+	{.str = "code_page_size", .field = PERF_OUTPUT_CODE_PAGE_SIZE},
 };
 
 enum {
@@ -208,7 +210,7 @@ static struct {
 			      PERF_OUTPUT_DSO | PERF_OUTPUT_PERIOD |
 			      PERF_OUTPUT_ADDR | PERF_OUTPUT_DATA_SRC |
 			      PERF_OUTPUT_WEIGHT | PERF_OUTPUT_PHYS_ADDR |
-			      PERF_OUTPUT_DATA_PAGE_SIZE,
+			      PERF_OUTPUT_DATA_PAGE_SIZE | PERF_OUTPUT_CODE_PAGE_SIZE,
 
 		.invalid_fields = PERF_OUTPUT_TRACE | PERF_OUTPUT_BPF_OUTPUT,
 	},
@@ -475,7 +477,10 @@ static int perf_evsel__check_attr(struct perf_evsel *evsel,
 	if (PRINT_FIELD(DATA_PAGE_SIZE) &&
 		perf_evsel__check_stype(evsel, PERF_SAMPLE_DATA_PAGE_SIZE, "DATA_PAGE_SIZE",
 					PERF_OUTPUT_DATA_PAGE_SIZE))
-		return -EINVAL;
+	if (PRINT_FIELD(CODE_PAGE_SIZE) &&
+		perf_evsel__check_stype(evsel, PERF_SAMPLE_CODE_PAGE_SIZE, "CODE_PAGE_SIZE",
+					PERF_OUTPUT_CODE_PAGE_SIZE))
+			return -EINVAL;
 
 	return 0;
 }
@@ -1854,6 +1859,9 @@ static void process_event(struct perf_script *script,
 
 	if (PRINT_FIELD(DATA_PAGE_SIZE))
 		fprintf(fp, " %s", get_page_size_name(sample->data_page_size));
+
+	if (PRINT_FIELD(CODE_PAGE_SIZE))
+		fprintf(fp, " %s", get_page_size_name(sample->code_page_size));
 
 	fprintf(fp, "\n");
 
