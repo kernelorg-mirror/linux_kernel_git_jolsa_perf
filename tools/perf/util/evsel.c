@@ -1019,6 +1019,9 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 	if (opts->sample_phys_addr)
 		perf_evsel__set_sample_bit(evsel, PHYS_ADDR);
 
+	if (opts->sample_data_page_size)
+		perf_evsel__set_sample_bit(evsel, DATA_PAGE_SIZE);
+
 	if (opts->no_buffering) {
 		attr->watermark = 0;
 		attr->wakeup_events = 1;
@@ -1561,7 +1564,7 @@ static void __p_sample_type(char *buf, size_t size, u64 value)
 		bit_name(PERIOD), bit_name(STREAM_ID), bit_name(RAW),
 		bit_name(BRANCH_STACK), bit_name(REGS_USER), bit_name(STACK_USER),
 		bit_name(IDENTIFIER), bit_name(REGS_INTR), bit_name(DATA_SRC),
-		bit_name(WEIGHT), bit_name(PHYS_ADDR),
+		bit_name(WEIGHT), bit_name(PHYS_ADDR), bit_name(DATA_PAGE_SIZE),
 		{ .name = NULL, }
 	};
 #undef bit_name
@@ -2392,6 +2395,12 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		array++;
 	}
 
+	data->data_page_size = 0;
+	if (type & PERF_SAMPLE_DATA_PAGE_SIZE) {
+		data->data_page_size = *array;
+		array++;
+	}
+
 	return 0;
 }
 
@@ -2542,6 +2551,9 @@ size_t perf_event__sample_event_size(const struct perf_sample *sample, u64 type,
 	}
 
 	if (type & PERF_SAMPLE_PHYS_ADDR)
+		result += sizeof(u64);
+
+	if (type & PERF_SAMPLE_DATA_PAGE_SIZE)
 		result += sizeof(u64);
 
 	return result;
@@ -2710,6 +2722,11 @@ int perf_event__synthesize_sample(union perf_event *event, u64 type,
 
 	if (type & PERF_SAMPLE_PHYS_ADDR) {
 		*array = sample->phys_addr;
+		array++;
+	}
+
+	if (type & PERF_SAMPLE_DATA_PAGE_SIZE) {
+		*array = sample->data_page_size;
 		array++;
 	}
 
