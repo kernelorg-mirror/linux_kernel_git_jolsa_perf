@@ -41,18 +41,6 @@ int sigqueue(pid_t pid, int sig, const union sigval value);
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
-/*
- * Check platform the perf data file was created on and perform platform
- * specific interpretation.
- */
-static void perf_evlist__init_trace_event_sample_raw(struct perf_evlist *evlist)
-{
-	const char *arch_pf = perf_env__arch(evlist->env);
-
-	if (arch_pf && !strcmp("s390", arch_pf))
-		evlist->trace_event_sample_raw = perf_evlist__s390_sample_raw;
-}
-
 void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
 		       struct thread_map *threads)
 {
@@ -65,7 +53,6 @@ void perf_evlist__init(struct perf_evlist *evlist, struct cpu_map *cpus,
 	fdarray__init(&evlist->pollfd, 64);
 	evlist->workload.pid = -1;
 	evlist->bkw_mmap_state = BKW_MMAP_NOTREADY;
-	perf_evlist__init_trace_event_sample_raw(evlist);
 }
 
 struct perf_evlist *perf_evlist__new(void)

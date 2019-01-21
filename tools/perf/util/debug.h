@@ -43,7 +43,11 @@ extern int debug_data_convert;
 #define STRERR_BUFSIZE	128	/* For the buffer size of str_error_r */
 
 int dump_printf(const char *fmt, ...) __printf(1, 2);
-void trace_event(union perf_event *event);
+
+void arch_trace_event(struct perf_evlist *evlist, union perf_event *event,
+		      struct perf_sample *sample);
+void trace_event(struct perf_evlist *evlist, union perf_event *event,
+		 struct perf_sample *sample);
 
 int ui__error(const char *format, ...) __printf(1, 2);
 int ui__warning(const char *format, ...) __printf(1, 2);

@@ -161,7 +161,16 @@ static int trace_event_printer(enum binary_printer_ops op,
 	return printed;
 }
 
-void trace_event(union perf_event *event)
+
+void __weak
+arch_trace_event(struct perf_evlist *evlist __maybe_unused,
+		 union perf_event *event __maybe_unused,
+		 struct perf_sample *sample __maybe_unused)
+{
+}
+
+void trace_event(struct perf_evlist *evlist, union perf_event *event,
+		 struct perf_sample *sample)
 {
 	unsigned char *raw_event = (void *)event;
 
@@ -170,6 +179,8 @@ void trace_event(union perf_event *event)
 
 	print_binary(raw_event, event->header.size, 16,
 		     trace_event_printer, event);
+
+	arch_trace_event(evlist, event, sample);
 }
 
 static struct debug_variable {

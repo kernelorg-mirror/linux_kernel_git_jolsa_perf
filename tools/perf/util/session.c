@@ -1068,9 +1068,7 @@ static void dump_event(struct perf_evlist *evlist, union perf_event *event,
 	printf("\n%#" PRIx64 " [%#x]: event: %d\n",
 	       file_offset, event->header.size, event->header.type);
 
-	trace_event(event);
-	if (event->header.type == PERF_RECORD_SAMPLE && evlist->trace_event_sample_raw)
-		evlist->trace_event_sample_raw(evlist, event, sample);
+	trace_event(evlist, event, sample);
 
 	if (sample)
 		perf_evlist__print_tstamp(evlist, event, sample);
