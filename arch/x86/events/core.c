@@ -2578,3 +2578,41 @@ void perf_get_x86_pmu_capability(struct x86_pmu_capability *cap)
 	cap->events_mask_len	= x86_pmu.events_mask_len;
 }
 EXPORT_SYMBOL_GPL(perf_get_x86_pmu_capability);
+
+/*
+ * map x86 page levels to perf page sizes
+ */
+static const enum perf_page_size perf_page_size_map[PG_LEVEL_NUM] = {
+	[PG_LEVEL_NONE] = PERF_PAGE_SIZE_NONE,
+	[PG_LEVEL_4K]   = PERF_PAGE_SIZE_4K,
+	[PG_LEVEL_2M]   = PERF_PAGE_SIZE_2M,
+	[PG_LEVEL_1G]   = PERF_PAGE_SIZE_1G,
+	[PG_LEVEL_512G] = PERF_PAGE_SIZE_512G,
+};
+
+u64 perf_get_page_size(u64 virt)
+{
+	unsigned long flags;
+	unsigned int level;
+	pte_t *pte;
+
+	if (!virt)
+		return 0;
+
+	/*
+	 * Interrupts are disabled, so it prevents any tear down
+	 * of the page tables.
+	 * See the comment near struct mmu_table_batch.
+	 */
+	local_irq_save(flags);
+	if (virt >= TASK_SIZE)
+		pte = lookup_address(virt, &level);
+	else
+		pte = lookup_address_in_pgd(pgd_offset(current->mm, virt),
+					    virt, &level);
+	local_irq_restore(flags);
+	if (level >= PG_LEVEL_NUM)
+		return PERF_PAGE_SIZE_NONE;
+
+	return (u64)perf_page_size_map[level];
+}

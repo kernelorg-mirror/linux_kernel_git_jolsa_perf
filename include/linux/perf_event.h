@@ -937,6 +937,7 @@ struct perf_sample_data {
 	u64				stack_user_size;
 
 	u64				phys_addr;
+	u64				data_page_size;
 } ____cacheline_aligned;
 
 /* default value for data source */
