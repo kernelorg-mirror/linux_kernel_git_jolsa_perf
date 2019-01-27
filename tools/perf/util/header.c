@@ -683,6 +683,13 @@ done:
 }
 
 
+static int write_total_mem_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+	u64 total_mem = env->total_mem;
+
+	return do_write(ff, &total_mem, sizeof(total_mem));
+}
 
 static int write_total_mem(struct feat_fd *ff)
 {
@@ -691,6 +698,9 @@ static int write_total_mem(struct feat_fd *ff)
 	size_t len = 0;
 	int ret = -1, n;
 	uint64_t mem;
+
+	if (ff->from_env)
+		return write_total_mem_from_env(ff);
 
 	fp = fopen("/proc/meminfo", "r");
 	if (!fp)
