@@ -1275,20 +1275,12 @@ static int build_mem_topology(struct memory_node *nodes, u64 size, u64 *cntp)
  * 40 - size             | size of bitmap
  * 48 - bitmap           | bitmap of memory indexes that belongs to node
  */
-static int write_mem_topology(struct feat_fd *ff __maybe_unused)
+static int __write_mem_topology(struct feat_fd *ff, u64 bsize,
+				u64 version, u64 nr,
+				struct memory_node *nodes)
 {
-	static struct memory_node nodes[MAX_MEMORY_NODES];
-	u64 bsize, version = 1, i, nr;
+	u64 i;
 	int ret;
-
-	ret = sysfs__read_xll("devices/system/memory/block_size_bytes",
-			      (unsigned long long *) &bsize);
-	if (ret)
-		return ret;
-
-	ret = build_mem_topology(&nodes[0], MAX_MEMORY_NODES, &nr);
-	if (ret)
-		return ret;
 
 	ret = do_write(ff, &version, sizeof(version));
 	if (ret < 0)
@@ -1322,6 +1314,37 @@ static int write_mem_topology(struct feat_fd *ff __maybe_unused)
 
 out:
 	return ret;
+}
+
+static int write_mem_topology_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return __write_mem_topology(ff, env->memory_bsize, 1,
+				    env->nr_memory_nodes,
+				    env->memory_nodes);
+}
+
+static int write_mem_topology(struct feat_fd *ff)
+{
+	static struct memory_node nodes[MAX_MEMORY_NODES];
+	u64 bsize, nr;
+	int ret;
+
+	if (ff->from_env)
+		return write_mem_topology_from_env(ff);
+
+	ret = sysfs__read_xll("devices/system/memory/block_size_bytes",
+			      (unsigned long long *) &bsize);
+	if (ret)
+		return ret;
+
+	ret = build_mem_topology(&nodes[0], MAX_MEMORY_NODES, &nr);
+	if (ret)
+		return ret;
+
+	return __write_mem_topology(ff, bsize, 1, nr,
+				    (struct memory_node *) &nodes);
 }
 
 static void print_hostname(struct feat_fd *ff, FILE *fp)
