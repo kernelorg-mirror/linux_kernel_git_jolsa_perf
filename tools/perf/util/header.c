@@ -1249,17 +1249,11 @@ static int build_caches(struct cpu_cache_level caches[], u32 size, u32 *cntp)
 
 #define MAX_CACHES 2000
 
-static int write_cache(struct feat_fd *ff)
+static int __write_cache(struct feat_fd *ff, u32 version, u32 cnt,
+			 struct cpu_cache_level *caches)
 {
-	struct cpu_cache_level caches[MAX_CACHES];
-	u32 cnt = 0, i, version = 1;
 	int ret;
-
-	ret = build_caches(caches, MAX_CACHES, &cnt);
-	if (ret)
-		goto out;
-
-	qsort(&caches, cnt, sizeof(struct cpu_cache_level), cpu_cache_level__sort);
+	u32 i;
 
 	ret = do_write(ff, &version, sizeof(u32));
 	if (ret < 0)
@@ -1293,6 +1287,34 @@ static int write_cache(struct feat_fd *ff)
 		_W(map)
 		#undef _W
 	}
+
+out:
+	return ret;
+}
+
+static int write_cache_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return __write_cache(ff, 1, env->caches_cnt, env->caches);
+}
+
+static int write_cache(struct feat_fd *ff)
+{
+	struct cpu_cache_level caches[MAX_CACHES];
+	u32 cnt = 0, i;
+	int ret;
+
+	if (ff->from_env)
+		return write_cache_from_env(ff);
+
+	ret = build_caches(caches, MAX_CACHES, &cnt);
+	if (ret)
+		goto out;
+
+	qsort(&caches, cnt, sizeof(struct cpu_cache_level), cpu_cache_level__sort);
+
+	ret = __write_cache(ff, 1, cnt, caches);
 
 out:
 	for (i = 0; i < cnt; i++)
