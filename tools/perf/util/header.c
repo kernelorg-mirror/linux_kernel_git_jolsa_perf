@@ -895,10 +895,20 @@ int __weak get_cpuid(char *buffer __maybe_unused, size_t sz __maybe_unused)
 	return -1;
 }
 
+static int write_cpuid_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->cpuid);
+}
+
 static int write_cpuid(struct feat_fd *ff)
 {
 	char buffer[64];
 	int ret;
+
+	if (ff->from_env)
+		return write_cpuid_from_env(ff);
 
 	ret = get_cpuid(buffer, sizeof(buffer));
 	if (ret)
