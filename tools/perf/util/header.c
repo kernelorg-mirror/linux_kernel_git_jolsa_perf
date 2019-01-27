@@ -587,33 +587,52 @@ static int write_event_desc(struct feat_fd *ff)
 	return 0;
 }
 
-static int write_cmdline(struct feat_fd *ff)
+static int __write_cmdline(struct feat_fd *ff, char *cmdline,
+			   int nr_cmdline, const char **cmdline_argv)
 {
-	char pbuf[MAXPATHLEN], *buf;
-	int i, ret, n;
-
-	/* actual path to perf binary */
-	buf = perf_exe(pbuf, MAXPATHLEN);
+	int i, ret;
+	u32 n;
 
 	/* account for binary path */
-	n = perf_env.nr_cmdline + 1;
+	n = nr_cmdline + 1;
 
 	ret = do_write(ff, &n, sizeof(n));
 	if (ret < 0)
 		return ret;
 
-	ret = do_write_string(ff, buf);
+	ret = do_write_string(ff, cmdline);
 	if (ret < 0)
 		return ret;
 
-	for (i = 0 ; i < perf_env.nr_cmdline; i++) {
-		ret = do_write_string(ff, perf_env.cmdline_argv[i]);
+	for (i = 0 ; i < nr_cmdline; i++) {
+		ret = do_write_string(ff, cmdline_argv[i]);
 		if (ret < 0)
 			return ret;
 	}
 	return 0;
 }
 
+static int write_cmdline_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return __write_cmdline(ff, env->cmdline, env->nr_cmdline,
+			       env->cmdline_argv);
+}
+
+static int write_cmdline(struct feat_fd *ff)
+{
+	char buf[MAXPATHLEN];
+
+	if (ff->from_env)
+		return write_cmdline_from_env(ff);
+
+	/* actual path to perf binary */
+	perf_exe(buf, MAXPATHLEN);
+
+	return __write_cmdline(ff, buf, perf_env.nr_cmdline,
+			       perf_env.cmdline_argv);
+}
 
 static int write_cpu_topology(struct feat_fd *ff)
 {
