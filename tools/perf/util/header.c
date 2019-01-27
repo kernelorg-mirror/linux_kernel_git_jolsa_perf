@@ -724,11 +724,68 @@ static int write_total_mem(struct feat_fd *ff)
 	return ret;
 }
 
+static int write_numa_topology_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+	u32 nr, i;
+	int ret = -1;
+	nr = env->nr_numa_nodes;
+
+	ret = do_write(ff, &nr, sizeof(nr));
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < nr; i++) {
+		struct numa_node *n = env->numa_nodes;
+		int size = 1000;
+		char *buf;
+
+		ret = do_write(ff, &n->node, sizeof(u32));
+		if (ret < 0)
+			break;
+
+		ret = do_write(ff, &n->mem_total, sizeof(u64));
+		if (ret)
+			break;
+
+		ret = do_write(ff, &n->mem_free, sizeof(u64));
+		if (ret)
+			break;
+
+		ret = -1;
+
+		do {
+			ssize_t len;
+
+			buf = malloc(size);
+			if (!buf)
+				return -ENOMEM;
+
+			len = cpu_map__snprint(n->map, buf, size);
+			if (len == size) {
+				size += 1000;
+				free(buf);
+			} else {
+				ret = 0;
+			}
+		} while (ret);
+
+		ret = do_write_string(ff, buf);
+		if (ret < 0)
+			break;
+	}
+
+	return ret;
+}
+
 static int write_numa_topology(struct feat_fd *ff)
 {
 	struct numa_topology *tp;
 	int ret = -1;
 	u32 i;
+
+	if (ff->from_env)
+		return write_numa_topology_from_env(ff);
 
 	tp = numa_topology__new();
 	if (!tp)
