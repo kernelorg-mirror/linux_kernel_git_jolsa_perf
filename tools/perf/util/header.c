@@ -495,11 +495,28 @@ static int write_cpudesc(struct feat_fd *ff)
 }
 
 
+static int write_nrcpus_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+	u32 nrc = env->nr_cpus_online;
+	u32 nra = env->nr_cpus_avail;
+	int ret;
+
+	ret = do_write(ff, &nrc, sizeof(nrc));
+	if (ret < 0)
+		return ret;
+
+	return do_write(ff, &nra, sizeof(nra));
+}
+
 static int write_nrcpus(struct feat_fd *ff)
 {
 	long nr;
 	u32 nrc, nra;
 	int ret;
+
+	if (ff->from_env)
+		return write_nrcpus_from_env(ff);
 
 	nrc = cpu__max_present_cpu();
 
