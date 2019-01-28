@@ -73,6 +73,7 @@ struct feat_fd {
 	void			*buf;	/* Either buf != NULL or fd >= 0 */
 	ssize_t			offset;
 	size_t			size;
+	bool			from_env;
 	struct perf_evsel	*events;
 	struct perf_evlist	*evlist;
 };
@@ -2817,7 +2818,8 @@ static int do_write_feat(struct feat_fd *ff, int type,
 }
 
 static int perf_header__adds_write(struct perf_header *header,
-				   struct perf_evlist *evlist, int fd)
+				   struct perf_evlist *evlist,
+				   int fd, bool from_env)
 {
 	int nr_sections;
 	struct feat_fd ff;
@@ -2828,9 +2830,10 @@ static int perf_header__adds_write(struct perf_header *header,
 	int err;
 
 	ff = (struct feat_fd){
-		.fd     = fd,
-		.ph     = header,
-		.evlist = evlist,
+		.fd       = fd,
+		.ph       = header,
+		.evlist   = evlist,
+		.from_env = from_env,
 	};
 
 	nr_sections = bitmap_weight(header->adds_features, HEADER_FEAT_BITS);
@@ -2931,7 +2934,7 @@ int perf_session__write_header(struct perf_session *session,
 	header->feat_offset = header->data_offset + header->data_size;
 
 	if (at_exit) {
-		err = perf_header__adds_write(header, evlist, fd);
+		err = perf_header__adds_write(header, evlist, fd, false);
 		if (err < 0)
 			return err;
 	}
