@@ -396,8 +396,18 @@ static int write_arch(struct feat_fd *ff)
 	return do_write_string(ff, uts.machine);
 }
 
+static int write_version_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->version);
+}
+
 static int write_version(struct feat_fd *ff)
 {
+	if (ff->from_env)
+		return write_version_from_env(ff);
+
 	return do_write_string(ff, perf_version_string);
 }
 
