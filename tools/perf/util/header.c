@@ -352,10 +352,20 @@ static int write_hostname(struct feat_fd *ff)
 	return do_write_string(ff, uts.nodename);
 }
 
+static int write_osrelease_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->os_release);
+}
+
 static int write_osrelease(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
+
+	if (ff->from_env)
+		return write_osrelease_from_env(ff);
 
 	ret = uname(&uts);
 	if (ret < 0)
