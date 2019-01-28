@@ -468,10 +468,20 @@ done:
 	return ret;
 }
 
+static int write_cpudesc_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->cpu_desc);
+}
+
 static int write_cpudesc(struct feat_fd *ff)
 {
 	const char *cpuinfo_procs[] = CPUINFO_PROC;
 	unsigned int i;
+
+	if (ff->from_env)
+		return write_cpudesc_from_env(ff);
 
 	for (i = 0; i < ARRAY_SIZE(cpuinfo_procs); i++) {
 		int ret;
