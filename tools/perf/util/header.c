@@ -376,10 +376,20 @@ static int write_osrelease(struct feat_fd *ff)
 	return do_write_string(ff, uts.release);
 }
 
+static int write_arch_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->arch);
+}
+
 static int write_arch(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
+
+	if (ff->from_env)
+		return write_arch_from_env(ff);
 
 	ret = uname(&uts);
 	if (ret < 0)
