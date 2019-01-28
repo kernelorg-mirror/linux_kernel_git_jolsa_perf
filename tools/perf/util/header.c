@@ -330,10 +330,20 @@ static int write_build_id(struct feat_fd *ff)
 	return 0;
 }
 
+static int write_hostname_from_env(struct feat_fd *ff)
+{
+	struct perf_env *env = &ff->ph->env;
+
+	return do_write_string(ff, env->hostname);
+}
+
 static int write_hostname(struct feat_fd *ff)
 {
 	struct utsname uts;
 	int ret;
+
+	if (ff->from_env)
+		return write_hostname_from_env(ff);
 
 	ret = uname(&uts);
 	if (ret < 0)
