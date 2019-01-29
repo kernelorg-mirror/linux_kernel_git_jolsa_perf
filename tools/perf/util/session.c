@@ -2083,6 +2083,7 @@ struct reader {
 	int	fd;
 	u64	data_size;
 	u64	data_offset;
+	char	*path;
 };
 
 static int
@@ -2096,6 +2097,8 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	char *buf, *mmaps[NUM_MMAPS];
 	union perf_event *event;
 	s64 skip;
+
+	pr_debug("reader processing %s\n", rd->path);
 
 	page_offset = page_size * (rd->data_offset / page_size);
 	file_offset = page_offset;
@@ -2157,8 +2160,8 @@ more:
 
 	if (size < sizeof(struct perf_event_header) ||
 	    (skip = perf_session__process_event(session, event, file_pos)) < 0) {
-		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d [%s]\n",
-		       file_offset + head, event->header.size,
+		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
+		       file_offset + head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));
 		err = skip;
 		goto out;
@@ -2192,6 +2195,7 @@ static int __perf_session__process_events(struct perf_session *session)
 		.fd		= perf_data__fd(session->data),
 		.data_size	= session->header.data_size,
 		.data_offset	= session->header.data_offset,
+		.path		= session->data->file.path,
 	};
 	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
