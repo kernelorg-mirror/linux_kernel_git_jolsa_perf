@@ -1712,6 +1712,33 @@ record__threads_type(struct record *rec)
 	return -1;
 }
 
+static void
+record__threads_info(struct record *rec)
+{
+	struct thread_cfg *cfgs = rec->threads.cfgs;
+	int i, cnt = rec->threads.cnt;
+
+	if (!debug_threads && !verbose)
+		return;
+
+	for (i = 0; i < cnt; i++) {
+		struct thread_cfg *cfg = cfgs + i;
+		char buf[100];
+
+		fprintf(stderr, "thread %d ", i);
+
+		cpu_map__snprint(cfg->monitor, buf, sizeof(buf));
+		fprintf(stderr, "monitor: %s ", buf);
+
+		if (cfg->allowed) {
+			cpu_map__snprint(cfg->allowed, buf, sizeof(buf));
+			fprintf(stderr, "allowed: %s\n", buf);
+		} else {
+			fprintf(stderr, "allowed: any\n");
+		}
+	}
+}
+
 static int
 record__threads_config(struct record *rec)
 {
@@ -1720,6 +1747,8 @@ record__threads_config(struct record *rec)
 	ret = record__threads_type(rec);
 	if (ret)
 		return ret;
+
+	record__threads_info(rec);
 
 	ret = record__threads_create(rec);
 	if (ret)
