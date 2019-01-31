@@ -43,6 +43,7 @@
 #include "util/time-utils.h"
 #include "util/units.h"
 #include "util/bpf-event.h"
+#include "util/cputopo.h"
 #include "asm/bug.h"
 #include "perf.h"
 
@@ -81,6 +82,7 @@ enum {
 	RECORD__THREADS_TYPE_ONE,
 	RECORD__THREADS_TYPE_ALL,
 	RECORD__THREADS_TYPE_USER,
+	RECORD__THREADS_TYPE_CORE,
 };
 
 enum {
@@ -1823,6 +1825,49 @@ record__threads_type_user(struct record *rec)
 }
 
 static int
+record__threads_type_core(struct record *rec)
+{
+	struct thread_cfg *config;
+	struct cpu_topology *tp;
+	u32 i;
+
+	tp = cpu_topology__new();
+	if (!tp)
+		return -ENOMEM;
+
+	config = zalloc(sizeof(*config) * tp->thread_sib);
+	if (!config)
+		goto out;
+
+        for (i = 0; i < tp->thread_sib; i++) {
+		struct perf_cpu_map *map;
+
+		map = perf_cpu_map__new(tp->thread_siblings[i]);
+		if (!map)
+			goto out_clean;
+
+		config[i].monitor = map;
+		config[i].allowed = perf_cpu_map__get(map);
+        }
+
+	rec->threads.cfgs = config;
+	rec->threads.cnt  = tp->thread_sib;
+	cpu_topology__delete(tp);
+	return 0;
+
+out_clean:
+	while (i--) {
+		perf_cpu_map__put(config[i].monitor);
+	}
+	free(config);
+
+out:
+	cpu_topology__delete(tp);
+	return -ENOMEM;
+}
+
+
+static int
 record__threads_type(struct record *rec)
 {
 	if (rec->threads.type == RECORD__THREADS_TYPE_ONE)
@@ -1831,6 +1876,8 @@ record__threads_type(struct record *rec)
 		return record__threads_type_all(rec);
 	if (rec->threads.type == RECORD__THREADS_TYPE_USER)
 		return record__threads_type_user(rec);
+	if (rec->threads.type == RECORD__THREADS_TYPE_CORE)
+		return record__threads_type_core(rec);
 
 	return -1;
 }
@@ -2950,6 +2997,11 @@ parse_threads(const struct option *opt, const char *str, int unset)
 
 	if (!str || !strcmp(str, "all")) {
 		rec->threads.type = RECORD__THREADS_TYPE_ALL;
+		return 0;
+	}
+
+	if (!strcmp(str, "core")) {
+		rec->threads.type = RECORD__THREADS_TYPE_CORE;
 		return 0;
 	}
 
