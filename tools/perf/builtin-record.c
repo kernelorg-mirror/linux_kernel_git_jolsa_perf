@@ -84,6 +84,7 @@ enum {
 	RECORD__THREADS_TYPE_USER,
 	RECORD__THREADS_TYPE_CORE,
 	RECORD__THREADS_TYPE_SOCKET,
+	RECORD__THREADS_TYPE_NUMA,
 };
 
 enum {
@@ -1909,6 +1910,48 @@ out:
 	return -ENOMEM;
 }
 
+static int
+record__threads_type_numa(struct record *rec)
+{
+	struct thread_cfg *config;
+	struct numa_topology *tp;
+	u32 i;
+
+	tp = numa_topology__new();
+	if (!tp)
+		return -ENOMEM;
+
+	config = zalloc(sizeof(*config) * tp->nr);
+	if (!config)
+		goto out;
+
+        for (i = 0; i < tp->nr; i++) {
+		struct perf_cpu_map *map;
+
+		map = perf_cpu_map__new(tp->nodes[i].cpus);
+		if (!map)
+			goto out_clean;
+
+		config[i].monitor = map;
+		config[i].allowed = perf_cpu_map__get(map);
+        }
+
+	rec->threads.cfgs = config;
+	rec->threads.cnt  = tp->nr;
+	numa_topology__delete(tp);
+	return 0;
+
+out_clean:
+	while (i--) {
+		perf_cpu_map__put(config[i].monitor);
+	}
+	free(config);
+
+out:
+	numa_topology__delete(tp);
+	return -ENOMEM;
+}
+
 
 static int
 record__threads_type(struct record *rec)
@@ -1923,6 +1966,8 @@ record__threads_type(struct record *rec)
 		return record__threads_type_core(rec);
 	if (rec->threads.type == RECORD__THREADS_TYPE_SOCKET)
 		return record__threads_type_socket(rec);
+	if (rec->threads.type == RECORD__THREADS_TYPE_NUMA)
+		return record__threads_type_numa(rec);
 
 	return -1;
 }
@@ -3052,6 +3097,11 @@ parse_threads(const struct option *opt, const char *str, int unset)
 
 	if (!strcmp(str, "socket")) {
 		rec->threads.type = RECORD__THREADS_TYPE_SOCKET;
+		return 0;
+	}
+
+	if (!strcmp(str, "numa")) {
+		rec->threads.type = RECORD__THREADS_TYPE_NUMA;
 		return 0;
 	}
 
