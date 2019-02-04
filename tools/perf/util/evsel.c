@@ -2171,6 +2171,36 @@ perf_event__check_size(union perf_event *event, unsigned int sample_size)
 	return 0;
 }
 
+static struct regs_dump   empty_regs;
+static struct stack_dump  empty_stack;
+static struct sample_read empty_read;
+
+static __always_inline void
+perf_sample__init(struct perf_sample *data)
+{
+	data->cpu = data->pid = data->tid = -1;
+	data->stream_id = data->id = data->time = -1ULL;
+	data->id = -1ULL;
+	data->data_src = PERF_MEM_DATA_SRC_NONE;
+	data->ip = 0;
+	data->addr = 0;
+	data->weight = 0;
+	data->transaction = 0;
+	data->phys_addr = 0;
+	data->flags = 0;
+	/*
+	 * It's enough to clear data->insn_len, no need to clear the whole array.
+	 */
+	data->insn_len = 0;
+	data->raw_data = NULL;
+	data->callchain = NULL;
+	data->branch_stack = NULL;
+	data->user_regs = empty_regs;
+	data->intr_regs = empty_regs;
+	data->user_stack = empty_stack;
+	data->read = empty_read;
+}
+
 int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			     struct perf_sample *data)
 {
@@ -2187,14 +2217,11 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	 */
 	union u64_swap u;
 
-	memset(data, 0, sizeof(*data));
-	data->cpu = data->pid = data->tid = -1;
-	data->stream_id = data->id = data->time = -1ULL;
-	data->period = evsel->attr.sample_period;
+	perf_sample__init(data);
+
+	data->period  = evsel->attr.sample_period;
 	data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
 	data->misc    = event->header.misc;
-	data->id = -1ULL;
-	data->data_src = PERF_MEM_DATA_SRC_NONE;
 
 	if (event->header.type != PERF_RECORD_SAMPLE) {
 		if (!evsel->attr.sample_id_all)
