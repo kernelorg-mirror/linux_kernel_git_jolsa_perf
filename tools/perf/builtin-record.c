@@ -92,6 +92,7 @@ struct record {
 	bool			buildid_all;
 	bool			timestamp_filename;
 	bool			timestamp_boundary;
+	bool			output_is_file;
 	struct switch_output	switch_output;
 	unsigned long long	samples;
 	struct mmap_cpu_mask	affinity_mask;
@@ -2325,8 +2326,10 @@ static struct option __record_options[] = {
 	OPT_STRING('C', "cpu", &record.opts.target.cpu_list, "cpu",
 		    "list of cpus to monitor"),
 	OPT_U64('c', "count", &record.opts.user_interval, "event period to sample"),
-	OPT_STRING('o', "output", &record.data.path, "file",
-		    "output file name"),
+	OPT_STRING_SET('o', "output", &record.data.path, &record.output_is_file,
+		       "file", "output file name"),
+	OPT_STRING_SET(0, "output-dir", &record.data.path, &record.data.is_dir,
+		       "file", "output directory name"),
 	OPT_BOOLEAN_SET('i', "no-inherit", &record.opts.no_inherit,
 			&record.opts.no_inherit_set,
 			"child tasks do not inherit counters"),
@@ -2530,6 +2533,11 @@ int cmd_record(int argc, const char **argv)
 	if (rec->opts.comp_level != 0) {
 		pr_debug("Compression enabled, disabling build id collection at the end of the session.\n");
 		rec->no_buildid = true;
+	}
+
+	if (perf_data__is_dir(&rec->data) && record.output_is_file) {
+		ui__error("cannot use both -o and --output-dir\n");
+		return -EINVAL;
 	}
 
 	if (rec->opts.record_switch_events &&

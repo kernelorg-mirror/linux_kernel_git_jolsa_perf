@@ -590,6 +590,9 @@ appended unit character - B/K/M/G
 --dir::
 Store data into directory with one data file for cpu.
 
+--output-dir::
+Same as --dir option, can't be used together with -o option.
+
 SEE ALSO
 --------
 linkperf:perf-stat[1], linkperf:perf-list[1]

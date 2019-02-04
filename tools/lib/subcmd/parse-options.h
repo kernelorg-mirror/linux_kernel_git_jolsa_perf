@@ -146,6 +146,10 @@ struct option {
 	  .value = check_vtype(v, const char **), .argh = (a), .help = (h), \
 	  .flags = PARSE_OPT_OPTARG, .defval = (intptr_t)(d), \
 	  .set = check_vtype(os, bool *)}
+#define OPT_STRING_SET(s, l, v, os, a, h) \
+	{ .type = OPTION_STRING, .short_name = (s), .long_name = (l), \
+	  .value = check_vtype(v, const char **), .argh = (a), .help = (h), \
+	  .set = check_vtype(os, bool *)}
 #define OPT_STRING_NOEMPTY(s, l, v, a, h)   { .type = OPTION_STRING,  .short_name = (s), .long_name = (l), .value = check_vtype(v, const char **), .argh = (a), .help = (h), .flags = PARSE_OPT_NOEMPTY}
 #define OPT_DATE(s, l, v, h) \
 	{ .type = OPTION_CALLBACK, .short_name = (s), .long_name = (l), .value = (v), .argh = "time", .help = (h), .callback = parse_opt_approxidate_cb }
