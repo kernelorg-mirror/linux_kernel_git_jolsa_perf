@@ -113,6 +113,8 @@ struct thread_obj {
 	struct thread_stat	  stats;
 	struct thread_stat	  stats_sec;
 	struct perf_cpu_map	 *allowed;
+	int			  poll_timeout;
+	u64			  poll_skip_last;
 };
 
 struct thread_cfg {
@@ -1582,6 +1584,7 @@ static void thread_obj__init(struct thread_obj *th, struct perf_cpu_map *allowed
 	fdarray__init(&th->pollfd, 64);
 	th->rec = rec;
 	th->allowed = perf_cpu_map__get(allowed);
+	th->poll_timeout = 100;
 }
 
 static int
@@ -2041,6 +2044,19 @@ static inline pid_t gettid(void)
 	return (pid_t) syscall(__NR_gettid);
 }
 
+static int poll_timeout(struct thread_obj *obj)
+{
+	if (obj->stats.poll_skip == obj->poll_skip_last) {
+		if (obj->poll_timeout < 500)
+			obj->poll_timeout += 10;
+	} else {
+		obj->poll_timeout = 100;
+	}
+
+	obj->poll_skip_last = obj->stats.poll_skip;
+	return obj->poll_timeout;
+}
+
 static void*
 thread_obj__process(struct record *rec)
 {
@@ -2054,7 +2070,7 @@ thread_obj__process(struct record *rec)
 		if (hits == thread->samples) {
 			thread->stats.poll++;
 
-			err = fdarray__poll(&thread->pollfd, 500);
+			err = fdarray__poll(&thread->pollfd, poll_timeout(thread));
 			/*
 			 * Propagate error, only if there's any. Ignore positive
 			 * number of returned events and interrupt error.
@@ -2175,10 +2191,11 @@ static void thread_obj__display(struct thread_obj *th, unsigned long s)
 	else
 		buf_time[0] = 0;
 
-	fprintf(stderr, "%6s %6d %10s %10" PRIu64" %10" PRIu64"\n",
+	fprintf(stderr, "%6s %6d %10s %10" PRIu64" %10" PRIu64 " %10d\n",
 		buf_time, th->pid, buf_size,
 		th->stats.poll - th->stats_sec.poll,
-		th->stats.poll_skip - th->stats_sec.poll_skip);
+		th->stats.poll_skip - th->stats_sec.poll_skip,
+		th->poll_timeout);
 
 	th->stats_sec = th->stats;
 }
@@ -2199,8 +2216,8 @@ static void record__threads_stats(struct record *rec)
 	last = current;
 
 	if (!last_header || (last_header + 10 < current)) {
-		fprintf(stderr, "%6s %6s %10s %10s %10s\n",
-			" ", "pid", "write", "poll", "skip");
+		fprintf(stderr, "%6s %6s %10s %10s %10s %10s\n",
+			" ", "pid", "write", "poll", "skip", "timeout");
 		last_header = current;
 	}
 
@@ -2535,7 +2552,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			if (done || draining)
 				break;
 
-			err = fdarray__poll(&thread->pollfd, 1000);
+			err = fdarray__poll(&thread->pollfd, poll_timeout(thread));
 			thread->stats.poll++;
 
 			/*
