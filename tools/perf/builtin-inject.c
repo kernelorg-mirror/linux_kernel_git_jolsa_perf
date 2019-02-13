@@ -316,6 +316,19 @@ static int perf_event__repipe_mmap2(struct perf_tool *tool,
 	return err;
 }
 
+static int perf_event__repipe_mmap3(struct perf_tool *tool,
+				   union perf_event *event,
+				   struct perf_sample *sample,
+				   struct machine *machine)
+{
+	int err;
+
+	err = perf_event__process_mmap3(tool, event, sample, machine);
+	perf_event__repipe(tool, event, sample, machine);
+
+	return err;
+}
+
 #ifdef HAVE_JITDUMP
 static int perf_event__jit_repipe_mmap2(struct perf_tool *tool,
 					union perf_event *event,
@@ -338,6 +351,29 @@ static int perf_event__jit_repipe_mmap2(struct perf_tool *tool,
 		return 0;
 	}
 	return perf_event__repipe_mmap2(tool, event, sample, machine);
+}
+
+static int perf_event__jit_repipe_mmap3(struct perf_tool *tool,
+					union perf_event *event,
+					struct perf_sample *sample,
+					struct machine *machine)
+{
+	struct perf_inject *inject = container_of(tool, struct perf_inject, tool);
+	u64 n = 0;
+	int ret;
+
+	/*
+	 * if jit marker, then inject jit mmaps and generate ELF images
+	 */
+	ret = jit_process(inject->session, &inject->output, machine,
+			  event->mmap3.filename, sample->pid, &n);
+	if (ret < 0)
+		return ret;
+	if (ret) {
+		inject->bytes_written += n;
+		return 0;
+	}
+	return perf_event__repipe_mmap3(tool, event, sample, machine);
 }
 #endif
 
@@ -609,6 +645,7 @@ static int __cmd_inject(struct perf_inject *inject)
 	    inject->itrace_synth_opts.set) {
 		inject->tool.mmap	  = perf_event__repipe_mmap;
 		inject->tool.mmap2	  = perf_event__repipe_mmap2;
+		inject->tool.mmap3	  = perf_event__repipe_mmap3;
 		inject->tool.fork	  = perf_event__repipe_fork;
 		inject->tool.tracing_data = perf_event__repipe_tracing_data;
 	}
@@ -818,6 +855,7 @@ int cmd_inject(int argc, const char **argv)
 #ifdef HAVE_JITDUMP
 	if (inject.jit_mode) {
 		inject.tool.mmap2	   = perf_event__jit_repipe_mmap2;
+		inject.tool.mmap3	   = perf_event__jit_repipe_mmap3;
 		inject.tool.mmap	   = perf_event__jit_repipe_mmap;
 		inject.tool.ordered_events = true;
 		inject.tool.ordering_requires_timestamps = true;

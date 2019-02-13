@@ -474,6 +474,7 @@ int cmd_annotate(int argc, const char **argv)
 			.sample	= process_sample_event,
 			.mmap	= perf_event__process_mmap,
 			.mmap2	= perf_event__process_mmap2,
+			.mmap3	= perf_event__process_mmap3,
 			.comm	= perf_event__process_comm,
 			.exit	= perf_event__process_exit,
 			.fork	= perf_event__process_fork,
