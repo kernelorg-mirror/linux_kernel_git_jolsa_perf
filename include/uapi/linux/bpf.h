@@ -10,6 +10,7 @@
 
 #include <linux/types.h>
 #include <linux/bpf_common.h>
+#include <linux/buildid.h>
 
 /* Extended instruction set based on top of classic BPF */
 
@@ -429,10 +430,9 @@ enum bpf_stack_build_id_status {
 	BPF_STACK_BUILD_ID_IP = 2,
 };
 
-#define BPF_BUILD_ID_SIZE 20
 struct bpf_stack_build_id {
 	__s32		status;
-	unsigned char	build_id[BPF_BUILD_ID_SIZE];
+	unsigned char	build_id[BUILD_ID_SIZE];
 	union {
 		__u64	offset;
 		__u64	ip;
