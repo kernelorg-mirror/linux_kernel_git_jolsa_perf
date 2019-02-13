@@ -2366,6 +2366,19 @@ static int build_id__process_mmap2(struct perf_tool *tool, union perf_event *eve
 	return perf_event__process_mmap2(tool, event, sample, machine);
 }
 
+static int build_id__process_mmap3(struct perf_tool *tool, union perf_event *event,
+				   struct perf_sample *sample, struct machine *machine)
+{
+	/*
+	 * We already have the kernel maps, put in place via perf_session__create_kernel_maps()
+	 * no need to add them twice.
+	 */
+	if (!(event->header.misc & PERF_RECORD_MISC_USER))
+		return 0;
+
+	return perf_event__process_mmap3(tool, event, sample, machine);
+}
+
 /*
  * XXX Ideally would be local to cmd_record() and passed to a record__new
  * because we need to have access to it in record__exit, that is called
@@ -2400,6 +2413,7 @@ static struct record record = {
 		.namespaces	= perf_event__process_namespaces,
 		.mmap		= build_id__process_mmap,
 		.mmap2		= build_id__process_mmap2,
+		.mmap3		= build_id__process_mmap3,
 		.ordered_events	= true,
 	},
 };

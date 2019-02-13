@@ -3443,6 +3443,7 @@ int cmd_script(int argc, const char **argv)
 			.sample		 = process_sample_event,
 			.mmap		 = perf_event__process_mmap,
 			.mmap2		 = perf_event__process_mmap2,
+			.mmap3		 = perf_event__process_mmap3,
 			.comm		 = perf_event__process_comm,
 			.namespaces	 = perf_event__process_namespaces,
 			.cgroup		 = perf_event__process_cgroup,

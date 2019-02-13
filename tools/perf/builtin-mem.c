@@ -383,6 +383,7 @@ int cmd_mem(int argc, const char **argv)
 			.sample		= process_sample_event,
 			.mmap		= perf_event__process_mmap,
 			.mmap2		= perf_event__process_mmap2,
+			.mmap3		= perf_event__process_mmap3,
 			.comm		= perf_event__process_comm,
 			.lost		= perf_event__process_lost,
 			.fork		= perf_event__process_fork,
