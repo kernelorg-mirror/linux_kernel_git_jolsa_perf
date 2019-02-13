@@ -969,6 +969,7 @@ static struct perf_tool perf_kmem = {
 	.comm		 = perf_event__process_comm,
 	.mmap		 = perf_event__process_mmap,
 	.mmap2		 = perf_event__process_mmap2,
+	.mmap3		 = perf_event__process_mmap3,
 	.namespaces	 = perf_event__process_namespaces,
 	.ordered_events	 = true,
 };

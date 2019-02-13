@@ -365,6 +365,7 @@ static struct perf_c2c c2c = {
 		.sample		= process_sample_event,
 		.mmap		= perf_event__process_mmap,
 		.mmap2		= perf_event__process_mmap2,
+		.mmap3		= perf_event__process_mmap3,
 		.comm		= perf_event__process_comm,
 		.exit		= perf_event__process_exit,
 		.fork		= perf_event__process_fork,
