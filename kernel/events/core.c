@@ -51,6 +51,7 @@
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
 #include <linux/min_heap.h>
+#include <linux/buildid.h>
 
 #include "internal.h"
 
@@ -7897,6 +7898,7 @@ struct perf_mmap_event {
 	u64			ino;
 	u64			ino_generation;
 	u32			prot, flags;
+	u8			buildid[BUILD_ID_SIZE];
 
 	struct {
 		struct perf_event_header	header;
@@ -7933,7 +7935,7 @@ static void perf_event_mmap_output(struct perf_event *event,
 	if (!perf_event_mmap_match(event, data))
 		return;
 
-	if (event->attr.mmap2) {
+	if (event->attr.mmap2 || event->attr.mmap3) {
 		mmap_event->event_id.header.type = PERF_RECORD_MMAP2;
 		mmap_event->event_id.header.size += sizeof(mmap_event->maj);
 		mmap_event->event_id.header.size += sizeof(mmap_event->min);
@@ -7941,6 +7943,11 @@ static void perf_event_mmap_output(struct perf_event *event,
 		mmap_event->event_id.header.size += sizeof(mmap_event->ino_generation);
 		mmap_event->event_id.header.size += sizeof(mmap_event->prot);
 		mmap_event->event_id.header.size += sizeof(mmap_event->flags);
+	}
+
+	if (event->attr.mmap3) {
+		mmap_event->event_id.header.type = PERF_RECORD_MMAP3;
+		mmap_event->event_id.header.size += sizeof(mmap_event->buildid);
 	}
 
 	perf_event_header__init_id(&mmap_event->event_id.header, &sample, event);
@@ -7954,7 +7961,7 @@ static void perf_event_mmap_output(struct perf_event *event,
 
 	perf_output_put(&handle, mmap_event->event_id);
 
-	if (event->attr.mmap2) {
+	if (event->attr.mmap2 || event->attr.mmap3) {
 		perf_output_put(&handle, mmap_event->maj);
 		perf_output_put(&handle, mmap_event->min);
 		perf_output_put(&handle, mmap_event->ino);
@@ -7962,6 +7969,9 @@ static void perf_event_mmap_output(struct perf_event *event,
 		perf_output_put(&handle, mmap_event->prot);
 		perf_output_put(&handle, mmap_event->flags);
 	}
+
+	if (event->attr.mmap3)
+		__output_copy(&handle, mmap_event->buildid, BUILD_ID_SIZE);
 
 	__output_copy(&handle, mmap_event->file_name,
 				   mmap_event->file_size);
@@ -8081,6 +8091,8 @@ got_name:
 	mmap_event->ino_generation = gen;
 	mmap_event->prot = prot;
 	mmap_event->flags = flags;
+
+	build_id_parse(vma, mmap_event->buildid);
 
 	if (!(vma->vm_flags & VM_EXEC))
 		mmap_event->event_id.header.misc |= PERF_RECORD_MISC_MMAP_DATA;
@@ -8207,6 +8219,7 @@ void perf_event_mmap(struct vm_area_struct *vma)
 		.vma	= vma,
 		/* .file_name */
 		/* .file_size */
+		/* .buildid */
 		.event_id  = {
 			.header = {
 				.type = PERF_RECORD_MMAP,
