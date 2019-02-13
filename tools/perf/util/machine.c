@@ -1627,61 +1627,13 @@ out_problem:
 	return -1;
 }
 
-int machine__process_mmap2_event(struct machine *machine,
-				 union perf_event *event,
-				 struct perf_sample *sample)
-{
-	struct thread *thread;
-	struct map *map;
-	int ret = 0;
+typedef struct map* (*alloc_map_t)(union perf_event *event,
+				   struct thread *thread,
+				   struct machine *machine,
+				   int prot);
 
-	if (dump_trace)
-		perf_event__fprintf_mmap2(event, stdout);
-
-	if (sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL ||
-	    sample->cpumode == PERF_RECORD_MISC_KERNEL) {
-		ret = machine__process_kernel_mmap_event(machine, event);
-		if (ret < 0)
-			goto out_problem;
-		return 0;
-	}
-
-	thread = machine__findnew_thread(machine, event->mmap2.pid,
-					event->mmap2.tid);
-	if (thread == NULL)
-		goto out_problem;
-
-	map = map__new(machine, event->mmap2.start,
-			event->mmap2.len, event->mmap2.pgoff,
-			event->mmap2.maj,
-			event->mmap2.min, event->mmap2.ino,
-			event->mmap2.ino_generation,
-			event->mmap2.prot,
-			event->mmap2.flags,
-			event->mmap2.filename, thread);
-
-	if (map == NULL)
-		goto out_problem_map;
-
-	ret = thread__insert_map(thread, map);
-	if (ret)
-		goto out_problem_insert;
-
-	thread__put(thread);
-	map__put(map);
-	return 0;
-
-out_problem_insert:
-	map__put(map);
-out_problem_map:
-	thread__put(thread);
-out_problem:
-	dump_printf("problem processing PERF_RECORD_MMAP2, skipping event.\n");
-	return 0;
-}
-
-int machine__process_mmap_event(struct machine *machine, union perf_event *event,
-				struct perf_sample *sample)
+static int process_mmap_event(struct machine *machine, union perf_event *event,
+			      struct perf_sample *sample, alloc_map_t alloc_map)
 {
 	struct thread *thread;
 	struct map *map;
@@ -1707,11 +1659,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 	if (!(event->header.misc & PERF_RECORD_MISC_MMAP_DATA))
 		prot = PROT_EXEC;
 
-	map = map__new(machine, event->mmap.start,
-			event->mmap.len, event->mmap.pgoff,
-			0, 0, 0, 0, prot, 0,
-			event->mmap.filename,
-			thread);
+	map = alloc_map(event, thread, machine, prot);
 
 	if (map == NULL)
 		goto out_problem_map;
@@ -1731,6 +1679,44 @@ out_problem_map:
 out_problem:
 	dump_printf("problem processing PERF_RECORD_MMAP, skipping event.\n");
 	return 0;
+}
+
+static struct map*
+alloc_map__mmap(union perf_event *event, struct thread *thread,
+		struct machine *machine, int prot)
+{
+	return map__new(machine, event->mmap.start,
+			event->mmap.len, event->mmap.pgoff,
+			0, 0, 0, 0, prot, 0,
+			event->mmap.filename,
+			thread);
+}
+
+static struct map*
+alloc_map__mmap2(union perf_event *event, struct thread *thread,
+		 struct machine *machine, int prot __maybe_unused)
+{
+	return map__new(machine, event->mmap2.start,
+			event->mmap2.len, event->mmap2.pgoff,
+			event->mmap2.maj,
+			event->mmap2.min, event->mmap2.ino,
+			event->mmap2.ino_generation,
+			event->mmap2.prot,
+			event->mmap2.flags,
+			event->mmap2.filename, thread);
+}
+
+int machine__process_mmap_event(struct machine *machine, union perf_event *event,
+				struct perf_sample *sample)
+{
+	return process_mmap_event(machine, event, sample, alloc_map__mmap);
+}
+
+int machine__process_mmap2_event(struct machine *machine,
+				 union perf_event *event,
+				 struct perf_sample *sample)
+{
+	return process_mmap_event(machine, event, sample, alloc_map__mmap2);
 }
 
 static void __machine__remove_thread(struct machine *machine, struct thread *th, bool lock)
