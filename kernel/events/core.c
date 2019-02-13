@@ -51,6 +51,7 @@
 #include <linux/proc_ns.h>
 #include <linux/mount.h>
 #include <linux/min_heap.h>
+#include <linux/buildid.h>
 
 #include "internal.h"
 
@@ -386,6 +387,7 @@ static DEFINE_PER_CPU(int, perf_sched_cb_usages);
 static DEFINE_PER_CPU(struct pmu_event_list, pmu_sb_events);
 
 static atomic_t nr_mmap_events __read_mostly;
+static atomic_t nr_mmap3_events __read_mostly;
 static atomic_t nr_comm_events __read_mostly;
 static atomic_t nr_namespaces_events __read_mostly;
 static atomic_t nr_task_events __read_mostly;
@@ -4588,7 +4590,7 @@ static bool is_sb_event(struct perf_event *event)
 		return false;
 
 	if (attr->mmap || attr->mmap_data || attr->mmap2 ||
-	    attr->comm || attr->comm_exec ||
+	    attr->mmap3 || attr->comm || attr->comm_exec ||
 	    attr->task || attr->ksymbol ||
 	    attr->context_switch || attr->text_poke ||
 	    attr->bpf_event)
@@ -4644,6 +4646,8 @@ static void unaccount_event(struct perf_event *event)
 		dec = true;
 	if (event->attr.mmap || event->attr.mmap_data)
 		atomic_dec(&nr_mmap_events);
+	if (event->attr.mmap3)
+		atomic_dec(&nr_mmap3_events);
 	if (event->attr.comm)
 		atomic_dec(&nr_comm_events);
 	if (event->attr.namespaces)
@@ -7465,7 +7469,7 @@ restart:
 /*
  * task tracking -- fork/exit
  *
- * enabled by: attr.comm | attr.mmap | attr.mmap2 | attr.mmap_data | attr.task
+ * enabled by: attr.comm | attr.mmap | attr.mmap2 | attr.mmap3 | attr.mmap_data | attr.task
  */
 
 struct perf_task_event {
@@ -7486,8 +7490,8 @@ struct perf_task_event {
 static int perf_event_task_match(struct perf_event *event)
 {
 	return event->attr.comm  || event->attr.mmap ||
-	       event->attr.mmap2 || event->attr.mmap_data ||
-	       event->attr.task;
+	       event->attr.mmap2 || event->attr.mmap3 ||
+	       event->attr.mmap_data || event->attr.task;
 }
 
 static void perf_event_task_output(struct perf_event *event,
@@ -7913,6 +7917,7 @@ struct perf_mmap_event {
 	u64			ino;
 	u64			ino_generation;
 	u32			prot, flags;
+	u8			buildid[BUILD_ID_SIZE];
 
 	struct {
 		struct perf_event_header	header;
@@ -7933,7 +7938,7 @@ static int perf_event_mmap_match(struct perf_event *event,
 	int executable = vma->vm_flags & VM_EXEC;
 
 	return (!executable && event->attr.mmap_data) ||
-	       (executable && (event->attr.mmap || event->attr.mmap2));
+	       (executable && (event->attr.mmap || event->attr.mmap2 || event->attr.mmap3));
 }
 
 static void perf_event_mmap_output(struct perf_event *event,
@@ -7949,7 +7954,7 @@ static void perf_event_mmap_output(struct perf_event *event,
 	if (!perf_event_mmap_match(event, data))
 		return;
 
-	if (event->attr.mmap2) {
+	if (event->attr.mmap2 || event->attr.mmap3) {
 		mmap_event->event_id.header.type = PERF_RECORD_MMAP2;
 		mmap_event->event_id.header.size += sizeof(mmap_event->maj);
 		mmap_event->event_id.header.size += sizeof(mmap_event->min);
@@ -7957,6 +7962,12 @@ static void perf_event_mmap_output(struct perf_event *event,
 		mmap_event->event_id.header.size += sizeof(mmap_event->ino_generation);
 		mmap_event->event_id.header.size += sizeof(mmap_event->prot);
 		mmap_event->event_id.header.size += sizeof(mmap_event->flags);
+	}
+
+	if (event->attr.mmap3) {
+		mmap_event->event_id.header.type = PERF_RECORD_MMAP3;
+		mmap_event->event_id.header.size += sizeof(u32);
+		mmap_event->event_id.header.size += sizeof(mmap_event->buildid);
 	}
 
 	perf_event_header__init_id(&mmap_event->event_id.header, &sample, event);
@@ -7970,13 +7981,20 @@ static void perf_event_mmap_output(struct perf_event *event,
 
 	perf_output_put(&handle, mmap_event->event_id);
 
-	if (event->attr.mmap2) {
+	if (event->attr.mmap2 || event->attr.mmap3) {
 		perf_output_put(&handle, mmap_event->maj);
 		perf_output_put(&handle, mmap_event->min);
 		perf_output_put(&handle, mmap_event->ino);
 		perf_output_put(&handle, mmap_event->ino_generation);
 		perf_output_put(&handle, mmap_event->prot);
 		perf_output_put(&handle, mmap_event->flags);
+	}
+
+	if (event->attr.mmap3) {
+		u32 reserved = 0;
+
+		perf_output_put(&handle, reserved);
+		__output_copy(&handle, mmap_event->buildid, BUILD_ID_SIZE);
 	}
 
 	__output_copy(&handle, mmap_event->file_name,
@@ -8097,6 +8115,9 @@ got_name:
 	mmap_event->ino_generation = gen;
 	mmap_event->prot = prot;
 	mmap_event->flags = flags;
+
+	if (atomic_read(&nr_mmap3_events))
+		build_id_parse(vma, mmap_event->buildid);
 
 	if (!(vma->vm_flags & VM_EXEC))
 		mmap_event->event_id.header.misc |= PERF_RECORD_MISC_MMAP_DATA;
@@ -8241,6 +8262,7 @@ void perf_event_mmap(struct vm_area_struct *vma)
 		/* .ino_generation (attr_mmap2 only) */
 		/* .prot (attr_mmap2 only) */
 		/* .flags (attr_mmap2 only) */
+		/* .buildid (attr_mmap3 only) */
 	};
 
 	perf_addr_filters_adjust(vma);
@@ -11040,6 +11062,8 @@ static void account_event(struct perf_event *event)
 		inc = true;
 	if (event->attr.mmap || event->attr.mmap_data)
 		atomic_inc(&nr_mmap_events);
+	if (event->attr.mmap3)
+		atomic_inc(&nr_mmap3_events);
 	if (event->attr.comm)
 		atomic_inc(&nr_comm_events);
 	if (event->attr.namespaces)
