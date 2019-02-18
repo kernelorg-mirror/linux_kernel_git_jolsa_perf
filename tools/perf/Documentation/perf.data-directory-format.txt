@@ -1,0 +1,54 @@
+perf.data directory format
+
+DISCLAIMER This is not ABI yet and is subject to possible change
+           in following versions of perf. We will remove this
+           disclaimer once the directory format soaks in.
+
+
+This document describes the on-disk perf.data format, generated
+by perf record with --dir option and consumed by the other perf
+tools.
+
+The directory perf.data is created by perf record command by
+using the --dir option:
+
+  $ perf record --dir perf bench sched messaging
+  $ ls -l perf.data
+      total 344
+      -rw-------. 1 jolsa jolsa 43864 Jan 20 22:26 data.0
+      -rw-------. 1 jolsa jolsa 30464 Jan 20 22:26 data.1
+      -rw-------. 1 jolsa jolsa 53816 Jan 20 22:26 data.2
+      -rw-------. 1 jolsa jolsa 30368 Jan 20 22:26 data.3
+      -rw-------. 1 jolsa jolsa 40088 Jan 20 22:26 data.4
+      -rw-------. 1 jolsa jolsa 42592 Jan 20 22:26 data.5
+      -rw-------. 1 jolsa jolsa 56136 Jan 20 22:26 data.6
+      -rw-------. 1 jolsa jolsa 25992 Jan 20 22:26 data.7
+      -rw-------. 1 jolsa jolsa  8832 Jan 20 22:26 header
+
+The header file keeps the standard perf.data file header,
+and the data.* files keep data.
+
+header file
+-----------
+The header file following the standard format describe in
+Documentation/perf.data-file-format doc. Including its data
+portion that is used to store manually synthesized events.
+
+data file
+---------
+The data files layout is described by HEADER_DIR_FORMAT feature.
+Currently it holds only version number (1):
+
+  HEADER_DIR_FORMAT = 24
+
+  struct {
+     uint64_t version;
+  }
+
+The current only only version value 1 means that data files:
+  - follow the 'data.*' format
+  - contain raw events data in standard perf format as read
+    from kernel (and need to be sorted)
+
+Future versions are expected to describe different data files
+layout according to special needs.
