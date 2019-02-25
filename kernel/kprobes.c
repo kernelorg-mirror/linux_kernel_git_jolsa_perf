@@ -2525,6 +2525,11 @@ static int disarm_all_kprobes(void)
 	return ret;
 }
 
+void kprobes_disable(void)
+{
+	disarm_all_kprobes();
+}
+
 /*
  * XXX: The debugfs bool file interface doesn't allow for callbacks
  * when the bool state is switched. We can reuse that facility when

@@ -19,6 +19,7 @@
 
 #include <asm/irq_regs.h>
 #include <linux/perf_event.h>
+#include <linux/kprobes.h>
 
 static DEFINE_PER_CPU(bool, hard_watchdog_warn);
 static DEFINE_PER_CPU(bool, watchdog_nmi_touch);
@@ -130,6 +131,8 @@ static void watchdog_overflow_callback(struct perf_event *event,
 	 */
 	if (is_hardlockup()) {
 		int this_cpu = smp_processor_id();
+
+		kprobes_disable();
 
 		/* only print hardlockups once */
 		if (__this_cpu_read(hard_watchdog_warn) == true)

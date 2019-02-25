@@ -385,6 +385,8 @@ void dump_kprobe(struct kprobe *kp);
 void *alloc_insn_page(void);
 void free_insn_page(void *page);
 
+void kprobes_disable(void);
+
 #else /* !CONFIG_KPROBES: */
 
 static inline int kprobes_built_in(void)
@@ -447,6 +449,9 @@ static inline bool within_kprobe_blacklist(unsigned long addr)
 {
 	return true;
 }
+
+void kprobes_disable(void) { }
+
 #endif /* CONFIG_KPROBES */
 static inline int disable_kretprobe(struct kretprobe *rp)
 {
