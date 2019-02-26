@@ -1154,9 +1154,11 @@ void recycle_rp_inst(struct kretprobe_instance *ri,
 	hlist_del(&ri->hlist);
 	INIT_HLIST_NODE(&ri->hlist);
 	if (likely(rp)) {
-		raw_spin_lock(&rp->lock);
+		unsigned long flags;
+
+		raw_spin_lock_irqsave(&rp->lock, flags);
 		hlist_add_head(&ri->hlist, &rp->free_instances);
-		raw_spin_unlock(&rp->lock);
+		raw_spin_unlock_irqrestore(&rp->lock, flags);
 	} else
 		/* Unregistering */
 		hlist_add_head(&ri->hlist, head);
