@@ -870,6 +870,32 @@ static bool is_dummy_event(struct perf_evsel *evsel)
 	       (evsel->attr.config == PERF_COUNT_SW_DUMMY);
 }
 
+#ifndef PYTHON_MOD
+static int pmu_get_precise(const char *pmu_name)
+{
+	struct perf_pmu *pmu = pmu_name ? perf_pmu__find(pmu_name) : NULL;
+
+	/* If unsupported pmu->max_precise is -1. */
+	return pmu ? pmu->max_precise : -1;
+}
+#else
+static int pmu_get_precise(const char *pmu_name __maybe_unused)
+{
+	return 0;
+}
+#endif
+
+static void perf_evsel__set_max_precise_ip(struct perf_evsel *evsel)
+{
+	int max_precise = pmu_get_precise(evsel->pmu_name);
+	struct perf_event_attr *attr = &evsel->attr;
+
+	if (max_precise >= 0)
+		attr->precise_ip = max_precise;
+	else
+		perf_event_attr__set_max_precise_ip(attr);
+}
+
 /*
  * The enable_on_exec/disabled value strategy:
  *
@@ -1091,7 +1117,7 @@ void perf_evsel__config(struct perf_evsel *evsel, struct record_opts *opts,
 	}
 
 	if (evsel->precise_max)
-		perf_event_attr__set_max_precise_ip(attr);
+		perf_evsel__set_max_precise_ip(evsel);
 
 	if (opts->all_user) {
 		attr->exclude_kernel = 1;
