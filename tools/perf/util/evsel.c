@@ -2217,12 +2217,13 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	 */
 	union u64_swap u;
 
+	perf_sample__init(data);
+
+	data->period  = evsel->attr.sample_period;
 	data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
 	data->misc    = event->header.misc;
 
 	if (event->header.type != PERF_RECORD_SAMPLE) {
-		perf_sample__init(data);
-
 		if (!evsel->attr.sample_id_all)
 			return 0;
 		return perf_evsel__parse_id_sample(evsel, event, data);
@@ -2236,15 +2237,11 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 	if (type & PERF_SAMPLE_IDENTIFIER) {
 		data->id = *array;
 		array++;
-	} else {
-		data->id = -1ULL;
 	}
 
 	if (type & PERF_SAMPLE_IP) {
 		data->ip = *array;
 		array++;
-	} else {
-		data->ip = 0;
 	}
 
 	if (type & PERF_SAMPLE_TID) {
@@ -2259,36 +2256,26 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		data->pid = u.val32[0];
 		data->tid = u.val32[1];
 		array++;
-	} else {
-		data->pid = data->tid = -1;
 	}
 
 	if (type & PERF_SAMPLE_TIME) {
 		data->time = *array;
 		array++;
-	} else {
-		data->time = -1ULL;
 	}
 
 	if (type & PERF_SAMPLE_ADDR) {
 		data->addr = *array;
 		array++;
-	} else {
-		data->addr = 0;
 	}
 
 	if (type & PERF_SAMPLE_ID) {
 		data->id = *array;
 		array++;
-	} else {
-		data->id = -1ULL;
 	}
 
 	if (type & PERF_SAMPLE_STREAM_ID) {
 		data->stream_id = *array;
 		array++;
-	} else {
-		data->stream_id = -1ULL;
 	}
 
 	if (type & PERF_SAMPLE_CPU) {
@@ -2302,15 +2289,11 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 
 		data->cpu = u.val32[0];
 		array++;
-	} else {
-		data->cpu = -1;
 	}
 
 	if (type & PERF_SAMPLE_PERIOD) {
 		data->period = *array;
 		array++;
-	} else {
-		data->period = evsel->attr.sample_period;
 	}
 
 	if (type & PERF_SAMPLE_READ) {
@@ -2354,8 +2337,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			data->read.one.id = *array;
 			array++;
 		}
-	} else {
-		data->read = empty_read;
 	}
 
 	if (evsel__has_callchain(evsel)) {
@@ -2368,8 +2349,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		sz = data->callchain->nr * sizeof(u64);
 		OVERFLOW_CHECK(array, sz, max_size);
 		array = (void *)array + sz;
-	} else {
-		data->callchain = NULL;
 	}
 
 	if (type & PERF_SAMPLE_RAW) {
@@ -2401,8 +2380,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		OVERFLOW_CHECK(array, data->raw_size, max_size);
 		data->raw_data = (void *)array;
 		array = (void *)array + data->raw_size;
-	} else {
-		data->raw_data = NULL;
 	}
 
 	if (type & PERF_SAMPLE_BRANCH_STACK) {
@@ -2417,8 +2394,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 		sz = data->branch_stack->nr * sizeof(struct branch_entry);
 		OVERFLOW_CHECK(array, sz, max_size);
 		array = (void *)array + sz;
-	} else {
-		data->branch_stack = NULL;
 	}
 
 	if (type & PERF_SAMPLE_REGS_USER) {
@@ -2435,8 +2410,6 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			data->user_regs.regs = (u64 *)array;
 			array = (void *)array + sz;
 		}
-	} else {
-		data->user_regs = empty_regs;
 	}
 
 	if (type & PERF_SAMPLE_STACK_USER) {
@@ -2458,34 +2431,27 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 				      "user stack dump failure\n"))
 				return -EFAULT;
 		}
-	} else {
-		data->user_stack = empty_stack;
 	}
 
 	if (type & PERF_SAMPLE_WEIGHT) {
 		OVERFLOW_CHECK_u64(array);
 		data->weight = *array;
 		array++;
-	} else {
-		data->weight = 0;
 	}
 
 	if (type & PERF_SAMPLE_DATA_SRC) {
 		OVERFLOW_CHECK_u64(array);
 		data->data_src = *array;
 		array++;
-	} else {
-		data->data_src = PERF_MEM_DATA_SRC_NONE;
 	}
 
 	if (type & PERF_SAMPLE_TRANSACTION) {
 		OVERFLOW_CHECK_u64(array);
 		data->transaction = *array;
 		array++;
-	} else {
-		data->transaction = 0;
 	}
 
+	data->intr_regs.abi = PERF_SAMPLE_REGS_ABI_NONE;
 	if (type & PERF_SAMPLE_REGS_INTR) {
 		OVERFLOW_CHECK_u64(array);
 		data->intr_regs.abi = *array;
@@ -2500,16 +2466,12 @@ int perf_evsel__parse_sample(struct perf_evsel *evsel, union perf_event *event,
 			data->intr_regs.regs = (u64 *)array;
 			array = (void *)array + sz;
 		}
-	} else {
-		data->intr_regs.abi = PERF_SAMPLE_REGS_ABI_NONE;
-		data->intr_regs = empty_regs;
 	}
 
+	data->phys_addr = 0;
 	if (type & PERF_SAMPLE_PHYS_ADDR) {
 		data->phys_addr = *array;
 		array++;
-	} else {
-		data->phys_addr = 0;
 	}
 
 	return 0;
