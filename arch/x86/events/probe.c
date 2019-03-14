@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0
+#include <linux/export.h>
+#include <linux/bits.h>
+#include "probe.h"
+
+unsigned long
+perf_msr_probe(struct perf_msr *msr, int cnt,
+	       struct attribute **attrs, void *data)
+{
+	unsigned long avail = 0;
+	unsigned int bit;
+	u64 val;
+
+	if (cnt >= BITS_PER_LONG)
+		return 0;
+
+	for (bit = 0; bit < cnt; bit++) {
+		struct attribute **a = msr[bit].attrs;
+
+		if (!msr[bit].no_check) {
+			if (msr[bit].test && !msr[bit].test(bit, data))
+				continue;
+			if (rdmsrl_safe(msr[bit].msr, &val) || !val)
+				continue;
+		}
+
+		while (*a)
+			*attrs++ = *a++;
+
+		avail |= bit;
+	}
+
+	*attrs = NULL;
+	return avail;
+}
+EXPORT_SYMBOL_GPL(perf_msr_probe);
