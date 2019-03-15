@@ -2083,6 +2083,7 @@ struct reader_state {
 	char	*mmaps[NUM_MMAPS];
 	size_t	 mmap_size;
 	int	 mmap_idx;
+	char	*mmap_cur;
 };
 
 struct reader {
@@ -2137,7 +2138,7 @@ remap:
 		err = -errno;
 		goto out;
 	}
-	mmaps[st->mmap_idx] = buf;
+	mmaps[st->mmap_idx] = st->mmap_cur = buf;
 	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
 	file_pos = file_offset + head;
 	if (session->one_mmap) {
@@ -2146,7 +2147,7 @@ remap:
 	}
 
 more:
-	event = fetch_mmaped_event(head, st->mmap_size, buf, session->header.needs_swap);
+	event = fetch_mmaped_event(head, st->mmap_size, st->mmap_cur, session->header.needs_swap);
 	if (IS_ERR(event))
 		return PTR_ERR(event);
 
