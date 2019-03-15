@@ -2082,6 +2082,7 @@ static int __perf_session__process_decomp_events(struct perf_session *session)
 struct reader_state {
 	char	*mmaps[NUM_MMAPS];
 	size_t	 mmap_size;
+	int	 mmap_idx;
 };
 
 struct reader {
@@ -2100,7 +2101,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	struct reader_state *st = &rd->state;
 	u64 data_size = rd->data_size;
 	u64 head, page_offset, file_offset, file_pos, size;
-	int err = 0, mmap_prot, mmap_flags, map_idx = 0;
+	int err = 0, mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
 	s64 skip;
@@ -2136,8 +2137,8 @@ remap:
 		err = -errno;
 		goto out;
 	}
-	mmaps[map_idx] = buf;
-	map_idx = (map_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
+	mmaps[st->mmap_idx] = buf;
+	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
 	file_pos = file_offset + head;
 	if (session->one_mmap) {
 		session->one_mmap_addr = buf;
@@ -2150,9 +2151,9 @@ more:
 		return PTR_ERR(event);
 
 	if (!event) {
-		if (mmaps[map_idx]) {
-			munmap(mmaps[map_idx], st->mmap_size);
-			mmaps[map_idx] = NULL;
+		if (mmaps[st->mmap_idx]) {
+			munmap(mmaps[st->mmap_idx], st->mmap_size);
+			mmaps[st->mmap_idx] = NULL;
 		}
 
 		page_offset = page_size * (head / page_size);
