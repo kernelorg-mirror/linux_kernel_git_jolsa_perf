@@ -1998,6 +1998,7 @@ static int __perf_session__process_decomp_events(struct perf_session *session)
 
 struct reader_state {
 	char	*mmaps[NUM_MMAPS];
+	size_t	 mmap_size;
 };
 
 struct reader {
@@ -2017,7 +2018,6 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	u64 data_size = rd->data_size;
 	u64 head, page_offset, file_offset, file_pos, size;
 	int err = 0, mmap_prot, mmap_flags, map_idx = 0;
-	size_t	mmap_size;
 	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
 	s64 skip;
@@ -2030,9 +2030,9 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 
 	data_size += rd->data_offset;
 
-	mmap_size = MMAP_SIZE;
-	if (mmap_size > data_size) {
-		mmap_size = data_size;
+	st->mmap_size = MMAP_SIZE;
+	if (st->mmap_size > data_size) {
+		st->mmap_size = data_size;
 		session->one_mmap = true;
 	}
 
@@ -2046,7 +2046,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 		mmap_flags = MAP_PRIVATE;
 	}
 remap:
-	buf = mmap(NULL, mmap_size, mmap_prot, mmap_flags, rd->fd,
+	buf = mmap(NULL, st->mmap_size, mmap_prot, mmap_flags, rd->fd,
 		   file_offset);
 	if (buf == MAP_FAILED) {
 		pr_err("failed to mmap file\n");
@@ -2062,10 +2062,10 @@ remap:
 	}
 
 more:
-	event = fetch_mmaped_event(session, head, mmap_size, buf);
+	event = fetch_mmaped_event(session, head, st->mmap_size, buf);
 	if (!event) {
 		if (mmaps[map_idx]) {
-			munmap(mmaps[map_idx], mmap_size);
+			munmap(mmaps[map_idx], st->mmap_size);
 			mmaps[map_idx] = NULL;
 		}
 
