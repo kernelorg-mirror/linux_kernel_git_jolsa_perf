@@ -2079,22 +2079,29 @@ static int __perf_session__process_decomp_events(struct perf_session *session)
 #define NUM_MMAPS 128
 #endif
 
+struct reader_state {
+	char	*mmaps[NUM_MMAPS];
+};
+
 struct reader {
 	int	fd;
 	u64	data_size;
 	u64	data_offset;
 	char	*path;
+
+	struct reader_state	state;
 };
 
 static int
 reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
 {
+	struct reader_state *st = &rd->state;
 	u64 data_size = rd->data_size;
 	u64 head, page_offset, file_offset, file_pos, size;
 	int err = 0, mmap_prot, mmap_flags, map_idx = 0;
 	size_t	mmap_size;
-	char *buf, *mmaps[NUM_MMAPS];
+	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
 	s64 skip;
 
@@ -2112,7 +2119,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 		session->one_mmap = true;
 	}
 
-	memset(mmaps, 0, sizeof(mmaps));
+	memset(mmaps, 0, sizeof(st->mmaps));
 
 	mmap_prot  = PROT_READ;
 	mmap_flags = MAP_SHARED;
@@ -2130,7 +2137,7 @@ remap:
 		goto out;
 	}
 	mmaps[map_idx] = buf;
-	map_idx = (map_idx + 1) & (ARRAY_SIZE(mmaps) - 1);
+	map_idx = (map_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
 	file_pos = file_offset + head;
 	if (session->one_mmap) {
 		session->one_mmap_addr = buf;
