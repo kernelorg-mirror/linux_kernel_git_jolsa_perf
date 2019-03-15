@@ -2084,6 +2084,7 @@ struct reader_state {
 	size_t	 mmap_size;
 	int	 mmap_idx;
 	char	*mmap_cur;
+	u64	 file_pos;
 };
 
 struct reader {
@@ -2101,7 +2102,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 {
 	struct reader_state *st = &rd->state;
 	u64 data_size = rd->data_size;
-	u64 head, page_offset, file_offset, file_pos, size;
+	u64 head, page_offset, file_offset, size;
 	int err = 0, mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
@@ -2140,7 +2141,7 @@ remap:
 	}
 	mmaps[st->mmap_idx] = st->mmap_cur = buf;
 	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
-	file_pos = file_offset + head;
+	st->file_pos = file_offset + head;
 	if (session->one_mmap) {
 		session->one_mmap_addr = buf;
 		session->one_mmap_offset = file_offset;
@@ -2168,7 +2169,7 @@ more:
 	skip = -EINVAL;
 
 	if (size < sizeof(struct perf_event_header) ||
-	    (skip = perf_session__process_event(session, event, file_pos)) < 0) {
+	    (skip = perf_session__process_event(session, event, st->file_pos)) < 0) {
 		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
 		       file_offset + head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));
@@ -2180,7 +2181,7 @@ more:
 		size += skip;
 
 	head += size;
-	file_pos += size;
+	st->file_pos += size;
 
 	err = __perf_session__process_decomp_events(session);
 	if (err)
@@ -2191,7 +2192,7 @@ more:
 	if (session_done())
 		goto out;
 
-	if (file_pos < data_size)
+	if (st->file_pos < data_size)
 		goto more;
 
 out:
