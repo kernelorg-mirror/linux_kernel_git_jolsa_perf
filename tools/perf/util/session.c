@@ -2016,16 +2016,12 @@ struct reader {
 	struct reader_state	state;
 };
 
-static int
-reader__process_events(struct reader *rd, struct perf_session *session,
-		       struct ui_progress *prog)
+static void
+reader__init(struct reader *rd, struct perf_session *session)
 {
 	struct reader_state *st = &rd->state;
-	u64 page_offset, size;
-	int err = 0, mmap_prot, mmap_flags;
-	char *buf, **mmaps = st->mmaps;
-	union perf_event *event;
-	s64 skip;
+	char **mmaps = st->mmaps;
+	u64 page_offset;
 
 	pr_debug("reader processing %s\n", rd->path);
 
@@ -2042,6 +2038,20 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	}
 
 	memset(mmaps, 0, sizeof(st->mmaps));
+}
+
+static int
+reader__process_events(struct reader *rd, struct perf_session *session,
+		       struct ui_progress *prog)
+{
+	struct reader_state *st = &rd->state;
+	u64 page_offset, size;
+	int err = 0, mmap_prot, mmap_flags;
+	char *buf, **mmaps = st->mmaps;
+	union perf_event *event;
+	s64 skip;
+
+	reader__init(rd, session);
 
 	mmap_prot  = PROT_READ;
 	mmap_flags = MAP_SHARED;
