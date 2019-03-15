@@ -2087,6 +2087,7 @@ struct reader_state {
 	u64	 file_pos;
 	u64	 file_offset;
 	u64	 data_size;
+	u64	 head;
 };
 
 struct reader {
@@ -2103,7 +2104,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
 {
 	struct reader_state *st = &rd->state;
-	u64 head, page_offset, size;
+	u64 page_offset, size;
 	int err = 0, mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
@@ -2113,7 +2114,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 
 	page_offset = page_size * (rd->data_offset / page_size);
 	st->file_offset = page_offset;
-	head = rd->data_offset - page_offset;
+	st->head = rd->data_offset - page_offset;
 
 	st->data_size = rd->data_size + rd->data_offset;
 
@@ -2142,14 +2143,14 @@ remap:
 	}
 	mmaps[st->mmap_idx] = st->mmap_cur = buf;
 	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
-	st->file_pos = st->file_offset + head;
+	st->file_pos = st->file_offset + st->head;
 	if (session->one_mmap) {
 		session->one_mmap_addr = buf;
 		session->one_mmap_offset = st->file_offset;
 	}
 
 more:
-	event = fetch_mmaped_event(head, st->mmap_size, st->mmap_cur, session->header.needs_swap);
+	event = fetch_mmaped_event(st->head, st->mmap_size, st->mmap_cur, session->header.needs_swap);
 	if (IS_ERR(event))
 		return PTR_ERR(event);
 
@@ -2159,9 +2160,9 @@ more:
 			mmaps[st->mmap_idx] = NULL;
 		}
 
-		page_offset = page_size * (head / page_size);
+		page_offset = page_size * (st->head / page_size);
 		st->file_offset += page_offset;
-		head -= page_offset;
+		st->head -= page_offset;
 		goto remap;
 	}
 
@@ -2172,7 +2173,7 @@ more:
 	if (size < sizeof(struct perf_event_header) ||
 	    (skip = perf_session__process_event(session, event, st->file_pos)) < 0) {
 		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
-		       st->file_offset + head, rd->path, event->header.size,
+		       st->file_offset + st->head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));
 		err = skip;
 		goto out;
@@ -2181,7 +2182,7 @@ more:
 	if (skip)
 		size += skip;
 
-	head += size;
+	st->head += size;
 	st->file_pos += size;
 
 	err = __perf_session__process_decomp_events(session);
