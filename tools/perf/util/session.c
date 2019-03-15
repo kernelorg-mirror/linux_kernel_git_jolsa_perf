@@ -2085,6 +2085,7 @@ struct reader_state {
 	int	 mmap_idx;
 	char	*mmap_cur;
 	u64	 file_pos;
+	u64	 file_offset;
 };
 
 struct reader {
@@ -2102,7 +2103,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 {
 	struct reader_state *st = &rd->state;
 	u64 data_size = rd->data_size;
-	u64 head, page_offset, file_offset, size;
+	u64 head, page_offset, size;
 	int err = 0, mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
 	union perf_event *event;
@@ -2111,7 +2112,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	pr_debug("reader processing %s\n", rd->path);
 
 	page_offset = page_size * (rd->data_offset / page_size);
-	file_offset = page_offset;
+	st->file_offset = page_offset;
 	head = rd->data_offset - page_offset;
 
 	data_size += rd->data_offset;
@@ -2133,7 +2134,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	}
 remap:
 	buf = mmap(NULL, st->mmap_size, mmap_prot, mmap_flags, rd->fd,
-		   file_offset);
+		   st->file_offset);
 	if (buf == MAP_FAILED) {
 		pr_err("failed to mmap file\n");
 		err = -errno;
@@ -2141,10 +2142,10 @@ remap:
 	}
 	mmaps[st->mmap_idx] = st->mmap_cur = buf;
 	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
-	st->file_pos = file_offset + head;
+	st->file_pos = st->file_offset + head;
 	if (session->one_mmap) {
 		session->one_mmap_addr = buf;
-		session->one_mmap_offset = file_offset;
+		session->one_mmap_offset = st->file_offset;
 	}
 
 more:
@@ -2159,7 +2160,7 @@ more:
 		}
 
 		page_offset = page_size * (head / page_size);
-		file_offset += page_offset;
+		st->file_offset += page_offset;
 		head -= page_offset;
 		goto remap;
 	}
@@ -2171,7 +2172,7 @@ more:
 	if (size < sizeof(struct perf_event_header) ||
 	    (skip = perf_session__process_event(session, event, st->file_pos)) < 0) {
 		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
-		       file_offset + head, rd->path, event->header.size,
+		       st->file_offset + head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));
 		err = skip;
 		goto out;
