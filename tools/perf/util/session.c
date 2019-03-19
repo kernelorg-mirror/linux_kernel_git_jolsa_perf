@@ -2104,13 +2104,10 @@ reader__init(struct reader *rd, struct perf_session *session)
 {
 	struct reader_state *st = &rd->state;
 	char **mmaps = st->mmaps;
-	u64 page_offset;
 
 	pr_debug("reader processing %s\n", rd->path);
 
-	page_offset = page_size * (rd->data_offset / page_size);
-	st->file_offset = page_offset;
-	st->head = rd->data_offset - page_offset;
+	st->head = rd->data_offset;
 
 	st->data_size = rd->data_size + rd->data_offset;
 
@@ -2129,6 +2126,7 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 	struct reader_state *st = &rd->state;
 	int mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
+	u64 page_offset;
 
 	mmap_prot  = PROT_READ;
 	mmap_flags = MAP_SHARED;
@@ -2142,6 +2140,10 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 		munmap(mmaps[st->mmap_idx], st->mmap_size);
 		mmaps[st->mmap_idx] = NULL;
 	}
+
+	page_offset = page_size * (st->head / page_size);
+	st->file_offset += page_offset;
+	st->head -= page_offset;
 
 	buf = mmap(NULL, st->mmap_size, mmap_prot, mmap_flags, rd->fd,
 		   st->file_offset);
@@ -2164,7 +2166,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
 {
 	struct reader_state *st = &rd->state;
-	u64 page_offset, size;
+	u64 size;
 	int err;
 	union perf_event *event;
 	s64 skip;
@@ -2182,9 +2184,6 @@ more:
 		return PTR_ERR(event);
 
 	if (!event) {
-		page_offset = page_size * (st->head / page_size);
-		st->file_offset += page_offset;
-		st->head -= page_offset;
 		goto remap;
 	}
 
