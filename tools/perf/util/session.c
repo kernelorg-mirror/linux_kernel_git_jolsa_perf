@@ -2055,6 +2055,11 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 		mmap_flags = MAP_PRIVATE;
 	}
 
+	if (mmaps[st->mmap_idx]) {
+		munmap(mmaps[st->mmap_idx], st->mmap_size);
+		mmaps[st->mmap_idx] = NULL;
+	}
+
 	buf = mmap(NULL, st->mmap_size, mmap_prot, mmap_flags, rd->fd,
 		   st->file_offset);
 	if (buf == MAP_FAILED) {
@@ -2078,7 +2083,6 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	struct reader_state *st = &rd->state;
 	u64 page_offset, size;
 	int err;
-	char **mmaps = st->mmaps;
 	union perf_event *event;
 	s64 skip;
 
@@ -2092,11 +2096,6 @@ remap:
 more:
 	event = fetch_mmaped_event(session, st->head, st->mmap_size, st->mmap_cur);
 	if (!event) {
-		if (mmaps[st->mmap_idx]) {
-			munmap(mmaps[st->mmap_idx], st->mmap_size);
-			mmaps[st->mmap_idx] = NULL;
-		}
-
 		page_offset = page_size * (st->head / page_size);
 		st->file_offset += page_offset;
 		st->head -= page_offset;
