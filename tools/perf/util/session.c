@@ -2162,30 +2162,20 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 }
 
 static int
-reader__process_events(struct reader *rd, struct perf_session *session,
-		       struct ui_progress *prog)
+reader__read_event(struct reader *rd, struct perf_session *session,
+		   struct ui_progress *prog)
 {
 	struct reader_state *st = &rd->state;
-	u64 size;
-	int err;
 	union perf_event *event;
+	u64 size;
 	s64 skip;
 
-	reader__init(rd, session);
-
-remap:
-	err = reader__mmap(rd, session);
-	if (err)
-		goto out;
-
-more:
 	event = fetch_mmaped_event(st->head, st->mmap_size, st->mmap_cur, session->header.needs_swap);
 	if (IS_ERR(event))
 		return PTR_ERR(event);
 
-	if (!event) {
-		goto remap;
-	}
+	if (!event)
+		return 0;
 
 	size = event->header.size;
 
@@ -2196,8 +2186,7 @@ more:
 		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
 		       st->file_offset + st->head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));
-		err = skip;
-		goto out;
+		return skip;
 	}
 
 	if (skip)
@@ -2206,20 +2195,37 @@ more:
 	st->head += size;
 	st->file_pos += size;
 
-	err = __perf_session__process_decomp_events(session);
-	if (err)
-		goto out;
-
 	ui_progress__update(prog, size);
+	return 1;
+}
 
-	if (session_done())
-		goto out;
 
-	if (st->file_pos < st->data_size)
-		goto more;
+static int
+reader__process_events(struct reader *rd, struct perf_session *session,
+		       struct ui_progress *prog)
+{
+	struct reader_state *st = &rd->state;
+	int err;
 
-out:
-	return err;
+	reader__init(rd, session);
+
+	err = reader__mmap(rd, session);
+
+	while ((err >= 0) && (st->file_pos < st->data_size)) {
+		if (session_done())
+			return 0;
+
+		err = reader__read_event(rd, session, prog);
+		if (err < 0)
+			break;
+		if (!err)
+			err = reader__mmap(rd, session);
+	}
+
+	if (!err)
+		err = __perf_session__process_decomp_events(session);
+
+	return err < 0 ? err : 0;
 }
 
 static int __perf_session__process_events(struct perf_session *session)
