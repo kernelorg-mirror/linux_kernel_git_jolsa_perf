@@ -2086,6 +2086,7 @@ struct reader_state {
 	char	*mmap_cur;
 	u64	 file_pos;
 	u64	 file_offset;
+	u64	 data_size;
 };
 
 struct reader {
@@ -2102,7 +2103,6 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
 {
 	struct reader_state *st = &rd->state;
-	u64 data_size = rd->data_size;
 	u64 head, page_offset, size;
 	int err = 0, mmap_prot, mmap_flags;
 	char *buf, **mmaps = st->mmaps;
@@ -2115,11 +2115,11 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 	st->file_offset = page_offset;
 	head = rd->data_offset - page_offset;
 
-	data_size += rd->data_offset;
+	st->data_size = rd->data_size + rd->data_offset;
 
 	st->mmap_size = MMAP_SIZE;
-	if (st->mmap_size > data_size) {
-		st->mmap_size = data_size;
+	if (st->mmap_size > st->data_size) {
+		st->mmap_size = st->data_size;
 		session->one_mmap = true;
 	}
 
@@ -2193,7 +2193,7 @@ more:
 	if (session_done())
 		goto out;
 
-	if (st->file_pos < data_size)
+	if (st->file_pos < st->data_size)
 		goto more;
 
 out:
