@@ -4408,7 +4408,8 @@ static struct attribute_group group_events_td  = { .name = "events" };
 static struct attribute_group group_events_mem = { .name = "events" };
 static struct attribute_group group_events_tsx = { .name = "events" };
 
-static struct attribute_group group_format_extra = { .name = "format" };
+static struct attribute_group group_format_extra     = { .name = "format" };
+static struct attribute_group group_format_extra_skl = { .name = "format" };
 
 static struct attribute_group *update_attrs[] = {
 	&group_events_td,
@@ -4417,17 +4418,18 @@ static struct attribute_group *update_attrs[] = {
 	&group_caps_gen,
 	&group_caps_lbr,
 	&group_format_extra,
+	&group_format_extra_skl,
 	NULL,
 };
 
 
 __init int intel_pmu_init(void)
 {
+	struct attribute **extra_skl_attr = NULL;
 	struct attribute **extra_attr = NULL;
 	struct attribute **td_attr = NULL;
 	struct attribute **mem_attr = NULL;
 	struct attribute **tsx_attr = NULL;
-	struct attribute **to_free = NULL;
 	union cpuid10_edx edx;
 	union cpuid10_eax eax;
 	union cpuid10_ebx ebx;
@@ -4915,8 +4917,7 @@ __init int intel_pmu_init(void)
 		x86_pmu.get_event_constraints = hsw_get_event_constraints;
 		extra_attr = boot_cpu_has(X86_FEATURE_RTM) ?
 			hsw_format_attr : nhm_format_attr;
-		extra_attr = merge_attr(extra_attr, skl_format_attr);
-		to_free = extra_attr;
+		extra_skl_attr = skl_format_attr;
 		td_attr  = hsw_events_attrs;
 		mem_attr = hsw_mem_events_attrs;
 		tsx_attr = hsw_tsx_events_attrs;
@@ -4983,8 +4984,11 @@ __init int intel_pmu_init(void)
 
 	snprintf(pmu_name_str, sizeof(pmu_name_str), "%s", name);
 
-	if (version >= 2 && extra_attr)
+	if (version >= 2 && extra_attr) {
 		group_format_extra.attrs = extra_attr;
+		if (extra_skl_attr)
+			group_format_extra_skl.attrs = extra_skl_attr;
+	}
 
 	group_events_td.attrs = td_attr;
 	if (x86_pmu.pebs)
@@ -5073,7 +5077,6 @@ __init int intel_pmu_init(void)
 	if (x86_pmu.counter_freezing)
 		x86_pmu.handle_irq = intel_pmu_handle_irq_v4;
 
-	kfree(to_free);
 	return 0;
 }
 
