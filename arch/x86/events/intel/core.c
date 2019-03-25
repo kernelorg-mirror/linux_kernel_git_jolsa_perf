@@ -4397,6 +4397,13 @@ static struct attribute *intel_pmu_attrs[] = {
 	NULL,
 };
 
+static struct attribute_group group_caps_gen = {
+	.name  = "caps",
+	.attrs = intel_pmu_caps_attrs,
+};
+
+static struct attribute_group group_caps_lbr = { .name = "caps" };
+
 static struct attribute_group group_events_td  = { .name = "events" };
 static struct attribute_group group_events_mem = { .name = "events" };
 static struct attribute_group group_events_tsx = { .name = "events" };
@@ -4405,8 +4412,11 @@ static struct attribute_group *update_attrs[] = {
 	&group_events_td,
 	&group_events_mem,
 	&group_events_tsx,
+	&group_caps_gen,
+	&group_caps_lbr,
 	NULL,
 };
+
 
 __init int intel_pmu_init(void)
 {
@@ -5030,10 +5040,8 @@ __init int intel_pmu_init(void)
 			x86_pmu.lbr_nr = 0;
 	}
 
-	x86_pmu.caps_attrs = intel_pmu_caps_attrs;
-
 	if (x86_pmu.lbr_nr) {
-		x86_pmu.caps_attrs = merge_attr(x86_pmu.caps_attrs, lbr_attrs);
+		group_caps_lbr.attrs = lbr_attrs;
 		pr_cont("%d-deep LBR, ", x86_pmu.lbr_nr);
 	}
 
