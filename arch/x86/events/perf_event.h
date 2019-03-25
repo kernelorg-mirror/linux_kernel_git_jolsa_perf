@@ -634,7 +634,7 @@ struct x86_pmu {
 	struct attribute **caps_attrs;
 
 	ssize_t		(*events_sysfs_show)(char *page, u64 config);
-	struct attribute **cpu_events;
+	struct attribute_group **update_attrs;
 
 	unsigned long	attr_freeze_on_smi;
 	struct attribute **attrs;

@@ -1855,14 +1855,6 @@ static int __init init_hw_perf_events(void)
 	else
 		filter_events(x86_pmu_events_group.attrs);
 
-	if (x86_pmu.cpu_events) {
-		struct attribute **tmp;
-
-		tmp = merge_attr(x86_pmu_events_group.attrs, x86_pmu.cpu_events);
-		if (!WARN_ON(!tmp))
-			x86_pmu_events_group.attrs = tmp;
-	}
-
 	if (x86_pmu.attrs) {
 		struct attribute **tmp;
 
@@ -1902,6 +1894,13 @@ static int __init init_hw_perf_events(void)
 	err = perf_pmu_register(&pmu, "cpu", PERF_TYPE_RAW);
 	if (err)
 		goto out2;
+
+	if (x86_pmu.update_attrs) {
+		struct attribute_group **group = x86_pmu.update_attrs;
+
+		while (*group)
+			sysfs_update_group(&pmu.dev->kobj, *group);
+	}
 
 	return 0;
 
