@@ -3688,8 +3688,6 @@ static __initconst const struct x86_pmu core_pmu = {
 	.check_period		= intel_pmu_check_period,
 };
 
-static struct attribute *intel_pmu_attrs[];
-
 static __initconst const struct x86_pmu intel_pmu = {
 	.name			= "Intel",
 	.handle_irq		= intel_pmu_handle_irq,
@@ -3720,8 +3718,6 @@ static __initconst const struct x86_pmu intel_pmu = {
 
 	.format_attrs		= intel_arch3_formats_attr,
 	.events_sysfs_show	= intel_event_sysfs_show,
-
-	.attrs			= intel_pmu_attrs,
 
 	.cpu_prepare		= intel_pmu_cpu_prepare,
 	.cpu_starting		= intel_pmu_cpu_starting,
@@ -4112,6 +4108,10 @@ static struct attribute *intel_pmu_attrs[] = {
 	NULL,
 };
 
+static struct attribute_group group_default = {
+	.attrs = intel_pmu_attrs,
+};
+
 static struct attribute_group group_caps_gen = {
 	.name  = "caps",
 	.attrs = intel_pmu_caps_attrs,
@@ -4134,6 +4134,7 @@ static struct attribute_group *update_attrs[] = {
 	&group_caps_lbr,
 	&group_format_extra,
 	&group_format_extra_skl,
+	&group_default,
 	NULL,
 };
 
