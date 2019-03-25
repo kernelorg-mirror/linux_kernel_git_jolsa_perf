@@ -4408,12 +4408,15 @@ static struct attribute_group group_events_td  = { .name = "events" };
 static struct attribute_group group_events_mem = { .name = "events" };
 static struct attribute_group group_events_tsx = { .name = "events" };
 
+static struct attribute_group group_format_extra = { .name = "format" };
+
 static struct attribute_group *update_attrs[] = {
 	&group_events_td,
 	&group_events_mem,
 	&group_events_tsx,
 	&group_caps_gen,
 	&group_caps_lbr,
+	&group_format_extra,
 	NULL,
 };
 
@@ -4980,11 +4983,8 @@ __init int intel_pmu_init(void)
 
 	snprintf(pmu_name_str, sizeof(pmu_name_str), "%s", name);
 
-	if (version >= 2 && extra_attr) {
-		x86_pmu.format_attrs = merge_attr(intel_arch3_formats_attr,
-						  extra_attr);
-		WARN_ON(!x86_pmu.format_attrs);
-	}
+	if (version >= 2 && extra_attr)
+		group_format_extra.attrs = extra_attr;
 
 	group_events_td.attrs = td_attr;
 	if (x86_pmu.pebs)
