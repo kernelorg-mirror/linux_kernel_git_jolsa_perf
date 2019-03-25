@@ -4402,6 +4402,12 @@ pebs_is_visible(struct kobject *kobj, struct attribute *attr, int i)
 	return x86_pmu.pebs ? attr->mode : 0;
 }
 
+static umode_t
+lbr_is_visible(struct kobject *kobj, struct attribute *attr, int i)
+{
+	return x86_pmu.lbr_nr ? attr->mode : 0;
+}
+
 static struct attribute_group group_events_td  = {
 	.name = "events",
 };
@@ -4416,12 +4422,25 @@ static struct attribute_group group_events_tsx = {
 	.is_visible = pebs_is_visible,
 };
 
+static struct attribute_group group_caps_gen = {
+	.name  = "caps",
+	.attrs = intel_pmu_caps_attrs,
+};
+
+static struct attribute_group group_caps_lbr = {
+	.name = "caps",
+	.is_visible = lbr_is_visible,
+ };
+
 static const struct attribute_group *attr_groups_update[] = {
 	&group_events_td,
 	&group_events_mem,
 	&group_events_tsx,
+	&group_caps_gen,
+	&group_caps_lbr,
 	NULL,
 };
+
 
 __init int intel_pmu_init(void)
 {
@@ -4995,6 +5014,7 @@ __init int intel_pmu_init(void)
 	group_events_td.attrs = td_attr;
 	group_events_mem.attrs = mem_attr;
 	group_events_tsx.attrs = tsx_attr;
+	group_caps_lbr.attrs = lbr_attrs;
 
 	x86_pmu.attr_groups_update = attr_groups_update;
 
@@ -5044,12 +5064,8 @@ __init int intel_pmu_init(void)
 			x86_pmu.lbr_nr = 0;
 	}
 
-	x86_pmu.caps_attrs = intel_pmu_caps_attrs;
-
-	if (x86_pmu.lbr_nr) {
-		x86_pmu.caps_attrs = merge_attr(x86_pmu.caps_attrs, lbr_attrs);
+	if (x86_pmu.lbr_nr)
 		pr_cont("%d-deep LBR, ", x86_pmu.lbr_nr);
-	}
 
 	/*
 	 * Access extra MSR may cause #GP under certain circumstances.
