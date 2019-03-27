@@ -2103,6 +2103,7 @@ struct reader_state {
 	u64	 data_size;
 	u64	 head;
 	bool	 eof;
+	u64	 size;
 };
 
 struct reader {
@@ -2221,6 +2222,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	if (skip)
 		size += skip;
 
+	st->size += size;
 	st->head += size;
 	st->file_pos += size;
 
@@ -2376,7 +2378,15 @@ static int __perf_session__process_dir_events(struct perf_session *session)
 				readers--;
 		}
 
-		i = (i + 1) % rmax;
+		/*
+		 * Processing 10MBs of data from each reader in sequence,
+		 * because that's the way the ordered events sorting works
+		 * most efficiently.
+		 */
+		if (rd[i].state.size >= 10*1024*1024) {
+			rd[i].state.size = 0;
+			i = (i + 1) % rmax;
+		}
 	}
 
 	/* ... and flush everything out. */
