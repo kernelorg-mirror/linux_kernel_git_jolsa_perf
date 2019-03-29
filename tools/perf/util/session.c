@@ -2088,6 +2088,7 @@ struct reader_state {
 	u64	 file_offset;
 	u64	 data_size;
 	u64	 head;
+	bool	 eof;
 };
 
 struct reader {
@@ -2128,6 +2129,11 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 	char *buf, **mmaps = st->mmaps;
 	u64 page_offset;
 
+	if (st->file_pos >= st->data_size) {
+		st->eof = true;
+		return 0;
+	}
+
 	mmap_prot  = PROT_READ;
 	mmap_flags = MAP_SHARED;
 
@@ -2158,7 +2164,7 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 		session->one_mmap_addr = buf;
 		session->one_mmap_offset = st->file_offset;
 	}
-	return 0;
+	return 1;
 }
 
 static int
@@ -2211,7 +2217,7 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 
 	err = reader__mmap(rd, session);
 
-	while ((err >= 0) && (st->file_pos < st->data_size)) {
+	while ((err >= 0) && !st->eof) {
 		if (session_done())
 			return 0;
 
