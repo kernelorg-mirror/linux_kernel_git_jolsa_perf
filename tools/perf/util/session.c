@@ -2100,6 +2100,11 @@ struct reader {
 	struct reader_state	state;
 };
 
+enum {
+	READER_EOF	=  0,
+	READER_OK	=  1,
+};
+
 static void
 reader__init(struct reader *rd, struct perf_session *session)
 {
@@ -2131,7 +2136,7 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 
 	if (st->file_pos >= st->data_size) {
 		st->eof = true;
-		return 0;
+		return READER_EOF;
 	}
 
 	mmap_prot  = PROT_READ;
@@ -2164,7 +2169,7 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 		session->one_mmap_addr = buf;
 		session->one_mmap_offset = st->file_offset;
 	}
-	return 1;
+	return READER_OK;
 }
 
 static int
@@ -2181,7 +2186,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 		return PTR_ERR(event);
 
 	if (!event)
-		return 0;
+		return READER_EOF;
 
 	size = event->header.size;
 
@@ -2202,7 +2207,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	st->file_pos += size;
 
 	ui_progress__update(prog, size);
-	return 1;
+	return READER_OK;
 }
 
 
@@ -2210,21 +2215,20 @@ static int
 reader__process_events(struct reader *rd, struct perf_session *session,
 		       struct ui_progress *prog)
 {
-	struct reader_state *st = &rd->state;
 	int err;
 
 	reader__init(rd, session);
 
 	err = reader__mmap(rd, session);
+	if (err != READER_OK)
+		return -EINVAL;
 
-	while ((err >= 0) && !st->eof) {
+	while (err == READER_OK) {
 		if (session_done())
 			return 0;
 
 		err = reader__read_event(rd, session, prog);
-		if (err < 0)
-			break;
-		if (!err)
+		if (err == READER_EOF)
 			err = reader__mmap(rd, session);
 	}
 
