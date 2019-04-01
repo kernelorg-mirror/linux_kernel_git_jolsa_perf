@@ -1473,7 +1473,6 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
 	struct perf_sample sample = { .time = 0, };
-	int fd = perf_data__fd(session->data);
 	int err;
 
 	if (event->header.type != PERF_RECORD_COMPRESSED ||
@@ -1499,7 +1498,7 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return 0;
 	case PERF_RECORD_HEADER_TRACING_DATA:
 		/* setup for reading amidst mmap */
-		lseek(fd, offset->val, SEEK_SET);
+		lseek(offset->fd, offset->val, SEEK_SET);
 		return tool->tracing_data(session, event);
 	case PERF_RECORD_HEADER_BUILD_ID:
 		return tool->build_id(session, event);
@@ -1511,7 +1510,7 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->auxtrace_info(session, event);
 	case PERF_RECORD_AUXTRACE:
 		/* setup for reading amidst mmap */
-		lseek(fd, offset->val + event->header.size, SEEK_SET);
+		lseek(offset->fd, offset->val + event->header.size, SEEK_SET);
 		return tool->auxtrace(session, event, offset);
 	case PERF_RECORD_AUXTRACE_ERROR:
 		perf_session__auxtrace_error_inc(session, event);
@@ -1548,6 +1547,7 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	struct perf_evlist *evlist = session->evlist;
 	struct perf_tool *tool = session->tool;
 	struct file_offset offset = {
+		.fd  = -1,
 		.val = 0,
 	};
 
@@ -1894,6 +1894,7 @@ more:
 	}
 
 	offset = (struct file_offset ) {
+		.fd  = fd,
 		.val = head,
 	};
 
@@ -2106,6 +2107,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 {
 	struct reader_state *st = &rd->state;
 	struct file_offset offset = {
+		.fd  = rd->fd,
 		.val = st->file_pos,
 	};
 	union perf_event *event;

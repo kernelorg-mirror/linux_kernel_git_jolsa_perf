@@ -104,7 +104,7 @@ static int arm_spe_process_event(struct perf_session *session __maybe_unused,
 static int arm_spe_process_auxtrace_event(struct perf_session *session,
 					  union perf_event *event,
 					  struct perf_tool *tool __maybe_unused,
-					  struct file_offset *offset __maybe_unused)
+					  struct file_offset *offset)
 {
 	struct arm_spe *spe = container_of(session->auxtrace, struct arm_spe,
 					     auxtrace);
@@ -122,7 +122,7 @@ static int arm_spe_process_auxtrace_event(struct perf_session *session,
 	}
 
 	err = auxtrace_queues__add_event(&spe->queues, session, event,
-					 data_offset, &buffer);
+					 data_offset, offset->fd, &buffer);
 	if (err)
 		return err;
 
