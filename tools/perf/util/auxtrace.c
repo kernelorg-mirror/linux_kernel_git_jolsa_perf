@@ -1241,7 +1241,7 @@ int perf_event__process_auxtrace_info(struct perf_session *session,
 
 s64 perf_event__process_auxtrace(struct perf_session *session,
 				 union perf_event *event,
-				 struct file_offset *offset __maybe_unused)
+				 struct file_offset *offset)
 {
 	s64 err;
 
@@ -1257,7 +1257,8 @@ s64 perf_event__process_auxtrace(struct perf_session *session,
 	if (!session->auxtrace || event->header.type != PERF_RECORD_AUXTRACE)
 		return -EINVAL;
 
-	err = session->auxtrace->process_auxtrace_event(session, event, session->tool);
+	err = session->auxtrace->process_auxtrace_event(session, event,
+							session->tool, offset);
 	if (err < 0)
 		return err;
 

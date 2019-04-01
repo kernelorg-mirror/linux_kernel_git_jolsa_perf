@@ -156,7 +156,8 @@ struct auxtrace {
 			     struct perf_tool *tool);
 	int (*process_auxtrace_event)(struct perf_session *session,
 				      union perf_event *event,
-				      struct perf_tool *tool);
+				      struct perf_tool *tool,
+				      struct file_offset *offset);
 	int (*queue_data)(struct perf_session *session,
 			  struct perf_sample *sample, union perf_event *event,
 			  u64 data_offset);
