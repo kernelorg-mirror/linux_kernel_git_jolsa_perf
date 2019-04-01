@@ -1617,6 +1617,8 @@ int perf_session__peek_event(struct perf_session *session, off_t file_offset,
 	size_t hdr_sz, rest;
 	int fd;
 
+	BUG_ON(perf_data__is_dir(session->data));
+
 	if (session->one_mmap && !session->header.needs_swap) {
 		event = file_offset - session->one_mmap_offset +
 			session->one_mmap_addr;
