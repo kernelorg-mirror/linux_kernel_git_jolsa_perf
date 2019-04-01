@@ -200,6 +200,7 @@ struct auxtrace_buffer {
 	int			cpu;
 	void			*data;
 	off_t			data_offset;
+	int			data_fd;
 	void			*mmap_addr;
 	size_t			mmap_size;
 	bool			data_needs_freeing;
@@ -472,7 +473,9 @@ int auxtrace_mmap__read_snapshot(struct mmap *map,
 int auxtrace_queues__init(struct auxtrace_queues *queues);
 int auxtrace_queues__add_event(struct auxtrace_queues *queues,
 			       struct perf_session *session,
-			       union perf_event *event, off_t data_offset,
+			       union perf_event *event,
+			       off_t data_offset,
+			       int data_fd,
 			       struct auxtrace_buffer **buffer_ptr);
 struct auxtrace_queue *
 auxtrace_queues__sample_queue(struct auxtrace_queues *queues,

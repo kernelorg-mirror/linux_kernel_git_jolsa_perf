@@ -21,6 +21,7 @@ struct auxtrace;
 struct itrace_synth_opts;
 
 struct file_offset {
+	int	fd;
 	u64	val;
 };
 

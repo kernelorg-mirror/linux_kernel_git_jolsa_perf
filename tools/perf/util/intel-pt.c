@@ -2736,7 +2736,7 @@ static int intel_pt_process_auxtrace_event(struct perf_session *session,
 		}
 
 		err = auxtrace_queues__add_event(&pt->queues, session, event,
-						 data_offset, &buffer);
+						 data_offset, offset->fd, &buffer);
 		if (err)
 			return err;
 
@@ -2763,7 +2763,7 @@ static int intel_pt_queue_data(struct perf_session *session,
 
 	if (event) {
 		return auxtrace_queues__add_event(&pt->queues, session, event,
-						  data_offset, NULL);
+						  data_offset, perf_data__fd(session->data), NULL);
 	}
 
 	if (sample->time && sample->time != (u64)-1)

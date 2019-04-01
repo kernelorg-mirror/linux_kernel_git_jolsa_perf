@@ -423,7 +423,9 @@ out_free:
 
 int auxtrace_queues__add_event(struct auxtrace_queues *queues,
 			       struct perf_session *session,
-			       union perf_event *event, off_t data_offset,
+			       union perf_event *event,
+			       off_t data_offset,
+			       int data_fd,
 			       struct auxtrace_buffer **buffer_ptr)
 {
 	struct auxtrace_buffer buffer = {
@@ -431,6 +433,7 @@ int auxtrace_queues__add_event(struct auxtrace_queues *queues,
 		.tid = event->auxtrace.tid,
 		.cpu = event->auxtrace.cpu,
 		.data_offset = data_offset,
+		.data_fd = data_fd,
 		.offset = event->auxtrace.offset,
 		.reference = event->auxtrace.reference,
 		.size = event->auxtrace.size,
@@ -462,7 +465,7 @@ static int auxtrace_queues__add_indexed_event(struct auxtrace_queues *queues,
 		}
 		file_offset += event->header.size;
 		err = auxtrace_queues__add_event(queues, session, event,
-						 file_offset, NULL);
+						 file_offset, -1, NULL);
 	}
 out:
 	return err;
