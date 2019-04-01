@@ -278,9 +278,8 @@ static int auxtrace_queues__grow(struct auxtrace_queues *queues,
 	return 0;
 }
 
-static void *auxtrace_copy_data(u64 size, struct perf_session *session)
+static void *auxtrace_copy_data(int fd, u64 size)
 {
-	int fd = perf_data__fd(session->data);
 	void *p;
 	ssize_t ret;
 
@@ -391,11 +390,16 @@ static int auxtrace_queues__add_buffer(struct auxtrace_queues *queues,
 	if (!buffer)
 		return -ENOMEM;
 
-	if (session->one_mmap) {
+	if (perf_data__is_dir(session->data)) {
+		buffer->data = auxtrace_copy_data(buffer->data_fd, buffer->size);
+		if (!buffer->data)
+			goto out_free;
+		buffer->data_needs_freeing = true;
+	} else if (session->one_mmap) {
 		buffer->data = buffer->data_offset - session->one_mmap_offset +
 			       session->one_mmap_addr;
 	} else if (perf_data__is_pipe(session->data)) {
-		buffer->data = auxtrace_copy_data(buffer->size, session);
+		buffer->data = auxtrace_copy_data(perf_data__fd(session->data), buffer->size);
 		if (!buffer->data)
 			goto out_free;
 		buffer->data_needs_freeing = true;
