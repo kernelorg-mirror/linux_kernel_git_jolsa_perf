@@ -1240,7 +1240,8 @@ int perf_event__process_auxtrace_info(struct perf_session *session,
 }
 
 s64 perf_event__process_auxtrace(struct perf_session *session,
-				 union perf_event *event)
+				 union perf_event *event,
+				 struct file_offset *offset __maybe_unused)
 {
 	s64 err;
 

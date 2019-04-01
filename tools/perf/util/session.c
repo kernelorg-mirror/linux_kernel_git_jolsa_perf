@@ -382,7 +382,8 @@ static int skipn(int fd, off_t n)
 }
 
 static s64 process_event_auxtrace_stub(struct perf_session *session __maybe_unused,
-				       union perf_event *event)
+				       union perf_event *event,
+				       struct file_offset *offset __maybe_unused)
 {
 	dump_printf(": unhandled!\n");
 	if (perf_data__is_pipe(session->data))
@@ -1507,7 +1508,7 @@ static int perf_session__deliver_event(struct perf_session *session,
 
 static s64 perf_session__process_user_event(struct perf_session *session,
 					    union perf_event *event,
-					    u64 file_offset)
+					    struct file_offset *offset)
 {
 	struct ordered_events *oe = &session->ordered_events;
 	struct perf_tool *tool = session->tool;
@@ -1517,7 +1518,7 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 
 	if (event->header.type != PERF_RECORD_COMPRESSED ||
 	    tool->compressed == perf_session__process_compressed_event_stub)
-		dump_event(session->evlist, event, file_offset, &sample);
+		dump_event(session->evlist, event, offset->val, &sample);
 
 	/* These events are processed right away */
 	switch (event->header.type) {
@@ -1538,7 +1539,7 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return 0;
 	case PERF_RECORD_HEADER_TRACING_DATA:
 		/* setup for reading amidst mmap */
-		lseek(fd, file_offset, SEEK_SET);
+		lseek(fd, offset->val, SEEK_SET);
 		return tool->tracing_data(session, event);
 	case PERF_RECORD_HEADER_BUILD_ID:
 		return tool->build_id(session, event);
@@ -1550,8 +1551,8 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 		return tool->auxtrace_info(session, event);
 	case PERF_RECORD_AUXTRACE:
 		/* setup for reading amidst mmap */
-		lseek(fd, file_offset + event->header.size, SEEK_SET);
-		return tool->auxtrace(session, event);
+		lseek(fd, offset->val + event->header.size, SEEK_SET);
+		return tool->auxtrace(session, event, offset);
 	case PERF_RECORD_AUXTRACE_ERROR:
 		perf_session__auxtrace_error_inc(session, event);
 		return tool->auxtrace_error(session, event);
@@ -1571,9 +1572,9 @@ static s64 perf_session__process_user_event(struct perf_session *session,
 	case PERF_RECORD_HEADER_FEATURE:
 		return tool->feature(session, event);
 	case PERF_RECORD_COMPRESSED:
-		err = tool->compressed(session, event, file_offset);
+		err = tool->compressed(session, event, offset->val);
 		if (err)
-			dump_event(session->evlist, event, file_offset, &sample);
+			dump_event(session->evlist, event, offset->val, &sample);
 		return err;
 	default:
 		return -EINVAL;
@@ -1586,11 +1587,14 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 {
 	struct evlist *evlist = session->evlist;
 	struct perf_tool *tool = session->tool;
+	struct file_offset offset = {
+		.val = 0,
+	};
 
 	events_stats__inc(&evlist->stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
-		return perf_session__process_user_event(session, event, 0);
+		return perf_session__process_user_event(session, event, &offset);
 
 	return machines__deliver_event(&session->machines, evlist, event, sample, tool, 0);
 }
@@ -1688,7 +1692,8 @@ int perf_session__peek_events(struct perf_session *session, u64 offset,
 }
 
 static s64 perf_session__process_event(struct perf_session *session,
-				       union perf_event *event, u64 file_offset)
+				       union perf_event *event,
+				       struct file_offset *offset)
 {
 	struct evlist *evlist = session->evlist;
 	struct perf_tool *tool = session->tool;
@@ -1703,7 +1708,7 @@ static s64 perf_session__process_event(struct perf_session *session,
 	events_stats__inc(&evlist->stats, event->header.type);
 
 	if (event->header.type >= PERF_RECORD_USER_TYPE_START)
-		return perf_session__process_user_event(session, event, file_offset);
+		return perf_session__process_user_event(session, event, offset);
 
 	if (tool->ordered_events) {
 		u64 timestamp = -1ULL;
@@ -1712,12 +1717,12 @@ static s64 perf_session__process_event(struct perf_session *session,
 		if (ret && ret != -1)
 			return ret;
 
-		ret = perf_session__queue_event(session, event, timestamp, file_offset);
+		ret = perf_session__queue_event(session, event, timestamp, offset->val);
 		if (ret != -ETIME)
 			return ret;
 	}
 
-	return perf_session__deliver_event(session, event, tool, file_offset);
+	return perf_session__deliver_event(session, event, tool, offset->val);
 }
 
 void perf_event_header__bswap(struct perf_event_header *hdr)
@@ -1890,6 +1895,7 @@ static int __perf_session__process_decomp_events(struct perf_session *session);
 static int __perf_session__process_pipe_events(struct perf_session *session)
 {
 	struct ordered_events *oe = &session->ordered_events;
+	struct file_offset offset;
 	struct perf_tool *tool = session->tool;
 	int fd = perf_data__fd(session->data);
 	union perf_event *event;
@@ -1955,7 +1961,11 @@ more:
 		}
 	}
 
-	if ((skip = perf_session__process_event(session, event, head)) < 0) {
+	offset = (struct file_offset ) {
+		.val = head,
+	};
+
+	if ((skip = perf_session__process_event(session, event, &offset)) < 0) {
 		pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 		       head, event->header.size, event->header.type);
 		err = -EINVAL;
@@ -2035,8 +2045,9 @@ fetch_decomp_event(u64 head, size_t mmap_size, char *buf, bool needs_swap)
 
 static int __perf_session__process_decomp_events(struct perf_session *session)
 {
+	struct file_offset offset = { .val = 0 };
 	s64 skip;
-	u64 size, file_pos = 0;
+	u64 size;
 	struct decomp *decomp = session->decomp_last;
 
 	if (!decomp)
@@ -2052,7 +2063,7 @@ static int __perf_session__process_decomp_events(struct perf_session *session)
 		size = event->header.size;
 
 		if (size < sizeof(struct perf_event_header) ||
-		    (skip = perf_session__process_event(session, event, file_pos)) < 0) {
+		    (skip = perf_session__process_event(session, event, &offset)) < 0) {
 			pr_err("%#" PRIx64 " [%#x]: failed to process type: %d\n",
 				decomp->file_pos + decomp->head, event->header.size, event->header.type);
 			return -EINVAL;
@@ -2177,6 +2188,9 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 		   struct ui_progress *prog)
 {
 	struct reader_state *st = &rd->state;
+	struct file_offset offset = {
+		.val = st->file_pos,
+	};
 	union perf_event *event;
 	u64 size;
 	s64 skip;
@@ -2193,7 +2207,7 @@ reader__read_event(struct reader *rd, struct perf_session *session,
 	skip = -EINVAL;
 
 	if (size < sizeof(struct perf_event_header) ||
-	    (skip = perf_session__process_event(session, event, st->file_pos)) < 0) {
+	    (skip = perf_session__process_event(session, event, &offset)) < 0) {
 		pr_err("%#" PRIx64 " [%s] [%#x]: failed to process type: %d [%s]\n",
 		       st->file_offset + st->head, rd->path, event->header.size,
 		       event->header.type, strerror(-skip));

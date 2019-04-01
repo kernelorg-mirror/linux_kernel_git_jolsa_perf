@@ -20,6 +20,10 @@ struct thread;
 struct auxtrace;
 struct itrace_synth_opts;
 
+struct file_offset {
+	u64	val;
+};
+
 struct perf_session {
 	struct perf_header	header;
 	struct machines		machines;
