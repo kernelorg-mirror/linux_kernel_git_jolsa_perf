@@ -2121,7 +2121,7 @@ enum {
 };
 
 static void
-reader__init(struct reader *rd, struct perf_session *session)
+reader__init(struct reader *rd, bool *one_mmap)
 {
 	struct reader_state *st = &rd->state;
 	char **mmaps = st->mmaps;
@@ -2135,7 +2135,8 @@ reader__init(struct reader *rd, struct perf_session *session)
 	st->mmap_size = MMAP_SIZE;
 	if (st->mmap_size > st->data_size) {
 		st->mmap_size = st->data_size;
-		session->one_mmap = true;
+		if (one_mmap)
+			*one_mmap = true;
 	}
 
 	memset(mmaps, 0, sizeof(st->mmaps));
@@ -2180,10 +2181,6 @@ reader__mmap(struct reader *rd, struct perf_session *session)
 	mmaps[st->mmap_idx] = st->mmap_cur = buf;
 	st->mmap_idx = (st->mmap_idx + 1) & (ARRAY_SIZE(st->mmaps) - 1);
 	st->file_pos = st->file_offset + st->head;
-	if (session->one_mmap) {
-		session->one_mmap_addr = buf;
-		session->one_mmap_offset = st->file_offset;
-	}
 	return READER_OK;
 }
 
@@ -2236,11 +2233,16 @@ reader__process_events(struct reader *rd, struct perf_session *session,
 {
 	int err;
 
-	reader__init(rd, session);
+	reader__init(rd, &session->one_mmap);
 
 	err = reader__mmap(rd, session);
 	if (err != READER_OK)
 		return -EINVAL;
+
+	if (session->one_mmap) {
+		session->one_mmap_addr   = rd->state.mmap_cur;
+		session->one_mmap_offset = rd->state.file_offset;
+	}
 
 	while (err == READER_OK) {
 		if (session_done())
@@ -2329,7 +2331,7 @@ static int __perf_session__process_dir_events(struct perf_session *session)
 		.data_offset	= session->header.data_offset,
 	};
 
-	reader__init(&rd[0], session);
+	reader__init(&rd[0], NULL);
 
 	if (reader__mmap(&rd[0], session) != READER_OK)
 		goto out_err;
@@ -2347,7 +2349,7 @@ static int __perf_session__process_dir_events(struct perf_session *session)
 			.data_offset	= 0,
 		};
 
-		reader__init(&rd[rmax], session);
+		reader__init(&rd[rmax], NULL);
 
 		if (reader__mmap(&rd[rmax], session) != READER_OK)
 			goto out_err;

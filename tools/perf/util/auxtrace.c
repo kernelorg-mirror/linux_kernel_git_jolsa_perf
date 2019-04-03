@@ -469,7 +469,7 @@ static int auxtrace_queues__add_indexed_event(struct auxtrace_queues *queues,
 		}
 		file_offset += event->header.size;
 		err = auxtrace_queues__add_event(queues, session, event,
-						 file_offset, -1, NULL);
+						 file_offset, perf_data__fd(session->data), NULL);
 	}
 out:
 	return err;
