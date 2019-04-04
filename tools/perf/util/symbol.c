@@ -1166,6 +1166,18 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 	return 0;
 }
 
+static bool in_kcore(struct kcore_mapfn_data *md, struct map *map)
+{
+	struct map *iter;
+
+	list_for_each_entry(iter, &md->maps, node) {
+		if ((map->start >= iter->start) && (map->start < iter->end))
+			return true;
+	}
+
+	return false;
+}
+
 static int dso__load_kcore(struct dso *dso, struct map *map,
 			   const char *kallsyms_filename)
 {
@@ -1222,7 +1234,7 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 	while (old_map) {
 		struct map *next = map_groups__next(old_map);
 
-		if (old_map != map)
+		if (old_map != map && !in_kcore(&md, old_map))
 			map_groups__remove(kmaps, old_map);
 		old_map = next;
 	}
