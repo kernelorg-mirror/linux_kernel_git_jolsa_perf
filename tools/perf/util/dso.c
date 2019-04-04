@@ -22,6 +22,8 @@
 #include "debug.h"
 #include "string2.h"
 #include "vdso.h"
+#include "bpf-event.h"
+#include <bpf/libbpf.h>
 
 static const char * const debuglink_paths[] = {
 	"%.0s%s",
@@ -970,6 +972,33 @@ static ssize_t data_read_offset(struct dso *dso, struct machine *machine,
 	return cached_read(dso, machine, offset, data, size);
 }
 
+static ssize_t
+dso__bpf_read_data(struct dso *dso, u64 offset, u8* data, ssize_t size)
+{
+	struct bpf_prog_info_node *info_node;
+	struct bpf_prog_info_linear *info_linear;
+	u64 len;
+	u8 *buf;
+
+	info_node = perf_env__find_bpf_prog_info(dso->bpf_prog.env,
+						 dso->bpf_prog.id);
+	if (!info_node) {
+		dso->data.status = DSO_DATA_STATUS_ERROR;
+		return -1;
+	}
+
+	info_linear = info_node->info_linear;
+	len = info_linear->info.jited_prog_len;
+	buf = (u8*) info_linear->info.jited_prog_insns;
+
+	if (offset >= len)
+		return -1;
+
+	size = (ssize_t) min(len - offset, (u64) size);
+	memcpy(data, buf + offset, size);
+	return size;
+}
+
 /**
  * dso__data_read_offset - Read data from dso file offset
  * @dso: dso object
@@ -986,6 +1015,9 @@ ssize_t dso__data_read_offset(struct dso *dso, struct machine *machine,
 {
 	if (dso->data.status == DSO_DATA_STATUS_ERROR)
 		return -1;
+
+	if (dso->binary_type == DSO_BINARY_TYPE__BPF_PROG_INFO)
+		return dso__bpf_read_data(dso, offset, data, size);
 
 	return data_read_offset(dso, machine, offset, data, size);
 }
