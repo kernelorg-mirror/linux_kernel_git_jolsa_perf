@@ -20,6 +20,16 @@ extern int debug_data_convert;
 #define pr_fmt(fmt) fmt
 #endif
 
+#define pr_once(__p, __f, ...)			\
+({						\
+	static bool __print_once;		\
+						\
+	if (!__print_once) {			\
+		__print_once = true;		\
+		pr_ ## __p(__f, ##__VA_ARGS__);	\
+	}\
+})
+
 #define pr_err(fmt, ...) \
 	eprintf(0, verbose, pr_fmt(fmt), ##__VA_ARGS__)
 #define pr_warning(fmt, ...) \

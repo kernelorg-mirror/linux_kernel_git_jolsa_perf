@@ -910,10 +910,10 @@ static void __maps__insert_name(struct maps *maps, struct map *map)
 		rc = strcmp(m->dso->short_name, map->dso->short_name);
 		if (rc < 0)
 			p = &(*p)->rb_left;
-		else if (rc  > 0)
+		else {
 			p = &(*p)->rb_right;
-		else
-			return;
+			pr_once(warning, "detected duplicate map name\n");
+		}
 	}
 	rb_link_node(&map->rb_node_name, parent, p);
 	rb_insert_color(&map->rb_node_name, &maps->names);
