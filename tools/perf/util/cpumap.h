@@ -5,19 +5,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <linux/refcount.h>
-
+#include <perf/cpumap.h>
 #include "perf.h"
 #include "util/debug.h"
 
-struct perf_cpu_map;
-
-struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list);
-struct perf_cpu_map *perf_perf_cpu_map__empty_new(int nr);
-struct perf_cpu_map *perf_cpu_map__dummy_new(void);
 struct perf_cpu_map *cpu_map__new_data(struct cpu_map_data *data);
-struct perf_cpu_map *perf_cpu_map__read(FILE *file);
-size_t perf_cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size);
-size_t perf_cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size);
 size_t cpu_map__fprintf(struct perf_cpu_map *map, FILE *fp);
 int cpu_map__get_socket_id(int cpu);
 int cpu_map__get_socket(struct perf_cpu_map *map, int idx, void *data);
@@ -29,9 +21,6 @@ int cpu_map__build_socket_map(struct perf_cpu_map *cpus, struct perf_cpu_map **s
 int cpu_map__build_die_map(struct perf_cpu_map *cpus, struct perf_cpu_map **diep);
 int cpu_map__build_core_map(struct perf_cpu_map *cpus, struct perf_cpu_map **corep);
 const struct perf_cpu_map *cpu_map__online(void); /* thread unsafe */
-
-struct perf_cpu_map *perf_cpu_map__get(struct perf_cpu_map *map);
-void perf_cpu_map__put(struct perf_cpu_map *map);
 
 static inline int cpu_map__id_to_socket(int id)
 {
@@ -55,14 +44,4 @@ int cpu__max_cpu(void);
 int cpu__max_present_cpu(void);
 int cpu__get_node(int cpu);
 
-int perf_cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
-			    int (*f)(struct perf_cpu_map *map, int cpu, void *data),
-			    void *data);
-
-int perf_cpu_map__nr(const struct perf_cpu_map *map);
-bool perf_cpu_map__empty(const struct perf_cpu_map *map);
-void perf_cpu_map__set(struct perf_cpu_map *map, int idx, int cpu);
-int perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
-bool perf_cpu_map__has(struct perf_cpu_map *cpus, int cpu);
-int perf_cpu_map__idx(struct perf_cpu_map *cpus, int cpu);
 #endif /* __PERF_CPUMAP_H */

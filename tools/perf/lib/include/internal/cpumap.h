@@ -1,0 +1,12 @@
+#ifndef __LIBPERF_INTERNAL_CPUMAP_H
+#define __LIBPERF_INTERNAL_CPUMAP_H
+
+#include <linux/refcount.h>
+
+struct perf_cpu_map {
+	refcount_t refcnt;
+	int nr;
+	int map[];
+};
+
+#endif /* __LIBPERF_INTERNAL_CPUMAP_H */
