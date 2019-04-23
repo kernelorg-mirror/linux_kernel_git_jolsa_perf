@@ -571,10 +571,10 @@ static void pmu_read_sysfs(void)
 	closedir(dir);
 }
 
-static struct cpu_map *__pmu_cpumask(const char *path)
+static struct perf_cpu_map *__pmu_cpumask(const char *path)
 {
 	FILE *file;
-	struct cpu_map *cpus;
+	struct perf_cpu_map *cpus;
 
 	file = fopen(path, "r");
 	if (!file)
@@ -592,10 +592,10 @@ static struct cpu_map *__pmu_cpumask(const char *path)
 #define CPUS_TEMPLATE_UNCORE	"%s/bus/event_source/devices/%s/cpumask"
 #define CPUS_TEMPLATE_CPU	"%s/bus/event_source/devices/%s/cpus"
 
-static struct cpu_map *pmu_cpumask(const char *name)
+static struct perf_cpu_map *pmu_cpumask(const char *name)
 {
 	char path[PATH_MAX];
-	struct cpu_map *cpus;
+	struct perf_cpu_map *cpus;
 	const char *sysfs = sysfs__mountpoint();
 	const char *templates[] = {
 		CPUS_TEMPLATE_UNCORE,
@@ -620,7 +620,7 @@ static struct cpu_map *pmu_cpumask(const char *name)
 static bool pmu_is_uncore(const char *name)
 {
 	char path[PATH_MAX];
-	struct cpu_map *cpus;
+	struct perf_cpu_map *cpus;
 	const char *sysfs = sysfs__mountpoint();
 
 	snprintf(path, PATH_MAX, CPUS_TEMPLATE_UNCORE, sysfs, name);
