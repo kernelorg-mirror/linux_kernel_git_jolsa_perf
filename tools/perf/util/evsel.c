@@ -1734,7 +1734,7 @@ static int update_fds(struct perf_evsel *evsel,
 
 static bool ignore_missing_thread(struct perf_evsel *evsel,
 				  int nr_cpus, int cpu,
-				  struct thread_map *threads,
+				  struct perf_thread_map *threads,
 				  int thread, int err)
 {
 	pid_t ignore_pid = thread_map__pid(threads, thread);
@@ -1823,7 +1823,7 @@ static int perf_event_open(struct perf_evsel *evsel,
 }
 
 int perf_evsel__open(struct perf_evsel *evsel, struct perf_cpu_map *cpus,
-		     struct thread_map *threads)
+		     struct perf_thread_map *threads)
 {
 	int cpu, thread, nthreads;
 	unsigned long flags = PERF_FLAG_FD_CLOEXEC;
@@ -1846,7 +1846,7 @@ int perf_evsel__open(struct perf_evsel *evsel, struct perf_cpu_map *cpus,
 	}
 
 	if (threads == NULL) {
-		static struct thread_map *empty_thread_map;
+		static struct perf_thread_map *empty_thread_map;
 
 		if (empty_thread_map == NULL) {
 			empty_thread_map = thread_map__new_by_tid(-1);
@@ -2086,7 +2086,7 @@ int perf_evsel__open_per_cpu(struct perf_evsel *evsel,
 }
 
 int perf_evsel__open_per_thread(struct perf_evsel *evsel,
-				struct thread_map *threads)
+				struct perf_thread_map *threads)
 {
 	return perf_evsel__open(evsel, NULL, threads);
 }
@@ -3061,7 +3061,7 @@ static int store_evsel_ids(struct perf_evsel *evsel, struct perf_evlist *evlist)
 int perf_evsel__store_ids(struct perf_evsel *evsel, struct perf_evlist *evlist)
 {
 	struct perf_cpu_map *cpus = evsel->cpus;
-	struct thread_map *threads = evsel->threads;
+	struct perf_thread_map *threads = evsel->threads;
 
 	if (perf_evsel__alloc_id(evsel, cpus->nr, threads->nr))
 		return -ENOMEM;
