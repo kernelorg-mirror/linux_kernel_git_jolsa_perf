@@ -1625,6 +1625,7 @@ struct perf_script {
 	bool			show_lost_events;
 	bool			show_round_events;
 	bool			show_bpf_events;
+	bool			show_all_events;
 	bool			allocated;
 	bool			per_event_dump;
 	struct cpu_map		*cpus;
@@ -2456,6 +2457,16 @@ static int __cmd_script(struct perf_script *script)
 	signal(SIGINT, sig_handler);
 
 	perf_stat__init_shadow_stats();
+
+	if (script->show_all_events) {
+		script->show_task_events	= true;
+		script->show_mmap_events	= true;
+		script->show_switch_events	= true;
+		script->show_namespace_events	= true;
+		script->show_lost_events	= true;
+		script->show_round_events	= true;
+		script->show_bpf_events		= true;
+	}
 
 	/* override event processing functions */
 	if (script->show_task_events) {
@@ -3502,6 +3513,8 @@ int cmd_script(int argc, const char **argv)
 		    "Show round events (if recorded)"),
 	OPT_BOOLEAN('\0', "show-bpf-events", &script.show_bpf_events,
 		    "Show bpf related events (if recorded)"),
+	OPT_BOOLEAN('\0', "show-all-events", &script.show_all_events,
+		    "Show all side-band events (if recorded)"),
 	OPT_BOOLEAN('\0', "per-event-dump", &script.per_event_dump,
 		    "Dump trace output to files named by the monitored events"),
 	OPT_BOOLEAN('f', "force", &symbol_conf.force, "don't complain, do it"),
