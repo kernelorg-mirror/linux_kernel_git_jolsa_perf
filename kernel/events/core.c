@@ -9874,6 +9874,12 @@ static int pmu_dev_alloc(struct pmu *pmu)
 	if (ret)
 		goto del_dev;
 
+	if (pmu->attr_groups_update)
+		ret = sysfs_update_groups(pmu->dev, pmu->attr_groups_update);
+
+	if (ret)
+		goto del_dev;
+
 out:
 	return ret;
 
