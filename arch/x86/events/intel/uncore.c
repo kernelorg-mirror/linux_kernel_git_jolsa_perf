@@ -1140,12 +1140,27 @@ static void uncore_change_context(struct intel_uncore_type **uncores,
 		uncore_change_type_ctx(*uncores, old_cpu, new_cpu);
 }
 
-static int uncore_event_cpu_offline(unsigned int cpu)
+static void uncore_box_unref(struct intel_uncore_type **types, int id)
 {
-	struct intel_uncore_type *type, **types = uncore_msr_uncores;
+	struct intel_uncore_type *type;
 	struct intel_uncore_pmu *pmu;
 	struct intel_uncore_box *box;
-	int i, pkg, target;
+	int i;
+
+	for (; *types; types++) {
+		type = *types;
+		pmu = type->pmus;
+		for (i = 0; i < type->num_boxes; i++, pmu++) {
+			box = pmu->boxes[id];
+			if (box && atomic_dec_return(&box->refcnt) == 0)
+				uncore_box_exit(box);
+		}
+	}
+}
+
+static int uncore_event_cpu_offline(unsigned int cpu)
+{
+	int pkg, target;
 
 	/* Check if exiting cpu is used for collecting uncore events */
 	if (!cpumask_test_and_clear_cpu(cpu, &uncore_cpu_mask))
@@ -1165,15 +1180,7 @@ static int uncore_event_cpu_offline(unsigned int cpu)
 unref:
 	/* Clear the references */
 	pkg = topology_logical_package_id(cpu);
-	for (; *types; types++) {
-		type = *types;
-		pmu = type->pmus;
-		for (i = 0; i < type->num_boxes; i++, pmu++) {
-			box = pmu->boxes[pkg];
-			if (box && atomic_dec_return(&box->refcnt) == 0)
-				uncore_box_exit(box);
-		}
-	}
+	uncore_box_unref(uncore_msr_uncores, pkg);
 	return 0;
 }
 
@@ -1215,16 +1222,15 @@ cleanup:
 	}
 	return -ENOMEM;
 }
-
-static int uncore_event_cpu_online(unsigned int cpu)
+static int uncore_box_ref(struct intel_uncore_type **types,
+			  int id, unsigned int cpu)
 {
-	struct intel_uncore_type *type, **types = uncore_msr_uncores;
+	struct intel_uncore_type *type;
 	struct intel_uncore_pmu *pmu;
 	struct intel_uncore_box *box;
-	int i, ret, pkg, target;
+	int i, ret;
 
-	pkg = topology_logical_package_id(cpu);
-	ret = allocate_boxes(types, pkg, cpu);
+	ret = allocate_boxes(types, id, cpu);
 	if (ret)
 		return ret;
 
@@ -1232,11 +1238,22 @@ static int uncore_event_cpu_online(unsigned int cpu)
 		type = *types;
 		pmu = type->pmus;
 		for (i = 0; i < type->num_boxes; i++, pmu++) {
-			box = pmu->boxes[pkg];
+			box = pmu->boxes[id];
 			if (box && atomic_inc_return(&box->refcnt) == 1)
 				uncore_box_init(box);
 		}
 	}
+	return 0;
+}
+
+static int uncore_event_cpu_online(unsigned int cpu)
+{
+	int ret, pkg, target;
+
+	pkg = topology_logical_package_id(cpu);
+	ret = uncore_box_ref(uncore_msr_uncores, pkg, cpu);
+	if (ret)
+		return ret;
 
 	/*
 	 * Check if there is an online cpu in the package
