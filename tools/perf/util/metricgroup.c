@@ -29,7 +29,7 @@
 #include <ctype.h>
 
 struct metric_event *metricgroup__lookup(struct rblist *metric_events,
-					 struct perf_evsel *evsel,
+					 struct evsel *evsel,
 					 bool create)
 {
 	struct rb_node *nd;
@@ -94,12 +94,12 @@ struct egroup {
 	const char *metric_expr;
 };
 
-static struct perf_evsel *find_evsel(struct perf_evlist *perf_evlist,
+static struct evsel *find_evsel(struct perf_evlist *perf_evlist,
 				     const char **ids,
 				     int idnum,
-				     struct perf_evsel **metric_events)
+				     struct evsel **metric_events)
 {
-	struct perf_evsel *ev, *start = NULL;
+	struct evsel *ev, *start = NULL;
 	int ind = 0;
 
 	evlist__for_each_entry (perf_evlist, ev) {
@@ -133,10 +133,10 @@ static int metricgroup__setup_events(struct list_head *groups,
 	int i = 0;
 	int ret = 0;
 	struct egroup *eg;
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	list_for_each_entry (eg, groups, nd) {
-		struct perf_evsel **metric_events;
+		struct evsel **metric_events;
 
 		metric_events = calloc(sizeof(void *), eg->idnum + 1);
 		if (!metric_events) {

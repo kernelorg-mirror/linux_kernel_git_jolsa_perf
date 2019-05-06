@@ -551,14 +551,14 @@ exit:
 }
 
 typedef int (*tracepoint_handler)(struct timechart *tchart,
-				  struct perf_evsel *evsel,
+				  struct evsel *evsel,
 				  struct perf_sample *sample,
 				  const char *backtrace);
 
 static int process_sample_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
-				struct perf_evsel *evsel,
+				struct evsel *evsel,
 				struct machine *machine)
 {
 	struct timechart *tchart = container_of(tool, struct timechart, tool);
@@ -581,7 +581,7 @@ static int process_sample_event(struct perf_tool *tool,
 
 static int
 process_sample_cpu_idle(struct timechart *tchart __maybe_unused,
-			struct perf_evsel *evsel,
+			struct evsel *evsel,
 			struct perf_sample *sample,
 			const char *backtrace __maybe_unused)
 {
@@ -597,7 +597,7 @@ process_sample_cpu_idle(struct timechart *tchart __maybe_unused,
 
 static int
 process_sample_cpu_frequency(struct timechart *tchart,
-			     struct perf_evsel *evsel,
+			     struct evsel *evsel,
 			     struct perf_sample *sample,
 			     const char *backtrace __maybe_unused)
 {
@@ -610,7 +610,7 @@ process_sample_cpu_frequency(struct timechart *tchart,
 
 static int
 process_sample_sched_wakeup(struct timechart *tchart,
-			    struct perf_evsel *evsel,
+			    struct evsel *evsel,
 			    struct perf_sample *sample,
 			    const char *backtrace)
 {
@@ -624,7 +624,7 @@ process_sample_sched_wakeup(struct timechart *tchart,
 
 static int
 process_sample_sched_switch(struct timechart *tchart,
-			    struct perf_evsel *evsel,
+			    struct evsel *evsel,
 			    struct perf_sample *sample,
 			    const char *backtrace)
 {
@@ -640,7 +640,7 @@ process_sample_sched_switch(struct timechart *tchart,
 #ifdef SUPPORT_OLD_POWER_EVENTS
 static int
 process_sample_power_start(struct timechart *tchart __maybe_unused,
-			   struct perf_evsel *evsel,
+			   struct evsel *evsel,
 			   struct perf_sample *sample,
 			   const char *backtrace __maybe_unused)
 {
@@ -653,7 +653,7 @@ process_sample_power_start(struct timechart *tchart __maybe_unused,
 
 static int
 process_sample_power_end(struct timechart *tchart,
-			 struct perf_evsel *evsel __maybe_unused,
+			 struct evsel *evsel __maybe_unused,
 			 struct perf_sample *sample,
 			 const char *backtrace __maybe_unused)
 {
@@ -663,7 +663,7 @@ process_sample_power_end(struct timechart *tchart,
 
 static int
 process_sample_power_frequency(struct timechart *tchart,
-			       struct perf_evsel *evsel,
+			       struct evsel *evsel,
 			       struct perf_sample *sample,
 			       const char *backtrace __maybe_unused)
 {
@@ -846,7 +846,7 @@ static int pid_end_io_sample(struct timechart *tchart, int pid, int type,
 
 static int
 process_enter_read(struct timechart *tchart,
-		   struct perf_evsel *evsel,
+		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -856,7 +856,7 @@ process_enter_read(struct timechart *tchart,
 
 static int
 process_exit_read(struct timechart *tchart,
-		  struct perf_evsel *evsel,
+		  struct evsel *evsel,
 		  struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -866,7 +866,7 @@ process_exit_read(struct timechart *tchart,
 
 static int
 process_enter_write(struct timechart *tchart,
-		    struct perf_evsel *evsel,
+		    struct evsel *evsel,
 		    struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -876,7 +876,7 @@ process_enter_write(struct timechart *tchart,
 
 static int
 process_exit_write(struct timechart *tchart,
-		   struct perf_evsel *evsel,
+		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -886,7 +886,7 @@ process_exit_write(struct timechart *tchart,
 
 static int
 process_enter_sync(struct timechart *tchart,
-		   struct perf_evsel *evsel,
+		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -896,7 +896,7 @@ process_enter_sync(struct timechart *tchart,
 
 static int
 process_exit_sync(struct timechart *tchart,
-		  struct perf_evsel *evsel,
+		  struct evsel *evsel,
 		  struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -906,7 +906,7 @@ process_exit_sync(struct timechart *tchart,
 
 static int
 process_enter_tx(struct timechart *tchart,
-		 struct perf_evsel *evsel,
+		 struct evsel *evsel,
 		 struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -916,7 +916,7 @@ process_enter_tx(struct timechart *tchart,
 
 static int
 process_exit_tx(struct timechart *tchart,
-		struct perf_evsel *evsel,
+		struct evsel *evsel,
 		struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -926,7 +926,7 @@ process_exit_tx(struct timechart *tchart,
 
 static int
 process_enter_rx(struct timechart *tchart,
-		 struct perf_evsel *evsel,
+		 struct evsel *evsel,
 		 struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -936,7 +936,7 @@ process_enter_rx(struct timechart *tchart,
 
 static int
 process_exit_rx(struct timechart *tchart,
-		struct perf_evsel *evsel,
+		struct evsel *evsel,
 		struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -946,7 +946,7 @@ process_exit_rx(struct timechart *tchart,
 
 static int
 process_enter_poll(struct timechart *tchart,
-		   struct perf_evsel *evsel,
+		   struct evsel *evsel,
 		   struct perf_sample *sample)
 {
 	long fd = perf_evsel__intval(evsel, sample, "fd");
@@ -956,7 +956,7 @@ process_enter_poll(struct timechart *tchart,
 
 static int
 process_exit_poll(struct timechart *tchart,
-		  struct perf_evsel *evsel,
+		  struct evsel *evsel,
 		  struct perf_sample *sample)
 {
 	long ret = perf_evsel__intval(evsel, sample, "ret");
@@ -1540,7 +1540,7 @@ static int process_header(struct perf_file_section *section __maybe_unused,
 
 static int __cmd_timechart(struct timechart *tchart, const char *output_name)
 {
-	const struct perf_evsel_str_handler power_tracepoints[] = {
+	const struct evsel_str_handler power_tracepoints[] = {
 		{ "power:cpu_idle",		process_sample_cpu_idle },
 		{ "power:cpu_frequency",	process_sample_cpu_frequency },
 		{ "sched:sched_wakeup",		process_sample_sched_wakeup },

@@ -63,7 +63,7 @@ struct intel_pt {
 	u32 auxtrace_type;
 	struct perf_session *session;
 	struct machine *machine;
-	struct perf_evsel *switch_evsel;
+	struct evsel *switch_evsel;
 	struct thread *unknown_thread;
 	bool timeless_decoding;
 	bool sampling_mode;
@@ -725,7 +725,7 @@ static bool intel_pt_get_config(struct intel_pt *pt,
 
 static bool intel_pt_exclude_kernel(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
 		if (intel_pt_get_config(pt, &evsel->attr, NULL) &&
@@ -737,7 +737,7 @@ static bool intel_pt_exclude_kernel(struct intel_pt *pt)
 
 static bool intel_pt_return_compression(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	u64 config;
 
 	if (!pt->noretcomp_bit)
@@ -753,7 +753,7 @@ static bool intel_pt_return_compression(struct intel_pt *pt)
 
 static bool intel_pt_branch_enable(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	u64 config;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
@@ -766,7 +766,7 @@ static bool intel_pt_branch_enable(struct intel_pt *pt)
 
 static unsigned int intel_pt_mtc_period(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	unsigned int shift;
 	u64 config;
 
@@ -785,7 +785,7 @@ static unsigned int intel_pt_mtc_period(struct intel_pt *pt)
 
 static bool intel_pt_timeless_decoding(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	bool timeless_decoding = true;
 	u64 config;
 
@@ -807,7 +807,7 @@ static bool intel_pt_timeless_decoding(struct intel_pt *pt)
 
 static bool intel_pt_tracing_kernel(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
 		if (intel_pt_get_config(pt, &evsel->attr, NULL) &&
@@ -819,7 +819,7 @@ static bool intel_pt_tracing_kernel(struct intel_pt *pt)
 
 static bool intel_pt_have_tsc(struct intel_pt *pt)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	bool have_tsc = false;
 	u64 config;
 
@@ -2113,7 +2113,7 @@ static int intel_pt_sync_switch(struct intel_pt *pt, int cpu, pid_t tid,
 static int intel_pt_process_switch(struct intel_pt *pt,
 				   struct perf_sample *sample)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	pid_t tid;
 	int cpu, ret;
 
@@ -2428,7 +2428,7 @@ static int intel_pt_synth_event(struct perf_session *session, const char *name,
 static void intel_pt_set_event_name(struct perf_evlist *evlist, u64 id,
 				    const char *name)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel->id && evsel->id[0] == id) {
@@ -2440,10 +2440,10 @@ static void intel_pt_set_event_name(struct perf_evlist *evlist, u64 id,
 	}
 }
 
-static struct perf_evsel *intel_pt_evsel(struct intel_pt *pt,
+static struct evsel *intel_pt_evsel(struct intel_pt *pt,
 					 struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel->attr.type == pt->pmu_type && evsel->ids)
@@ -2457,7 +2457,7 @@ static int intel_pt_synth_events(struct intel_pt *pt,
 				 struct perf_session *session)
 {
 	struct perf_evlist *evlist = session->evlist;
-	struct perf_evsel *evsel = intel_pt_evsel(pt, evlist);
+	struct evsel *evsel = intel_pt_evsel(pt, evlist);
 	struct perf_event_attr attr;
 	u64 id;
 	int err;
@@ -2606,9 +2606,9 @@ static int intel_pt_synth_events(struct intel_pt *pt,
 	return 0;
 }
 
-static struct perf_evsel *intel_pt_find_sched_switch(struct perf_evlist *evlist)
+static struct evsel *intel_pt_find_sched_switch(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry_reverse(evlist, evsel) {
 		const char *name = perf_evsel__name(evsel);
@@ -2622,7 +2622,7 @@ static struct perf_evsel *intel_pt_find_sched_switch(struct perf_evlist *evlist)
 
 static bool intel_pt_find_switch(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel->attr.context_switch)

@@ -24,7 +24,7 @@ struct stats walltime_nsecs_stats;
 
 struct saved_value {
 	struct rb_node rb_node;
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	enum stat_type type;
 	int ctx;
 	int cpu;
@@ -93,7 +93,7 @@ static void saved_value_delete(struct rblist *rblist __maybe_unused,
 	free(v);
 }
 
-static struct saved_value *saved_value_lookup(struct perf_evsel *evsel,
+static struct saved_value *saved_value_lookup(struct evsel *evsel,
 					      int cpu,
 					      bool create,
 					      enum stat_type type,
@@ -145,7 +145,7 @@ void perf_stat__init_shadow_stats(void)
 	runtime_stat__init(&rt_stat);
 }
 
-static int evsel_context(struct perf_evsel *evsel)
+static int evsel_context(struct evsel *evsel)
 {
 	int ctx = 0;
 
@@ -206,7 +206,7 @@ static void update_runtime_stat(struct runtime_stat *st,
  * more semantic information such as miss/hit ratios,
  * instruction rates, etc:
  */
-void perf_stat__update_shadow_stats(struct perf_evsel *counter, u64 count,
+void perf_stat__update_shadow_stats(struct evsel *counter, u64 count,
 				    int cpu, struct runtime_stat *st)
 {
 	int ctx = evsel_context(counter);
@@ -298,10 +298,10 @@ static const char *get_ratio_color(enum grc_type type, double ratio)
 	return color;
 }
 
-static struct perf_evsel *perf_stat__find_event(struct perf_evlist *evsel_list,
+static struct evsel *perf_stat__find_event(struct perf_evlist *evsel_list,
 						const char *name)
 {
-	struct perf_evsel *c2;
+	struct evsel *c2;
 
 	evlist__for_each_entry (evsel_list, c2) {
 		if (!strcasecmp(c2->name, name))
@@ -313,7 +313,7 @@ static struct perf_evsel *perf_stat__find_event(struct perf_evlist *evsel_list,
 /* Mark MetricExpr target events and link events using them to them. */
 void perf_stat__collect_metric_expr(struct perf_evlist *evsel_list)
 {
-	struct perf_evsel *counter, *leader, **metric_events, *oc;
+	struct evsel *counter, *leader, **metric_events, *oc;
 	bool found;
 	const char **metric_names;
 	int i;
@@ -331,7 +331,7 @@ void perf_stat__collect_metric_expr(struct perf_evlist *evsel_list)
 						&metric_names, &num_metric_names) < 0)
 				continue;
 
-			metric_events = calloc(sizeof(struct perf_evsel *),
+			metric_events = calloc(sizeof(struct evsel *),
 					       num_metric_names + 1);
 			if (!metric_events)
 				return;
@@ -413,7 +413,7 @@ static double runtime_stat_n(struct runtime_stat *st,
 
 static void print_stalled_cycles_frontend(struct perf_stat_config *config,
 					  int cpu,
-					  struct perf_evsel *evsel, double avg,
+					  struct evsel *evsel, double avg,
 					  struct perf_stat_output_ctx *out,
 					  struct runtime_stat *st)
 {
@@ -437,7 +437,7 @@ static void print_stalled_cycles_frontend(struct perf_stat_config *config,
 
 static void print_stalled_cycles_backend(struct perf_stat_config *config,
 					 int cpu,
-					 struct perf_evsel *evsel, double avg,
+					 struct evsel *evsel, double avg,
 					 struct perf_stat_output_ctx *out,
 					 struct runtime_stat *st)
 {
@@ -457,7 +457,7 @@ static void print_stalled_cycles_backend(struct perf_stat_config *config,
 
 static void print_branch_misses(struct perf_stat_config *config,
 				int cpu,
-				struct perf_evsel *evsel,
+				struct evsel *evsel,
 				double avg,
 				struct perf_stat_output_ctx *out,
 				struct runtime_stat *st)
@@ -478,7 +478,7 @@ static void print_branch_misses(struct perf_stat_config *config,
 
 static void print_l1_dcache_misses(struct perf_stat_config *config,
 				   int cpu,
-				   struct perf_evsel *evsel,
+				   struct evsel *evsel,
 				   double avg,
 				   struct perf_stat_output_ctx *out,
 				   struct runtime_stat *st)
@@ -500,7 +500,7 @@ static void print_l1_dcache_misses(struct perf_stat_config *config,
 
 static void print_l1_icache_misses(struct perf_stat_config *config,
 				   int cpu,
-				   struct perf_evsel *evsel,
+				   struct evsel *evsel,
 				   double avg,
 				   struct perf_stat_output_ctx *out,
 				   struct runtime_stat *st)
@@ -521,7 +521,7 @@ static void print_l1_icache_misses(struct perf_stat_config *config,
 
 static void print_dtlb_cache_misses(struct perf_stat_config *config,
 				    int cpu,
-				    struct perf_evsel *evsel,
+				    struct evsel *evsel,
 				    double avg,
 				    struct perf_stat_output_ctx *out,
 				    struct runtime_stat *st)
@@ -541,7 +541,7 @@ static void print_dtlb_cache_misses(struct perf_stat_config *config,
 
 static void print_itlb_cache_misses(struct perf_stat_config *config,
 				    int cpu,
-				    struct perf_evsel *evsel,
+				    struct evsel *evsel,
 				    double avg,
 				    struct perf_stat_output_ctx *out,
 				    struct runtime_stat *st)
@@ -561,7 +561,7 @@ static void print_itlb_cache_misses(struct perf_stat_config *config,
 
 static void print_ll_cache_misses(struct perf_stat_config *config,
 				  int cpu,
-				  struct perf_evsel *evsel,
+				  struct evsel *evsel,
 				  double avg,
 				  struct perf_stat_output_ctx *out,
 				  struct runtime_stat *st)
@@ -684,7 +684,7 @@ static double td_be_bound(int ctx, int cpu, struct runtime_stat *st)
 }
 
 static void print_smi_cost(struct perf_stat_config *config,
-			   int cpu, struct perf_evsel *evsel,
+			   int cpu, struct evsel *evsel,
 			   struct perf_stat_output_ctx *out,
 			   struct runtime_stat *st)
 {
@@ -710,7 +710,7 @@ static void print_smi_cost(struct perf_stat_config *config,
 
 static void generic_metric(struct perf_stat_config *config,
 			   const char *metric_expr,
-			   struct perf_evsel **metric_events,
+			   struct evsel **metric_events,
 			   char *name,
 			   const char *metric_name,
 			   double avg,
@@ -762,7 +762,7 @@ static void generic_metric(struct perf_stat_config *config,
 }
 
 void perf_stat__print_shadow_stats(struct perf_stat_config *config,
-				   struct perf_evsel *evsel,
+				   struct evsel *evsel,
 				   double avg, int cpu,
 				   struct perf_stat_output_ctx *out,
 				   struct rblist *metric_events,

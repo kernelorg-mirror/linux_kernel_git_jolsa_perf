@@ -67,7 +67,7 @@ double rel_stddev_stats(double stddev, double avg)
 	return pct;
 }
 
-bool __perf_evsel_stat__is(struct perf_evsel *evsel,
+bool __perf_evsel_stat__is(struct evsel *evsel,
 			   enum perf_stat_evsel_id id)
 {
 	struct perf_stat_evsel *ps = evsel->stats;
@@ -92,7 +92,7 @@ static const char *id_str[PERF_STAT_EVSEL_ID__MAX] = {
 };
 #undef ID
 
-static void perf_stat_evsel_id_init(struct perf_evsel *evsel)
+static void perf_stat_evsel_id_init(struct evsel *evsel)
 {
 	struct perf_stat_evsel *ps = evsel->stats;
 	int i;
@@ -107,7 +107,7 @@ static void perf_stat_evsel_id_init(struct perf_evsel *evsel)
 	}
 }
 
-static void perf_evsel__reset_stat_priv(struct perf_evsel *evsel)
+static void perf_evsel__reset_stat_priv(struct evsel *evsel)
 {
 	int i;
 	struct perf_stat_evsel *ps = evsel->stats;
@@ -118,7 +118,7 @@ static void perf_evsel__reset_stat_priv(struct perf_evsel *evsel)
 	perf_stat_evsel_id_init(evsel);
 }
 
-static int perf_evsel__alloc_stat_priv(struct perf_evsel *evsel)
+static int perf_evsel__alloc_stat_priv(struct evsel *evsel)
 {
 	evsel->stats = zalloc(sizeof(struct perf_stat_evsel));
 	if (evsel->stats == NULL)
@@ -127,7 +127,7 @@ static int perf_evsel__alloc_stat_priv(struct perf_evsel *evsel)
 	return 0;
 }
 
-static void perf_evsel__free_stat_priv(struct perf_evsel *evsel)
+static void perf_evsel__free_stat_priv(struct evsel *evsel)
 {
 	struct perf_stat_evsel *ps = evsel->stats;
 
@@ -136,7 +136,7 @@ static void perf_evsel__free_stat_priv(struct perf_evsel *evsel)
 	zfree(&evsel->stats);
 }
 
-static int perf_evsel__alloc_prev_raw_counts(struct perf_evsel *evsel,
+static int perf_evsel__alloc_prev_raw_counts(struct evsel *evsel,
 					     int ncpus, int nthreads)
 {
 	struct perf_counts *counts;
@@ -148,13 +148,13 @@ static int perf_evsel__alloc_prev_raw_counts(struct perf_evsel *evsel,
 	return counts ? 0 : -ENOMEM;
 }
 
-static void perf_evsel__free_prev_raw_counts(struct perf_evsel *evsel)
+static void perf_evsel__free_prev_raw_counts(struct evsel *evsel)
 {
 	perf_counts__delete(evsel->prev_raw_counts);
 	evsel->prev_raw_counts = NULL;
 }
 
-static int perf_evsel__alloc_stats(struct perf_evsel *evsel, bool alloc_raw)
+static int perf_evsel__alloc_stats(struct evsel *evsel, bool alloc_raw)
 {
 	int ncpus = perf_evsel__nr_cpus(evsel);
 	int nthreads = thread_map__nr(evsel->threads);
@@ -169,7 +169,7 @@ static int perf_evsel__alloc_stats(struct perf_evsel *evsel, bool alloc_raw)
 
 int perf_evlist__alloc_stats(struct perf_evlist *evlist, bool alloc_raw)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (perf_evsel__alloc_stats(evsel, alloc_raw))
@@ -185,7 +185,7 @@ out_free:
 
 void perf_evlist__free_stats(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		perf_evsel__free_stat_priv(evsel);
@@ -196,7 +196,7 @@ void perf_evlist__free_stats(struct perf_evlist *evlist)
 
 void perf_evlist__reset_stats(struct perf_evlist *evlist)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
 		perf_evsel__reset_stat_priv(evsel);
@@ -204,13 +204,13 @@ void perf_evlist__reset_stats(struct perf_evlist *evlist)
 	}
 }
 
-static void zero_per_pkg(struct perf_evsel *counter)
+static void zero_per_pkg(struct evsel *counter)
 {
 	if (counter->per_pkg_mask)
 		memset(counter->per_pkg_mask, 0, MAX_NR_CPUS);
 }
 
-static int check_per_pkg(struct perf_evsel *counter,
+static int check_per_pkg(struct evsel *counter,
 			 struct perf_counts_values *vals, int cpu, bool *skip)
 {
 	unsigned long *mask = counter->per_pkg_mask;
@@ -253,7 +253,7 @@ static int check_per_pkg(struct perf_evsel *counter,
 }
 
 static int
-process_counter_values(struct perf_stat_config *config, struct perf_evsel *evsel,
+process_counter_values(struct perf_stat_config *config, struct evsel *evsel,
 		       int cpu, int thread,
 		       struct perf_counts_values *count)
 {
@@ -305,7 +305,7 @@ process_counter_values(struct perf_stat_config *config, struct perf_evsel *evsel
 }
 
 static int process_counter_maps(struct perf_stat_config *config,
-				struct perf_evsel *counter)
+				struct evsel *counter)
 {
 	int nthreads = thread_map__nr(counter->threads);
 	int ncpus = perf_evsel__nr_cpus(counter);
@@ -326,7 +326,7 @@ static int process_counter_maps(struct perf_stat_config *config,
 }
 
 int perf_stat_process_counter(struct perf_stat_config *config,
-			      struct perf_evsel *counter)
+			      struct evsel *counter)
 {
 	struct perf_counts_values *aggr = &counter->counts->aggr;
 	struct perf_stat_evsel *ps = counter->stats;
@@ -380,7 +380,7 @@ int perf_event__process_stat_event(struct perf_session *session,
 {
 	struct perf_counts_values count;
 	struct stat_event *st = &event->stat;
-	struct perf_evsel *counter;
+	struct evsel *counter;
 
 	count.val = st->val;
 	count.ena = st->ena;
@@ -436,12 +436,12 @@ size_t perf_event__fprintf_stat_config(union perf_event *event, FILE *fp)
 	return ret;
 }
 
-int create_perf_stat_counter(struct perf_evsel *evsel,
+int create_perf_stat_counter(struct evsel *evsel,
 			     struct perf_stat_config *config,
 			     struct target *target)
 {
 	struct perf_event_attr *attr = &evsel->attr;
-	struct perf_evsel *leader = evsel->leader;
+	struct evsel *leader = evsel->leader;
 
 	attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |
 			    PERF_FORMAT_TOTAL_TIME_RUNNING;

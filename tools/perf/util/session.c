@@ -145,7 +145,7 @@ static void perf_session__destroy_kernel_maps(struct perf_session *session)
 
 static bool perf_session__has_comm_exec(struct perf_session *session)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(session->evlist, evsel) {
 		if (evsel->attr.comm_exec)
@@ -316,7 +316,7 @@ static int process_event_synth_event_update_stub(struct perf_tool *tool __maybe_
 static int process_event_sample_stub(struct perf_tool *tool __maybe_unused,
 				     union perf_event *event __maybe_unused,
 				     struct perf_sample *sample __maybe_unused,
-				     struct perf_evsel *evsel __maybe_unused,
+				     struct evsel *evsel __maybe_unused,
 				     struct machine *machine __maybe_unused)
 {
 	dump_printf(": unhandled!\n");
@@ -1027,7 +1027,7 @@ static void callchain__lbr_callstack_printf(struct perf_sample *sample)
 	}
 }
 
-static void callchain__printf(struct perf_evsel *evsel,
+static void callchain__printf(struct evsel *evsel,
 			      struct perf_sample *sample)
 {
 	unsigned int i;
@@ -1192,7 +1192,7 @@ static void dump_event(struct perf_evlist *evlist, union perf_event *event,
 	       event->header.size, perf_event__name(event->header.type));
 }
 
-static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
+static void dump_sample(struct evsel *evsel, union perf_event *event,
 			struct perf_sample *sample)
 {
 	u64 sample_type;
@@ -1237,7 +1237,7 @@ static void dump_sample(struct perf_evsel *evsel, union perf_event *event,
 		sample_read__printf(sample, evsel->attr.read_format);
 }
 
-static void dump_read(struct perf_evsel *evsel, union perf_event *event)
+static void dump_read(struct evsel *evsel, union perf_event *event)
 {
 	struct read_event *read_event = &event->read;
 	u64 read_format;
@@ -1342,7 +1342,7 @@ static int
 			     struct perf_tool *tool,
 			     union  perf_event *event,
 			     struct perf_sample *sample,
-			     struct perf_evsel *evsel,
+			     struct evsel *evsel,
 			     struct machine *machine)
 {
 	/* We know evsel != NULL. */
@@ -1368,7 +1368,7 @@ static int machines__deliver_event(struct machines *machines,
 				   struct perf_sample *sample,
 				   struct perf_tool *tool, u64 file_offset)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	struct machine *machine;
 
 	dump_event(evlist, event, file_offset, sample);
@@ -1696,7 +1696,7 @@ static void
 perf_session__warn_order(const struct perf_session *session)
 {
 	const struct ordered_events *oe = &session->ordered_events;
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	bool should_warn = true;
 
 	evlist__for_each_entry(session->evlist, evsel) {
@@ -2174,7 +2174,7 @@ int perf_session__process_events(struct perf_session *session)
 
 bool perf_session__has_traces(struct perf_session *session, const char *msg)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 
 	evlist__for_each_entry(session->evlist, evsel) {
 		if (evsel->attr.type == PERF_TYPE_TRACEPOINT)
@@ -2248,10 +2248,10 @@ size_t perf_session__fprintf(struct perf_session *session, FILE *fp)
 	return machine__fprintf(&session->machines.host, fp);
 }
 
-struct perf_evsel *perf_session__find_first_evtype(struct perf_session *session,
+struct evsel *perf_session__find_first_evtype(struct perf_session *session,
 					      unsigned int type)
 {
-	struct perf_evsel *pos;
+	struct evsel *pos;
 
 	evlist__for_each_entry(session->evlist, pos) {
 		if (pos->attr.type == type)
@@ -2267,7 +2267,7 @@ int perf_session__cpu_bitmap(struct perf_session *session,
 	struct perf_cpu_map *map;
 
 	for (i = 0; i < PERF_TYPE_MAX; ++i) {
-		struct perf_evsel *evsel;
+		struct evsel *evsel;
 
 		evsel = perf_session__find_first_evtype(session, i);
 		if (!evsel)
@@ -2318,10 +2318,10 @@ void perf_session__fprintf_info(struct perf_session *session, FILE *fp,
 
 
 int __perf_session__set_tracepoints_handlers(struct perf_session *session,
-					     const struct perf_evsel_str_handler *assocs,
+					     const struct evsel_str_handler *assocs,
 					     size_t nr_assocs)
 {
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	size_t i;
 	int err;
 
@@ -2388,7 +2388,7 @@ int perf_event__synthesize_id_index(struct perf_tool *tool,
 				    struct machine *machine)
 {
 	union perf_event *ev;
-	struct perf_evsel *evsel;
+	struct evsel *evsel;
 	size_t nr = 0, i = 0, sz, max_nr, n;
 	int err;
 

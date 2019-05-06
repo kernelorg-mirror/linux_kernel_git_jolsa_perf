@@ -390,7 +390,7 @@ static const char *get_dsoname(struct map *map)
 }
 
 static PyObject *python_process_callchain(struct perf_sample *sample,
-					 struct perf_evsel *evsel,
+					 struct evsel *evsel,
 					 struct addr_location *al)
 {
 	PyObject *pylist;
@@ -632,7 +632,7 @@ static PyObject *get_sample_value_as_tuple(struct sample_read_value *value)
 
 static void set_sample_read_in_dict(PyObject *dict_sample,
 					 struct perf_sample *sample,
-					 struct perf_evsel *evsel)
+					 struct evsel *evsel)
 {
 	u64 read_format = evsel->attr.read_format;
 	PyObject *values;
@@ -703,7 +703,7 @@ static int regs_map(struct regs_dump *regs, uint64_t mask, char *bf, int size)
 
 static void set_regs_in_dict(PyObject *dict,
 			     struct perf_sample *sample,
-			     struct perf_evsel *evsel)
+			     struct evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 	char bf[512];
@@ -720,7 +720,7 @@ static void set_regs_in_dict(PyObject *dict,
 }
 
 static PyObject *get_perf_sample_dict(struct perf_sample *sample,
-					 struct perf_evsel *evsel,
+					 struct evsel *evsel,
 					 struct addr_location *al,
 					 PyObject *callchain)
 {
@@ -788,7 +788,7 @@ static PyObject *get_perf_sample_dict(struct perf_sample *sample,
 }
 
 static void python_process_tracepoint(struct perf_sample *sample,
-				      struct perf_evsel *evsel,
+				      struct evsel *evsel,
 				      struct addr_location *al)
 {
 	struct tep_event *event = evsel->tp_format;
@@ -947,7 +947,7 @@ static int tuple_set_string(PyObject *t, unsigned int pos, const char *s)
 	return PyTuple_SetItem(t, pos, _PyUnicode_FromString(s));
 }
 
-static int python_export_evsel(struct db_export *dbe, struct perf_evsel *evsel)
+static int python_export_evsel(struct db_export *dbe, struct evsel *evsel)
 {
 	struct tables *tables = container_of(dbe, struct tables, dbe);
 	PyObject *t;
@@ -1208,7 +1208,7 @@ static int python_process_call_return(struct call_return *cr, u64 *parent_db_id,
 }
 
 static void python_process_general_event(struct perf_sample *sample,
-					 struct perf_evsel *evsel,
+					 struct evsel *evsel,
 					 struct addr_location *al)
 {
 	PyObject *handler, *t, *dict, *callchain;
@@ -1244,7 +1244,7 @@ static void python_process_general_event(struct perf_sample *sample,
 
 static void python_process_event(union perf_event *event,
 				 struct perf_sample *sample,
-				 struct perf_evsel *evsel,
+				 struct evsel *evsel,
 				 struct addr_location *al)
 {
 	struct tables *tables = &tables_global;
@@ -1263,7 +1263,7 @@ static void python_process_event(union perf_event *event,
 }
 
 static void get_handler_name(char *str, size_t size,
-			     struct perf_evsel *evsel)
+			     struct evsel *evsel)
 {
 	char *p = str;
 
@@ -1276,7 +1276,7 @@ static void get_handler_name(char *str, size_t size,
 }
 
 static void
-process_stat(struct perf_evsel *counter, int cpu, int thread, u64 tstamp,
+process_stat(struct evsel *counter, int cpu, int thread, u64 tstamp,
 	     struct perf_counts_values *count)
 {
 	PyObject *handler, *t;
@@ -1313,7 +1313,7 @@ process_stat(struct perf_evsel *counter, int cpu, int thread, u64 tstamp,
 }
 
 static void python_process_stat(struct perf_stat_config *config,
-				struct perf_evsel *counter, u64 tstamp)
+				struct evsel *counter, u64 tstamp)
 {
 	struct perf_thread_map *threads = counter->threads;
 	struct perf_cpu_map *cpus = counter->cpus;
