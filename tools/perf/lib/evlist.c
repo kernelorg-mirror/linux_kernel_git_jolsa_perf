@@ -2,6 +2,7 @@
 #include <linux/list.h>
 #include <linux/string.h>
 #include <internal/evlist.h>
+#include <internal/evsel.h>
 
 static void perf_evlist__init(struct perf_evlist *evlist)
 {
@@ -31,4 +32,24 @@ void perf_evlist__set_priv(struct perf_evlist *evlist, void *priv)
 void* perf_evlist__priv(struct perf_evlist *evlist)
 {
 	return evlist->priv;
+}
+
+struct perf_evsel*
+perf_evlist__next(struct perf_evlist *evlist, struct perf_evsel *prev)
+{
+	struct perf_evsel *next;
+
+	if (!prev) {
+		next = list_first_entry(&evlist->entries,
+					struct perf_evsel,
+					node);
+	} else {
+		next = list_next_entry(prev, node);
+	}
+
+	/* Empty list is noticed here so don't need checking on entry. */
+	if (&next->node == &evlist->entries)
+		return NULL;
+
+	return next;
 }
