@@ -25,7 +25,7 @@
 #include "../../util/evlist.h"
 
 static
-struct auxtrace_record *auxtrace_record__init_intel(struct perf_evlist *evlist,
+struct auxtrace_record *auxtrace_record__init_intel(struct evlist *evlist,
 						    int *err)
 {
 	struct perf_pmu *intel_pt_pmu;
@@ -59,7 +59,7 @@ struct auxtrace_record *auxtrace_record__init_intel(struct perf_evlist *evlist,
 	return NULL;
 }
 
-struct auxtrace_record *auxtrace_record__init(struct perf_evlist *evlist,
+struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 					      int *err)
 {
 	char buffer[64];

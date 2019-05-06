@@ -1042,7 +1042,7 @@ __bpf_map__config_value(struct bpf_map *map,
 static int
 bpf_map__config_value(struct bpf_map *map,
 		      struct parse_events_term *term,
-		      struct perf_evlist *evlist __maybe_unused)
+		      struct evlist *evlist __maybe_unused)
 {
 	if (!term->err_val) {
 		pr_debug("Config value not set\n");
@@ -1060,7 +1060,7 @@ bpf_map__config_value(struct bpf_map *map,
 static int
 __bpf_map__config_event(struct bpf_map *map,
 			struct parse_events_term *term,
-			struct perf_evlist *evlist)
+			struct evlist *evlist)
 {
 	struct evsel *evsel;
 	const struct bpf_map_def *def;
@@ -1102,7 +1102,7 @@ __bpf_map__config_event(struct bpf_map *map,
 static int
 bpf_map__config_event(struct bpf_map *map,
 		      struct parse_events_term *term,
-		      struct perf_evlist *evlist)
+		      struct evlist *evlist)
 {
 	if (!term->err_val) {
 		pr_debug("Config value not set\n");
@@ -1120,7 +1120,7 @@ bpf_map__config_event(struct bpf_map *map,
 struct bpf_obj_config__map_func {
 	const char *config_opt;
 	int (*config_func)(struct bpf_map *, struct parse_events_term *,
-			   struct perf_evlist *);
+			   struct evlist *);
 };
 
 struct bpf_obj_config__map_func bpf_obj_config__map_funcs[] = {
@@ -1168,7 +1168,7 @@ config_map_indices_range_check(struct parse_events_term *term,
 static int
 bpf__obj_config_map(struct bpf_object *obj,
 		    struct parse_events_term *term,
-		    struct perf_evlist *evlist,
+		    struct evlist *evlist,
 		    int *key_scan_pos)
 {
 	/* key is "map:<mapname>.<config opt>" */
@@ -1227,7 +1227,7 @@ out:
 
 int bpf__config_obj(struct bpf_object *obj,
 		    struct parse_events_term *term,
-		    struct perf_evlist *evlist,
+		    struct evlist *evlist,
 		    int *error_pos)
 {
 	int key_scan_pos = 0;
@@ -1522,7 +1522,7 @@ int bpf__apply_obj_config(void)
 			(strcmp(name, 			\
 				bpf_map__name(pos)) == 0))
 
-struct evsel *bpf__setup_output_event(struct perf_evlist *evlist, const char *name)
+struct evsel *bpf__setup_output_event(struct evlist *evlist, const char *name)
 {
 	struct bpf_map_priv *tmpl_priv = NULL;
 	struct bpf_object *obj, *tmp;
@@ -1599,7 +1599,7 @@ struct evsel *bpf__setup_output_event(struct perf_evlist *evlist, const char *na
 	return evsel;
 }
 
-int bpf__setup_stdout(struct perf_evlist *evlist)
+int bpf__setup_stdout(struct evlist *evlist)
 {
 	struct evsel *evsel = bpf__setup_output_event(evlist, "__bpf_stdout__");
 	return PTR_ERR_OR_ZERO(evsel);
@@ -1755,7 +1755,7 @@ int bpf__strerror_load(struct bpf_object *obj,
 
 int bpf__strerror_config_obj(struct bpf_object *obj __maybe_unused,
 			     struct parse_events_term *term __maybe_unused,
-			     struct perf_evlist *evlist __maybe_unused,
+			     struct evlist *evlist __maybe_unused,
 			     int *error_pos __maybe_unused, int err,
 			     char *buf, size_t size)
 {
@@ -1779,7 +1779,7 @@ int bpf__strerror_apply_obj_config(int err, char *buf, size_t size)
 	return 0;
 }
 
-int bpf__strerror_setup_output_event(struct perf_evlist *evlist __maybe_unused,
+int bpf__strerror_setup_output_event(struct evlist *evlist __maybe_unused,
 				     int err, char *buf, size_t size)
 {
 	bpf__strerror_head(err, buf, size);

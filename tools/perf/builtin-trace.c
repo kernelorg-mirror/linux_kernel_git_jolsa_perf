@@ -92,7 +92,7 @@ struct trace {
 		struct bpf_map *map;
 	} dump;
 	struct record_opts	opts;
-	struct perf_evlist	*evlist;
+	struct evlist	*evlist;
 	struct machine		*host;
 	struct thread		*current;
 	struct cgroup		*cgroup;
@@ -1367,7 +1367,7 @@ static char *trace__machine__resolve_kernel_addr(void *vmachine, unsigned long l
 	return machine__resolve_kernel_addr(vmachine, addrp, modp);
 }
 
-static int trace__symbols_init(struct trace *trace, struct perf_evlist *evlist)
+static int trace__symbols_init(struct trace *trace, struct evlist *evlist)
 {
 	int err = symbol__init(NULL);
 
@@ -2572,7 +2572,7 @@ static int trace__record(struct trace *trace, int argc, const char **argv)
 
 static size_t trace__fprintf_thread_summary(struct trace *trace, FILE *fp);
 
-static bool perf_evlist__add_vfs_getname(struct perf_evlist *evlist)
+static bool perf_evlist__add_vfs_getname(struct evlist *evlist)
 {
 	bool found = false;
 	struct evsel *evsel, *tmp;
@@ -2655,7 +2655,7 @@ static void trace__handle_event(struct trace *trace, union perf_event *event, st
 static int trace__add_syscall_newtp(struct trace *trace)
 {
 	int ret = -1;
-	struct perf_evlist *evlist = trace->evlist;
+	struct evlist *evlist = trace->evlist;
 	struct evsel *sys_enter, *sys_exit;
 
 	sys_enter = perf_evsel__raw_syscall_newtp("sys_enter", trace__sys_enter);
@@ -2891,7 +2891,7 @@ static int trace__set_filter_pids(struct trace *trace)
 
 static int __trace__deliver_event(struct trace *trace, union perf_event *event)
 {
-	struct perf_evlist *evlist = trace->evlist;
+	struct evlist *evlist = trace->evlist;
 	struct perf_sample sample;
 	int err;
 
@@ -2949,7 +2949,7 @@ static int ordered_events__deliver_event(struct ordered_events *oe,
 
 static int trace__run(struct trace *trace, int argc, const char **argv)
 {
-	struct perf_evlist *evlist = trace->evlist;
+	struct evlist *evlist = trace->evlist;
 	struct evsel *evsel, *pgfault_maj = NULL, *pgfault_min = NULL;
 	int err = -1, i;
 	unsigned long before;
@@ -3526,7 +3526,7 @@ static int parse_pagefaults(const struct option *opt, const char *str,
 	return 0;
 }
 
-static void evlist__set_evsel_handler(struct perf_evlist *evlist, void *handler)
+static void evlist__set_evsel_handler(struct evlist *evlist, void *handler)
 {
 	struct evsel *evsel;
 
@@ -3534,7 +3534,7 @@ static void evlist__set_evsel_handler(struct perf_evlist *evlist, void *handler)
 		evsel->handler = handler;
 }
 
-static int evlist__set_syscall_tp_fields(struct perf_evlist *evlist)
+static int evlist__set_syscall_tp_fields(struct evlist *evlist)
 {
 	struct evsel *evsel;
 

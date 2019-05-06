@@ -298,7 +298,7 @@ static const char *get_ratio_color(enum grc_type type, double ratio)
 	return color;
 }
 
-static struct evsel *perf_stat__find_event(struct perf_evlist *evsel_list,
+static struct evsel *perf_stat__find_event(struct evlist *evsel_list,
 						const char *name)
 {
 	struct evsel *c2;
@@ -311,7 +311,7 @@ static struct evsel *perf_stat__find_event(struct perf_evlist *evsel_list,
 }
 
 /* Mark MetricExpr target events and link events using them to them. */
-void perf_stat__collect_metric_expr(struct perf_evlist *evsel_list)
+void perf_stat__collect_metric_expr(struct evlist *evsel_list)
 {
 	struct evsel *counter, *leader, **metric_events, *oc;
 	bool found;
