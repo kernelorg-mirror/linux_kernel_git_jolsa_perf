@@ -7,6 +7,7 @@
 #include <string.h>
 #include <linux/refcount.h>
 #include <linux/rbtree.h>
+#include <linux/string.h>
 #include "rwsem.h"
 
 struct comm_str {

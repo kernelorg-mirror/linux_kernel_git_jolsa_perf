@@ -18,11 +18,6 @@
 void usage(const char *err) __noreturn;
 void die(const char *err, ...) __noreturn __printf(1, 2);
 
-static inline void *zalloc(size_t size)
-{
-	return calloc(1, size);
-}
-
 #define zfree(ptr) ({ free(*ptr); *ptr = NULL; })
 
 struct dirent;

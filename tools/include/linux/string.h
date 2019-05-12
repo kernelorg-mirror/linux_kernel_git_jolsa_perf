@@ -4,6 +4,7 @@
 
 #include <linux/types.h>	/* for size_t */
 #include <string.h>
+#include <stdlib.h>
 
 void *memdup(const void *src, size_t len);
 
@@ -27,6 +28,11 @@ char *str_error_r(int errnum, char *buf, size_t buflen);
 static inline bool strstarts(const char *str, const char *prefix)
 {
 	return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+static inline void *zalloc(size_t size)
+{
+	return calloc(1, size);
 }
 
 #endif /* _LINUX_STRING_H_ */

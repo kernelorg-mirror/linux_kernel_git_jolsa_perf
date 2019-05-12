@@ -15,6 +15,7 @@
 
 #include <linux/rbtree.h>
 #include <linux/list.h>
+#include <linux/string.h>
 
 #include "util.h"
 #include "call-path.h"
