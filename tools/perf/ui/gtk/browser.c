@@ -15,19 +15,21 @@ void perf_gtk__signal(int sig)
 	psignal(sig, "perf");
 }
 
-void perf_gtk__resize_window(GtkWidget *window)
+void perf_gtk__resize_window(GtkWidget *widget)
 {
 	GdkRectangle rect;
-	GdkScreen *screen;
-	int monitor;
+	GdkMonitor *monitor;
+	GdkDisplay *display;
+	GdkWindow *window;
 	int height;
 	int width;
 
-	screen = gtk_widget_get_screen(window);
+	display = gdk_display_get_default();
+	window = gtk_widget_get_window(widget);
 
-	monitor = gdk_screen_get_monitor_at_window(screen, window->window);
+	monitor = gdk_display_get_monitor_at_window(display, window);
 
-	gdk_screen_get_monitor_geometry(screen, monitor, &rect);
+	gdk_monitor_get_geometry(monitor, &rect);
 
 	width	= rect.width * 3 / 4;
 	height	= rect.height * 3 / 4;
@@ -60,7 +62,7 @@ GtkWidget *perf_gtk__setup_info_bar(void)
 	content_area = gtk_info_bar_get_content_area(GTK_INFO_BAR(info_bar));
 	gtk_container_add(GTK_CONTAINER(content_area), label);
 
-	gtk_info_bar_add_button(GTK_INFO_BAR(info_bar), GTK_STOCK_OK,
+	gtk_info_bar_add_button(GTK_INFO_BAR(info_bar), "_OK",
 				GTK_RESPONSE_OK);
 	g_signal_connect(info_bar, "response",
 			 G_CALLBACK(gtk_widget_hide), NULL);

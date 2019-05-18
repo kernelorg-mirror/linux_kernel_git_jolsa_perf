@@ -36,8 +36,8 @@ FEATURE_TESTS_BASIC :=                  \
         sync-compare-and-swap           \
         get_current_dir_name            \
         glibc                           \
-        gtk2                            \
-        gtk2-infobar                    \
+        gtk3                            \
+        gtk3-infobar                    \
         libaudit                        \
         libbfd                          \
         libelf                          \
@@ -104,7 +104,7 @@ FEATURE_DISPLAY ?=              \
          dwarf                  \
          dwarf_getlocations     \
          glibc                  \
-         gtk2                   \
+         gtk3                   \
          libaudit               \
          libbfd                 \
          libelf                 \

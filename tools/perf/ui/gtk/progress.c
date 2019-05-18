@@ -14,7 +14,7 @@ static void gtk_ui_progress__update(struct ui_progress *p)
 	char buf[1024];
 
 	if (dialog == NULL) {
-		GtkWidget *vbox = gtk_vbox_new(TRUE, 5);
+		GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
 		GtkWidget *label = gtk_label_new(p->title);
 
 		dialog = gtk_window_new(GTK_WINDOW_TOPLEVEL);

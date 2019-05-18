@@ -301,7 +301,7 @@ OPTIONS
 	requires a tty, if one is not present, as when piping to other
 	commands, the stdio interface is used.
 
---gtk:: Use the GTK2 interface.
+--gtk:: Use the GTK3 interface.
 
 -k::
 --vmlinux=<file>::

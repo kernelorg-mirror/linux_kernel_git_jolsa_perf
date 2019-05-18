@@ -10,8 +10,8 @@ FILES=                                          \
          test-sync-compare-and-swap.bin         \
          test-get_current_dir_name.bin          \
          test-glibc.bin                         \
-         test-gtk2.bin                          \
-         test-gtk2-infobar.bin                  \
+         test-gtk3.bin                          \
+         test-gtk3-infobar.bin                  \
          test-hello.bin                         \
          test-libaudit.bin                      \
          test-libbfd.bin                        \
@@ -186,11 +186,11 @@ $(OUTPUT)test-libslang.bin:
 $(OUTPUT)test-libcrypto.bin:
 	$(BUILD) -lcrypto
 
-$(OUTPUT)test-gtk2.bin:
-	$(BUILD) $(shell $(PKG_CONFIG) --libs --cflags gtk+-2.0 2>/dev/null)
+$(OUTPUT)test-gtk3.bin:
+	$(BUILD) $(shell $(PKG_CONFIG) --libs --cflags gtk+-3.0 2>/dev/null)
 
-$(OUTPUT)test-gtk2-infobar.bin:
-	$(BUILD) $(shell $(PKG_CONFIG) --libs --cflags gtk+-2.0 2>/dev/null)
+$(OUTPUT)test-gtk3-infobar.bin:
+	$(BUILD) $(shell $(PKG_CONFIG) --libs --cflags gtk+-3.0 2>/dev/null)
 
 grep-libs  = $(filter -l%,$(1))
 strip-libs = $(filter-out -l%,$(1))

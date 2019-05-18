@@ -78,12 +78,12 @@
 # include "test-libslang.c"
 #undef main
 
-#define main main_test_gtk2
-# include "test-gtk2.c"
+#define main main_test_gtk3
+# include "test-gtk3.c"
 #undef main
 
-#define main main_test_gtk2_infobar
-# include "test-gtk2-infobar.c"
+#define main main_test_gtk3_infobar
+# include "test-gtk3-infobar.c"
 #undef main
 
 #define main main_test_libbfd
@@ -205,8 +205,8 @@ int main(int argc, char *argv[])
 	main_test_libunwind();
 	main_test_libaudit();
 	main_test_libslang();
-	main_test_gtk2(argc, argv);
-	main_test_gtk2_infobar(argc, argv);
+	main_test_gtk3(argc, argv);
+	main_test_gtk3_infobar(argc, argv);
 	main_test_libbfd();
 	main_test_backtrace();
 	main_test_libnuma();
