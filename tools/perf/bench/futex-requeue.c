@@ -94,7 +94,7 @@ static void block_threads(pthread_t *w,
 	/* create and block all threads */
 	for (i = 0; i < nthreads; i++) {
 		CPU_ZERO(&cpuset);
-		CPU_SET(cpu->map[i % cpu->nr], &cpuset);
+		CPU_SET(cpu_map__cpu(cpu, i % cpu_map__nr(cpu)), &cpuset);
 
 		if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset))
 			err(EXIT_FAILURE, "pthread_attr_setaffinity_np");
@@ -132,7 +132,7 @@ int bench_futex_requeue(int argc, const char **argv)
 	sigaction(SIGINT, &act, NULL);
 
 	if (!nthreads)
-		nthreads = cpu->nr;
+		nthreads = cpu_map__nr(cpu);
 
 	worker = calloc(nthreads, sizeof(*worker));
 	if (!worker)

@@ -33,10 +33,10 @@ static int process_event_mask(struct perf_tool *tool __maybe_unused,
 	}
 
 	map = cpu_map__new_data(data);
-	TEST_ASSERT_VAL("wrong nr",  map->nr == 20);
+	TEST_ASSERT_VAL("wrong nr",  cpu_map__nr(map) == 20);
 
 	for (i = 0; i < 20; i++) {
-		TEST_ASSERT_VAL("wrong cpu", map->map[i] == i);
+		TEST_ASSERT_VAL("wrong cpu", cpu_map__cpu(map, i) == i);
 	}
 
 	cpu_map__put(map);
@@ -64,10 +64,9 @@ static int process_event_cpus(struct perf_tool *tool __maybe_unused,
 	TEST_ASSERT_VAL("wrong cpu",  cpus->cpu[1] == 256);
 
 	map = cpu_map__new_data(data);
-	TEST_ASSERT_VAL("wrong nr",  map->nr == 2);
-	TEST_ASSERT_VAL("wrong cpu", map->map[0] == 1);
-	TEST_ASSERT_VAL("wrong cpu", map->map[1] == 256);
-	TEST_ASSERT_VAL("wrong refcnt", refcount_read(&map->refcnt) == 1);
+	TEST_ASSERT_VAL("wrong nr",  cpu_map__nr(map) == 2);
+	TEST_ASSERT_VAL("wrong cpu", cpu_map__cpu(map, 0) == 1);
+	TEST_ASSERT_VAL("wrong cpu", cpu_map__cpu(map, 1) == 256);
 	cpu_map__put(map);
 	return 0;
 }

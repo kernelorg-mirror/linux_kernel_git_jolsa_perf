@@ -140,7 +140,7 @@ int bench_futex_hash(int argc, const char **argv)
 	sigaction(SIGINT, &act, NULL);
 
 	if (!nthreads) /* default to the number of CPUs */
-		nthreads = cpu->nr;
+		nthreads = cpu_map__nr(cpu);
 
 	worker = calloc(nthreads, sizeof(*worker));
 	if (!worker)
@@ -167,7 +167,7 @@ int bench_futex_hash(int argc, const char **argv)
 			goto errmem;
 
 		CPU_ZERO(&cpuset);
-		CPU_SET(cpu->map[i % cpu->nr], &cpuset);
+		CPU_SET(cpu_map__cpu(cpu, i % cpu_map__nr(cpu)), &cpuset);
 
 		ret = pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset);
 		if (ret)

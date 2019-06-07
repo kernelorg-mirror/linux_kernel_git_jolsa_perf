@@ -24,8 +24,8 @@ static unsigned long *get_bitmap(const char *str, int nbits)
 	bm = bitmap_alloc(nbits);
 
 	if (map && bm) {
-		for (i = 0; i < map->nr; i++) {
-			set_bit(map->map[i], bm);
+		for (i = 0; i < cpu_map__nr(map); i++) {
+			set_bit(cpu_map__cpu(map, i), bm);
 		}
 	}
 

@@ -253,7 +253,7 @@ static int do_threads(struct worker *worker, struct perf_cpu_map *cpu)
 
 		if (!noaffinity) {
 			CPU_ZERO(&cpuset);
-			CPU_SET(cpu->map[i % cpu->nr], &cpuset);
+			CPU_SET(cpu_map__cpu(cpu, i % cpu_map__nr(cpu)), &cpuset);
 
 			ret = pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset);
 			if (ret)
@@ -332,7 +332,7 @@ int bench_epoll_ctl(int argc, const char **argv)
 
 	/* default to the number of CPUs */
 	if (!nthreads)
-		nthreads = cpu->nr;
+		nthreads = cpu_map__nr(cpu);
 
 	worker = calloc(nthreads, sizeof(*worker));
 	if (!worker)

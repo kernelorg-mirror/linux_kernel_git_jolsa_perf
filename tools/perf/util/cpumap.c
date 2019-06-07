@@ -12,6 +12,12 @@
 
 #include "sane_ctype.h"
 
+struct perf_cpu_map {
+	refcount_t refcnt;
+	int nr;
+	int map[];
+};
+
 static int max_cpu_num;
 static int max_present_cpu_num;
 static int max_node_num;
@@ -693,7 +699,7 @@ int cpu_map__idx(struct perf_cpu_map *cpus, int cpu)
 	return -1;
 }
 
-int cpu_map__cpu(struct perf_cpu_map *cpus, int idx)
+int cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
 {
 	return cpus->map[idx];
 }

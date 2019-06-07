@@ -9,11 +9,7 @@
 #include "perf.h"
 #include "util/debug.h"
 
-struct perf_cpu_map {
-	refcount_t refcnt;
-	int nr;
-	int map[];
-};
+struct perf_cpu_map;
 
 struct perf_cpu_map *cpu_map__new(const char *cpu_list);
 struct perf_cpu_map *cpu_map__empty_new(int nr);
@@ -66,7 +62,7 @@ int cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
 int cpu_map__nr(const struct perf_cpu_map *map);
 bool cpu_map__empty(const struct perf_cpu_map *map);
 void cpu_map__set_cpu(struct perf_cpu_map *map, int idx, int cpu);
-int cpu_map__cpu(struct perf_cpu_map *cpus, int idx);
+int cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
 bool cpu_map__has(struct perf_cpu_map *cpus, int cpu);
 int cpu_map__idx(struct perf_cpu_map *cpus, int cpu);
 #endif /* __PERF_CPUMAP_H */
