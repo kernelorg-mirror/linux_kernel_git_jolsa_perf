@@ -52,16 +52,6 @@ static inline int cpu_map__id_to_cpu(int id)
 	return id & 0xffff;
 }
 
-static inline int cpu_map__nr(const struct perf_cpu_map *map)
-{
-	return map ? map->nr : 1;
-}
-
-static inline bool cpu_map__empty(const struct perf_cpu_map *map)
-{
-	return map ? map->map[0] == -1 : true;
-}
-
 int cpu__setup_cpunode_map(void);
 
 int cpu__max_node(void);
@@ -73,6 +63,8 @@ int cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
 		       int (*f)(struct perf_cpu_map *map, int cpu, void *data),
 		       void *data);
 
+int cpu_map__nr(const struct perf_cpu_map *map);
+bool cpu_map__empty(const struct perf_cpu_map *map);
 void cpu_map__set_cpu(struct perf_cpu_map *map, int idx, int cpu);
 int cpu_map__cpu(struct perf_cpu_map *cpus, int idx);
 bool cpu_map__has(struct perf_cpu_map *cpus, int cpu);

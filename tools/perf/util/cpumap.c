@@ -698,6 +698,16 @@ int cpu_map__cpu(struct perf_cpu_map *cpus, int idx)
 	return cpus->map[idx];
 }
 
+int cpu_map__nr(const struct perf_cpu_map *map)
+{
+	return map ? map->nr : 1;
+}
+
+bool cpu_map__empty(const struct perf_cpu_map *map)
+{
+	return map ? map->map[0] == -1 : true;
+}
+
 size_t cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size)
 {
 	int i, cpu, start = -1;
