@@ -308,6 +308,12 @@ void cpu_map__put(struct perf_cpu_map *map)
 		cpu_map__delete(map);
 }
 
+void cpu_map__set_cpu(struct perf_cpu_map *map, int idx, int cpu)
+{
+	if (idx < map->nr)
+		map->map[idx] = cpu;
+}
+
 static int cpu__get_topology_int(int cpu, const char *name, int *value)
 {
 	char path[PATH_MAX];
