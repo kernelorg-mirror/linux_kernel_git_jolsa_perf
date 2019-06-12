@@ -14,7 +14,6 @@ struct thread_map_data {
 struct perf_thread_map {
 	refcount_t refcnt;
 	int nr;
-	int err_thread;
 	struct thread_map_data map[];
 };
 

@@ -166,6 +166,7 @@ struct evsel {
 		perf_evsel__sb_cb_t	*cb;
 		void			*data;
 	} side_band;
+	int			err_thread;
 };
 
 union u64_swap {

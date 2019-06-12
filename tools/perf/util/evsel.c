@@ -246,6 +246,7 @@ void evsel__init(struct evsel *evsel,
 	evsel->metric_events = NULL;
 	evsel->collect_stat  = false;
 	evsel->pmu_name      = NULL;
+	evsel->err_thread    = -1;
 }
 
 struct evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
@@ -2058,7 +2059,7 @@ try_fallback:
 	}
 out_close:
 	if (err)
-		threads->err_thread = thread;
+		evsel->err_thread = thread;
 
 	do {
 		while (--thread >= 0) {
