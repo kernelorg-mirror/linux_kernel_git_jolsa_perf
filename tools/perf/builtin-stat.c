@@ -491,7 +491,7 @@ try_again:
 				 * For global --per-thread case, skip current
 				 * error thread.
 				 */
-				if (!thread_map__remove(evsel_list->threads, counter->err_thread)) {
+				if (!perf_thread_map__remove(evsel_list->threads, counter->err_thread)) {
 					counter->err_thread = -1;
 					goto try_again;
 				}

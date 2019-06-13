@@ -476,7 +476,7 @@ bool perf_thread_map__has(struct perf_thread_map *threads, pid_t pid)
 	return false;
 }
 
-int thread_map__remove(struct perf_thread_map *threads, int idx)
+int perf_thread_map__remove(struct perf_thread_map *threads, int idx)
 {
 	int i;
 

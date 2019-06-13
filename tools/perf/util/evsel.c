@@ -1757,12 +1757,12 @@ static bool ignore_missing_thread(struct evsel *evsel,
 
 	/*
 	 * We should remove fd for missing_thread first
-	 * because thread_map__remove() will decrease threads->nr.
+	 * because perf_thread_map__remove() will decrease threads->nr.
 	 */
 	if (update_fds(evsel, nr_cpus, cpu, perf_thread_map__nr(threads), thread))
 		return false;
 
-	if (thread_map__remove(threads, thread))
+	if (perf_thread_map__remove(threads, thread))
 		return false;
 
 	pr_warning("WARNING: Ignored open failure for pid %d\n",

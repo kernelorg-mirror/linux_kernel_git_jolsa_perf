@@ -107,7 +107,7 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 		thread_map__fprintf(threads, stderr);
 
 	TEST_ASSERT_VAL("failed to remove thread",
-			!thread_map__remove(threads, 0));
+			!perf_thread_map__remove(threads, 0));
 
 	TEST_ASSERT_VAL("thread_map count != 1", perf_thread_map__nr(threads) == 1);
 
@@ -115,7 +115,7 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 		thread_map__fprintf(threads, stderr);
 
 	TEST_ASSERT_VAL("failed to remove thread",
-			!thread_map__remove(threads, 0));
+			!perf_thread_map__remove(threads, 0));
 
 	TEST_ASSERT_VAL("thread_map count != 0", perf_thread_map__nr(threads) == 0);
 
@@ -123,7 +123,7 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 		thread_map__fprintf(threads, stderr);
 
 	TEST_ASSERT_VAL("failed to not remove thread",
-			thread_map__remove(threads, 0));
+			perf_thread_map__remove(threads, 0));
 
 	perf_thread_map__put(threads);
 	return 0;
