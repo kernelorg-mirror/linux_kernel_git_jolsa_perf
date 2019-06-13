@@ -1850,7 +1850,7 @@ int perf_evsel__open(struct evsel *evsel, struct perf_cpu_map *cpus,
 		static struct perf_thread_map *empty_thread_map;
 
 		if (empty_thread_map == NULL) {
-			empty_thread_map = thread_map__new_by_tid(-1);
+			empty_thread_map = perf_thread_map__new_by_tid(-1);
 			if (empty_thread_map == NULL)
 				return -ENOMEM;
 		}

@@ -90,7 +90,7 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 	return threads;
 }
 
-struct perf_thread_map *thread_map__new_by_tid(pid_t tid)
+struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
 {
 	struct perf_thread_map *threads = thread_map__alloc(1);
 
@@ -207,7 +207,7 @@ struct perf_thread_map *thread_map__new(pid_t pid, pid_t tid, uid_t uid)
 	if (tid == -1 && uid != UINT_MAX)
 		return thread_map__new_by_uid(uid);
 
-	return thread_map__new_by_tid(tid);
+	return perf_thread_map__new_by_tid(tid);
 }
 
 static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)

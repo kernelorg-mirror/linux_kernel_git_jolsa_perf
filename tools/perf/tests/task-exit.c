@@ -64,7 +64,7 @@ int test__task_exit(struct test *test __maybe_unused, int subtest __maybe_unused
 	 * we're monitoring, the one forked there.
 	 */
 	cpus = perf_cpu_map__dummy_new();
-	threads = thread_map__new_by_tid(-1);
+	threads = perf_thread_map__new_by_tid(-1);
 	if (!cpus || !threads) {
 		err = -ENOMEM;
 		pr_debug("Not enough memory to create thread/cpu maps\n");

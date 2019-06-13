@@ -57,7 +57,7 @@ static int __test__sw_clock_freq(enum perf_sw_ids clock_id)
 	perf_evlist__add(evlist, evsel);
 
 	cpus = perf_cpu_map__dummy_new();
-	threads = thread_map__new_by_tid(getpid());
+	threads = perf_thread_map__new_by_tid(getpid());
 	if (!cpus || !threads) {
 		err = -ENOMEM;
 		pr_debug("Not enough memory to create thread/cpu maps\n");

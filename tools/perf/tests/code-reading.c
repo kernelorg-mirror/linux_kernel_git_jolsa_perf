@@ -594,7 +594,7 @@ static int do_test_code_reading(bool try_kcore)
 	if (!have_vmlinux && !have_kcore)
 		excl_kernel = true;
 
-	threads = thread_map__new_by_tid(pid);
+	threads = perf_thread_map__new_by_tid(pid);
 	if (!threads) {
 		pr_debug("thread_map__new_by_tid failed\n");
 		goto out_err;

@@ -1052,7 +1052,7 @@ static int record__synthesize_workload(struct record *rec, bool tail)
 	if (rec->opts.tail_synthesize != tail)
 		return 0;
 
-	thread_map = thread_map__new_by_tid(rec->evlist->workload.pid);
+	thread_map = perf_thread_map__new_by_tid(rec->evlist->workload.pid);
 	if (thread_map == NULL)
 		return -1;
 
