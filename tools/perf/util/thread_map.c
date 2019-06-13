@@ -436,7 +436,7 @@ static void thread_map__copy_event(struct perf_thread_map *threads,
 
 	for (i = 0; i < event->nr; i++) {
 		thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
-		threads->map[i].comm = strndup(event->entries[i].comm, 16);
+		thread_map__set_comm(threads, i, event->entries[i].comm);
 	}
 
 	refcount_set(&threads->refcnt, 1);
