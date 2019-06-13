@@ -12,7 +12,7 @@
 struct perf_cpu_map;
 
 struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list);
-struct perf_cpu_map *cpu_map__empty_new(int nr);
+struct perf_cpu_map *perf_cpu_map__empty_new(int nr);
 struct perf_cpu_map *cpu_map__dummy_new(void);
 struct perf_cpu_map *cpu_map__new_data(struct cpu_map_data *data);
 struct perf_cpu_map *cpu_map__read(FILE *file);
