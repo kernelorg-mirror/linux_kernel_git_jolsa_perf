@@ -217,9 +217,9 @@ static struct perf_cpu_map *cpu_map__from_entries(struct cpu_map_entries *cpus)
 			 * otherwise it would become 65535.
 			 */
 			if (cpus->cpu[i] == (u16) -1)
-				map->map[i] = -1;
+				perf_cpu_map__set(map, i, -1);
 			else
-				map->map[i] = (int) cpus->cpu[i];
+				perf_cpu_map__set(map, i, (int) cpus->cpu[i]);
 		}
 	}
 
@@ -238,7 +238,7 @@ static struct perf_cpu_map *cpu_map__from_mask(struct cpu_map_mask *mask)
 		int cpu, i = 0;
 
 		for_each_set_bit(cpu, mask->mask, nbits)
-			map->map[i++] = cpu;
+			perf_cpu_map__set(map, i++, cpu);
 	}
 	return map;
 
