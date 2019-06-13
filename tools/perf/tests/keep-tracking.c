@@ -72,7 +72,7 @@ int test__keep_tracking(struct test *test __maybe_unused, int subtest __maybe_un
 	int found, err = -1;
 	const char *comm;
 
-	threads = thread_map__new(-1, getpid(), UINT_MAX);
+	threads = perf_thread_map__new(-1, getpid(), UINT_MAX);
 	CHECK_NOT_NULL__(threads);
 
 	cpus = perf_cpu_map__new(NULL);

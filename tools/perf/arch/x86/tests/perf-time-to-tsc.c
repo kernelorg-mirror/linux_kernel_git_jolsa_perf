@@ -62,7 +62,7 @@ int test__perf_time_to_tsc(struct test *test __maybe_unused, int subtest __maybe
 	u64 test_time, comm1_time = 0, comm2_time = 0;
 	struct perf_mmap *md;
 
-	threads = thread_map__new(-1, getpid(), UINT_MAX);
+	threads = perf_thread_map__new(-1, getpid(), UINT_MAX);
 	CHECK_NOT_NULL__(threads);
 
 	cpus = perf_cpu_map__new(NULL);

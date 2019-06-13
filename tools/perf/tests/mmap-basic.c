@@ -40,7 +40,7 @@ int test__basic_mmap(struct test *test __maybe_unused, int subtest __maybe_unuse
 	char sbuf[STRERR_BUFSIZE];
 	struct perf_mmap *md;
 
-	threads = thread_map__new(-1, getpid(), UINT_MAX);
+	threads = perf_thread_map__new(-1, getpid(), UINT_MAX);
 	if (threads == NULL) {
 		pr_debug("thread_map__new\n");
 		return -1;

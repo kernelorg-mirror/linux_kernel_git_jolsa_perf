@@ -334,7 +334,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 	const char *comm;
 	int err = -1;
 
-	threads = thread_map__new(-1, getpid(), UINT_MAX);
+	threads = perf_thread_map__new(-1, getpid(), UINT_MAX);
 	if (!threads) {
 		pr_debug("thread_map__new failed!\n");
 		goto out_err;

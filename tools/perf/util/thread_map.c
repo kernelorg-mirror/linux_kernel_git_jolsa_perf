@@ -199,7 +199,7 @@ static struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
 	return __thread_map__new_all_cpus(uid);
 }
 
-struct perf_thread_map *thread_map__new(pid_t pid, pid_t tid, uid_t uid)
+struct perf_thread_map *perf_thread_map__new(pid_t pid, pid_t tid, uid_t uid)
 {
 	if (pid != -1)
 		return perf_thread_map__new_by_pid(pid);

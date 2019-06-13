@@ -617,7 +617,7 @@ static int pyrf_thread_map__init(struct pyrf_thread_map *pthreads,
 					 kwlist, &pid, &tid, &uid))
 		return -1;
 
-	pthreads->threads = thread_map__new(pid, tid, uid);
+	pthreads->threads = perf_thread_map__new(pid, tid, uid);
 	if (pthreads->threads == NULL)
 		return -1;
 	return 0;
