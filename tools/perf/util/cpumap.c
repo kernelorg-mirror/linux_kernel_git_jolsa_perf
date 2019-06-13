@@ -682,7 +682,7 @@ int cpu__setup_cpunode_map(void)
 	return 0;
 }
 
-bool cpu_map__has(struct perf_cpu_map *cpus, int cpu)
+bool perf_cpu_map__has(struct perf_cpu_map *cpus, int cpu)
 {
 	return cpu_map__idx(cpus, cpu) != -1;
 }

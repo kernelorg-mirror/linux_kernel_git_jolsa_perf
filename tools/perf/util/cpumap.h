@@ -63,6 +63,6 @@ int perf_cpu_map__nr(const struct perf_cpu_map *map);
 bool perf_cpu_map__empty(const struct perf_cpu_map *map);
 void perf_cpu_map__set(struct perf_cpu_map *map, int idx, int cpu);
 int perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
-bool cpu_map__has(struct perf_cpu_map *cpus, int cpu);
+bool perf_cpu_map__has(struct perf_cpu_map *cpus, int cpu);
 int cpu_map__idx(struct perf_cpu_map *cpus, int cpu);
 #endif /* __PERF_CPUMAP_H */
