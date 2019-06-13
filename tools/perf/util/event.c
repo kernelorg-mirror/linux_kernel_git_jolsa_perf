@@ -17,7 +17,7 @@
 #include "machine.h"
 #include "sort.h"
 #include "string2.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "thread.h"
 #include "thread_map.h"
 #include "sane_ctype.h"

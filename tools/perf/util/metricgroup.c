@@ -24,7 +24,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include "pmu-events/pmu-events.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include <assert.h>
 #include <ctype.h>
 

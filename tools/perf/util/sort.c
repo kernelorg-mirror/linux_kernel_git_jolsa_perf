@@ -12,7 +12,7 @@
 #include "thread.h"
 #include "evsel.h"
 #include "evlist.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "strbuf.h"
 #include <traceevent/event-parse.h>
 #include "mem-events.h"

@@ -22,7 +22,7 @@
 #include "util.h"
 #include "event.h"
 #include "namespaces.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "strfilter.h"
 #include "debug.h"
 #include "cache.h"

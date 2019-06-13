@@ -20,7 +20,7 @@
 #include "builtin.h"
 #include "namespaces.h"
 #include "util/util.h"
-#include "util/strlist.h"
+#include <api/strlist.h>
 #include "util/strfilter.h"
 #include "util/symbol.h"
 #include "util/debug.h"

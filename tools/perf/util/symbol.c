@@ -20,7 +20,7 @@
 #include "machine.h"
 #include "map.h"
 #include "symbol.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "intlist.h"
 #include "namespaces.h"
 #include "header.h"

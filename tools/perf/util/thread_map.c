@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "string2.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include <string.h>
 #include <api/fs/fs.h>
 #include "asm/bug.h"

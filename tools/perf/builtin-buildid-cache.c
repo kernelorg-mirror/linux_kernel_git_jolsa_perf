@@ -20,7 +20,7 @@
 #include "util/debug.h"
 #include "util/header.h"
 #include <subcmd/parse-options.h>
-#include "util/strlist.h"
+#include <api/strlist.h>
 #include "util/build-id.h"
 #include "util/session.h"
 #include "util/symbol.h"

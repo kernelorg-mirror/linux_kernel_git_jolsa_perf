@@ -6,7 +6,7 @@
 #include "evsel.h"
 #include "callchain.h"
 #include "map.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "symbol.h"
 #include "srcline.h"
 

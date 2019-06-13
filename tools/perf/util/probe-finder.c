@@ -24,7 +24,7 @@
 #include "debug.h"
 #include "intlist.h"
 #include "util.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "symbol.h"
 #include "probe-finder.h"
 #include "probe-file.h"

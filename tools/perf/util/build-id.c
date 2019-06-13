@@ -27,7 +27,7 @@
 #include "vdso.h"
 #include "path.h"
 #include "probe-file.h"
-#include "strlist.h"
+#include <api/strlist.h>
 
 #include "sane_ctype.h"
 

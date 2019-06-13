@@ -4,13 +4,15 @@
  * Licensed under the GPLv2.
  */
 
+#define _GNU_SOURCE
 #include "strlist.h"
-#include "util.h"
-#include <errno.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#define zfree(ptr) ({ free(*ptr); *ptr = NULL; })
 
 static
 struct rb_node *strlist__node_new(struct rblist *rblist, const void *entry)

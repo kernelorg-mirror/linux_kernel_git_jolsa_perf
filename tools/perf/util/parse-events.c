@@ -16,7 +16,7 @@
 #include "parse-events.h"
 #include <subcmd/exec-cmd.h>
 #include "string2.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "symbol.h"
 #include "cache.h"
 #include "header.h"

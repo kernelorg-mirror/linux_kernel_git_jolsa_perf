@@ -12,7 +12,7 @@
 #include "map.h"
 #include "symbol.h"
 #include "sort.h"
-#include "strlist.h"
+#include <api/strlist.h>
 #include "thread.h"
 #include "vdso.h"
 #include <stdbool.h>
