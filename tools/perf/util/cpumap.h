@@ -16,7 +16,7 @@ struct perf_cpu_map *perf_perf_cpu_map__empty_new(int nr);
 struct perf_cpu_map *perf_cpu_map__dummy_new(void);
 struct perf_cpu_map *cpu_map__new_data(struct cpu_map_data *data);
 struct perf_cpu_map *perf_cpu_map__read(FILE *file);
-size_t cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size);
+size_t perf_cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size);
 size_t perf_cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size);
 size_t cpu_map__fprintf(struct perf_cpu_map *map, FILE *fp);
 int cpu_map__get_socket_id(int cpu);

@@ -257,7 +257,7 @@ size_t cpu_map__fprintf(struct perf_cpu_map *map, FILE *fp)
 #define BUFSIZE 1024
 	char buf[BUFSIZE];
 
-	cpu_map__snprint(map, buf, sizeof(buf));
+	perf_cpu_map__snprint(map, buf, sizeof(buf));
 	return fprintf(fp, "%s\n", buf);
 #undef BUFSIZE
 }
@@ -714,7 +714,7 @@ bool perf_cpu_map__empty(const struct perf_cpu_map *map)
 	return map ? map->map[0] == -1 : true;
 }
 
-size_t cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size)
+size_t perf_cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size)
 {
 	int i, cpu, start = -1;
 	bool first = true;

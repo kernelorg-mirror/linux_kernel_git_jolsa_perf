@@ -102,7 +102,7 @@ static int cpu_map_print(const char *str)
 	if (!map)
 		return -1;
 
-	cpu_map__snprint(map, buf, sizeof(buf));
+	perf_cpu_map__snprint(map, buf, sizeof(buf));
 	return !strcmp(buf, str);
 }
 
