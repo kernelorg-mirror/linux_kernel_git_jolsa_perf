@@ -54,8 +54,10 @@ static struct perf_thread_map *thread_map__realloc(struct perf_thread_map *map, 
 	/*
 	 * We only realloc to add more items, let's reset new items.
 	 */
-	if (map)
+	if (map) {
 		thread_map__reset(map, start, nr);
+		map->nr = nr;
+	}
 
 	/*
 	 * Set refcnt if there's new allocation.
@@ -83,7 +85,6 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 	if (threads != NULL) {
 		for (i = 0; i < items; i++)
 			perf_thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
-		threads->nr = items;
 	}
 
 	for (i=0; i<items; i++)
@@ -97,10 +98,8 @@ struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
 {
 	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
 
-	if (threads != NULL) {
+	if (threads != NULL)
 		perf_thread_map__set_pid(threads, 0, tid);
-		threads->nr = 1;
-	}
 
 	return threads;
 }
@@ -253,7 +252,6 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 			perf_thread_map__set_pid(threads, j++, atoi(namelist[i]->d_name));
 			zfree(&namelist[i]);
 		}
-		threads->nr = total_tasks;
 		free(namelist);
 	}
 
@@ -275,10 +273,8 @@ struct perf_thread_map *perf_thread_map__new_dummy(void)
 {
 	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
 
-	if (threads != NULL) {
+	if (threads != NULL)
 		perf_thread_map__set_pid(threads, 0, -1);
-		threads->nr = 1;
-	}
 	return threads;
 }
 
@@ -439,8 +435,6 @@ static void thread_map__copy_event(struct perf_thread_map *threads,
 				   struct thread_map_event *event)
 {
 	unsigned i;
-
-	threads->nr = (int) event->nr;
 
 	for (i = 0; i < event->nr; i++) {
 		perf_thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
