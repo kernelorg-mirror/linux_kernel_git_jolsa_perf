@@ -19,7 +19,7 @@
 #include "strbuf.h"
 #include "pmu.h"
 #include "expr.h"
-#include "rblist.h"
+#include <api/rblist.h>
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>

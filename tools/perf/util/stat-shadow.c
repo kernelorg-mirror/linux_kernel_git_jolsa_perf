@@ -4,7 +4,7 @@
 #include "stat.h"
 #include "color.h"
 #include "pmu.h"
-#include "rblist.h"
+#include <api/rblist.h>
 #include "evlist.h"
 #include "expr.h"
 #include "metricgroup.h"

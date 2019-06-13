@@ -2,7 +2,7 @@
 #define METRICGROUP_H 1
 
 #include "linux/list.h"
-#include "rblist.h"
+#include <api/rblist.h>
 #include <subcmd/parse-options.h>
 #include "evlist.h"
 #include "strbuf.h"

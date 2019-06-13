@@ -4,8 +4,7 @@
 
 #include <linux/rbtree.h>
 #include <stdbool.h>
-
-#include "rblist.h"
+#include <api/rblist.h>
 
 struct int_node {
 	struct rb_node rb_node;

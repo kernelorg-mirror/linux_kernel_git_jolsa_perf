@@ -72,7 +72,6 @@ perf-y += cpumap.o
 perf-y += cputopo.o
 perf-y += cgroup.o
 perf-y += target.o
-perf-y += rblist.o
 perf-y += intlist.o
 perf-y += vdso.o
 perf-y += counts.o
