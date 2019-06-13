@@ -314,7 +314,7 @@ void cpu_map__put(struct perf_cpu_map *map)
 		cpu_map__delete(map);
 }
 
-void cpu_map__set_cpu(struct perf_cpu_map *map, int idx, int cpu)
+void perf_cpu_map__set(struct perf_cpu_map *map, int idx, int cpu)
 {
 	if (idx < map->nr)
 		map->map[idx] = cpu;

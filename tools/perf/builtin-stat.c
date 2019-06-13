@@ -838,7 +838,7 @@ static int perf_stat__get_aggr(struct perf_stat_config *config,
 	cpu = cpu_map__cpu(map, idx);
 
 	if (cpu_map__cpu(config->cpus_aggr_map, cpu) == -1)
-		cpu_map__set_cpu(config->cpus_aggr_map, cpu, get_id(config, map, idx));
+		perf_cpu_map__set(config->cpus_aggr_map, cpu, get_id(config, map, idx));
 
 	return cpu_map__cpu(config->cpus_aggr_map, cpu);
 }
