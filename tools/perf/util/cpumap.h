@@ -37,13 +37,6 @@ const struct perf_cpu_map *cpu_map__online(void); /* thread unsafe */
 struct perf_cpu_map *cpu_map__get(struct perf_cpu_map *map);
 void cpu_map__put(struct perf_cpu_map *map);
 
-static inline int cpu_map__socket(struct perf_cpu_map *sock, int s)
-{
-	if (!sock || s > sock->nr || s < 0)
-		return 0;
-	return sock->map[s];
-}
-
 static inline int cpu_map__id_to_socket(int id)
 {
 	return id >> 24;
