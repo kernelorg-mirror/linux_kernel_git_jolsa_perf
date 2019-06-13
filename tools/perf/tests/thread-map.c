@@ -21,7 +21,7 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	map = perf_thread_map__new_by_pid(getpid());
 	TEST_ASSERT_VAL("failed to alloc map", map);
 
-	thread_map__read_comms(map);
+	perf_thread_map__read_comms(map);
 
 	TEST_ASSERT_VAL("wrong nr", perf_thread_map__nr(map) == 1);
 	TEST_ASSERT_VAL("wrong pid",
@@ -35,7 +35,7 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	map = perf_thread_map__new_dummy();
 	TEST_ASSERT_VAL("failed to alloc map", map);
 
-	thread_map__read_comms(map);
+	perf_thread_map__read_comms(map);
 
 	TEST_ASSERT_VAL("wrong nr", perf_thread_map__nr(map) == 1);
 	TEST_ASSERT_VAL("wrong pid", perf_thread_map__pid(map, 0) == -1);
@@ -82,7 +82,7 @@ int test__thread_map_synthesize(struct test *test __maybe_unused, int subtest __
 	threads = perf_thread_map__new_by_pid(getpid());
 	TEST_ASSERT_VAL("failed to alloc map", threads);
 
-	thread_map__read_comms(threads);
+	perf_thread_map__read_comms(threads);
 
 	TEST_ASSERT_VAL("failed to synthesize map",
 		!perf_event__synthesize_thread_map2(NULL, threads, process_event, NULL));

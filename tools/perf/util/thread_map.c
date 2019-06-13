@@ -430,7 +430,7 @@ static void comm_init(struct perf_thread_map *map, int i)
 	map->map[i].comm = comm;
 }
 
-void thread_map__read_comms(struct perf_thread_map *threads)
+void perf_thread_map__read_comms(struct perf_thread_map *threads)
 {
 	int i;
 

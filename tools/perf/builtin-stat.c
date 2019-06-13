@@ -1882,7 +1882,7 @@ int cmd_stat(int argc, const char **argv)
 	 * so we could print it out on output.
 	 */
 	if (stat_config.aggr_mode == AGGR_THREAD) {
-		thread_map__read_comms(evsel_list->threads);
+		perf_thread_map__read_comms(evsel_list->threads);
 		if (target.system_wide) {
 			if (runtime_stat_new(&stat_config,
 				perf_thread_map__nr(evsel_list->threads))) {
