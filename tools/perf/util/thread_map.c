@@ -333,7 +333,7 @@ out_free_threads:
 	goto out;
 }
 
-struct perf_thread_map *thread_map__new_str(const char *pid, const char *tid,
+struct perf_thread_map *perf_thread_map__new_str(const char *pid, const char *tid,
 				       uid_t uid, bool all_threads)
 {
 	if (pid)

@@ -18,7 +18,7 @@ struct perf_thread_map *thread_map__new_event(struct thread_map_event *event);
 struct perf_thread_map *perf_thread_map__get(struct perf_thread_map *map);
 void perf_thread_map__put(struct perf_thread_map *map);
 
-struct perf_thread_map *thread_map__new_str(const char *pid,
+struct perf_thread_map *perf_thread_map__new_str(const char *pid,
 		const char *tid, uid_t uid, bool all_threads);
 
 struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str);
