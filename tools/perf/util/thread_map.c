@@ -194,7 +194,7 @@ struct perf_thread_map *thread_map__new_all_cpus(void)
 	return __thread_map__new_all_cpus(UINT_MAX);
 }
 
-struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
+static struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
 {
 	return __thread_map__new_all_cpus(uid);
 }
