@@ -397,7 +397,7 @@ static int perf_evlist__enable_event_thread(struct evlist *evlist,
 					    int thread)
 {
 	int cpu;
-	int nr_cpus = cpu_map__nr(evlist->cpus);
+	int nr_cpus = perf_cpu_map__nr(evlist->cpus);
 
 	if (!evsel->fd)
 		return -EINVAL;
@@ -423,7 +423,7 @@ int perf_evlist__enable_event_idx(struct evlist *evlist,
 
 int perf_evlist__alloc_pollfd(struct evlist *evlist)
 {
-	int nr_cpus = cpu_map__nr(evlist->cpus);
+	int nr_cpus = perf_cpu_map__nr(evlist->cpus);
 	int nr_threads = thread_map__nr(evlist->threads);
 	int nfds = 0;
 	struct evsel *evsel;
@@ -719,7 +719,7 @@ static struct perf_mmap *perf_evlist__alloc_mmap(struct evlist *evlist,
 	int i;
 	struct perf_mmap *map;
 
-	evlist->nr_mmaps = cpu_map__nr(evlist->cpus);
+	evlist->nr_mmaps = perf_cpu_map__nr(evlist->cpus);
 	if (cpu_map__empty(evlist->cpus))
 		evlist->nr_mmaps = thread_map__nr(evlist->threads);
 	map = zalloc(evlist->nr_mmaps * sizeof(struct perf_mmap));
@@ -834,7 +834,7 @@ static int perf_evlist__mmap_per_cpu(struct evlist *evlist,
 				     struct mmap_params *mp)
 {
 	int cpu, thread;
-	int nr_cpus = cpu_map__nr(evlist->cpus);
+	int nr_cpus = perf_cpu_map__nr(evlist->cpus);
 	int nr_threads = thread_map__nr(evlist->threads);
 
 	pr_debug2("perf event ring buffer mmapped per cpu\n");
@@ -1041,7 +1041,7 @@ int perf_evlist__mmap_ex(struct evlist *evlist, unsigned int pages,
 	evlist__for_each_entry(evlist, evsel) {
 		if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
 		    evsel->sample_id == NULL &&
-		    perf_evsel__alloc_id(evsel, cpu_map__nr(cpus), threads->nr) < 0)
+		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), threads->nr) < 0)
 			return -ENOMEM;
 	}
 

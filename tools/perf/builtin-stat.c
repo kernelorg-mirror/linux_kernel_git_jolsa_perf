@@ -819,7 +819,7 @@ static int cpu_map__get_max(struct perf_cpu_map *map)
 {
 	int i, max = -1;
 
-	for (i = 0; i < cpu_map__nr(map); i++) {
+	for (i = 0; i < perf_cpu_map__nr(map); i++) {
 		if (cpu_map__cpu(map, i) > max)
 			max = cpu_map__cpu(map, i);
 	}
@@ -832,7 +832,7 @@ static int perf_stat__get_aggr(struct perf_stat_config *config,
 {
 	int cpu;
 
-	if (idx >= cpu_map__nr(map))
+	if (idx >= perf_cpu_map__nr(map))
 		return -1;
 
 	cpu = cpu_map__cpu(map, idx);
@@ -938,7 +938,7 @@ static inline int perf_env__get_cpu(struct perf_env *env, struct perf_cpu_map *m
 {
 	int cpu;
 
-	if (idx > cpu_map__nr(map))
+	if (idx > perf_cpu_map__nr(map))
 		return -1;
 
 	cpu = cpu_map__cpu(map, idx);

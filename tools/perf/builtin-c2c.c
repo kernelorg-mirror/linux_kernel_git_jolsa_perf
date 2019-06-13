@@ -2062,7 +2062,7 @@ static int setup_nodes(struct perf_session *session)
 		if (cpu_map__empty(map))
 			continue;
 
-		for (cpu = 0; cpu < cpu_map__nr(map); cpu++) {
+		for (cpu = 0; cpu < perf_cpu_map__nr(map); cpu++) {
 			set_bit(cpu_map__cpu(map, cpu), set);
 
 			if (WARN_ONCE(cpu2node[cpu_map__cpu(map, cpu)] != -1, "node/cpu topology bug"))

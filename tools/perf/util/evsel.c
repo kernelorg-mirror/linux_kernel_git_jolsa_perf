@@ -1863,7 +1863,7 @@ int perf_evsel__open(struct evsel *evsel, struct perf_cpu_map *cpus,
 		nthreads = threads->nr;
 
 	if (evsel->fd == NULL &&
-	    perf_evsel__alloc_fd(evsel, cpu_map__nr(cpus), nthreads) < 0)
+	    perf_evsel__alloc_fd(evsel, perf_cpu_map__nr(cpus), nthreads) < 0)
 		return -ENOMEM;
 
 	if (evsel->cgrp) {
@@ -1899,7 +1899,7 @@ retry_sample_id:
 
 	display_attr(&evsel->attr);
 
-	for (cpu = 0; cpu < cpu_map__nr(cpus); cpu++) {
+	for (cpu = 0; cpu < perf_cpu_map__nr(cpus); cpu++) {
 
 		for (thread = 0; thread < nthreads; thread++) {
 			int fd, group_fd;
@@ -1919,7 +1919,7 @@ retry_open:
 			if (fd < 0) {
 				err = -errno;
 
-				if (ignore_missing_thread(evsel, cpu_map__nr(cpus), cpu, threads, thread, err)) {
+				if (ignore_missing_thread(evsel, perf_cpu_map__nr(cpus), cpu, threads, thread, err)) {
 					/*
 					 * We just removed 1 thread, so take a step
 					 * back on thread index and lower the upper
@@ -3063,7 +3063,7 @@ int perf_evsel__store_ids(struct evsel *evsel, struct evlist *evlist)
 	struct perf_cpu_map *cpus = evsel->cpus;
 	struct perf_thread_map *threads = evsel->threads;
 
-	if (perf_evsel__alloc_id(evsel, cpu_map__nr(cpus), threads->nr))
+	if (perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), threads->nr))
 		return -ENOMEM;
 
 	return store_evsel_ids(evsel, evlist);

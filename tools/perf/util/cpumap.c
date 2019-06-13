@@ -704,7 +704,7 @@ int cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
 	return cpus->map[idx];
 }
 
-int cpu_map__nr(const struct perf_cpu_map *map)
+int perf_cpu_map__nr(const struct perf_cpu_map *map)
 {
 	return map ? map->nr : 1;
 }

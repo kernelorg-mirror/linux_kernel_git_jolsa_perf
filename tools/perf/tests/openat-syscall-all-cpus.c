@@ -55,7 +55,7 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 		goto out_evsel_delete;
 	}
 
-	for (cpu = 0; cpu < cpu_map__nr(cpus); ++cpu) {
+	for (cpu = 0; cpu < perf_cpu_map__nr(cpus); ++cpu) {
 		unsigned int ncalls = nr_openat_calls + cpu;
 		/*
 		 * XXX eventually lift this restriction in a way that
@@ -87,14 +87,14 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 	 * we use the auto allocation it will allocate just for 1 cpu,
 	 * as we start by cpu 0.
 	 */
-	if (perf_evsel__alloc_counts(evsel, cpu_map__nr(cpus), 1) < 0) {
-		pr_debug("perf_evsel__alloc_counts(ncpus=%d)\n", cpu_map__nr(cpus));
+	if (perf_evsel__alloc_counts(evsel, perf_cpu_map__nr(cpus), 1) < 0) {
+		pr_debug("perf_evsel__alloc_counts(ncpus=%d)\n", perf_cpu_map__nr(cpus));
 		goto out_close_fd;
 	}
 
 	err = 0;
 
-	for (cpu = 0; cpu < cpu_map__nr(cpus); ++cpu) {
+	for (cpu = 0; cpu < perf_cpu_map__nr(cpus); ++cpu) {
 		unsigned int expected;
 
 		if (cpu_map__cpu(cpus, cpu) >= CPU_SETSIZE)

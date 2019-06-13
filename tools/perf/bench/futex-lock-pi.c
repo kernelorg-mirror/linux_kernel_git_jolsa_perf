@@ -133,7 +133,7 @@ static void create_threads(struct worker *w, pthread_attr_t thread_attr,
 			worker[i].futex = &global_futex;
 
 		CPU_ZERO(&cpuset);
-		CPU_SET(cpu_map__cpu(cpu, i % cpu_map__nr(cpu)), &cpuset);
+		CPU_SET(cpu_map__cpu(cpu, i % perf_cpu_map__nr(cpu)), &cpuset);
 
 		if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset))
 			err(EXIT_FAILURE, "pthread_attr_setaffinity_np");
@@ -164,7 +164,7 @@ int bench_futex_lock_pi(int argc, const char **argv)
 	sigaction(SIGINT, &act, NULL);
 
 	if (!nthreads)
-		nthreads = cpu_map__nr(cpu);
+		nthreads = perf_cpu_map__nr(cpu);
 
 	worker = calloc(nthreads, sizeof(*worker));
 	if (!worker)

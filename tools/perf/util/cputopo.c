@@ -315,7 +315,7 @@ struct numa_topology *numa_topology__new(void)
 	if (!node_map)
 		goto out;
 
-	nr = (u32) cpu_map__nr(node_map);
+	nr = (u32) perf_cpu_map__nr(node_map);
 
 	tp = zalloc(sizeof(*tp) + sizeof(tp->nodes[0])*nr);
 	if (!tp)

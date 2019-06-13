@@ -201,7 +201,7 @@ static inline struct perf_cpu_map *perf_evsel__cpus(struct evsel *evsel)
 
 static inline int perf_evsel__nr_cpus(struct evsel *evsel)
 {
-	return cpu_map__nr(perf_evsel__cpus(evsel));
+	return perf_cpu_map__nr(perf_evsel__cpus(evsel));
 }
 
 void perf_counts_values__scale(struct perf_counts_values *count,

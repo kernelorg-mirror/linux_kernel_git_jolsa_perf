@@ -100,7 +100,7 @@ static int check_cpu_topology(char *path, struct perf_cpu_map *map)
 			 session->header.env.cpu[i].socket_id);
 	}
 
-	for (i = 0; i < cpu_map__nr(map); i++) {
+	for (i = 0; i < perf_cpu_map__nr(map); i++) {
 		TEST_ASSERT_VAL("Core ID doesn't match",
 			(session->header.env.cpu[cpu_map__cpu(map, i)].core_id == (cpu_map__get_core(map, i, NULL) & 0xffff)));
 

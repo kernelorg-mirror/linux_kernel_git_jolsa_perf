@@ -2286,7 +2286,7 @@ int perf_session__cpu_bitmap(struct perf_session *session,
 		return -1;
 	}
 
-	for (i = 0; i < cpu_map__nr(map); i++) {
+	for (i = 0; i < perf_cpu_map__nr(map); i++) {
 		int cpu = cpu_map__cpu(map, i);
 
 		if (cpu >= MAX_NR_CPUS) {

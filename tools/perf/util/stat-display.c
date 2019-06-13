@@ -496,7 +496,7 @@ static void aggr_update_shadow(struct perf_stat_config *config,
 	u64 val;
 	struct evsel *counter;
 
-	for (s = 0; s < cpu_map__nr(config->aggr_map); s++) {
+	for (s = 0; s < perf_cpu_map__nr(config->aggr_map); s++) {
 		id = cpu_map__cpu(config->aggr_map, s);
 		evlist__for_each_entry(evlist, counter) {
 			val = 0;
@@ -669,7 +669,7 @@ static void print_aggr(struct perf_stat_config *config,
 	 * With metric_only everything is on a single line.
 	 * Without each counter has its own line.
 	 */
-	for (s = 0; s < cpu_map__nr(config->aggr_map); s++) {
+	for (s = 0; s < perf_cpu_map__nr(config->aggr_map); s++) {
 		if (prefix && metric_only)
 			fprintf(output, "%s", prefix);
 
@@ -745,7 +745,7 @@ static void print_aggr_thread(struct perf_stat_config *config,
 {
 	FILE *output = config->output;
 	int nthreads = thread_map__nr(counter->threads);
-	int ncpus = cpu_map__nr(counter->cpus);
+	int ncpus = perf_cpu_map__nr(counter->cpus);
 	int thread, sorted_threads, id;
 	struct perf_aggr_thread_value *buf;
 
@@ -868,7 +868,7 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 	u64 ena, run, val;
 	double uval;
 
-	nrcpus = cpu_map__nr(evlist->cpus);
+	nrcpus = perf_cpu_map__nr(evlist->cpus);
 	for (cpu = 0; cpu < nrcpus; cpu++) {
 		bool first = true;
 
@@ -1142,7 +1142,7 @@ static void print_percore(struct perf_stat_config *config,
 	if (!(config->aggr_map || config->aggr_get_id))
 		return;
 
-	for (s = 0; s < cpu_map__nr(config->aggr_map); s++) {
+	for (s = 0; s < perf_cpu_map__nr(config->aggr_map); s++) {
 		if (prefix && metric_only)
 			fprintf(output, "%s", prefix);
 
