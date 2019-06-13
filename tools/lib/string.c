@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <linux/string.h>
 #include <linux/compiler.h>
+#include <ctype.h>
 
 /**
  * memdup - duplicate region of memory
@@ -105,4 +106,41 @@ size_t __weak strlcpy(char *dest, const char *src, size_t size)
 		dest[len] = '\0';
 	}
 	return ret;
+}
+
+/**
+ * ltrim - Removes leading whitespace from @s.
+ * @s: The string to be stripped.
+ *
+ * Return pointer to the first non-whitespace character in @s.
+ */
+char *ltrim(char *s)
+{
+	while (isspace(*s))
+		s++;
+
+	return s;
+}
+
+/**
+ * rtrim - Removes trailing whitespace from @s.
+ * @s: The string to be stripped.
+ *
+ * Note that the first trailing whitespace is replaced with a %NUL-terminator
+ * in the given string @s. Returns @s.
+ */
+char *rtrim(char *s)
+{
+	size_t size = strlen(s);
+	char *end;
+
+	if (!size)
+		return s;
+
+	end = s + size - 1;
+	while (end >= s && isspace(*end))
+		end--;
+	*(end + 1) = '\0';
+
+	return s;
 }

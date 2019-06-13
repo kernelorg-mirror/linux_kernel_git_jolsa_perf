@@ -35,4 +35,12 @@ static inline void *zalloc(size_t size)
 	return calloc(1, size);
 }
 
+char *ltrim(char *s);
+char *rtrim(char *s);
+
+static inline char *trim(char *s)
+{
+	return ltrim(rtrim(s));
+}
+
 #endif /* _LINUX_STRING_H_ */

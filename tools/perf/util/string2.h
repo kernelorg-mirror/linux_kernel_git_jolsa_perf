@@ -19,14 +19,6 @@ static inline bool strisglob(const char *str)
 int strtailcmp(const char *s1, const char *s2);
 char *strxfrchar(char *s, char from, char to);
 
-char *ltrim(char *s);
-char *rtrim(char *s);
-
-static inline char *trim(char *s)
-{
-	return ltrim(rtrim(s));
-}
-
 char *asprintf_expr_inout_ints(const char *var, bool in, size_t nints, int *ints);
 
 static inline char *asprintf_expr_in_ints(const char *var, size_t nints, int *ints)
