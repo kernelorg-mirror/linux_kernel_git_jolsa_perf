@@ -37,7 +37,9 @@ else
   CFLAGS := -g -Wall
 endif
 
-INCLUDES = -I. -Iinclude -I$(srctree)/tools/include -I$(srctree)/tools/arch/$(ARCH)/include/
+CFLAGS += -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
+
+INCLUDES = -I. -Iinclude -I$(srctree)/tools/include -I$(srctree)/tools/arch/$(ARCH)/include/ -I$(srctree)/tools/lib/
 
 # Append required CFLAGS
 override CFLAGS += $(EXTRA_WARNINGS)

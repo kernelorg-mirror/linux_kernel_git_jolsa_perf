@@ -1,0 +1,476 @@
+#include <stdlib.h>
+#include <errno.h>
+#include <dirent.h>
+#include <string.h>
+#include <linux/string.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <limits.h>
+#include <linux/refcount.h>
+#include <perf/threadmap.h>
+#include <api/strlist.h>
+#include <api/fs/fs.h>
+#include <asm/bug.h>
+#include <internal/threadmap.h>
+#include "internal.h"
+
+#define zfree(ptr) ({ free(*ptr); *ptr = NULL; })
+
+/* Skip "." and ".." directories */
+static int filter(const struct dirent *dir)
+{
+	if (dir->d_name[0] == '.')
+		return 0;
+	else
+		return 1;
+}
+
+static void thread_map__reset(struct perf_thread_map *map, int start, int nr)
+{
+	size_t size = (nr - start) * sizeof(map->map[0]);
+
+	memset(&map->map[start], 0, size);
+}
+
+static struct perf_thread_map *thread_map__realloc(struct perf_thread_map *map, int nr)
+{
+	size_t size = sizeof(*map) + sizeof(map->map[0]) * nr;
+	int start = map ? map->nr : 0;
+
+	map = realloc(map, size);
+	/*
+	 * We only realloc to add more items, let's reset new items.
+	 */
+	if (map) {
+		thread_map__reset(map, start, nr);
+		map->nr = nr;
+	}
+
+	/*
+	 * Set refcnt if there's new allocation.
+	 */
+	if (!start)
+		refcount_set(&map->refcnt, 1);
+
+	return map;
+}
+
+struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
+{
+	struct perf_thread_map *threads;
+	char name[256];
+	int items;
+	struct dirent **namelist = NULL;
+	int i;
+
+	sprintf(name, "/proc/%d/task", pid);
+	items = scandir(name, &namelist, filter, NULL);
+	if (items <= 0)
+		return NULL;
+
+	threads = perf_thread_map__empty_new(items);
+	if (threads != NULL) {
+		for (i = 0; i < items; i++)
+			perf_thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
+	}
+
+	for (i=0; i<items; i++)
+		zfree(&namelist[i]);
+	free(namelist);
+
+	return threads;
+}
+
+struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
+{
+	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
+
+	if (threads != NULL)
+		perf_thread_map__set_pid(threads, 0, tid);
+
+	return threads;
+}
+
+static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
+{
+	DIR *proc;
+	int max_threads = 32, items, i;
+	char path[NAME_MAX + 1 + 6];
+	struct dirent *dirent, **namelist = NULL;
+	struct perf_thread_map *threads = perf_thread_map__empty_new(max_threads);
+
+	if (threads == NULL)
+		goto out;
+
+	proc = opendir("/proc");
+	if (proc == NULL)
+		goto out_free_threads;
+
+	threads->nr = 0;
+
+	while ((dirent = readdir(proc)) != NULL) {
+		char *end;
+		bool grow = false;
+		pid_t pid = strtol(dirent->d_name, &end, 10);
+
+		if (*end) /* only interested in proper numerical dirents */
+			continue;
+
+		snprintf(path, sizeof(path), "/proc/%s", dirent->d_name);
+
+		if (uid != UINT_MAX) {
+			struct stat st;
+
+			if (stat(path, &st) != 0 || st.st_uid != uid)
+				continue;
+		}
+
+		snprintf(path, sizeof(path), "/proc/%d/task", pid);
+		items = scandir(path, &namelist, filter, NULL);
+		if (items <= 0)
+			goto out_free_closedir;
+
+		while (threads->nr + items >= max_threads) {
+			max_threads *= 2;
+			grow = true;
+		}
+
+		if (grow) {
+			struct perf_thread_map *tmp;
+
+			tmp = thread_map__realloc(threads, max_threads);
+			if (tmp == NULL)
+				goto out_free_namelist;
+
+			threads = tmp;
+		}
+
+		for (i = 0; i < items; i++) {
+			perf_thread_map__set_pid(threads, threads->nr + i,
+					    atoi(namelist[i]->d_name));
+		}
+
+		for (i = 0; i < items; i++)
+			zfree(&namelist[i]);
+		free(namelist);
+
+		threads->nr += items;
+	}
+
+out_closedir:
+	closedir(proc);
+out:
+	return threads;
+
+out_free_threads:
+	free(threads);
+	return NULL;
+
+out_free_namelist:
+	for (i = 0; i < items; i++)
+		zfree(&namelist[i]);
+	free(namelist);
+
+out_free_closedir:
+	zfree(&threads);
+	goto out_closedir;
+}
+
+static struct perf_thread_map *thread_map__new_all_cpus(void)
+{
+	return __thread_map__new_all_cpus(UINT_MAX);
+}
+
+static struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
+{
+	return __thread_map__new_all_cpus(uid);
+}
+
+struct perf_thread_map *perf_thread_map__new(pid_t pid, pid_t tid, uid_t uid)
+{
+	if (pid != -1)
+		return perf_thread_map__new_by_pid(pid);
+
+	if (tid == -1 && uid != UINT_MAX)
+		return thread_map__new_by_uid(uid);
+
+	return perf_thread_map__new_by_tid(tid);
+}
+
+static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
+{
+	struct perf_thread_map *threads = NULL, *nt;
+	char name[256];
+	int items, total_tasks = 0;
+	struct dirent **namelist = NULL;
+	int i, j = 0;
+	pid_t pid, prev_pid = INT_MAX;
+	char *end_ptr;
+	struct str_node *pos;
+	struct strlist_config slist_config = { .dont_dupstr = true, };
+	struct strlist *slist = strlist__new(pid_str, &slist_config);
+
+	if (!slist)
+		return NULL;
+
+	strlist__for_each_entry(pos, slist) {
+		pid = strtol(pos->s, &end_ptr, 10);
+
+		if (pid == INT_MIN || pid == INT_MAX ||
+		    (*end_ptr != '\0' && *end_ptr != ','))
+			goto out_free_threads;
+
+		if (pid == prev_pid)
+			continue;
+
+		sprintf(name, "/proc/%d/task", pid);
+		items = scandir(name, &namelist, filter, NULL);
+		if (items <= 0)
+			goto out_free_threads;
+
+		total_tasks += items;
+		nt = thread_map__realloc(threads, total_tasks);
+		if (nt == NULL)
+			goto out_free_namelist;
+
+		threads = nt;
+
+		for (i = 0; i < items; i++) {
+			perf_thread_map__set_pid(threads, j++, atoi(namelist[i]->d_name));
+			zfree(&namelist[i]);
+		}
+		free(namelist);
+	}
+
+out:
+	strlist__delete(slist);
+	return threads;
+
+out_free_namelist:
+	for (i = 0; i < items; i++)
+		zfree(&namelist[i]);
+	free(namelist);
+
+out_free_threads:
+	zfree(&threads);
+	goto out;
+}
+
+struct perf_thread_map *perf_thread_map__new_dummy(void)
+{
+	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
+
+	if (threads != NULL)
+		perf_thread_map__set_pid(threads, 0, -1);
+	return threads;
+}
+
+struct perf_thread_map *perf_thread_map__new_by_tid_str(const char *tid_str)
+{
+	struct perf_thread_map *threads = NULL, *nt;
+	int ntasks = 0;
+	pid_t tid, prev_tid = INT_MAX;
+	char *end_ptr;
+	struct str_node *pos;
+	struct strlist_config slist_config = { .dont_dupstr = true, };
+	struct strlist *slist;
+
+	/* perf-stat expects threads to be generated even if tid not given */
+	if (!tid_str)
+		return perf_thread_map__new_dummy();
+
+	slist = strlist__new(tid_str, &slist_config);
+	if (!slist)
+		return NULL;
+
+	strlist__for_each_entry(pos, slist) {
+		tid = strtol(pos->s, &end_ptr, 10);
+
+		if (tid == INT_MIN || tid == INT_MAX ||
+		    (*end_ptr != '\0' && *end_ptr != ','))
+			goto out_free_threads;
+
+		if (tid == prev_tid)
+			continue;
+
+		ntasks++;
+		nt = thread_map__realloc(threads, ntasks);
+
+		if (nt == NULL)
+			goto out_free_threads;
+
+		threads = nt;
+		perf_thread_map__set_pid(threads, ntasks - 1, tid);
+		threads->nr = ntasks;
+	}
+out:
+	return threads;
+
+out_free_threads:
+	zfree(&threads);
+	strlist__delete(slist);
+	goto out;
+}
+
+struct perf_thread_map *perf_thread_map__new_str(const char *pid, const char *tid,
+				       uid_t uid, bool all_threads)
+{
+	if (pid)
+		return thread_map__new_by_pid_str(pid);
+
+	if (!tid && uid != UINT_MAX)
+		return thread_map__new_by_uid(uid);
+
+	if (all_threads)
+		return thread_map__new_all_cpus();
+
+	return perf_thread_map__new_by_tid_str(tid);
+}
+
+static void thread_map__delete(struct perf_thread_map *threads)
+{
+	if (threads) {
+		int i;
+
+		WARN_ONCE(refcount_read(&threads->refcnt) != 0,
+			  "thread map refcnt unbalanced\n");
+		for (i = 0; i < threads->nr; i++)
+			free(perf_thread_map__comm(threads, i));
+		free(threads);
+	}
+}
+
+struct perf_thread_map *perf_thread_map__get(struct perf_thread_map *map)
+{
+	if (map)
+		refcount_inc(&map->refcnt);
+	return map;
+}
+
+void perf_thread_map__put(struct perf_thread_map *map)
+{
+	if (map && refcount_dec_and_test(&map->refcnt))
+		thread_map__delete(map);
+}
+
+static int get_comm(char **comm, pid_t pid)
+{
+	char *path;
+	size_t size;
+	int err;
+
+	if (asprintf(&path, "%s/%d/comm", procfs__mountpoint(), pid) == -1)
+		return -ENOMEM;
+
+	err = filename__read_str(path, comm, &size);
+	if (!err) {
+		/*
+		 * We're reading 16 bytes, while filename__read_str
+		 * allocates data per BUFSIZ bytes, so we can safely
+		 * mark the end of the string.
+		 */
+		(*comm)[size] = 0;
+		rtrim(*comm);
+	}
+
+	free(path);
+	return err;
+}
+
+static void comm_init(struct perf_thread_map *map, int i)
+{
+	pid_t pid = perf_thread_map__pid(map, i);
+	char *comm = NULL;
+
+	/* dummy pid comm initialization */
+	if (pid == -1) {
+		map->map[i].comm = strdup("dummy");
+		return;
+	}
+
+	/*
+	 * The comm name is like extra bonus ;-),
+	 * so just warn if we fail for any reason.
+	 */
+	if (get_comm(&comm, pid))
+		pr_warning("Couldn't resolve comm name for pid %d\n", pid);
+
+	map->map[i].comm = comm;
+}
+
+void perf_thread_map__read_comms(struct perf_thread_map *threads)
+{
+	int i;
+
+	for (i = 0; i < threads->nr; ++i)
+		comm_init(threads, i);
+}
+
+struct perf_thread_map *perf_thread_map__empty_new(int nr)
+{
+	return thread_map__realloc(NULL, nr);
+}
+
+bool perf_thread_map__has(struct perf_thread_map *threads, pid_t pid)
+{
+	int i;
+
+	for (i = 0; i < threads->nr; ++i) {
+		if (threads->map[i].pid == pid)
+			return true;
+	}
+
+	return false;
+}
+
+int perf_thread_map__remove(struct perf_thread_map *threads, int idx)
+{
+	int i;
+
+	if (threads->nr < 1)
+		return -EINVAL;
+
+	if (idx >= threads->nr)
+		return -EINVAL;
+
+	/*
+	 * Free the 'idx' item and shift the rest up.
+	 */
+	free(threads->map[idx].comm);
+
+	for (i = idx; i < threads->nr - 1; i++)
+		threads->map[i] = threads->map[i + 1];
+
+	threads->nr--;
+	return 0;
+}
+
+int perf_thread_map__nr(const struct perf_thread_map *threads)
+{
+	return threads ? threads->nr : 1;
+}
+
+pid_t perf_thread_map__pid(struct perf_thread_map *map, int thread)
+{
+	return map->map[thread].pid;
+}
+
+void perf_thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid)
+{
+	map->map[thread].pid = pid;
+}
+
+char *perf_thread_map__comm(struct perf_thread_map *map, int thread)
+{
+	return map->map[thread].comm;
+}
+
+void perf_thread_map__set_comm(struct perf_thread_map *map, int thread, char *comm)
+{
+	if (map->map[thread].comm)
+		free(map->map[thread].comm);
+
+	map->map[thread].comm = strndup(comm, 16);
+}
