@@ -5,7 +5,12 @@ libapi-y += debug.o
 libapi-y += str_error_r.o
 libapi-y += rblist.o
 libapi-y += strlist.o
+libapi-y += string.o
 
 $(OUTPUT)str_error_r.o: ../str_error_r.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)string.o: ../string.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)
