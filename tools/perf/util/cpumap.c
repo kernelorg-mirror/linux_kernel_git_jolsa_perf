@@ -766,7 +766,7 @@ static char hex_char(unsigned char val)
 	return '?';
 }
 
-size_t cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
+size_t perf_cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
 {
 	int i, cpu;
 	char *ptr = buf;

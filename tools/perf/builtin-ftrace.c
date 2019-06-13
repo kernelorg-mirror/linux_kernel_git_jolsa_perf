@@ -183,7 +183,7 @@ static int set_tracing_cpumask(struct perf_cpu_map *cpumap)
 		return -1;
 	}
 
-	cpu_map__snprint_mask(cpumap, cpumask, mask_size);
+	perf_cpu_map__snprint_mask(cpumap, cpumask, mask_size);
 
 	ret = write_tracing_file("tracing_cpumask", cpumask);
 
