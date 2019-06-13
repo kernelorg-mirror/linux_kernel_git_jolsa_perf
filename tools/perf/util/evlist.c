@@ -167,7 +167,7 @@ static void __perf_evlist__propagate_maps(struct evlist *evlist,
 	}
 
 	thread_map__put(evsel->threads);
-	evsel->threads = thread_map__get(evlist->threads);
+	evsel->threads = perf_thread_map__get(evlist->threads);
 }
 
 static void perf_evlist__propagate_maps(struct evlist *evlist)
@@ -1122,7 +1122,7 @@ void perf_evlist__set_maps(struct evlist *evlist, struct perf_cpu_map *cpus,
 
 	if (threads != evlist->threads) {
 		thread_map__put(evlist->threads);
-		evlist->threads = thread_map__get(threads);
+		evlist->threads = perf_thread_map__get(threads);
 	}
 
 	perf_evlist__propagate_maps(evlist);

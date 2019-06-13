@@ -361,7 +361,7 @@ static void thread_map__delete(struct perf_thread_map *threads)
 	}
 }
 
-struct perf_thread_map *thread_map__get(struct perf_thread_map *map)
+struct perf_thread_map *perf_thread_map__get(struct perf_thread_map *map)
 {
 	if (map)
 		refcount_inc(&map->refcnt);
