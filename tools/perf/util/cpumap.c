@@ -353,7 +353,7 @@ static int cmp_ids(const void *a, const void *b)
 	return *(int *)a - *(int *)b;
 }
 
-int cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
+int perf_cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
 		       int (*f)(struct perf_cpu_map *map, int cpu, void *data),
 		       void *data)
 {
@@ -462,17 +462,17 @@ int cpu_map__get_core(struct perf_cpu_map *map, int idx, void *data)
 
 int cpu_map__build_socket_map(struct perf_cpu_map *cpus, struct perf_cpu_map **sockp)
 {
-	return cpu_map__build_map(cpus, sockp, cpu_map__get_socket, NULL);
+	return perf_cpu_map__build_map(cpus, sockp, cpu_map__get_socket, NULL);
 }
 
 int cpu_map__build_die_map(struct perf_cpu_map *cpus, struct perf_cpu_map **diep)
 {
-	return cpu_map__build_map(cpus, diep, cpu_map__get_die, NULL);
+	return perf_cpu_map__build_map(cpus, diep, cpu_map__get_die, NULL);
 }
 
 int cpu_map__build_core_map(struct perf_cpu_map *cpus, struct perf_cpu_map **corep)
 {
-	return cpu_map__build_map(cpus, corep, cpu_map__get_core, NULL);
+	return perf_cpu_map__build_map(cpus, corep, cpu_map__get_core, NULL);
 }
 
 /* setup simple routines to easily access node numbers given a cpu number */

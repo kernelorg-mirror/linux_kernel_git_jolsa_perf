@@ -55,9 +55,9 @@ int cpu__max_cpu(void);
 int cpu__max_present_cpu(void);
 int cpu__get_node(int cpu);
 
-int cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
-		       int (*f)(struct perf_cpu_map *map, int cpu, void *data),
-		       void *data);
+int perf_cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
+			    int (*f)(struct perf_cpu_map *map, int cpu, void *data),
+			    void *data);
 
 int perf_cpu_map__nr(const struct perf_cpu_map *map);
 bool perf_cpu_map__empty(const struct perf_cpu_map *map);

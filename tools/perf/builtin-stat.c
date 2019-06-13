@@ -1014,19 +1014,19 @@ static int perf_env__get_core(struct perf_cpu_map *map, int idx, void *data)
 static int perf_env__build_socket_map(struct perf_env *env, struct perf_cpu_map *cpus,
 				      struct perf_cpu_map **sockp)
 {
-	return cpu_map__build_map(cpus, sockp, perf_env__get_socket, env);
+	return perf_cpu_map__build_map(cpus, sockp, perf_env__get_socket, env);
 }
 
 static int perf_env__build_die_map(struct perf_env *env, struct perf_cpu_map *cpus,
 				   struct perf_cpu_map **diep)
 {
-	return cpu_map__build_map(cpus, diep, perf_env__get_die, env);
+	return perf_cpu_map__build_map(cpus, diep, perf_env__get_die, env);
 }
 
 static int perf_env__build_core_map(struct perf_env *env, struct perf_cpu_map *cpus,
 				    struct perf_cpu_map **corep)
 {
-	return cpu_map__build_map(cpus, corep, perf_env__get_core, env);
+	return perf_cpu_map__build_map(cpus, corep, perf_env__get_core, env);
 }
 
 static int perf_stat__get_socket_file(struct perf_stat_config *config __maybe_unused,
