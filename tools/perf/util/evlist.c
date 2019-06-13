@@ -556,7 +556,7 @@ static void perf_evlist__set_sid_idx(struct evlist *evlist,
 	else
 		sid->cpu = -1;
 	if (!evsel->system_wide && evlist->threads && thread >= 0)
-		sid->tid = thread_map__pid(evlist->threads, thread);
+		sid->tid = perf_thread_map__pid(evlist->threads, thread);
 	else
 		sid->tid = -1;
 }

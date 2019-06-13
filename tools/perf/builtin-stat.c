@@ -408,7 +408,7 @@ static bool is_target_alive(struct target *_target,
 		char path[PATH_MAX];
 
 		scnprintf(path, PATH_MAX, "%s/%d", procfs__mountpoint(),
-			  thread_map__pid(threads, i));
+			  perf_thread_map__pid(threads, i));
 
 		if (!stat(path, &st))
 			return true;

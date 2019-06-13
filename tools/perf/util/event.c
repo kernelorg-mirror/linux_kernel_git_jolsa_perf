@@ -648,7 +648,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 	for (thread = 0; thread < perf_thread_map__nr(threads); ++thread) {
 		if (__event__synthesize_thread(comm_event, mmap_event,
 					       fork_event, namespaces_event,
-					       thread_map__pid(threads, thread), 0,
+					       perf_thread_map__pid(threads, thread), 0,
 					       process, tool, machine,
 					       mmap_data)) {
 			err = -1;
@@ -659,12 +659,12 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 		 * comm.pid is set to thread group id by
 		 * perf_event__synthesize_comm
 		 */
-		if ((int) comm_event->comm.pid != thread_map__pid(threads, thread)) {
+		if ((int) comm_event->comm.pid != perf_thread_map__pid(threads, thread)) {
 			bool need_leader = true;
 
 			/* is thread group leader in thread_map? */
 			for (j = 0; j < perf_thread_map__nr(threads); ++j) {
-				if ((int) comm_event->comm.pid == thread_map__pid(threads, j)) {
+				if ((int) comm_event->comm.pid == perf_thread_map__pid(threads, j)) {
 					need_leader = false;
 					break;
 				}
@@ -998,7 +998,7 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 		if (!comm)
 			comm = (char *) "";
 
-		entry->pid = thread_map__pid(threads, i);
+		entry->pid = perf_thread_map__pid(threads, i);
 		strncpy((char *) &entry->comm, comm, sizeof(entry->comm));
 	}
 

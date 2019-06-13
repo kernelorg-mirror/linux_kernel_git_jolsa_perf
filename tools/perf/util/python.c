@@ -643,7 +643,7 @@ static PyObject *pyrf_thread_map__item(PyObject *obj, Py_ssize_t i)
 	if (i >= perf_thread_map__nr(pthreads->threads))
 		return NULL;
 
-	return Py_BuildValue("i", thread_map__pid(pthreads->threads, i));
+	return Py_BuildValue("i", perf_thread_map__pid(pthreads->threads, i));
 }
 
 static PySequenceMethods pyrf_thread_map__sequence_methods = {

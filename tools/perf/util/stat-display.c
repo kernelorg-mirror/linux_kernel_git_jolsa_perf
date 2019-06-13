@@ -117,7 +117,7 @@ static void aggr_printout(struct perf_stat_config *config,
 			config->csv_output ? 0 : 16,
 			thread_map__comm(evsel->threads, id),
 			config->csv_output ? 0 : -8,
-			thread_map__pid(evsel->threads, id),
+			perf_thread_map__pid(evsel->threads, id),
 			config->csv_sep);
 		break;
 	case AGGR_GLOBAL:

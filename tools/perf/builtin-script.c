@@ -1922,7 +1922,7 @@ static void __process_stat(struct evsel *counter, u64 tstamp)
 
 			printf("%3d %8d %15" PRIu64 " %15" PRIu64 " %15" PRIu64 " %15" PRIu64 " %s\n",
 				perf_cpu_map__cpu(counter->cpus, cpu),
-				thread_map__pid(counter->threads, thread),
+				perf_thread_map__pid(counter->threads, thread),
 				counts->val,
 				counts->ena,
 				counts->run,
