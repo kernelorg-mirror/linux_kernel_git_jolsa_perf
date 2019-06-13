@@ -1911,7 +1911,7 @@ retry_sample_id:
 retry_open:
 			test_attr__ready();
 
-			fd = perf_event_open(evsel, pid, cpu_map__cpu(cpus, cpu),
+			fd = perf_event_open(evsel, pid, perf_cpu_map__cpu(cpus, cpu),
 					     group_fd, flags);
 
 			FD(evsel, cpu, thread) = fd;

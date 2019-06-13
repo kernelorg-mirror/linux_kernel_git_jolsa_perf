@@ -167,7 +167,7 @@ int bench_futex_hash(int argc, const char **argv)
 			goto errmem;
 
 		CPU_ZERO(&cpuset);
-		CPU_SET(cpu_map__cpu(cpu, i % perf_cpu_map__nr(cpu)), &cpuset);
+		CPU_SET(perf_cpu_map__cpu(cpu, i % perf_cpu_map__nr(cpu)), &cpuset);
 
 		ret = pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset);
 		if (ret)

@@ -820,8 +820,8 @@ static int cpu_map__get_max(struct perf_cpu_map *map)
 	int i, max = -1;
 
 	for (i = 0; i < perf_cpu_map__nr(map); i++) {
-		if (cpu_map__cpu(map, i) > max)
-			max = cpu_map__cpu(map, i);
+		if (perf_cpu_map__cpu(map, i) > max)
+			max = perf_cpu_map__cpu(map, i);
 	}
 
 	return max;
@@ -835,12 +835,12 @@ static int perf_stat__get_aggr(struct perf_stat_config *config,
 	if (idx >= perf_cpu_map__nr(map))
 		return -1;
 
-	cpu = cpu_map__cpu(map, idx);
+	cpu = perf_cpu_map__cpu(map, idx);
 
-	if (cpu_map__cpu(config->cpus_aggr_map, cpu) == -1)
+	if (perf_cpu_map__cpu(config->cpus_aggr_map, cpu) == -1)
 		perf_cpu_map__set(config->cpus_aggr_map, cpu, get_id(config, map, idx));
 
-	return cpu_map__cpu(config->cpus_aggr_map, cpu);
+	return perf_cpu_map__cpu(config->cpus_aggr_map, cpu);
 }
 
 static int perf_stat__get_socket_cached(struct perf_stat_config *config,
@@ -941,7 +941,7 @@ static inline int perf_env__get_cpu(struct perf_env *env, struct perf_cpu_map *m
 	if (idx > perf_cpu_map__nr(map))
 		return -1;
 
-	cpu = cpu_map__cpu(map, idx);
+	cpu = perf_cpu_map__cpu(map, idx);
 
 	if (cpu >= env->nr_cpus_avail)
 		return -1;

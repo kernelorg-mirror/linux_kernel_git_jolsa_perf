@@ -574,7 +574,7 @@ static PyObject *pyrf_cpu_map__item(PyObject *obj, Py_ssize_t i)
 	if (i >= perf_cpu_map__nr(pcpus->cpus))
 		return NULL;
 
-	return Py_BuildValue("i", cpu_map__cpu(pcpus->cpus, i));
+	return Py_BuildValue("i", perf_cpu_map__cpu(pcpus->cpus, i));
 }
 
 static PySequenceMethods pyrf_cpu_map__sequence_methods = {

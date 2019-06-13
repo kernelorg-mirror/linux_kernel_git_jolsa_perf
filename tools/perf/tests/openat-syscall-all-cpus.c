@@ -63,15 +63,15 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 		 * without CPU_ALLOC. 1024 cpus in 2010 still seems
 		 * a reasonable upper limit tho :-)
 		 */
-		if (cpu_map__cpu(cpus, cpu) >= CPU_SETSIZE) {
-			pr_debug("Ignoring CPU %d\n", cpu_map__cpu(cpus, cpu));
+		if (perf_cpu_map__cpu(cpus, cpu) >= CPU_SETSIZE) {
+			pr_debug("Ignoring CPU %d\n", perf_cpu_map__cpu(cpus, cpu));
 			continue;
 		}
 
-		CPU_SET(cpu_map__cpu(cpus, cpu), &cpu_set);
+		CPU_SET(perf_cpu_map__cpu(cpus, cpu), &cpu_set);
 		if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set) < 0) {
 			pr_debug("sched_setaffinity() failed on CPU %d: %s ",
-				 cpu_map__cpu(cpus, cpu),
+				 perf_cpu_map__cpu(cpus, cpu),
 				 str_error_r(errno, sbuf, sizeof(sbuf)));
 			goto out_close_fd;
 		}
@@ -79,7 +79,7 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 			fd = openat(0, "/etc/passwd", O_RDONLY);
 			close(fd);
 		}
-		CPU_CLR(cpu_map__cpu(cpus, cpu), &cpu_set);
+		CPU_CLR(perf_cpu_map__cpu(cpus, cpu), &cpu_set);
 	}
 
 	/*
@@ -97,7 +97,7 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 	for (cpu = 0; cpu < perf_cpu_map__nr(cpus); ++cpu) {
 		unsigned int expected;
 
-		if (cpu_map__cpu(cpus, cpu) >= CPU_SETSIZE)
+		if (perf_cpu_map__cpu(cpus, cpu) >= CPU_SETSIZE)
 			continue;
 
 		if (perf_evsel__read_on_cpu(evsel, cpu, 0) < 0) {
@@ -109,7 +109,7 @@ int test__openat_syscall_event_on_all_cpus(struct test *test __maybe_unused, int
 		expected = nr_openat_calls + cpu;
 		if (perf_counts(evsel->counts, cpu, 0)->val != expected) {
 			pr_debug("perf_evsel__read_on_cpu: expected to intercept %d calls on cpu %d, got %" PRIu64 "\n",
-				 expected, cpu_map__cpu(cpus, cpu), perf_counts(evsel->counts, cpu, 0)->val);
+				 expected, perf_cpu_map__cpu(cpus, cpu), perf_counts(evsel->counts, cpu, 0)->val);
 			err = -1;
 		}
 	}

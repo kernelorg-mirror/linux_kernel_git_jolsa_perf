@@ -552,7 +552,7 @@ static void perf_evlist__set_sid_idx(struct evlist *evlist,
 	struct perf_sample_id *sid = SID(evsel, cpu, thread);
 	sid->idx = idx;
 	if (evlist->cpus && cpu >= 0)
-		sid->cpu = cpu_map__cpu(evlist->cpus, cpu);
+		sid->cpu = perf_cpu_map__cpu(evlist->cpus, cpu);
 	else
 		sid->cpu = -1;
 	if (!evsel->system_wide && evlist->threads && thread >= 0)
@@ -758,7 +758,7 @@ static int perf_evlist__mmap_per_evsel(struct evlist *evlist, int idx,
 {
 	struct evsel *evsel;
 	int revent;
-	int evlist_cpu = cpu_map__cpu(evlist->cpus, cpu_idx);
+	int evlist_cpu = perf_cpu_map__cpu(evlist->cpus, cpu_idx);
 
 	evlist__for_each_entry(evlist, evsel) {
 		struct perf_mmap *maps = evlist->mmap;

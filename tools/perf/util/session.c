@@ -2287,7 +2287,7 @@ int perf_session__cpu_bitmap(struct perf_session *session,
 	}
 
 	for (i = 0; i < perf_cpu_map__nr(map); i++) {
-		int cpu = cpu_map__cpu(map, i);
+		int cpu = perf_cpu_map__cpu(map, i);
 
 		if (cpu >= MAX_NR_CPUS) {
 			pr_err("Requested CPU %d too large. "

@@ -324,7 +324,7 @@ struct numa_topology *numa_topology__new(void)
 	tp->nr = nr;
 
 	for (i = 0; i < nr; i++) {
-		if (load_numa_node(&tp->nodes[i], cpu_map__cpu(node_map, i))) {
+		if (load_numa_node(&tp->nodes[i], perf_cpu_map__cpu(node_map, i))) {
 			numa_topology__delete(tp);
 			tp = NULL;
 			break;

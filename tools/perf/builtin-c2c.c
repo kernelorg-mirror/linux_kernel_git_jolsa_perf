@@ -2063,12 +2063,12 @@ static int setup_nodes(struct perf_session *session)
 			continue;
 
 		for (cpu = 0; cpu < perf_cpu_map__nr(map); cpu++) {
-			set_bit(cpu_map__cpu(map, cpu), set);
+			set_bit(perf_cpu_map__cpu(map, cpu), set);
 
-			if (WARN_ONCE(cpu2node[cpu_map__cpu(map, cpu)] != -1, "node/cpu topology bug"))
+			if (WARN_ONCE(cpu2node[perf_cpu_map__cpu(map, cpu)] != -1, "node/cpu topology bug"))
 				return -EINVAL;
 
-			cpu2node[cpu_map__cpu(map, cpu)] = node;
+			cpu2node[perf_cpu_map__cpu(map, cpu)] = node;
 		}
 	}
 

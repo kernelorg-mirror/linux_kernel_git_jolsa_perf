@@ -699,7 +699,7 @@ int cpu_map__idx(struct perf_cpu_map *cpus, int cpu)
 	return -1;
 }
 
-int cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
+int perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx)
 {
 	return cpus->map[idx];
 }
@@ -771,7 +771,7 @@ size_t cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
 	int i, cpu;
 	char *ptr = buf;
 	unsigned char *bitmap;
-	int last_cpu = cpu_map__cpu(map, map->nr - 1);
+	int last_cpu = perf_cpu_map__cpu(map, map->nr - 1);
 
 	bitmap = zalloc((last_cpu + 7) / 8);
 	if (bitmap == NULL) {
@@ -780,7 +780,7 @@ size_t cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
 	}
 
 	for (i = 0; i < map->nr; i++) {
-		cpu = cpu_map__cpu(map, i);
+		cpu = perf_cpu_map__cpu(map, i);
 		bitmap[cpu / 8] |= 1 << (cpu % 8);
 	}
 

@@ -53,11 +53,11 @@ int test__basic_mmap(struct test *test __maybe_unused, int subtest __maybe_unuse
 	}
 
 	CPU_ZERO(&cpu_set);
-	CPU_SET(cpu_map__cpu(cpus, 0), &cpu_set);
+	CPU_SET(perf_cpu_map__cpu(cpus, 0), &cpu_set);
 	sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
 	if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set) < 0) {
 		pr_debug("sched_setaffinity() failed on CPU %d: %s ",
-			 cpu_map__cpu(cpus, 0), str_error_r(errno, sbuf, sizeof(sbuf)));
+			 perf_cpu_map__cpu(cpus, 0), str_error_r(errno, sbuf, sizeof(sbuf)));
 		goto out_free_cpus;
 	}
 

@@ -102,10 +102,10 @@ static int check_cpu_topology(char *path, struct perf_cpu_map *map)
 
 	for (i = 0; i < perf_cpu_map__nr(map); i++) {
 		TEST_ASSERT_VAL("Core ID doesn't match",
-			(session->header.env.cpu[cpu_map__cpu(map, i)].core_id == (cpu_map__get_core(map, i, NULL) & 0xffff)));
+			(session->header.env.cpu[perf_cpu_map__cpu(map, i)].core_id == (cpu_map__get_core(map, i, NULL) & 0xffff)));
 
 		TEST_ASSERT_VAL("Socket ID doesn't match",
-			(session->header.env.cpu[cpu_map__cpu(map, i)].socket_id == cpu_map__get_socket(map, i, NULL)));
+			(session->header.env.cpu[perf_cpu_map__cpu(map, i)].socket_id == cpu_map__get_socket(map, i, NULL)));
 	}
 
 	perf_session__delete(session);

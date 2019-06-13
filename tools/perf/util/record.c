@@ -66,7 +66,7 @@ static bool perf_probe_api(setup_probe_fn_t fn)
 	cpus = perf_cpu_map__new(NULL);
 	if (!cpus)
 		return false;
-	cpu = cpu_map__cpu(cpus, 0);
+	cpu = perf_cpu_map__cpu(cpus, 0);
 	cpu_map__put(cpus);
 
 	do {
@@ -121,7 +121,7 @@ bool perf_can_record_cpu_wide(void)
 	cpus = perf_cpu_map__new(NULL);
 	if (!cpus)
 		return false;
-	cpu = cpu_map__cpu(cpus, 0);
+	cpu = perf_cpu_map__cpu(cpus, 0);
 	cpu_map__put(cpus);
 
 	fd = sys_perf_event_open(&attr, -1, cpu, -1, 0);
@@ -147,7 +147,7 @@ void perf_evlist__config(struct evlist *evlist, struct record_opts *opts,
 	if (opts->group)
 		perf_evlist__set_leader(evlist);
 
-	if (cpu_map__cpu(evlist->cpus, 0) < 0)
+	if (perf_cpu_map__cpu(evlist->cpus, 0) < 0)
 		opts->no_inherit = true;
 
 	use_comm_exec = perf_can_comm_exec();
@@ -277,10 +277,10 @@ bool perf_evlist__can_select_event(struct evlist *evlist, const char *str)
 	if (!evlist || perf_cpu_map__empty(evlist->cpus)) {
 		struct perf_cpu_map *cpus = perf_cpu_map__new(NULL);
 
-		cpu =  cpus ? cpu_map__cpu(cpus, 0) : 0;
+		cpu =  cpus ? perf_cpu_map__cpu(cpus, 0) : 0;
 		cpu_map__put(cpus);
 	} else {
-		cpu = cpu_map__cpu(evlist->cpus, 0);
+		cpu = perf_cpu_map__cpu(evlist->cpus, 0);
 	}
 
 	while (1) {
