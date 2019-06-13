@@ -368,7 +368,7 @@ struct perf_thread_map *perf_thread_map__get(struct perf_thread_map *map)
 	return map;
 }
 
-void thread_map__put(struct perf_thread_map *map)
+void perf_thread_map__put(struct perf_thread_map *map)
 {
 	if (map && refcount_dec_and_test(&map->refcnt))
 		thread_map__delete(map);

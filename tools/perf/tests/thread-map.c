@@ -29,7 +29,7 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(map, 0) &&
 			!strcmp(thread_map__comm(map, 0), NAME));
-	thread_map__put(map);
+	perf_thread_map__put(map);
 
 	/* test dummy pid */
 	map = perf_thread_map__new_dummy();
@@ -42,7 +42,7 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(map, 0) &&
 			!strcmp(thread_map__comm(map, 0), "dummy"));
-	thread_map__put(map);
+	perf_thread_map__put(map);
 	return 0;
 }
 
@@ -67,7 +67,7 @@ static int process_event(struct perf_tool *tool __maybe_unused,
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(threads, 0) &&
 			!strcmp(thread_map__comm(threads, 0), NAME));
-	thread_map__put(threads);
+	perf_thread_map__put(threads);
 	return 0;
 }
 
@@ -125,6 +125,6 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 	TEST_ASSERT_VAL("failed to not remove thread",
 			thread_map__remove(threads, 0));
 
-	thread_map__put(threads);
+	perf_thread_map__put(threads);
 	return 0;
 }
