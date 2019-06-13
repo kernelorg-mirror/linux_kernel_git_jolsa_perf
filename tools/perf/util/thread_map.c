@@ -57,6 +57,12 @@ static struct perf_thread_map *thread_map__realloc(struct perf_thread_map *map, 
 	if (map)
 		thread_map__reset(map, start, nr);
 
+	/*
+	 * Set refcnt if there's new allocation.
+	 */
+	if (!start)
+		refcount_set(&map->refcnt, 1);
+
 	return map;
 }
 
@@ -78,7 +84,6 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 		for (i = 0; i < items; i++)
 			perf_thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
 		threads->nr = items;
-		refcount_set(&threads->refcnt, 1);
 	}
 
 	for (i=0; i<items; i++)
@@ -95,7 +100,6 @@ struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
 	if (threads != NULL) {
 		perf_thread_map__set_pid(threads, 0, tid);
 		threads->nr = 1;
-		refcount_set(&threads->refcnt, 1);
 	}
 
 	return threads;
@@ -117,7 +121,6 @@ static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
 		goto out_free_threads;
 
 	threads->nr = 0;
-	refcount_set(&threads->refcnt, 1);
 
 	while ((dirent = readdir(proc)) != NULL) {
 		char *end;
@@ -256,8 +259,6 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 
 out:
 	strlist__delete(slist);
-	if (threads)
-		refcount_set(&threads->refcnt, 1);
 	return threads;
 
 out_free_namelist:
@@ -277,7 +278,6 @@ struct perf_thread_map *perf_thread_map__new_dummy(void)
 	if (threads != NULL) {
 		perf_thread_map__set_pid(threads, 0, -1);
 		threads->nr = 1;
-		refcount_set(&threads->refcnt, 1);
 	}
 	return threads;
 }
@@ -321,8 +321,6 @@ struct perf_thread_map *perf_thread_map__new_by_tid_str(const char *tid_str)
 		threads->nr = ntasks;
 	}
 out:
-	if (threads)
-		refcount_set(&threads->refcnt, 1);
 	return threads;
 
 out_free_threads:
@@ -448,8 +446,6 @@ static void thread_map__copy_event(struct perf_thread_map *threads,
 		perf_thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
 		perf_thread_map__set_comm(threads, i, event->entries[i].comm);
 	}
-
-	refcount_set(&threads->refcnt, 1);
 }
 
 struct perf_thread_map *thread_map__new_event(struct thread_map_event *event)
