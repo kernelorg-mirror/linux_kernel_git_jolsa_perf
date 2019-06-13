@@ -189,7 +189,7 @@ out_free_closedir:
 	goto out_closedir;
 }
 
-struct perf_thread_map *thread_map__new_all_cpus(void)
+static struct perf_thread_map *thread_map__new_all_cpus(void)
 {
 	return __thread_map__new_all_cpus(UINT_MAX);
 }
