@@ -32,6 +32,6 @@ char *perf_thread_map__comm(struct perf_thread_map *map, int thread);
 void perf_thread_map__set_comm(struct perf_thread_map *map, int thread, char *comm);
 
 void perf_thread_map__read_comms(struct perf_thread_map *threads);
-bool thread_map__has(struct perf_thread_map *threads, pid_t pid);
+bool perf_thread_map__has(struct perf_thread_map *threads, pid_t pid);
 int thread_map__remove(struct perf_thread_map *threads, int idx);
 #endif	/* __PERF_THREAD_MAP_H */

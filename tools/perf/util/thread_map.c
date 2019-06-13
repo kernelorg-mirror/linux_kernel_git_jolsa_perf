@@ -464,7 +464,7 @@ struct perf_thread_map *thread_map__new_event(struct thread_map_event *event)
 	return threads;
 }
 
-bool thread_map__has(struct perf_thread_map *threads, pid_t pid)
+bool perf_thread_map__has(struct perf_thread_map *threads, pid_t pid)
 {
 	int i;
 

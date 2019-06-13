@@ -1506,7 +1506,7 @@ map__findnew_thread(struct perf_sched *sched, struct machine *machine, pid_t pid
 	if (!sched->map.color_pids || !thread || thread__priv(thread))
 		return thread;
 
-	if (thread_map__has(sched->map.color_pids, tid))
+	if (perf_thread_map__has(sched->map.color_pids, tid))
 		priv.color = true;
 
 	thread__set_priv(thread, priv.ptr);
