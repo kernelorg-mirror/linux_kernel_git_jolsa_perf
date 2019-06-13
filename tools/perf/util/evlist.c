@@ -1376,7 +1376,7 @@ static int perf_evlist__create_syswide_maps(struct evlist *evlist)
 	if (!cpus)
 		goto out;
 
-	threads = thread_map__new_dummy();
+	threads = perf_thread_map__new_dummy();
 	if (!threads)
 		goto out_put;
 

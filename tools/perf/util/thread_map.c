@@ -272,7 +272,7 @@ out_free_threads:
 	goto out;
 }
 
-struct perf_thread_map *thread_map__new_dummy(void)
+struct perf_thread_map *perf_thread_map__new_dummy(void)
 {
 	struct perf_thread_map *threads = thread_map__alloc(1);
 
@@ -296,7 +296,7 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
 
 	/* perf-stat expects threads to be generated even if tid not given */
 	if (!tid_str)
-		return thread_map__new_dummy();
+		return perf_thread_map__new_dummy();
 
 	slist = strlist__new(tid_str, &slist_config);
 	if (!slist)
