@@ -506,3 +506,11 @@ char *thread_map__comm(struct perf_thread_map *map, int thread)
 {
 	return map->map[thread].comm;
 }
+
+void thread_map__set_comm(struct perf_thread_map *map, int thread, char *comm)
+{
+	if (map->map[thread].comm)
+		free(map->map[thread].comm);
+
+	map->map[thread].comm = strndup(comm, 16);
+}
