@@ -264,7 +264,7 @@ static int read_single_counter(struct evsel *counter, int cpu,
  */
 static int read_counter(struct evsel *counter, struct timespec *rs)
 {
-	int nthreads = thread_map__nr(evsel_list->threads);
+	int nthreads = perf_thread_map__nr(evsel_list->threads);
 	int ncpus, cpu, thread;
 
 	if (target__has_cpu(&target) && !target__has_per_thread(&target))
@@ -404,7 +404,7 @@ static bool is_target_alive(struct target *_target,
 	if (!target__has_task(_target))
 		return true;
 
-	for (i = 0; i < thread_map__nr(threads); i++) {
+	for (i = 0; i < perf_thread_map__nr(threads); i++) {
 		char path[PATH_MAX];
 
 		scnprintf(path, PATH_MAX, "%s/%d", procfs__mountpoint(),
@@ -1885,7 +1885,7 @@ int cmd_stat(int argc, const char **argv)
 		thread_map__read_comms(evsel_list->threads);
 		if (target.system_wide) {
 			if (runtime_stat_new(&stat_config,
-				thread_map__nr(evsel_list->threads))) {
+				perf_thread_map__nr(evsel_list->threads))) {
 				goto out;
 			}
 		}

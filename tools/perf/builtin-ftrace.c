@@ -157,7 +157,7 @@ static int set_tracing_pid(struct perf_ftrace *ftrace)
 	if (target__has_cpu(&ftrace->target))
 		return 0;
 
-	for (i = 0; i < thread_map__nr(ftrace->evlist->threads); i++) {
+	for (i = 0; i < perf_thread_map__nr(ftrace->evlist->threads); i++) {
 		scnprintf(buf, sizeof(buf), "%d",
 			  thread_map__pid(ftrace->evlist->threads, i));
 		if (append_tracing_file("set_ftrace_pid", buf) < 0)

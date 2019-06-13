@@ -341,7 +341,7 @@ static int perf_evlist__nr_threads(struct evlist *evlist,
 	if (evsel->system_wide)
 		return 1;
 	else
-		return thread_map__nr(evlist->threads);
+		return perf_thread_map__nr(evlist->threads);
 }
 
 void perf_evlist__disable(struct evlist *evlist)
@@ -424,7 +424,7 @@ int perf_evlist__enable_event_idx(struct evlist *evlist,
 int perf_evlist__alloc_pollfd(struct evlist *evlist)
 {
 	int nr_cpus = perf_cpu_map__nr(evlist->cpus);
-	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_threads = perf_thread_map__nr(evlist->threads);
 	int nfds = 0;
 	struct evsel *evsel;
 
@@ -721,7 +721,7 @@ static struct perf_mmap *perf_evlist__alloc_mmap(struct evlist *evlist,
 
 	evlist->nr_mmaps = perf_cpu_map__nr(evlist->cpus);
 	if (perf_cpu_map__empty(evlist->cpus))
-		evlist->nr_mmaps = thread_map__nr(evlist->threads);
+		evlist->nr_mmaps = perf_thread_map__nr(evlist->threads);
 	map = zalloc(evlist->nr_mmaps * sizeof(struct perf_mmap));
 	if (!map)
 		return NULL;
@@ -835,7 +835,7 @@ static int perf_evlist__mmap_per_cpu(struct evlist *evlist,
 {
 	int cpu, thread;
 	int nr_cpus = perf_cpu_map__nr(evlist->cpus);
-	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_threads = perf_thread_map__nr(evlist->threads);
 
 	pr_debug2("perf event ring buffer mmapped per cpu\n");
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
@@ -863,7 +863,7 @@ static int perf_evlist__mmap_per_thread(struct evlist *evlist,
 					struct mmap_params *mp)
 {
 	int thread;
-	int nr_threads = thread_map__nr(evlist->threads);
+	int nr_threads = perf_thread_map__nr(evlist->threads);
 
 	pr_debug2("perf event ring buffer mmapped per thread\n");
 	for (thread = 0; thread < nr_threads; thread++) {
@@ -1041,7 +1041,7 @@ int perf_evlist__mmap_ex(struct evlist *evlist, unsigned int pages,
 	evlist__for_each_entry(evlist, evsel) {
 		if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
 		    evsel->sample_id == NULL &&
-		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), thread_map__nr(threads)) < 0)
+		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), perf_thread_map__nr(threads)) < 0)
 			return -ENOMEM;
 	}
 

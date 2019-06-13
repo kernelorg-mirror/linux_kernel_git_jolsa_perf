@@ -744,7 +744,7 @@ static void print_aggr_thread(struct perf_stat_config *config,
 			      struct evsel *counter, char *prefix)
 {
 	FILE *output = config->output;
-	int nthreads = thread_map__nr(counter->threads);
+	int nthreads = perf_thread_map__nr(counter->threads);
 	int ncpus = perf_cpu_map__nr(counter->cpus);
 	int thread, sorted_threads, id;
 	struct perf_aggr_thread_value *buf;

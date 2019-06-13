@@ -498,7 +498,7 @@ int thread_map__remove(struct perf_thread_map *threads, int idx)
 	return 0;
 }
 
-int thread_map__nr(const struct perf_thread_map *threads)
+int perf_thread_map__nr(const struct perf_thread_map *threads)
 {
 	return threads ? threads->nr : 1;
 }

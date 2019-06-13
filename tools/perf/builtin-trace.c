@@ -3096,7 +3096,7 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	}
 
 	trace->multiple_threads = thread_map__pid(evlist->threads, 0) == -1 ||
-				  thread_map__nr(evlist->threads) > 1 ||
+				  perf_thread_map__nr(evlist->threads) > 1 ||
 				  perf_evlist__first(evlist)->attr.inherit;
 
 	/*

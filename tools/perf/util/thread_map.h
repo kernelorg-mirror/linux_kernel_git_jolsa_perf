@@ -25,7 +25,7 @@ struct perf_thread_map *perf_thread_map__new_by_tid_str(const char *tid_str);
 
 size_t thread_map__fprintf(struct perf_thread_map *threads, FILE *fp);
 
-int thread_map__nr(const struct perf_thread_map *threads);
+int perf_thread_map__nr(const struct perf_thread_map *threads);
 pid_t thread_map__pid(struct perf_thread_map *map, int thread);
 void thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid);
 char *thread_map__comm(struct perf_thread_map *map, int thread);
