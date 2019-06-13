@@ -3199,7 +3199,7 @@ static int setup_color_pids(struct perf_sched *sched)
 	if (!sched->map.color_pids_str)
 		return 0;
 
-	map = thread_map__new_by_tid_str(sched->map.color_pids_str);
+	map = perf_thread_map__new_by_tid_str(sched->map.color_pids_str);
 	if (!map) {
 		pr_err("failed to get thread map from %s\n", sched->map.color_pids_str);
 		return -1;

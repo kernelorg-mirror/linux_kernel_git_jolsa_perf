@@ -284,7 +284,7 @@ struct perf_thread_map *perf_thread_map__new_dummy(void)
 	return threads;
 }
 
-struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str)
+struct perf_thread_map *perf_thread_map__new_by_tid_str(const char *tid_str)
 {
 	struct perf_thread_map *threads = NULL, *nt;
 	int ntasks = 0;
@@ -345,7 +345,7 @@ struct perf_thread_map *perf_thread_map__new_str(const char *pid, const char *ti
 	if (all_threads)
 		return thread_map__new_all_cpus();
 
-	return thread_map__new_by_tid_str(tid);
+	return perf_thread_map__new_by_tid_str(tid);
 }
 
 static void thread_map__delete(struct perf_thread_map *threads)
