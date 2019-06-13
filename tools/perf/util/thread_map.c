@@ -60,8 +60,6 @@ static struct perf_thread_map *thread_map__realloc(struct perf_thread_map *map, 
 	return map;
 }
 
-#define thread_map__alloc(__nr) thread_map__realloc(NULL, __nr)
-
 struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 {
 	struct perf_thread_map *threads;
@@ -75,7 +73,7 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 	if (items <= 0)
 		return NULL;
 
-	threads = thread_map__alloc(items);
+	threads = perf_thread_map__empty_new(items);
 	if (threads != NULL) {
 		for (i = 0; i < items; i++)
 			perf_thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
@@ -92,7 +90,7 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 
 struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
 {
-	struct perf_thread_map *threads = thread_map__alloc(1);
+	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
 
 	if (threads != NULL) {
 		perf_thread_map__set_pid(threads, 0, tid);
@@ -109,7 +107,7 @@ static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
 	int max_threads = 32, items, i;
 	char path[NAME_MAX + 1 + 6];
 	struct dirent *dirent, **namelist = NULL;
-	struct perf_thread_map *threads = thread_map__alloc(max_threads);
+	struct perf_thread_map *threads = perf_thread_map__empty_new(max_threads);
 
 	if (threads == NULL)
 		goto out;
@@ -274,7 +272,7 @@ out_free_threads:
 
 struct perf_thread_map *perf_thread_map__new_dummy(void)
 {
-	struct perf_thread_map *threads = thread_map__alloc(1);
+	struct perf_thread_map *threads = perf_thread_map__empty_new(1);
 
 	if (threads != NULL) {
 		perf_thread_map__set_pid(threads, 0, -1);
@@ -458,11 +456,16 @@ struct perf_thread_map *thread_map__new_event(struct thread_map_event *event)
 {
 	struct perf_thread_map *threads;
 
-	threads = thread_map__alloc(event->nr);
+	threads = perf_thread_map__empty_new(event->nr);
 	if (threads)
 		thread_map__copy_event(threads, event);
 
 	return threads;
+}
+
+struct perf_thread_map *perf_thread_map__empty_new(int nr)
+{
+	return thread_map__realloc(NULL, nr);
 }
 
 bool perf_thread_map__has(struct perf_thread_map *threads, pid_t pid)
