@@ -62,7 +62,7 @@ static struct perf_thread_map *thread_map__realloc(struct perf_thread_map *map, 
 
 #define thread_map__alloc(__nr) thread_map__realloc(NULL, __nr)
 
-struct perf_thread_map *thread_map__new_by_pid(pid_t pid)
+struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 {
 	struct perf_thread_map *threads;
 	char name[256];
@@ -202,7 +202,7 @@ struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
 struct perf_thread_map *thread_map__new(pid_t pid, pid_t tid, uid_t uid)
 {
 	if (pid != -1)
-		return thread_map__new_by_pid(pid);
+		return perf_thread_map__new_by_pid(pid);
 
 	if (tid == -1 && uid != UINT_MAX)
 		return thread_map__new_by_uid(uid);

@@ -10,7 +10,7 @@ struct perf_thread_map;
 struct thread_map_event;
 
 struct perf_thread_map *perf_thread_map__new_dummy(void);
-struct perf_thread_map *thread_map__new_by_pid(pid_t pid);
+struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid);
 struct perf_thread_map *thread_map__new_by_tid(pid_t tid);
 struct perf_thread_map *thread_map__new_by_uid(uid_t uid);
 struct perf_thread_map *thread_map__new_all_cpus(void);

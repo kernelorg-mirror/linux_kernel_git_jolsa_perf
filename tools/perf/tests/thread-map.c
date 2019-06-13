@@ -18,7 +18,7 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 			!prctl(PR_SET_NAME, NAMEUL, 0, 0, 0));
 
 	/* test map on current pid */
-	map = thread_map__new_by_pid(getpid());
+	map = perf_thread_map__new_by_pid(getpid());
 	TEST_ASSERT_VAL("failed to alloc map", map);
 
 	thread_map__read_comms(map);
@@ -79,7 +79,7 @@ int test__thread_map_synthesize(struct test *test __maybe_unused, int subtest __
 			!prctl(PR_SET_NAME, NAMEUL, 0, 0, 0));
 
 	/* test map on current pid */
-	threads = thread_map__new_by_pid(getpid());
+	threads = perf_thread_map__new_by_pid(getpid());
 	TEST_ASSERT_VAL("failed to alloc map", threads);
 
 	thread_map__read_comms(threads);
