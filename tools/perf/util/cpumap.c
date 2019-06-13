@@ -206,7 +206,7 @@ static struct perf_cpu_map *cpu_map__from_entries(struct cpu_map_entries *cpus)
 {
 	struct perf_cpu_map *map;
 
-	map = perf_cpu_map__empty_new(cpus->nr);
+	map = perf_perf_cpu_map__empty_new(cpus->nr);
 	if (map) {
 		unsigned i;
 
@@ -233,7 +233,7 @@ static struct perf_cpu_map *cpu_map__from_mask(struct cpu_map_mask *mask)
 
 	nr = bitmap_weight(mask->mask, nbits);
 
-	map = perf_cpu_map__empty_new(nr);
+	map = perf_perf_cpu_map__empty_new(nr);
 	if (map) {
 		int cpu, i = 0;
 
@@ -275,7 +275,7 @@ struct perf_cpu_map *perf_cpu_map__dummy_new(void)
 	return cpus;
 }
 
-struct perf_cpu_map *perf_cpu_map__empty_new(int nr)
+struct perf_cpu_map *perf_perf_cpu_map__empty_new(int nr)
 {
 	struct perf_cpu_map *cpus = malloc(sizeof(*cpus) + sizeof(int) * nr);
 
@@ -709,7 +709,7 @@ int perf_cpu_map__nr(const struct perf_cpu_map *map)
 	return map ? map->nr : 1;
 }
 
-bool cpu_map__empty(const struct perf_cpu_map *map)
+bool perf_cpu_map__empty(const struct perf_cpu_map *map)
 {
 	return map ? map->map[0] == -1 : true;
 }

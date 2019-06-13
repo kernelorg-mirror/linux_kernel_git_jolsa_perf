@@ -274,7 +274,7 @@ bool perf_evlist__can_select_event(struct evlist *evlist, const char *str)
 
 	evsel = perf_evlist__last(temp_evlist);
 
-	if (!evlist || cpu_map__empty(evlist->cpus)) {
+	if (!evlist || perf_cpu_map__empty(evlist->cpus)) {
 		struct perf_cpu_map *cpus = perf_cpu_map__new(NULL);
 
 		cpu =  cpus ? cpu_map__cpu(cpus, 0) : 0;

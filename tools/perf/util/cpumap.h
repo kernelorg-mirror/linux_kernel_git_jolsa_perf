@@ -12,7 +12,7 @@
 struct perf_cpu_map;
 
 struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list);
-struct perf_cpu_map *perf_cpu_map__empty_new(int nr);
+struct perf_cpu_map *perf_perf_cpu_map__empty_new(int nr);
 struct perf_cpu_map *perf_cpu_map__dummy_new(void);
 struct perf_cpu_map *cpu_map__new_data(struct cpu_map_data *data);
 struct perf_cpu_map *perf_cpu_map__read(FILE *file);
@@ -60,7 +60,7 @@ int cpu_map__build_map(struct perf_cpu_map *cpus, struct perf_cpu_map **res,
 		       void *data);
 
 int perf_cpu_map__nr(const struct perf_cpu_map *map);
-bool cpu_map__empty(const struct perf_cpu_map *map);
+bool perf_cpu_map__empty(const struct perf_cpu_map *map);
 void cpu_map__set_cpu(struct perf_cpu_map *map, int idx, int cpu);
 int cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
 bool cpu_map__has(struct perf_cpu_map *cpus, int cpu);
