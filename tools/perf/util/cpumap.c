@@ -59,7 +59,7 @@ static struct perf_cpu_map *cpu_map__trim_new(int nr_cpus, int *tmp_cpus)
 	return cpus;
 }
 
-struct perf_cpu_map *cpu_map__read(FILE *file)
+struct perf_cpu_map *perf_cpu_map__read(FILE *file)
 {
 	struct perf_cpu_map *cpus = NULL;
 	int nr_cpus = 0;
@@ -123,7 +123,7 @@ static struct perf_cpu_map *cpu_map__read_all_cpu_map(void)
 	if (!onlnf)
 		return cpu_map__default_new();
 
-	cpus = cpu_map__read(onlnf);
+	cpus = perf_cpu_map__read(onlnf);
 	fclose(onlnf);
 	return cpus;
 }

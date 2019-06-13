@@ -580,7 +580,7 @@ static struct perf_cpu_map *__pmu_cpumask(const char *path)
 	if (!file)
 		return NULL;
 
-	cpus = cpu_map__read(file);
+	cpus = perf_cpu_map__read(file);
 	fclose(file);
 	return cpus;
 }
