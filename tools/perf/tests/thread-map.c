@@ -23,14 +23,12 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 
 	thread_map__read_comms(map);
 
-	TEST_ASSERT_VAL("wrong nr", map->nr == 1);
+	TEST_ASSERT_VAL("wrong nr", thread_map__nr(map) == 1);
 	TEST_ASSERT_VAL("wrong pid",
 			thread_map__pid(map, 0) == getpid());
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(map, 0) &&
 			!strcmp(thread_map__comm(map, 0), NAME));
-	TEST_ASSERT_VAL("wrong refcnt",
-			refcount_read(&map->refcnt) == 1);
 	thread_map__put(map);
 
 	/* test dummy pid */
@@ -39,13 +37,11 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 
 	thread_map__read_comms(map);
 
-	TEST_ASSERT_VAL("wrong nr", map->nr == 1);
+	TEST_ASSERT_VAL("wrong nr", thread_map__nr(map) == 1);
 	TEST_ASSERT_VAL("wrong pid", thread_map__pid(map, 0) == -1);
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(map, 0) &&
 			!strcmp(thread_map__comm(map, 0), "dummy"));
-	TEST_ASSERT_VAL("wrong refcnt",
-			refcount_read(&map->refcnt) == 1);
 	thread_map__put(map);
 	return 0;
 }
@@ -65,14 +61,12 @@ static int process_event(struct perf_tool *tool __maybe_unused,
 	threads = thread_map__new_event(&event->thread_map);
 	TEST_ASSERT_VAL("failed to alloc map", threads);
 
-	TEST_ASSERT_VAL("wrong nr", threads->nr == 1);
+	TEST_ASSERT_VAL("wrong nr", thread_map__nr(threads) == 1);
 	TEST_ASSERT_VAL("wrong pid",
 			thread_map__pid(threads, 0) == getpid());
 	TEST_ASSERT_VAL("wrong comm",
 			thread_map__comm(threads, 0) &&
 			!strcmp(thread_map__comm(threads, 0), NAME));
-	TEST_ASSERT_VAL("wrong refcnt",
-			refcount_read(&threads->refcnt) == 1);
 	thread_map__put(threads);
 	return 0;
 }
@@ -100,7 +94,6 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 {
 	struct perf_thread_map *threads;
 	char *str;
-	int i;
 
 	TEST_ASSERT_VAL("failed to allocate map string",
 			asprintf(&str, "%d,%d", getpid(), getppid()) >= 0);
@@ -116,7 +109,7 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 	TEST_ASSERT_VAL("failed to remove thread",
 			!thread_map__remove(threads, 0));
 
-	TEST_ASSERT_VAL("thread_map count != 1", threads->nr == 1);
+	TEST_ASSERT_VAL("thread_map count != 1", thread_map__nr(threads) == 1);
 
 	if (verbose > 0)
 		thread_map__fprintf(threads, stderr);
@@ -124,7 +117,7 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 	TEST_ASSERT_VAL("failed to remove thread",
 			!thread_map__remove(threads, 0));
 
-	TEST_ASSERT_VAL("thread_map count != 0", threads->nr == 0);
+	TEST_ASSERT_VAL("thread_map count != 0", thread_map__nr(threads) == 0);
 
 	if (verbose > 0)
 		thread_map__fprintf(threads, stderr);
@@ -132,9 +125,6 @@ int test__thread_map_remove(struct test *test __maybe_unused, int subtest __mayb
 	TEST_ASSERT_VAL("failed to not remove thread",
 			thread_map__remove(threads, 0));
 
-	for (i = 0; i < threads->nr; i++)
-		free(threads->map[i].comm);
-
-	free(threads);
+	thread_map__put(threads);
 	return 0;
 }

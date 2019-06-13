@@ -1752,14 +1752,14 @@ static bool ignore_missing_thread(struct evsel *evsel,
 		return false;
 
 	/* If there's only one thread, let it fail. */
-	if (threads->nr == 1)
+	if (thread_map__nr(threads) == 1)
 		return false;
 
 	/*
 	 * We should remove fd for missing_thread first
 	 * because thread_map__remove() will decrease threads->nr.
 	 */
-	if (update_fds(evsel, nr_cpus, cpu, threads->nr, thread))
+	if (update_fds(evsel, nr_cpus, cpu, thread_map__nr(threads), thread))
 		return false;
 
 	if (thread_map__remove(threads, thread))
@@ -1861,7 +1861,7 @@ int perf_evsel__open(struct evsel *evsel, struct perf_cpu_map *cpus,
 	if (evsel->system_wide)
 		nthreads = 1;
 	else
-		nthreads = threads->nr;
+		nthreads = thread_map__nr(threads);
 
 	if (evsel->fd == NULL &&
 	    perf_evsel__alloc_fd(evsel, perf_cpu_map__nr(cpus), nthreads) < 0)
@@ -3064,7 +3064,7 @@ int perf_evsel__store_ids(struct evsel *evsel, struct evlist *evlist)
 	struct perf_cpu_map *cpus = evsel->cpus;
 	struct perf_thread_map *threads = evsel->threads;
 
-	if (perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), threads->nr))
+	if (perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), thread_map__nr(threads)))
 		return -ENOMEM;
 
 	return store_evsel_ids(evsel, evlist);

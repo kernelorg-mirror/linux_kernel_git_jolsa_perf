@@ -18,6 +18,17 @@
 #include "debug.h"
 #include "event.h"
 
+struct thread_map_data {
+	pid_t    pid;
+	char	*comm;
+};
+
+struct perf_thread_map {
+	refcount_t refcnt;
+	int nr;
+	struct thread_map_data map[];
+};
+
 /* Skip "." and ".." directories */
 static int filter(const struct dirent *dir)
 {
@@ -487,7 +498,7 @@ int thread_map__remove(struct perf_thread_map *threads, int idx)
 	return 0;
 }
 
-int thread_map__nr(struct perf_thread_map *threads)
+int thread_map__nr(const struct perf_thread_map *threads)
 {
 	return threads ? threads->nr : 1;
 }

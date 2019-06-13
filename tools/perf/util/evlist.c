@@ -1041,7 +1041,7 @@ int perf_evlist__mmap_ex(struct evlist *evlist, unsigned int pages,
 	evlist__for_each_entry(evlist, evsel) {
 		if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
 		    evsel->sample_id == NULL &&
-		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), threads->nr) < 0)
+		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), thread_map__nr(threads)) < 0)
 			return -ENOMEM;
 	}
 

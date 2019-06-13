@@ -6,17 +6,7 @@
 #include <stdio.h>
 #include <linux/refcount.h>
 
-struct thread_map_data {
-	pid_t    pid;
-	char	*comm;
-};
-
-struct perf_thread_map {
-	refcount_t refcnt;
-	int nr;
-	struct thread_map_data map[];
-};
-
+struct perf_thread_map;
 struct thread_map_event;
 
 struct perf_thread_map *thread_map__new_dummy(void);
@@ -37,7 +27,7 @@ struct perf_thread_map *thread_map__new_by_tid_str(const char *tid_str);
 
 size_t thread_map__fprintf(struct perf_thread_map *threads, FILE *fp);
 
-int thread_map__nr(struct perf_thread_map *threads);
+int thread_map__nr(const struct perf_thread_map *threads);
 pid_t thread_map__pid(struct perf_thread_map *map, int thread);
 void thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid);
 char *thread_map__comm(struct perf_thread_map *map, int thread);

@@ -404,11 +404,11 @@ static bool is_target_alive(struct target *_target,
 	if (!target__has_task(_target))
 		return true;
 
-	for (i = 0; i < threads->nr; i++) {
+	for (i = 0; i < thread_map__nr(threads); i++) {
 		char path[PATH_MAX];
 
 		scnprintf(path, PATH_MAX, "%s/%d", procfs__mountpoint(),
-			  threads->map[i].pid);
+			  thread_map__pid(threads, i));
 
 		if (!stat(path, &st))
 			return true;

@@ -1325,7 +1325,7 @@ static void python_process_stat(struct perf_stat_config *config,
 		return;
 	}
 
-	for (thread = 0; thread < threads->nr; thread++) {
+	for (thread = 0; thread < thread_map__nr(threads); thread++) {
 		for (cpu = 0; cpu < perf_cpu_map__nr(cpus); cpu++) {
 			process_stat(counter, perf_cpu_map__cpu(cpus, cpu),
 				     thread_map__pid(threads, thread), tstamp,

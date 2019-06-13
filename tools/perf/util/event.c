@@ -645,7 +645,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 		goto out_free_fork;
 
 	err = 0;
-	for (thread = 0; thread < threads->nr; ++thread) {
+	for (thread = 0; thread < thread_map__nr(threads); ++thread) {
 		if (__event__synthesize_thread(comm_event, mmap_event,
 					       fork_event, namespaces_event,
 					       thread_map__pid(threads, thread), 0,
@@ -663,7 +663,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 			bool need_leader = true;
 
 			/* is thread group leader in thread_map? */
-			for (j = 0; j < threads->nr; ++j) {
+			for (j = 0; j < thread_map__nr(threads); ++j) {
 				if ((int) comm_event->comm.pid == thread_map__pid(threads, j)) {
 					need_leader = false;
 					break;
@@ -981,7 +981,7 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 	int i, err, size;
 
 	size  = sizeof(event->thread_map);
-	size +=	threads->nr * sizeof(event->thread_map.entries[0]);
+	size +=	thread_map__nr(threads) * sizeof(event->thread_map.entries[0]);
 
 	event = zalloc(size);
 	if (!event)
@@ -989,9 +989,9 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 
 	event->header.type = PERF_RECORD_THREAD_MAP;
 	event->header.size = size;
-	event->thread_map.nr = threads->nr;
+	event->thread_map.nr = thread_map__nr(threads);
 
-	for (i = 0; i < threads->nr; i++) {
+	for (i = 0; i < thread_map__nr(threads); i++) {
 		struct thread_map_event_entry *entry = &event->thread_map.entries[i];
 		char *comm = thread_map__comm(threads, i);
 
