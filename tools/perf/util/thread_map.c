@@ -78,7 +78,7 @@ struct perf_thread_map *perf_thread_map__new_by_pid(pid_t pid)
 	threads = thread_map__alloc(items);
 	if (threads != NULL) {
 		for (i = 0; i < items; i++)
-			thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
+			perf_thread_map__set_pid(threads, i, atoi(namelist[i]->d_name));
 		threads->nr = items;
 		refcount_set(&threads->refcnt, 1);
 	}
@@ -95,7 +95,7 @@ struct perf_thread_map *perf_thread_map__new_by_tid(pid_t tid)
 	struct perf_thread_map *threads = thread_map__alloc(1);
 
 	if (threads != NULL) {
-		thread_map__set_pid(threads, 0, tid);
+		perf_thread_map__set_pid(threads, 0, tid);
 		threads->nr = 1;
 		refcount_set(&threads->refcnt, 1);
 	}
@@ -159,7 +159,7 @@ static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
 		}
 
 		for (i = 0; i < items; i++) {
-			thread_map__set_pid(threads, threads->nr + i,
+			perf_thread_map__set_pid(threads, threads->nr + i,
 					    atoi(namelist[i]->d_name));
 		}
 
@@ -249,7 +249,7 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 		threads = nt;
 
 		for (i = 0; i < items; i++) {
-			thread_map__set_pid(threads, j++, atoi(namelist[i]->d_name));
+			perf_thread_map__set_pid(threads, j++, atoi(namelist[i]->d_name));
 			zfree(&namelist[i]);
 		}
 		threads->nr = total_tasks;
@@ -277,7 +277,7 @@ struct perf_thread_map *perf_thread_map__new_dummy(void)
 	struct perf_thread_map *threads = thread_map__alloc(1);
 
 	if (threads != NULL) {
-		thread_map__set_pid(threads, 0, -1);
+		perf_thread_map__set_pid(threads, 0, -1);
 		threads->nr = 1;
 		refcount_set(&threads->refcnt, 1);
 	}
@@ -319,7 +319,7 @@ struct perf_thread_map *perf_thread_map__new_by_tid_str(const char *tid_str)
 			goto out_free_threads;
 
 		threads = nt;
-		thread_map__set_pid(threads, ntasks - 1, tid);
+		perf_thread_map__set_pid(threads, ntasks - 1, tid);
 		threads->nr = ntasks;
 	}
 out:
@@ -446,7 +446,7 @@ static void thread_map__copy_event(struct perf_thread_map *threads,
 	threads->nr = (int) event->nr;
 
 	for (i = 0; i < event->nr; i++) {
-		thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
+		perf_thread_map__set_pid(threads, i, (pid_t) event->entries[i].pid);
 		thread_map__set_comm(threads, i, event->entries[i].comm);
 	}
 
@@ -508,7 +508,7 @@ pid_t perf_thread_map__pid(struct perf_thread_map *map, int thread)
 	return map->map[thread].pid;
 }
 
-void thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid)
+void perf_thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid)
 {
 	map->map[thread].pid = pid;
 }

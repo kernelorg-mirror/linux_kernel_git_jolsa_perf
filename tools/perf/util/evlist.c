@@ -1505,7 +1505,7 @@ int perf_evlist__prepare_workload(struct evlist *evlist, struct target *target,
 				__func__, __LINE__);
 			goto out_close_pipes;
 		}
-		thread_map__set_pid(evlist->threads, 0, evlist->workload.pid);
+		perf_thread_map__set_pid(evlist->threads, 0, evlist->workload.pid);
 	}
 
 	close(child_ready_pipe[1]);
