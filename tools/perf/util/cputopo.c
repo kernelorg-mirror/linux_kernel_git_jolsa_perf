@@ -181,7 +181,7 @@ struct cpu_topology *cpu_topology__new(void)
 	ncpus = cpu__max_present_cpu();
 
 	/* build online CPU map */
-	map = cpu_map__new(NULL);
+	map = perf_cpu_map__new(NULL);
 	if (map == NULL) {
 		pr_debug("failed to get system cpumap\n");
 		return NULL;
@@ -311,7 +311,7 @@ struct numa_topology *numa_topology__new(void)
 	if (c)
 		*c = '\0';
 
-	node_map = cpu_map__new(buf);
+	node_map = perf_cpu_map__new(buf);
 	if (!node_map)
 		goto out;
 

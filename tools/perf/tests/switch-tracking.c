@@ -340,7 +340,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 		goto out_err;
 	}
 
-	cpus = cpu_map__new(NULL);
+	cpus = perf_cpu_map__new(NULL);
 	if (!cpus) {
 		pr_debug("cpu_map__new failed!\n");
 		goto out_err;

@@ -128,7 +128,7 @@ static struct perf_cpu_map *cpu_map__read_all_cpu_map(void)
 	return cpus;
 }
 
-struct perf_cpu_map *cpu_map__new(const char *cpu_list)
+struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list)
 {
 	struct perf_cpu_map *cpus = NULL;
 	unsigned long start_cpu, end_cpu = 0;
@@ -808,7 +808,7 @@ const struct perf_cpu_map *cpu_map__online(void) /* thread unsafe */
 	static const struct perf_cpu_map *online = NULL;
 
 	if (!online)
-		online = cpu_map__new(NULL); /* from /sys/devices/system/cpu/online */
+		online = perf_cpu_map__new(NULL); /* from /sys/devices/system/cpu/online */
 
 	return online;
 }

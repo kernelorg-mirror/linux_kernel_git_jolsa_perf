@@ -548,7 +548,7 @@ static int pyrf_cpu_map__init(struct pyrf_cpu_map *pcpus,
 					 kwlist, &cpustr))
 		return -1;
 
-	pcpus->cpus = cpu_map__new(cpustr);
+	pcpus->cpus = perf_cpu_map__new(cpustr);
 	if (pcpus->cpus == NULL)
 		return -1;
 	return 0;

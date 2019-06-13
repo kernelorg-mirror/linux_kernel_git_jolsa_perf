@@ -2280,7 +2280,7 @@ int perf_session__cpu_bitmap(struct perf_session *session,
 		}
 	}
 
-	map = cpu_map__new(cpu_list);
+	map = perf_cpu_map__new(cpu_list);
 	if (map == NULL) {
 		pr_err("Invalid cpu_list\n");
 		return -1;

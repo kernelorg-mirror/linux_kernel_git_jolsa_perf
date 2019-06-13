@@ -492,7 +492,7 @@ cs_etm_info_priv_size(struct auxtrace_record *itr __maybe_unused,
 	int i;
 	int etmv3 = 0, etmv4 = 0;
 	struct cpu_map *event_cpus = evlist->cpus;
-	struct cpu_map *online_cpus = cpu_map__new(NULL);
+	struct cpu_map *online_cpus = perf_cpu_map__new(NULL);
 
 	/* cpu map is not empty, we have specific CPUs to work with */
 	if (!cpu_map__empty(event_cpus)) {
@@ -639,7 +639,7 @@ static int cs_etm_info_fill(struct auxtrace_record *itr,
 	u64 nr_cpu, type;
 	struct cpu_map *cpu_map;
 	struct cpu_map *event_cpus = session->evlist->cpus;
-	struct cpu_map *online_cpus = cpu_map__new(NULL);
+	struct cpu_map *online_cpus = perf_cpu_map__new(NULL);
 	struct cs_etm_recording *ptr =
 			container_of(itr, struct cs_etm_recording, itr);
 	struct perf_pmu *cs_etm_pmu = ptr->cs_etm_pmu;

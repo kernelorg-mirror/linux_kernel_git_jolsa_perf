@@ -1089,7 +1089,7 @@ int perf_evlist__create_maps(struct evlist *evlist, struct target *target)
 	if (target__uses_dummy_map(target))
 		cpus = cpu_map__dummy_new();
 	else
-		cpus = cpu_map__new(target->cpu_list);
+		cpus = perf_cpu_map__new(target->cpu_list);
 
 	if (!cpus)
 		goto out_delete_threads;
@@ -1372,7 +1372,7 @@ static int perf_evlist__create_syswide_maps(struct evlist *evlist)
 	 * error, and we may not want to do that fallback to a
 	 * default cpu identity map :-\
 	 */
-	cpus = cpu_map__new(NULL);
+	cpus = perf_cpu_map__new(NULL);
 	if (!cpus)
 		goto out;
 

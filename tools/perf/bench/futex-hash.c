@@ -131,7 +131,7 @@ int bench_futex_hash(int argc, const char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	cpu = cpu_map__new(NULL);
+	cpu = perf_cpu_map__new(NULL);
 	if (!cpu)
 		goto errmem;
 

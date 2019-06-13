@@ -77,7 +77,7 @@ int test__cpu_map_synthesize(struct test *test __maybe_unused, int subtest __may
 	struct perf_cpu_map *cpus;
 
 	/* This one is better stores in mask. */
-	cpus = cpu_map__new("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19");
+	cpus = perf_cpu_map__new("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19");
 
 	TEST_ASSERT_VAL("failed to synthesize map",
 		!perf_event__synthesize_cpu_map(NULL, cpus, process_event_mask, NULL));
@@ -85,7 +85,7 @@ int test__cpu_map_synthesize(struct test *test __maybe_unused, int subtest __may
 	cpu_map__put(cpus);
 
 	/* This one is better stores in cpu values. */
-	cpus = cpu_map__new("1,256");
+	cpus = perf_cpu_map__new("1,256");
 
 	TEST_ASSERT_VAL("failed to synthesize map",
 		!perf_event__synthesize_cpu_map(NULL, cpus, process_event_cpus, NULL));
@@ -96,7 +96,7 @@ int test__cpu_map_synthesize(struct test *test __maybe_unused, int subtest __may
 
 static int cpu_map_print(const char *str)
 {
-	struct perf_cpu_map *map = cpu_map__new(str);
+	struct perf_cpu_map *map = perf_cpu_map__new(str);
 	char buf[100];
 
 	if (!map)
