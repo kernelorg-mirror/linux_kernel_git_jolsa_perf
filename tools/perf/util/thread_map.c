@@ -378,8 +378,9 @@ size_t thread_map__fprintf(struct perf_thread_map *threads, FILE *fp)
 {
 	int i;
 	size_t printed = fprintf(fp, "%d thread%s: ",
-				 threads->nr, threads->nr > 1 ? "s" : "");
-	for (i = 0; i < threads->nr; ++i)
+				 perf_thread_map__nr(threads),
+				 perf_thread_map__nr(threads) > 1 ? "s" : "");
+	for (i = 0; i < perf_thread_map__nr(threads); ++i)
 		printed += fprintf(fp, "%s%d", i ? ", " : "", perf_thread_map__pid(threads, i));
 
 	return printed + fprintf(fp, "\n");
