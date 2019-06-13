@@ -340,10 +340,10 @@ int cpu_map__get_socket(struct perf_cpu_map *map, int idx, void *data __maybe_un
 {
 	int cpu;
 
-	if (idx > map->nr)
+	if (idx > perf_cpu_map__nr(map))
 		return -1;
 
-	cpu = map->map[idx];
+	cpu = perf_cpu_map__cpu(map, idx);
 
 	return cpu_map__get_socket_id(cpu);
 }
@@ -396,10 +396,10 @@ int cpu_map__get_die(struct perf_cpu_map *map, int idx, void *data)
 {
 	int cpu, die_id, s;
 
-	if (idx > map->nr)
+	if (idx > perf_cpu_map__nr(map))
 		return -1;
 
-	cpu = map->map[idx];
+	cpu = perf_cpu_map__cpu(map, idx);
 
 	die_id = cpu_map__get_die_id(cpu);
 	/* There is no die_id on legacy system. */
@@ -435,10 +435,10 @@ int cpu_map__get_core(struct perf_cpu_map *map, int idx, void *data)
 {
 	int cpu, s_die;
 
-	if (idx > map->nr)
+	if (idx > perf_cpu_map__nr(map))
 		return -1;
 
-	cpu = map->map[idx];
+	cpu = perf_cpu_map__cpu(map, idx);
 
 	cpu = cpu_map__get_core_id(cpu);
 
