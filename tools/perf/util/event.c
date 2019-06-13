@@ -993,7 +993,7 @@ int perf_event__synthesize_thread_map2(struct perf_tool *tool,
 
 	for (i = 0; i < perf_thread_map__nr(threads); i++) {
 		struct thread_map_event_entry *entry = &event->thread_map.entries[i];
-		char *comm = thread_map__comm(threads, i);
+		char *comm = perf_thread_map__comm(threads, i);
 
 		if (!comm)
 			comm = (char *) "";

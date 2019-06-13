@@ -27,8 +27,8 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	TEST_ASSERT_VAL("wrong pid",
 			perf_thread_map__pid(map, 0) == getpid());
 	TEST_ASSERT_VAL("wrong comm",
-			thread_map__comm(map, 0) &&
-			!strcmp(thread_map__comm(map, 0), NAME));
+			perf_thread_map__comm(map, 0) &&
+			!strcmp(perf_thread_map__comm(map, 0), NAME));
 	perf_thread_map__put(map);
 
 	/* test dummy pid */
@@ -40,8 +40,8 @@ int test__thread_map(struct test *test __maybe_unused, int subtest __maybe_unuse
 	TEST_ASSERT_VAL("wrong nr", perf_thread_map__nr(map) == 1);
 	TEST_ASSERT_VAL("wrong pid", perf_thread_map__pid(map, 0) == -1);
 	TEST_ASSERT_VAL("wrong comm",
-			thread_map__comm(map, 0) &&
-			!strcmp(thread_map__comm(map, 0), "dummy"));
+			perf_thread_map__comm(map, 0) &&
+			!strcmp(perf_thread_map__comm(map, 0), "dummy"));
 	perf_thread_map__put(map);
 	return 0;
 }
@@ -65,8 +65,8 @@ static int process_event(struct perf_tool *tool __maybe_unused,
 	TEST_ASSERT_VAL("wrong pid",
 			perf_thread_map__pid(threads, 0) == getpid());
 	TEST_ASSERT_VAL("wrong comm",
-			thread_map__comm(threads, 0) &&
-			!strcmp(thread_map__comm(threads, 0), NAME));
+			perf_thread_map__comm(threads, 0) &&
+			!strcmp(perf_thread_map__comm(threads, 0), NAME));
 	perf_thread_map__put(threads);
 	return 0;
 }

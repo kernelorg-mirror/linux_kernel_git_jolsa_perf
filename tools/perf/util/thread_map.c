@@ -356,7 +356,7 @@ static void thread_map__delete(struct perf_thread_map *threads)
 		WARN_ONCE(refcount_read(&threads->refcnt) != 0,
 			  "thread map refcnt unbalanced\n");
 		for (i = 0; i < threads->nr; i++)
-			free(thread_map__comm(threads, i));
+			free(perf_thread_map__comm(threads, i));
 		free(threads);
 	}
 }
@@ -513,7 +513,7 @@ void perf_thread_map__set_pid(struct perf_thread_map *map, int thread, pid_t pid
 	map->map[thread].pid = pid;
 }
 
-char *thread_map__comm(struct perf_thread_map *map, int thread)
+char *perf_thread_map__comm(struct perf_thread_map *map, int thread)
 {
 	return map->map[thread].comm;
 }
