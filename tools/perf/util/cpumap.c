@@ -301,7 +301,7 @@ static void cpu_map__delete(struct perf_cpu_map *map)
 	}
 }
 
-struct perf_cpu_map *cpu_map__get(struct perf_cpu_map *map)
+struct perf_cpu_map *perf_cpu_map__get(struct perf_cpu_map *map)
 {
 	if (map)
 		refcount_inc(&map->refcnt);

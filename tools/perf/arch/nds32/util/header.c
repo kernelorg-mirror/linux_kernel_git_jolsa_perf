@@ -22,7 +22,7 @@ char *get_cpuid_str(struct perf_pmu *pmu)
 	if (!buf)
 		return NULL;
 
-	cpus = cpu_map__get(pmu->cpus);
+	cpus = perf_cpu_map__get(pmu->cpus);
 	sprintf(buf, "0x%x", cpus->nr - 1);
 	cpu_map__put(cpus);
 	return buf;

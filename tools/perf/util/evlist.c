@@ -160,10 +160,10 @@ static void __perf_evlist__propagate_maps(struct evlist *evlist,
 	 */
 	if (!evsel->own_cpus || evlist->has_user_cpus) {
 		cpu_map__put(evsel->cpus);
-		evsel->cpus = cpu_map__get(evlist->cpus);
+		evsel->cpus = perf_cpu_map__get(evlist->cpus);
 	} else if (evsel->cpus != evsel->own_cpus) {
 		cpu_map__put(evsel->cpus);
-		evsel->cpus = cpu_map__get(evsel->own_cpus);
+		evsel->cpus = perf_cpu_map__get(evsel->own_cpus);
 	}
 
 	thread_map__put(evsel->threads);
@@ -1117,7 +1117,7 @@ void perf_evlist__set_maps(struct evlist *evlist, struct perf_cpu_map *cpus,
 	 */
 	if (cpus != evlist->cpus) {
 		cpu_map__put(evlist->cpus);
-		evlist->cpus = cpu_map__get(cpus);
+		evlist->cpus = perf_cpu_map__get(cpus);
 	}
 
 	if (threads != evlist->threads) {
