@@ -519,7 +519,7 @@ cs_etm_info_priv_size(struct auxtrace_record *itr __maybe_unused,
 		}
 	}
 
-	cpu_map__put(online_cpus);
+	perf_cpu_map__put(online_cpus);
 
 	return (CS_ETM_HEADER_SIZE +
 	       (etmv4 * CS_ETMV4_PRIV_SIZE) +
@@ -681,7 +681,7 @@ static int cs_etm_info_fill(struct auxtrace_record *itr,
 		if (perf_cpu_map__has(cpu_map, i))
 			cs_etm_get_metadata(i, &offset, itr, info);
 
-	cpu_map__put(online_cpus);
+	perf_cpu_map__put(online_cpus);
 
 	return 0;
 }

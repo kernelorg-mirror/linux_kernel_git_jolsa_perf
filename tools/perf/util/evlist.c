@@ -142,7 +142,7 @@ void evlist__delete(struct evlist *evlist)
 
 	perf_evlist__munmap(evlist);
 	perf_evlist__close(evlist);
-	cpu_map__put(evlist->cpus);
+	perf_cpu_map__put(evlist->cpus);
 	thread_map__put(evlist->threads);
 	evlist->cpus = NULL;
 	evlist->threads = NULL;
@@ -159,10 +159,10 @@ static void __perf_evlist__propagate_maps(struct evlist *evlist,
 	 * keep it, if there's no target cpu list defined.
 	 */
 	if (!evsel->own_cpus || evlist->has_user_cpus) {
-		cpu_map__put(evsel->cpus);
+		perf_cpu_map__put(evsel->cpus);
 		evsel->cpus = perf_cpu_map__get(evlist->cpus);
 	} else if (evsel->cpus != evsel->own_cpus) {
-		cpu_map__put(evsel->cpus);
+		perf_cpu_map__put(evsel->cpus);
 		evsel->cpus = perf_cpu_map__get(evsel->own_cpus);
 	}
 
@@ -1116,7 +1116,7 @@ void perf_evlist__set_maps(struct evlist *evlist, struct perf_cpu_map *cpus,
 	 * the caller to increase the reference count.
 	 */
 	if (cpus != evlist->cpus) {
-		cpu_map__put(evlist->cpus);
+		perf_cpu_map__put(evlist->cpus);
 		evlist->cpus = perf_cpu_map__get(cpus);
 	}
 
@@ -1384,7 +1384,7 @@ static int perf_evlist__create_syswide_maps(struct evlist *evlist)
 out:
 	return err;
 out_put:
-	cpu_map__put(cpus);
+	perf_cpu_map__put(cpus);
 	goto out;
 }
 

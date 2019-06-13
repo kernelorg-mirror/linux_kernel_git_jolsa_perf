@@ -60,6 +60,6 @@ char *get_cpuid_str(struct perf_pmu *pmu)
 		buf = NULL;
 	}
 
-	cpu_map__put(cpus);
+	perf_cpu_map__put(cpus);
 	return buf;
 }
