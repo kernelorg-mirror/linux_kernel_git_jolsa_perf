@@ -25,6 +25,7 @@
 
 #include "parse-events.h"
 #include <subcmd/parse-options.h>
+#include <perf/evlist.h>
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -42,8 +43,8 @@ int sigqueue(pid_t pid, int sig, const union sigval value);
 #define FD(e, x, y) (*(int *)xyarray__entry(e->fd, x, y))
 #define SID(e, x, y) xyarray__entry(e->sample_id, x, y)
 
-void evlist__init(struct evlist *evlist, struct perf_cpu_map *cpus,
-		  struct perf_thread_map *threads)
+void evlist__init(struct evlist *evlist, struct perf_evlist *core,
+		  struct perf_cpu_map *cpus, struct perf_thread_map *threads)
 {
 	int i;
 
@@ -54,15 +55,23 @@ void evlist__init(struct evlist *evlist, struct perf_cpu_map *cpus,
 	fdarray__init(&evlist->pollfd, 64);
 	evlist->workload.pid = -1;
 	evlist->bkw_mmap_state = BKW_MMAP_NOTREADY;
+	evlist->core = core;
 }
 
 struct evlist *evlist__new(void)
 {
 	struct evlist *evlist = zalloc(sizeof(*evlist));
+	struct perf_evlist *core;
 
-	if (evlist != NULL)
-		evlist__init(evlist, NULL, NULL);
+	if (evlist != NULL) {
+		core = perf_evlist__new();
+		if (!core) {
+			free(evlist);
+			return NULL;
+		}
 
+		evlist__init(evlist, core, NULL, NULL);
+	}
 	return evlist;
 }
 
@@ -148,6 +157,7 @@ void evlist__delete(struct evlist *evlist)
 	evlist->threads = NULL;
 	perf_evlist__purge(evlist);
 	perf_evlist__exit(evlist);
+	perf_evlist__delete(evlist->core);
 	free(evlist);
 }
 

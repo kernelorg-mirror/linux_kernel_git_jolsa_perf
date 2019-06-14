@@ -25,6 +25,7 @@ struct record_opts;
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
 struct evlist {
+	struct perf_evlist *core;
 	struct list_head entries;
 	struct hlist_head heads[PERF_EVLIST__HLIST_SIZE];
 	int		 nr_entries;
@@ -68,8 +69,8 @@ struct evsel_str_handler {
 struct evlist *evlist__new(void);
 struct evlist *perf_evlist__new_default(void);
 struct evlist *perf_evlist__new_dummy(void);
-void evlist__init(struct evlist *evlist, struct perf_cpu_map *cpus,
-		  struct perf_thread_map *threads);
+void evlist__init(struct evlist *evlist, struct perf_evlist *core,
+		  struct perf_cpu_map *cpus, struct perf_thread_map *threads);
 void perf_evlist__exit(struct evlist *evlist);
 void evlist__delete(struct evlist *evlist);
 

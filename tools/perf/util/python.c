@@ -5,6 +5,7 @@
 #include <poll.h>
 #include <linux/err.h>
 #include <perf/evsel.h>
+#include <perf/evlist.h>
 #include "evlist.h"
 #include "callchain.h"
 #include "evsel.h"
@@ -872,13 +873,18 @@ static int pyrf_evlist__init(struct pyrf_evlist *pevlist,
 	PyObject *pcpus = NULL, *pthreads = NULL;
 	struct perf_cpu_map *cpus;
 	struct perf_thread_map *threads;
+	struct perf_evlist *core;
 
 	if (!PyArg_ParseTuple(args, "OO", &pcpus, &pthreads))
 		return -1;
 
+	core = perf_evlist__new();
+	if (!core)
+		return -1;
+
 	threads = ((struct pyrf_thread_map *)pthreads)->threads;
 	cpus = ((struct pyrf_cpu_map *)pcpus)->cpus;
-	evlist__init(&pevlist->evlist, cpus, threads);
+	evlist__init(&pevlist->evlist, core, cpus, threads);
 	return 0;
 }
 
