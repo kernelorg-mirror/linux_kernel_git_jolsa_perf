@@ -14,6 +14,7 @@
 #include <api/fs/fs.h>
 #include <api/fs/tracing_path.h>
 #include <traceevent/event-parse.h>
+#include <perf/evsel.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/perf_event.h>
 #include <linux/compiler.h>
@@ -223,9 +224,10 @@ bool perf_evsel__is_function_event(struct evsel *evsel)
 #undef FUNCTION_EVENT
 }
 
-void evsel__init(struct evsel *evsel,
+void evsel__init(struct evsel *evsel, struct perf_evsel *core,
 		 struct perf_event_attr *attr, int idx)
 {
+	evsel->core	   = core;
 	evsel->idx	   = idx;
 	evsel->tracking	   = !idx;
 	evsel->attr	   = *attr;
@@ -252,10 +254,18 @@ void evsel__init(struct evsel *evsel,
 struct evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
 {
 	struct evsel *evsel = zalloc(perf_evsel__object.size);
+	struct perf_evsel *core;
 
 	if (!evsel)
 		return NULL;
-	evsel__init(evsel, attr, idx);
+
+	core = perf_evsel__new();
+	if (!core) {
+		free(evsel);
+		return NULL;
+	}
+
+	evsel__init(evsel, core, attr, idx);
 
 	if (perf_evsel__is_bpf_output(evsel)) {
 		evsel->attr.sample_type |= (PERF_SAMPLE_RAW | PERF_SAMPLE_TIME |
@@ -327,6 +337,7 @@ error_free:
 struct evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
 {
 	struct evsel *evsel = zalloc(perf_evsel__object.size);
+	struct perf_evsel *core;
 	int err = -ENOMEM;
 
 	if (evsel == NULL) {
@@ -337,6 +348,10 @@ struct evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
 			.sample_type   = (PERF_SAMPLE_RAW | PERF_SAMPLE_TIME |
 					  PERF_SAMPLE_CPU | PERF_SAMPLE_PERIOD),
 		};
+
+		core = perf_evsel__new();
+		if (!core)
+			goto out_free;
 
 		if (asprintf(&evsel->name, "%s:%s", sys, name) < 0)
 			goto out_free;
@@ -350,12 +365,13 @@ struct evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
 		event_attr_init(&attr);
 		attr.config = evsel->tp_format->id;
 		attr.sample_period = 1;
-		evsel__init(evsel, &attr, idx);
+		evsel__init(evsel, core, &attr, idx);
 	}
 
 	return evsel;
 
 out_free:
+	perf_evsel__delete(core);
 	zfree(&evsel->name);
 	free(evsel);
 out_err:
@@ -1329,6 +1345,7 @@ void perf_evsel__exit(struct evsel *evsel)
 void evsel__delete(struct evsel *evsel)
 {
 	perf_evsel__exit(evsel);
+	perf_evsel__delete(evsel->core);
 	free(evsel);
 }
 

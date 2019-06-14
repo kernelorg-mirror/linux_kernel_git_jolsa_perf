@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <poll.h>
 #include <linux/err.h>
+#include <perf/evsel.h>
 #include "evlist.h"
 #include "callchain.h"
 #include "evsel.h"
@@ -737,6 +738,7 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 	    mmap_data = 0,
 	    sample_id_all = 1;
 	int idx = 0;
+	struct perf_evsel *core;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwargs,
 					 "|iKiKKiiiiiiiiiiiiiiiiiiiiiiKK", kwlist,
@@ -758,6 +760,10 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 			return -1; /* FIXME: throw right exception */
 		attr.sample_period = sample_period;
 	}
+
+	core = perf_evsel__new();
+	if (!core)
+		return -1;
 
 	/* Bitfields */
 	attr.disabled	    = disabled;
@@ -781,7 +787,7 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 	attr.sample_id_all  = sample_id_all;
 	attr.size	    = sizeof(attr);
 
-	evsel__init(&pevsel->evsel, &attr, idx);
+	evsel__init(&pevsel->evsel, core, &attr, idx);
 	return 0;
 }
 
