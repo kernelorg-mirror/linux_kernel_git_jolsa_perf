@@ -652,7 +652,7 @@ static int add_bpf_event(const char *group, const char *event, int fd,
 			 group, event);
 		list_for_each_entry_safe(evsel, tmp, &new_evsels, node) {
 			list_del(&evsel->node);
-			perf_evsel__delete(evsel);
+			evsel__delete(evsel);
 		}
 		return err;
 	}
@@ -2323,7 +2323,7 @@ static bool is_event_supported(u8 type, unsigned config)
 			evsel->attr.exclude_kernel = 1;
 			ret = perf_evsel__open(evsel, NULL, tmap) >= 0;
 		}
-		perf_evsel__delete(evsel);
+		evsel__delete(evsel);
 	}
 
 	thread_map__put(tmap);
