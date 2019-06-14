@@ -71,7 +71,7 @@ struct evlist *perf_evlist__new_default(void)
 	struct evlist *evlist = evlist__new();
 
 	if (evlist && perf_evlist__add_default(evlist)) {
-		perf_evlist__delete(evlist);
+		evlist__delete(evlist);
 		evlist = NULL;
 	}
 
@@ -83,7 +83,7 @@ struct evlist *perf_evlist__new_dummy(void)
 	struct evlist *evlist = evlist__new();
 
 	if (evlist && perf_evlist__add_dummy(evlist)) {
-		perf_evlist__delete(evlist);
+		evlist__delete(evlist);
 		evlist = NULL;
 	}
 
@@ -135,7 +135,7 @@ void perf_evlist__exit(struct evlist *evlist)
 	fdarray__exit(&evlist->pollfd);
 }
 
-void perf_evlist__delete(struct evlist *evlist)
+void evlist__delete(struct evlist *evlist)
 {
 	if (evlist == NULL)
 		return;
@@ -1860,7 +1860,7 @@ int perf_evlist__add_sb_event(struct evlist **evlist,
 
 out_err:
 	if (new_evlist) {
-		perf_evlist__delete(*evlist);
+		evlist__delete(*evlist);
 		*evlist = NULL;
 	}
 	return -1;
@@ -1939,7 +1939,7 @@ int perf_evlist__start_sb_thread(struct evlist *evlist,
 	return 0;
 
 out_delete_evlist:
-	perf_evlist__delete(evlist);
+	evlist__delete(evlist);
 	evlist = NULL;
 	return -1;
 }
@@ -1950,5 +1950,5 @@ void perf_evlist__stop_sb_thread(struct evlist *evlist)
 		return;
 	evlist->thread.done = 1;
 	pthread_join(evlist->thread.th, NULL);
-	perf_evlist__delete(evlist);
+	evlist__delete(evlist);
 }
