@@ -22,3 +22,13 @@ void perf_evlist__delete(struct perf_evlist *evlist)
 {
 	free(evlist);
 }
+
+void perf_evlist__set_priv(struct perf_evlist *evlist, void *priv)
+{
+	evlist->priv = priv;
+}
+
+void* perf_evlist__priv(struct perf_evlist *evlist)
+{
+	return evlist->priv;
+}
