@@ -48,6 +48,7 @@ int test__task_exit(struct test *test __maybe_unused, int subtest __maybe_unused
 	struct perf_cpu_map *cpus;
 	struct perf_thread_map *threads;
 	struct perf_mmap *md;
+	struct perf_event_attr *attr;
 
 	signal(SIGCHLD, sig_handler);
 
@@ -84,16 +85,18 @@ int test__task_exit(struct test *test __maybe_unused, int subtest __maybe_unused
 	}
 
 	evsel = perf_evlist__first(evlist);
-	evsel->attr.task = 1;
+	attr = evsel__attr(evsel);
+
+	attr->task = 1;
 #ifdef __s390x__
-	evsel->attr.sample_freq = 1000000;
+	attr->sample_freq = 1000000;
 #else
-	evsel->attr.sample_freq = 1;
+	attr->sample_freq = 1;
 #endif
-	evsel->attr.inherit = 0;
-	evsel->attr.watermark = 0;
-	evsel->attr.wakeup_events = 1;
-	evsel->attr.exclude_kernel = 1;
+	attr->inherit = 0;
+	attr->watermark = 0;
+	attr->wakeup_events = 1;
+	attr->exclude_kernel = 1;
 
 	err = perf_evlist__open(evlist);
 	if (err < 0) {

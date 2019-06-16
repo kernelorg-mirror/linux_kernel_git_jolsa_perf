@@ -642,9 +642,9 @@ static int do_test_code_reading(bool try_kcore)
 
 		evsel = perf_evlist__first(evlist);
 
-		evsel->attr.comm = 1;
-		evsel->attr.disabled = 1;
-		evsel->attr.enable_on_exec = 0;
+		evsel__attr(evsel)->comm = 1;
+		evsel__attr(evsel)->disabled = 1;
+		evsel__attr(evsel)->enable_on_exec = 0;
 
 		ret = perf_evlist__open(evlist);
 		if (ret < 0) {

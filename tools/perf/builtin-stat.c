@@ -392,7 +392,7 @@ static void workload_exec_failed_signal(int signo __maybe_unused, siginfo_t *inf
 
 static bool perf_evsel__should_store_id(struct evsel *counter)
 {
-	return STAT_RECORD || counter->attr.read_format & PERF_FORMAT_ID;
+	return STAT_RECORD || evsel__attr(counter)->read_format & PERF_FORMAT_ID;
 }
 
 static bool is_target_alive(struct target *_target,

@@ -338,7 +338,7 @@ static PyObject *pyrf_sample_event__repr(struct pyrf_event *pevent)
 
 static bool is_tracepoint(struct pyrf_event *pevent)
 {
-	return pevent->evsel->attr.type == PERF_TYPE_TRACEPOINT;
+	return evsel__attr(pevent->evsel)->type == PERF_TYPE_TRACEPOINT;
 }
 
 static PyObject*
@@ -390,7 +390,7 @@ get_tracepoint_field(struct pyrf_event *pevent, PyObject *attr_name)
 	if (!evsel->tp_format) {
 		struct tep_event *tp_format;
 
-		tp_format = trace_event__tp_format_id(evsel->attr.config);
+		tp_format = trace_event__tp_format_id(evsel__attr(evsel)->config);
 		if (!tp_format)
 			return NULL;
 
@@ -762,10 +762,6 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 		attr.sample_period = sample_period;
 	}
 
-	core = perf_evsel__new();
-	if (!core)
-		return -1;
-
 	/* Bitfields */
 	attr.disabled	    = disabled;
 	attr.inherit	    = inherit;
@@ -788,7 +784,11 @@ static int pyrf_evsel__init(struct pyrf_evsel *pevsel,
 	attr.sample_id_all  = sample_id_all;
 	attr.size	    = sizeof(attr);
 
-	evsel__init(&pevsel->evsel, core, &attr, idx);
+	core = perf_evsel__new_attr(&attr);
+	if (!core)
+		return -1;
+
+	evsel__init(&pevsel->evsel, core, idx);
 	return 0;
 }
 
@@ -818,7 +818,7 @@ static PyObject *pyrf_evsel__open(struct pyrf_evsel *pevsel,
 	if (pcpus != NULL)
 		cpus = ((struct pyrf_cpu_map *)pcpus)->cpus;
 
-	evsel->attr.inherit = inherit;
+	evsel__attr(evsel)->inherit = inherit;
 	/*
 	 * This will group just the fds for this single evsel, to group
 	 * multiple events, use evlist.open().

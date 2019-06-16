@@ -440,7 +440,7 @@ int create_perf_stat_counter(struct evsel *evsel,
 			     struct perf_stat_config *config,
 			     struct target *target)
 {
-	struct perf_event_attr *attr = &evsel->attr;
+	struct perf_event_attr *attr = evsel__attr(evsel);
 	struct evsel *leader = evsel->leader;
 
 	attr->read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |

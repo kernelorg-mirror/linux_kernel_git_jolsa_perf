@@ -424,7 +424,7 @@ get_tracepoints_path(struct list_head *pattrs)
 	int nr_tracepoints = 0;
 
 	list_for_each_entry(pos, pattrs, node) {
-		if (pos->attr.type != PERF_TYPE_TRACEPOINT)
+		if (evsel__attr(pos)->type != PERF_TYPE_TRACEPOINT)
 			continue;
 		++nr_tracepoints;
 
@@ -440,7 +440,7 @@ get_tracepoints_path(struct list_head *pattrs)
 		}
 
 try_id:
-		ppath->next = tracepoint_id_to_path(pos->attr.config);
+		ppath->next = tracepoint_id_to_path(evsel__attr(pos)->config);
 		if (!ppath->next) {
 error:
 			pr_debug("No memory to alloc tracepoints list\n");
@@ -459,7 +459,7 @@ bool have_tracepoints(struct list_head *pattrs)
 	struct evsel *pos;
 
 	list_for_each_entry(pos, pattrs, node)
-		if (pos->attr.type == PERF_TYPE_TRACEPOINT)
+		if (evsel__attr(pos)->type == PERF_TYPE_TRACEPOINT)
 			return true;
 
 	return false;

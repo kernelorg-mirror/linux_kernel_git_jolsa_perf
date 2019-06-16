@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <linux/perf_event.h>
 #include <linux/types.h>
+#include <perf/evsel.h>
 #include "xyarray.h"
 #include "symbol_conf.h"
 #include "cpumap.h"
@@ -101,8 +102,7 @@ enum perf_tool_event {
 struct evsel {
 	struct perf_evsel	*core;
 	struct list_head	node;
-	struct evlist	*evlist;
-	struct perf_event_attr	attr;
+	struct evlist		*evlist;
 	char			*filter;
 	struct xyarray		*fd;
 	struct xyarray		*sample_id;
@@ -196,6 +196,11 @@ struct target;
 struct thread_map;
 struct record_opts;
 
+static inline struct perf_event_attr *evsel__attr(const struct evsel *evsel)
+{
+	return perf_evsel__attr(evsel->core);
+}
+
 static inline struct perf_cpu_map *perf_evsel__cpus(struct evsel *evsel)
 {
 	return evsel->cpus;
@@ -237,8 +242,7 @@ struct evsel *perf_evsel__new_cycles(bool precise);
 
 struct tep_event *event_format__new(const char *sys, const char *name);
 
-void evsel__init(struct evsel *evsel, struct perf_evsel *core,
-		 struct perf_event_attr *attr, int idx);
+void evsel__init(struct evsel *evsel, struct perf_evsel *core, int idx);
 void perf_evsel__exit(struct evsel *evsel);
 void evsel__delete(struct evsel *evsel);
 
@@ -327,21 +331,18 @@ u64 format_field__intval(struct tep_format_field *field, struct perf_sample *sam
 struct tep_format_field *perf_evsel__field(struct evsel *evsel, const char *name);
 
 #define perf_evsel__match(evsel, t, c)		\
-	(evsel->attr.type == PERF_TYPE_##t &&	\
-	 evsel->attr.config == PERF_COUNT_##c)
+	(perf_evsel__attr(evsel->core)->type == PERF_TYPE_##t &&	\
+	 perf_evsel__attr(evsel->core)->config == PERF_COUNT_##c)
 
 static inline bool perf_evsel__match2(struct evsel *e1,
 				      struct evsel *e2)
 {
-	return (e1->attr.type == e2->attr.type) &&
-	       (e1->attr.config == e2->attr.config);
-}
+	struct perf_event_attr *attr1 = perf_evsel__attr(e1->core);
+	struct perf_event_attr *attr2 = perf_evsel__attr(e2->core);
 
-#define perf_evsel__cmp(a, b)			\
-	((a) &&					\
-	 (b) &&					\
-	 (a)->attr.type == (b)->attr.type &&	\
-	 (a)->attr.config == (b)->attr.config)
+	return (attr1->type   == attr2->type) &&
+	       (attr1->config == attr2->config);
+}
 
 int perf_evsel__read(struct evsel *evsel, int cpu, int thread,
 		     struct perf_counts_values *count);
@@ -490,12 +491,12 @@ for ((_evsel) = _leader; 							\
 
 static inline bool perf_evsel__has_branch_callstack(const struct evsel *evsel)
 {
-	return evsel->attr.branch_sample_type & PERF_SAMPLE_BRANCH_CALL_STACK;
+	return perf_evsel__attr(evsel->core)->branch_sample_type & PERF_SAMPLE_BRANCH_CALL_STACK;
 }
 
 static inline bool evsel__has_callchain(const struct evsel *evsel)
 {
-	return (evsel->attr.sample_type & PERF_SAMPLE_CALLCHAIN) != 0;
+	return (perf_evsel__attr(evsel->core)->sample_type & PERF_SAMPLE_CALLCHAIN) != 0;
 }
 
 typedef int (*attr__fprintf_f)(FILE *, const char *, const char *, void *);

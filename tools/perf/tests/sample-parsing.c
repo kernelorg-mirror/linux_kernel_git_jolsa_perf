@@ -152,12 +152,10 @@ static bool samples_same(const struct perf_sample *s1,
 
 static int do_test(u64 sample_type, u64 sample_regs, u64 read_format)
 {
-	struct evsel evsel = {
-		.needs_swap = false,
-		.attr = {
-			.sample_type = sample_type,
-			.read_format = read_format,
-		},
+	struct evsel *evsel = NULL;
+	struct perf_event_attr attr = {
+		.sample_type = sample_type,
+		.read_format = read_format,
 	};
 	union perf_event *event;
 	union {
@@ -220,10 +218,10 @@ static int do_test(u64 sample_type, u64 sample_regs, u64 read_format)
 	int err, ret = -1;
 
 	if (sample_type & PERF_SAMPLE_REGS_USER)
-		evsel.attr.sample_regs_user = sample_regs;
+		attr.sample_regs_user = sample_regs;
 
 	if (sample_type & PERF_SAMPLE_REGS_INTR)
-		evsel.attr.sample_regs_intr = sample_regs;
+		attr.sample_regs_intr = sample_regs;
 
 	for (i = 0; i < sizeof(regs); i++)
 		*(i + (u8 *)regs) = i & 0xfe;
@@ -268,9 +266,15 @@ static int do_test(u64 sample_type, u64 sample_regs, u64 read_format)
 		goto out_free;
 	}
 
-	evsel.sample_size = __perf_evsel__sample_size(sample_type);
+	evsel = evsel__new(&attr);
+	if (!evsel) {
+		pr_debug("Failed to alloc core evsel\n");
+		goto out_free;
+	}
 
-	err = perf_evsel__parse_sample(&evsel, event, &sample_out);
+	evsel->sample_size = __perf_evsel__sample_size(sample_type);
+
+	err = perf_evsel__parse_sample(evsel, event, &sample_out);
 	if (err) {
 		pr_debug("%s failed for sample_type %#"PRIx64", error %d\n",
 			 "perf_evsel__parse_sample", sample_type, err);
@@ -288,6 +292,7 @@ out_free:
 	free(event);
 	if (ret && read_format)
 		pr_debug("read_format %#"PRIx64"\n", read_format);
+	evsel__delete(evsel);
 	return ret;
 }
 

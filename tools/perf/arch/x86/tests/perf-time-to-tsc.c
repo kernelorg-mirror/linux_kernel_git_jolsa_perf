@@ -79,9 +79,9 @@ int test__perf_time_to_tsc(struct test *test __maybe_unused, int subtest __maybe
 
 	evsel = perf_evlist__first(evlist);
 
-	evsel->attr.comm = 1;
-	evsel->attr.disabled = 1;
-	evsel->attr.enable_on_exec = 0;
+	evsel__attr(evsel)->comm = 1;
+	evsel__attr(evsel)->disabled = 1;
+	evsel__attr(evsel)->enable_on_exec = 0;
 
 	CHECK__(perf_evlist__open(evlist));
 

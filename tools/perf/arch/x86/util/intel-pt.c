@@ -130,8 +130,8 @@ static int intel_pt_read_config(struct perf_pmu *intel_pt_pmu, const char *str,
 		return -EINVAL;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->attr.type == intel_pt_pmu->type) {
-			*res = intel_pt_masked_bits(mask, evsel->attr.config);
+		if (evsel__attr(evsel)->type == intel_pt_pmu->type) {
+			*res = intel_pt_masked_bits(mask, evsel__attr(evsel)->config);
 			return 0;
 		}
 	}
@@ -282,7 +282,7 @@ static const char *intel_pt_find_filter(struct evlist *evlist,
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->attr.type == intel_pt_pmu->type)
+		if (evsel__attr(evsel)->type == intel_pt_pmu->type)
 			return evsel->filter;
 	}
 
@@ -523,37 +523,40 @@ out_err:
 static int intel_pt_validate_config(struct perf_pmu *intel_pt_pmu,
 				    struct evsel *evsel)
 {
+	struct perf_event_attr *attr;
 	int err;
 	char c;
 
 	if (!evsel)
 		return 0;
 
+	attr = evsel__attr(evsel);
+
 	/*
 	 * If supported, force pass-through config term (pt=1) even if user
 	 * sets pt=0, which avoids senseless kernel errors.
 	 */
 	if (perf_pmu__scan_file(intel_pt_pmu, "format/pt", "%c", &c) == 1 &&
-	    !(evsel->attr.config & 1)) {
+	    !(attr->config & 1)) {
 		pr_warning("pt=0 doesn't make sense, forcing pt=1\n");
-		evsel->attr.config |= 1;
+		attr->config |= 1;
 	}
 
 	err = intel_pt_val_config_term(intel_pt_pmu, "caps/cycle_thresholds",
 				       "cyc_thresh", "caps/psb_cyc",
-				       evsel->attr.config);
+				       attr->config);
 	if (err)
 		return err;
 
 	err = intel_pt_val_config_term(intel_pt_pmu, "caps/mtc_periods",
 				       "mtc_period", "caps/mtc",
-				       evsel->attr.config);
+				       attr->config);
 	if (err)
 		return err;
 
 	return intel_pt_val_config_term(intel_pt_pmu, "caps/psb_periods",
 					"psb_period", "caps/psb_cyc",
-					evsel->attr.config);
+					attr->config);
 }
 
 static int intel_pt_recording_options(struct auxtrace_record *itr,
@@ -574,13 +577,15 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 	ptr->snapshot_mode = opts->auxtrace_snapshot_mode;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->attr.type == intel_pt_pmu->type) {
+		struct perf_event_attr *attr = evsel__attr(evsel);
+
+		if (attr->type == intel_pt_pmu->type) {
 			if (intel_pt_evsel) {
 				pr_err("There may be only one " INTEL_PT_PMU_NAME " event\n");
 				return -EINVAL;
 			}
-			evsel->attr.freq = 0;
-			evsel->attr.sample_period = 1;
+			attr->freq = 0;
+			attr->sample_period = 1;
 			intel_pt_evsel = evsel;
 			opts->full_auxtrace = true;
 		}
@@ -678,7 +683,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 
 	intel_pt_parse_terms(&intel_pt_pmu->format, "tsc", &tsc_bit);
 
-	if (opts->full_auxtrace && (intel_pt_evsel->attr.config & tsc_bit))
+	if (opts->full_auxtrace && (evsel__attr(intel_pt_evsel)->config & tsc_bit))
 		have_timing_info = true;
 	else
 		have_timing_info = false;
@@ -701,9 +706,9 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 
 				switch_evsel = perf_evlist__last(evlist);
 
-				switch_evsel->attr.freq = 0;
-				switch_evsel->attr.sample_period = 1;
-				switch_evsel->attr.context_switch = 1;
+				evsel__attr(switch_evsel)->freq = 0;
+				evsel__attr(switch_evsel)->sample_period = 1;
+				evsel__attr(switch_evsel)->context_switch = 1;
 
 				switch_evsel->system_wide = true;
 				switch_evsel->no_aux_samples = true;
@@ -761,8 +766,8 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 
 		perf_evlist__set_tracking_event(evlist, tracking_evsel);
 
-		tracking_evsel->attr.freq = 0;
-		tracking_evsel->attr.sample_period = 1;
+		evsel__attr(tracking_evsel)->freq = 0;
+		evsel__attr(tracking_evsel)->sample_period = 1;
 
 		tracking_evsel->no_aux_samples = true;
 		if (need_immediate)
@@ -795,7 +800,7 @@ static int intel_pt_snapshot_start(struct auxtrace_record *itr)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(ptr->evlist, evsel) {
-		if (evsel->attr.type == ptr->intel_pt_pmu->type)
+		if (evsel__attr(evsel)->type == ptr->intel_pt_pmu->type)
 			return perf_evsel__disable(evsel);
 	}
 	return -EINVAL;
@@ -808,7 +813,7 @@ static int intel_pt_snapshot_finish(struct auxtrace_record *itr)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(ptr->evlist, evsel) {
-		if (evsel->attr.type == ptr->intel_pt_pmu->type)
+		if (evsel__attr(evsel)->type == ptr->intel_pt_pmu->type)
 			return perf_evsel__enable(evsel);
 	}
 	return -EINVAL;
@@ -1081,7 +1086,7 @@ static int intel_pt_read_finish(struct auxtrace_record *itr, int idx)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(ptr->evlist, evsel) {
-		if (evsel->attr.type == ptr->intel_pt_pmu->type)
+		if (evsel__attr(evsel)->type == ptr->intel_pt_pmu->type)
 			return perf_evlist__enable_event_idx(ptr->evlist, evsel,
 							     idx);
 	}

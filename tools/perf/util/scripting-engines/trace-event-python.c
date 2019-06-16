@@ -634,7 +634,7 @@ static void set_sample_read_in_dict(PyObject *dict_sample,
 					 struct perf_sample *sample,
 					 struct evsel *evsel)
 {
-	u64 read_format = evsel->attr.read_format;
+	u64 read_format = evsel__attr(evsel)->read_format;
 	PyObject *values;
 	unsigned int i;
 
@@ -705,7 +705,7 @@ static void set_regs_in_dict(PyObject *dict,
 			     struct perf_sample *sample,
 			     struct evsel *evsel)
 {
-	struct perf_event_attr *attr = &evsel->attr;
+	struct perf_event_attr *attr = evsel__attr(evsel);
 	char bf[512];
 
 	regs_map(&sample->intr_regs, attr->sample_regs_intr, bf, sizeof(bf));
@@ -735,7 +735,7 @@ static PyObject *get_perf_sample_dict(struct perf_sample *sample,
 		Py_FatalError("couldn't create Python dictionary");
 
 	pydict_set_item_string_decref(dict, "ev_name", _PyUnicode_FromString(perf_evsel__name(evsel)));
-	pydict_set_item_string_decref(dict, "attr", _PyBytes_FromStringAndSize((const char *)&evsel->attr, sizeof(evsel->attr)));
+	pydict_set_item_string_decref(dict, "attr", _PyBytes_FromStringAndSize((const char *) evsel__attr(evsel), sizeof(struct perf_event_attr)));
 
 	pydict_set_item_string_decref(dict_sample, "pid",
 			_PyLong_FromLong(sample->pid));
@@ -807,7 +807,7 @@ static void python_process_tracepoint(struct perf_sample *sample,
 
 	if (!event) {
 		snprintf(handler_name, sizeof(handler_name),
-			 "ug! no event found for type %" PRIu64, (u64)evsel->attr.config);
+			 "ug! no event found for type %" PRIu64, (u64) evsel__attr(evsel)->config);
 		Py_FatalError(handler_name);
 	}
 
@@ -1249,7 +1249,7 @@ static void python_process_event(union perf_event *event,
 {
 	struct tables *tables = &tables_global;
 
-	switch (evsel->attr.type) {
+	switch (evsel__attr(evsel)->type) {
 	case PERF_TYPE_TRACEPOINT:
 		python_process_tracepoint(sample, evsel, al);
 		break;

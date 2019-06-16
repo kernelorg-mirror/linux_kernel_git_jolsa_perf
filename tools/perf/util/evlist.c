@@ -311,8 +311,8 @@ perf_evlist__find_tracepoint_by_id(struct evlist *evlist, int id)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->attr.type   == PERF_TYPE_TRACEPOINT &&
-		    (int)evsel->attr.config == id)
+		if (evsel__attr(evsel)->type == PERF_TYPE_TRACEPOINT &&
+		    (int)evsel__attr(evsel)->config == id)
 			return evsel;
 	}
 
@@ -326,7 +326,7 @@ perf_evlist__find_tracepoint_by_name(struct evlist *evlist,
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if ((evsel->attr.type == PERF_TYPE_TRACEPOINT) &&
+		if ((evsel__attr(evsel)->type == PERF_TYPE_TRACEPOINT) &&
 		    (strcmp(evsel->name, name) == 0))
 			return evsel;
 	}
@@ -520,6 +520,7 @@ int perf_evlist__id_add_fd(struct evlist *evlist,
 			   struct evsel *evsel,
 			   int cpu, int thread, int fd)
 {
+	struct perf_event_attr *attr = evsel__attr(evsel);
 	u64 read_data[4] = { 0, };
 	int id_idx = 1; /* The first entry is the counter value */
 	u64 id;
@@ -541,13 +542,13 @@ int perf_evlist__id_add_fd(struct evlist *evlist,
 	if (perf_evlist__read_format(evlist) & PERF_FORMAT_GROUP)
 		return -1;
 
-	if (!(evsel->attr.read_format & PERF_FORMAT_ID) ||
+	if (!(attr->read_format & PERF_FORMAT_ID) ||
 	    read(fd, &read_data, sizeof(read_data)) == -1)
 		return -1;
 
-	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
+	if (attr->read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
 		++id_idx;
-	if (evsel->attr.read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+	if (attr->read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
 		++id_idx;
 
 	id = read_data[id_idx];
@@ -654,7 +655,7 @@ struct evsel *perf_evlist__event2evsel(struct evlist *evlist,
 	if (evlist->nr_entries == 1)
 		return first;
 
-	if (!first->attr.sample_id_all &&
+	if (!evsel__attr(first)->sample_id_all &&
 	    event->header.type != PERF_RECORD_SAMPLE)
 		return first;
 
@@ -759,7 +760,7 @@ static bool
 perf_evlist__should_poll(struct evlist *evlist __maybe_unused,
 			 struct evsel *evsel)
 {
-	if (evsel->attr.write_backward)
+	if (evsel__attr(evsel)->write_backward)
 		return false;
 	return true;
 }
@@ -774,12 +775,13 @@ static int perf_evlist__mmap_per_evsel(struct evlist *evlist, int idx,
 
 	evlist__for_each_entry(evlist, evsel) {
 		struct perf_mmap *maps = evlist->mmap;
+		struct perf_event_attr *attr = evsel__attr(evsel);
 		int *output = _output;
 		int fd;
 		int cpu;
 
 		mp->prot = PROT_READ | PROT_WRITE;
-		if (evsel->attr.write_backward) {
+		if (attr->write_backward) {
 			output = _output_overwrite;
 			maps = evlist->overwrite_mmap;
 
@@ -830,7 +832,7 @@ static int perf_evlist__mmap_per_evsel(struct evlist *evlist, int idx,
 			return -1;
 		}
 
-		if (evsel->attr.read_format & PERF_FORMAT_ID) {
+		if (attr->read_format & PERF_FORMAT_ID) {
 			if (perf_evlist__id_add_fd(evlist, evsel, cpu, thread,
 						   fd) < 0)
 				return -1;
@@ -1051,7 +1053,7 @@ int perf_evlist__mmap_ex(struct evlist *evlist, unsigned int pages,
 				   auxtrace_pages, auxtrace_overwrite);
 
 	evlist__for_each_entry(evlist, evsel) {
-		if ((evsel->attr.read_format & PERF_FORMAT_ID) &&
+		if ((evsel__attr(evsel)->read_format & PERF_FORMAT_ID) &&
 		    evsel->sample_id == NULL &&
 		    perf_evsel__alloc_id(evsel, perf_cpu_map__nr(cpus), perf_thread_map__nr(threads)) < 0)
 			return -ENOMEM;
@@ -1187,7 +1189,7 @@ int perf_evlist__set_tp_filter(struct evlist *evlist, const char *filter)
 	int err = 0;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->attr.type != PERF_TYPE_TRACEPOINT)
+		if (evsel__attr(evsel)->type != PERF_TYPE_TRACEPOINT)
 			continue;
 
 		err = perf_evsel__set_filter(evsel, filter);
@@ -1257,7 +1259,7 @@ u64 __perf_evlist__combined_sample_type(struct evlist *evlist)
 		return evlist->combined_sample_type;
 
 	evlist__for_each_entry(evlist, evsel)
-		evlist->combined_sample_type |= evsel->attr.sample_type;
+		evlist->combined_sample_type |= evsel__attr(evsel)->sample_type;
 
 	return evlist->combined_sample_type;
 }
@@ -1274,18 +1276,18 @@ u64 perf_evlist__combined_branch_type(struct evlist *evlist)
 	u64 branch_type = 0;
 
 	evlist__for_each_entry(evlist, evsel)
-		branch_type |= evsel->attr.branch_sample_type;
+		branch_type |= evsel__attr(evsel)->branch_sample_type;
 	return branch_type;
 }
 
 bool perf_evlist__valid_read_format(struct evlist *evlist)
 {
 	struct evsel *first = perf_evlist__first(evlist), *pos = first;
-	u64 read_format = first->attr.read_format;
-	u64 sample_type = first->attr.sample_type;
+	u64 read_format = evsel__attr(first)->read_format;
+	u64 sample_type = evsel__attr(first)->sample_type;
 
 	evlist__for_each_entry(evlist, pos) {
-		if (read_format != pos->attr.read_format)
+		if (read_format != evsel__attr(pos)->read_format)
 			return false;
 	}
 
@@ -1301,7 +1303,7 @@ bool perf_evlist__valid_read_format(struct evlist *evlist)
 u64 perf_evlist__read_format(struct evlist *evlist)
 {
 	struct evsel *first = perf_evlist__first(evlist);
-	return first->attr.read_format;
+	return evsel__attr(first)->read_format;
 }
 
 u16 perf_evlist__id_hdr_size(struct evlist *evlist)
@@ -1311,10 +1313,10 @@ u16 perf_evlist__id_hdr_size(struct evlist *evlist)
 	u64 sample_type;
 	u16 size = 0;
 
-	if (!first->attr.sample_id_all)
+	if (!evsel__attr(first)->sample_id_all)
 		goto out;
 
-	sample_type = first->attr.sample_type;
+	sample_type = evsel__attr(first)->sample_type;
 
 	if (sample_type & PERF_SAMPLE_TID)
 		size += sizeof(data->tid) * 2;
@@ -1342,7 +1344,7 @@ bool perf_evlist__valid_sample_id_all(struct evlist *evlist)
 	struct evsel *first = perf_evlist__first(evlist), *pos = first;
 
 	evlist__for_each_entry_continue(evlist, pos) {
-		if (first->attr.sample_id_all != pos->attr.sample_id_all)
+		if (evsel__attr(first)->sample_id_all != evsel__attr(pos)->sample_id_all)
 			return false;
 	}
 
@@ -1352,7 +1354,7 @@ bool perf_evlist__valid_sample_id_all(struct evlist *evlist)
 bool perf_evlist__sample_id_all(struct evlist *evlist)
 {
 	struct evsel *first = perf_evlist__first(evlist);
-	return first->attr.sample_id_all;
+	return evsel__attr(first)->sample_id_all;
 }
 
 void perf_evlist__set_selected(struct evlist *evlist,
@@ -1632,14 +1634,14 @@ int perf_evlist__strerror_open(struct evlist *evlist,
 		if (sysctl__read_int("kernel/perf_event_max_sample_rate", &max_freq) < 0)
 			goto out_default;
 
-		if (first->attr.sample_freq < (u64)max_freq)
+		if (evsel__attr(first)->sample_freq < (u64)max_freq)
 			goto out_default;
 
 		printed = scnprintf(buf, size,
 				    "Error:\t%s.\n"
 				    "Hint:\tCheck /proc/sys/kernel/perf_event_max_sample_rate.\n"
 				    "Hint:\tThe current value is %d and %" PRIu64 " is being requested.",
-				    emsg, max_freq, first->attr.sample_freq);
+				    emsg, max_freq, evsel__attr(first)->sample_freq);
 		break;
 	}
 	default:
@@ -1794,7 +1796,7 @@ bool perf_evlist__exclude_kernel(struct evlist *evlist)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (!evsel->attr.exclude_kernel)
+		if (!evsel__attr(evsel)->exclude_kernel)
 			return false;
 	}
 

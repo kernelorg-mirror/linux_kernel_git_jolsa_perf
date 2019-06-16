@@ -402,8 +402,8 @@ int db_export__sample(struct db_export *dbe, union perf_event *event,
 		}
 	}
 
-	if ((evsel->attr.sample_type & PERF_SAMPLE_ADDR) &&
-	    sample_addr_correlates_sym(&evsel->attr)) {
+	if ((evsel__attr(evsel)->sample_type & PERF_SAMPLE_ADDR) &&
+	    sample_addr_correlates_sym(evsel__attr(evsel))) {
 		struct addr_location addr_al;
 
 		thread__resolve(thread, &addr_al, sample);

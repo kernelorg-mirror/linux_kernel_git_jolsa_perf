@@ -489,13 +489,13 @@ static int write_event_desc(struct feat_fd *ff,
 	/*
 	 * size of perf_event_attr struct
 	 */
-	sz = (u32)sizeof(evsel->attr);
+	sz = (u32)sizeof(struct perf_event_attr);
 	ret = do_write(ff, &sz, sizeof(sz));
 	if (ret < 0)
 		return ret;
 
 	evlist__for_each_entry(evlist, evsel) {
-		ret = do_write(ff, &evsel->attr, sz);
+		ret = do_write(ff, evsel__attr(evsel), sz);
 		if (ret < 0)
 			return ret;
 		/*
@@ -1576,7 +1576,7 @@ static void free_event_desc(struct evsel *events)
 	if (!events)
 		return;
 
-	for (evsel = events; evsel->attr.size; evsel++) {
+	for (evsel = events; evsel__attr(evsel)->size; evsel++) {
 		zfree(&evsel->name);
 		zfree(&evsel->id);
 	}
@@ -1609,7 +1609,7 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 	if (!events)
 		goto error;
 
-	msz = sizeof(evsel->attr);
+	msz = sizeof(struct perf_event_attr);
 	if (sz < msz)
 		msz = sz;
 
@@ -1626,7 +1626,7 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 		if (ff->ph->needs_swap)
 			perf_event__attr_swap(buf);
 
-		memcpy(&evsel->attr, buf, msz);
+		memcpy(evsel__attr(evsel), buf, msz);
 
 		if (do_read_u32(ff, &nr))
 			goto error;
@@ -1684,7 +1684,7 @@ static void print_event_desc(struct feat_fd *ff, FILE *fp)
 		return;
 	}
 
-	for (evsel = events; evsel->attr.size; evsel++) {
+	for (evsel = events; evsel__attr(evsel)->size; evsel++) {
 		fprintf(fp, "# event : name = %s, ", evsel->name);
 
 		if (evsel->ids) {
@@ -1697,7 +1697,7 @@ static void print_event_desc(struct feat_fd *ff, FILE *fp)
 			fprintf(fp, " }");
 		}
 
-		perf_event_attr__fprintf(fp, &evsel->attr, __desc_attr__fprintf, NULL);
+		perf_event_attr__fprintf(fp, evsel__attr(evsel), __desc_attr__fprintf, NULL);
 
 		fputc('\n', fp);
 	}
@@ -2139,7 +2139,7 @@ process_event_desc(struct feat_fd *ff, void *data __maybe_unused)
 		ff->events = events;
 	}
 
-	for (evsel = events; evsel->attr.size; evsel++)
+	for (evsel = events; evsel__attr(evsel)->size; evsel++)
 		perf_evlist__set_event_name(session->evlist, evsel);
 
 	if (!session->data->is_pipe)
@@ -3072,7 +3072,7 @@ int perf_session__write_header(struct perf_session *session,
 
 	evlist__for_each_entry(evlist, evsel) {
 		f_attr = (struct perf_file_attr){
-			.attr = evsel->attr,
+			.attr = *evsel__attr(evsel),
 			.ids  = {
 				.offset = evsel->id_offset,
 				.size   = evsel->ids * sizeof(u64),
@@ -3495,9 +3495,9 @@ static int perf_evsel__prepare_tracepoint_event(struct evsel *evsel,
 		return -1;
 	}
 
-	event = tep_find_event(pevent, evsel->attr.config);
+	event = tep_find_event(pevent, evsel__attr(evsel)->config);
 	if (event == NULL) {
-		pr_debug("cannot find event format for %d\n", (int)evsel->attr.config);
+		pr_debug("cannot find event format for %d\n", (int) evsel__attr(evsel)->config);
 		return -1;
 	}
 
@@ -3518,7 +3518,7 @@ static int perf_evlist__prepare_tracepoint_events(struct evlist *evlist,
 	struct evsel *pos;
 
 	evlist__for_each_entry(evlist, pos) {
-		if (pos->attr.type == PERF_TYPE_TRACEPOINT &&
+		if (evsel__attr(pos)->type == PERF_TYPE_TRACEPOINT &&
 		    perf_evsel__prepare_tracepoint_event(pos, pevent))
 			return -1;
 	}
@@ -3921,7 +3921,7 @@ int perf_event__synthesize_attrs(struct perf_tool *tool,
 	int err = 0;
 
 	evlist__for_each_entry(evlist, evsel) {
-		err = perf_event__synthesize_attr(tool, &evsel->attr, evsel->ids,
+		err = perf_event__synthesize_attr(tool, evsel__attr(evsel), evsel->ids,
 						  evsel->id, process);
 		if (err) {
 			pr_debug("failed to create perf header attribute\n");

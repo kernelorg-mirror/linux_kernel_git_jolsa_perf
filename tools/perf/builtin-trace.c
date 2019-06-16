@@ -2002,8 +2002,8 @@ static int trace__resolve_callchain(struct trace *trace, struct evsel *evsel,
 				    struct callchain_cursor *cursor)
 {
 	struct addr_location al;
-	int max_stack = evsel->attr.sample_max_stack ?
-			evsel->attr.sample_max_stack :
+	int max_stack = evsel__attr(evsel)->sample_max_stack ?
+			evsel__attr(evsel)->sample_max_stack :
 			trace->max_stack;
 	int err;
 
@@ -2396,6 +2396,7 @@ static int trace__pgfault(struct trace *trace,
 			  union perf_event *event __maybe_unused,
 			  struct perf_sample *sample)
 {
+	struct perf_event_attr *attr = evsel__attr(evsel);
 	struct thread *thread;
 	struct addr_location al;
 	char map_type = 'd';
@@ -2418,7 +2419,7 @@ static int trace__pgfault(struct trace *trace,
 	if (ttrace == NULL)
 		goto out_put;
 
-	if (evsel->attr.config == PERF_COUNT_SW_PAGE_FAULTS_MAJ)
+	if (attr->config == PERF_COUNT_SW_PAGE_FAULTS_MAJ)
 		ttrace->pfmaj++;
 	else
 		ttrace->pfmin++;
@@ -2431,7 +2432,7 @@ static int trace__pgfault(struct trace *trace,
 	trace__fprintf_entry_head(trace, thread, 0, true, sample->time, trace->output);
 
 	fprintf(trace->output, "%sfault [",
-		evsel->attr.config == PERF_COUNT_SW_PAGE_FAULTS_MAJ ?
+		attr->config == PERF_COUNT_SW_PAGE_FAULTS_MAJ ?
 		"maj" : "min");
 
 	print_location(trace->output, sample, &al, false, true);
@@ -2479,7 +2480,7 @@ static void trace__set_base_time(struct trace *trace,
 	 * appears in our event stream (vfs_getname comes to mind).
 	 */
 	if (trace->base_time == 0 && !trace->full_time &&
-	    (evsel->attr.sample_type & PERF_SAMPLE_TIME))
+	    (evsel__attr(evsel)->sample_type & PERF_SAMPLE_TIME))
 		trace->base_time = sample->time;
 }
 
@@ -2638,7 +2639,7 @@ static void trace__handle_event(struct trace *trace, union perf_event *event, st
 
 	trace__set_base_time(trace, evsel, sample);
 
-	if (evsel->attr.type == PERF_TYPE_TRACEPOINT &&
+	if (evsel__attr(evsel)->type == PERF_TYPE_TRACEPOINT &&
 	    sample->raw_data == NULL) {
 		fprintf(trace->output, "%s sample with no payload for tid: %d, cpu %d, raw_size=%d, skipping...\n",
 		       perf_evsel__name(evsel), sample->tid,
@@ -2684,7 +2685,7 @@ static int trace__add_syscall_newtp(struct trace *trace)
 		 * leading to the syscall, allow overriding that for
 		 * debugging reasons using --kernel_syscall_callchains
 		 */
-		sys_exit->attr.exclude_callchain_kernel = 1;
+		evsel__attr(sys_exit)->exclude_callchain_kernel = 1;
 	}
 
 	trace->syscalls.events.sys_enter = sys_enter;
@@ -3097,18 +3098,18 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 
 	trace->multiple_threads = perf_thread_map__pid(evlist->threads, 0) == -1 ||
 				  perf_thread_map__nr(evlist->threads) > 1 ||
-				  perf_evlist__first(evlist)->attr.inherit;
+				  evsel__attr(perf_evlist__first(evlist))->inherit;
 
 	/*
-	 * Now that we already used evsel->attr to ask the kernel to setup the
-	 * events, lets reuse evsel->attr.sample_max_stack as the limit in
+	 * Now that we already used evsel->core.attr to ask the kernel to setup the
+	 * events, lets reuse evsel->core.attr.sample_max_stack as the limit in
 	 * trace__resolve_callchain(), allowing per-event max-stack settings
 	 * to override an explicitly set --max-stack global setting.
 	 */
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel__has_callchain(evsel) &&
-		    evsel->attr.sample_max_stack == 0)
-			evsel->attr.sample_max_stack = trace->max_stack;
+		    evsel__attr(evsel)->sample_max_stack == 0)
+			evsel__attr(evsel)->sample_max_stack = trace->max_stack;
 	}
 again:
 	before = trace->nr_events;
@@ -3301,10 +3302,12 @@ static int trace__replay(struct trace *trace)
 	}
 
 	evlist__for_each_entry(session->evlist, evsel) {
-		if (evsel->attr.type == PERF_TYPE_SOFTWARE &&
-		    (evsel->attr.config == PERF_COUNT_SW_PAGE_FAULTS_MAJ ||
-		     evsel->attr.config == PERF_COUNT_SW_PAGE_FAULTS_MIN ||
-		     evsel->attr.config == PERF_COUNT_SW_PAGE_FAULTS))
+		struct perf_event_attr *attr = evsel__attr(evsel);
+
+		if (attr->type == PERF_TYPE_SOFTWARE &&
+		    (attr->config == PERF_COUNT_SW_PAGE_FAULTS_MAJ ||
+		     attr->config == PERF_COUNT_SW_PAGE_FAULTS_MIN ||
+		     attr->config == PERF_COUNT_SW_PAGE_FAULTS))
 			evsel->handler = trace__pgfault;
 	}
 
