@@ -22,3 +22,13 @@ void perf_evsel__delete(struct perf_evsel *evsel)
 {
 	free(evsel);
 }
+
+void perf_evsel__set_priv(struct perf_evsel *evsel, void *priv)
+{
+	evsel->priv = priv;
+}
+
+void* perf_evsel__priv(struct perf_evsel *evsel)
+{
+	return evsel->priv;
+}

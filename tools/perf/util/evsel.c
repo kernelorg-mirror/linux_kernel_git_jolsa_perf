@@ -228,6 +228,7 @@ void evsel__init(struct evsel *evsel, struct perf_evsel *core,
 		 struct perf_event_attr *attr, int idx)
 {
 	evsel->core	   = core;
+	perf_evsel__set_priv(core, evsel);
 	evsel->idx	   = idx;
 	evsel->tracking	   = !idx;
 	evsel->attr	   = *attr;

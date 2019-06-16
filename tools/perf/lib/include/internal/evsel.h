@@ -3,6 +3,7 @@
 
 struct perf_evsel {
 	struct list_head	 node;
+	void			*priv;
 };
 
 #endif /* __LIBPERF_INTERNAL_EVSEL_H */
