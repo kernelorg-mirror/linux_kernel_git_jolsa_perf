@@ -3534,6 +3534,8 @@ int cmd_script(int argc, const char **argv)
 		NULL
 	};
 
+	perf_guest = true;
+
 	perf_set_singlethreaded();
 
 	setup_scripting();
