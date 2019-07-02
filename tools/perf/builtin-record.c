@@ -2496,7 +2496,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			trigger_error(&auxtrace_snapshot_trigger);
 			trigger_error(&switch_output_trigger);
 			err = -1;
-			goto out_child;
+			goto out_child_drain;
 		}
 
 		if (auxtrace_record__snapshot_started) {
@@ -2506,7 +2506,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			if (trigger_is_error(&auxtrace_snapshot_trigger)) {
 				pr_err("AUX area tracing snapshot failed\n");
 				err = -1;
-				goto out_child;
+				goto out_child_drain;
 			}
 		}
 
@@ -2540,7 +2540,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 				pr_err("Failed to switch to new file\n");
 				trigger_error(&switch_output_trigger);
 				err = fd;
-				goto out_child;
+				goto out_child_drain;
 			}
 
 			/* re-arm the alarm */
@@ -2599,7 +2599,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		const char *emsg = str_error_r(workload_exec_errno, msg, sizeof(msg));
 		pr_err("Workload failed: %s\n", emsg);
 		err = -1;
-		goto out_child;
+		goto out_child_drain;
 	}
 
 	if (!quiet)
@@ -2608,10 +2608,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	if (target__none(&rec->opts.target))
 		record__synthesize_workload(rec, true);
 
-out_child:
+out_child_drain:
 	record__mmap_read_all(rec, true);
 	record__aio_mmap_read_sync(rec);
 
+out_child:
 	if (rec->session->bytes_transferred && rec->session->bytes_compressed) {
 		ratio = (float)rec->session->bytes_transferred/(float)rec->session->bytes_compressed;
 		session->header.env.comp_ratio = ratio + 0.5;
