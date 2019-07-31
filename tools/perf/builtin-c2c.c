@@ -12,12 +12,14 @@
  */
 #include <errno.h>
 #include <inttypes.h>
+#include <search.h>
 #include <linux/compiler.h>
 #include <linux/kernel.h>
 #include <linux/stringify.h>
 #include <linux/zalloc.h>
 #include <asm/bug.h>
 #include <sys/param.h>
+#include <sys/mman.h>
 #include "debug.h"
 #include "builtin.h"
 #include <subcmd/parse-options.h>
@@ -34,6 +36,7 @@
 #include "thread.h"
 #include "mem2node.h"
 #include "symbol.h"
+#include "map.h"
 
 struct c2c_hists {
 	struct hists		hists;
@@ -47,6 +50,14 @@ struct compute_stats {
 	struct stats		 load;
 };
 
+#define MAX_PADDR 50
+
+enum shared_mem {
+	SHARED_MEM__UNKNOWN	= -1,
+	SHARED_MEM__NO		=  0,
+	SHARED_MEM__YES		=  1,
+};
+
 struct c2c_hist_entry {
 	struct c2c_hists	*hists;
 	struct c2c_stats	 stats;
@@ -57,9 +68,13 @@ struct c2c_hist_entry {
 
 	struct compute_stats	 cstats;
 
-	unsigned long		 paddr;
+	unsigned long		 paddr[MAX_PADDR];
+	void			*paddr_root;
 	unsigned long		 paddr_cnt;
 	bool			 paddr_zero;
+
+	enum shared_mem		 shared_mem;
+
 	char			*nodestr;
 
 	/*
@@ -87,6 +102,7 @@ struct perf_c2c {
 	bool			 use_stdio;
 	bool			 stats_only;
 	bool			 symbol_full;
+	bool			 merge_phys;
 
 	/* HITM shared clines stats */
 	struct c2c_stats	hitm_stats;
@@ -144,6 +160,7 @@ static void *c2c_he_zalloc(size_t size)
 	init_stats(&c2c_he->cstats.rmt_hitm);
 	init_stats(&c2c_he->cstats.load);
 
+	c2c_he->shared_mem = SHARED_MEM__UNKNOWN;
 	return &c2c_he->he;
 }
 
@@ -157,6 +174,7 @@ static void c2c_he_free(void *he)
 		free(c2c_he->hists);
 	}
 
+	tdestroy(c2c_he->paddr_root, NULL);
 	free(c2c_he->cpuset);
 	free(c2c_he->nodeset);
 	free(c2c_he->nodestr);
@@ -209,26 +227,62 @@ static void c2c_he__set_cpu(struct c2c_hist_entry *c2c_he,
 	set_bit(sample->cpu, c2c_he->cpuset);
 }
 
-static void c2c_he__set_node(struct c2c_hist_entry *c2c_he,
-			     struct perf_sample *sample)
+static bool is_shared_memory(struct map *map)
 {
-	int node;
+        return map->flags & MAP_SHARED && map->dso &&
+	       !strncmp(map->dso->name, "/SYSV", sizeof("/SYSV") - 1);
+}
+
+static void
+c2c_he__resolve_shared_mem(struct c2c_hist_entry *c2c_he)
+{
+	if (c2c_he->shared_mem != SHARED_MEM__UNKNOWN)
+		c2c_he->shared_mem = is_shared_memory(c2c_he->he.mem_info->daddr.map);
+}
+
+static int paddr_cmp(const void *a, const void *b)
+{
+	unsigned long pa = (unsigned long) a;
+	unsigned long pb = (unsigned long) b;
+
+	return pa - pb;
+}
+
+static void c2c_he__add_paddr(struct c2c_hist_entry *c2c_he,
+			      struct perf_sample *sample)
+{
+	c2c_he__resolve_shared_mem(c2c_he);
 
 	if (!sample->phys_addr) {
 		c2c_he->paddr_zero = true;
 		return;
 	}
 
+	if (c2c_he->shared_mem == SHARED_MEM__NO)
+		return;
+
+	if (WARN_ON_ONCE(c2c_he->paddr_cnt == MAX_PADDR))
+		return;
+
+	tsearch((const void*) sample->phys_addr, &c2c_he->paddr_root, paddr_cmp);
+
+	c2c_he->paddr[c2c_he->paddr_cnt] = sample->phys_addr;
+	c2c_he->paddr_cnt++;
+}
+
+static void c2c_he__set_node(struct c2c_hist_entry *c2c_he,
+			     struct perf_sample *sample)
+{
+	int node;
+
+	if (!sample->phys_addr)
+		return;
+
 	node = mem2node__node(&c2c.mem2node, sample->phys_addr);
 	if (WARN_ONCE(node < 0, "WARNING: failed to find node\n"))
 		return;
 
 	set_bit(node, c2c_he->nodeset);
-
-	if (c2c_he->paddr != sample->phys_addr) {
-		c2c_he->paddr_cnt++;
-		c2c_he->paddr = sample->phys_addr;
-	}
 }
 
 static void compute_stats(struct c2c_hist_entry *c2c_he,
@@ -295,6 +349,9 @@ static int process_sample_event(struct perf_tool *tool __maybe_unused,
 
 	c2c_he__set_cpu(c2c_he, sample);
 	c2c_he__set_node(c2c_he, sample);
+
+	if (c2c.merge_phys)
+		c2c_he__add_paddr(c2c_he, sample);
 
 	hists__inc_nr_samples(&c2c_hists->hists, he->filtered);
 	ret = hist_entry__append_callchain(he, sample);
