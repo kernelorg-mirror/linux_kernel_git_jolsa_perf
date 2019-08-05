@@ -87,6 +87,7 @@ struct perf_c2c {
 	bool			 use_stdio;
 	bool			 stats_only;
 	bool			 symbol_full;
+	bool			 phys;
 
 	/* HITM shared clines stats */
 	struct c2c_stats	hitm_stats;
@@ -474,11 +475,21 @@ static int c2c_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	__s;						\
 })
 
+
+static int64_t
+sort__dcacheline_phys_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	return left->mem_info->daddr.phys_addr - right->mem_info->daddr.phys_addr;
+}
+
 static int64_t
 dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	       struct hist_entry *left, struct hist_entry *right)
 {
-	return sort__dcacheline_cmp(left, right);
+	if (c2c.phys)
+		return sort__dcacheline_phys_cmp(left, right);
+	else
+		return sort__dcacheline_cmp(left, right);
 }
 
 static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
@@ -488,8 +499,12 @@ static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	int width = c2c_width(fmt, hpp, he->hists);
 	char buf[20];
 
-	if (he->mem_info)
-		addr = cl_address(he->mem_info->daddr.addr);
+	if (he->mem_info) {
+		if (c2c.phys)
+			addr = cl_address(he->mem_info->daddr.phys_addr);
+		else
+			addr = cl_address(he->mem_info->daddr.addr);
+	}
 
 	return scnprintf(hpp->buf, hpp->size, "%*s", width, HEX_STR(buf, addr));
 }
@@ -2525,11 +2540,15 @@ static int ui_quirks(void)
 	/* Fix the zero line for dcacheline column. */
 	buf = fill_line("Cacheline", dim_dcacheline.width +
 				     dim_dcacheline_node.width +
-				     dim_dcacheline_count.width + 4);
+				     (c2c.phys ? 2 : dim_dcacheline_count.width + 4));
 	if (!buf)
 		return -ENOMEM;
 
 	dim_dcacheline.header.line[0].text = buf;
+	if (c2c.phys) {
+		dim_dcacheline.header.line[0].span = 1;
+		dim_dcacheline.header.line[1].text = "Phys Address";
+	}
 
 	/* Fix the zero line for offset column. */
 	buf = fill_line(nodestr, dim_offset.width +
@@ -2650,13 +2669,14 @@ static int build_cl_output(char *cl_sort, bool no_source)
 	}
 
 	if (asprintf(&c2c.cl_output,
-		"%s%s%s%s%s%s%s%s%s%s",
+		"%s%s%s%s%s%s%s%s%s%s%s",
 		c2c.use_stdio ? "cl_num_empty," : "",
 		"percent_rmt_hitm,"
 		"percent_lcl_hitm,"
 		"percent_stores_l1hit,"
 		"percent_stores_l1miss,"
-		"offset,offset_node,dcacheline_count,",
+		"offset,offset_node,",
+		c2c.phys ? "" : "dcacheline_count,",
 		add_pid   ? "pid," : "",
 		add_tid   ? "tid," : "",
 		add_iaddr ? "iaddr," : "",
@@ -2711,6 +2731,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	char callchain_default_opt[] = CALLCHAIN_DEFAULT_OPT;
 	const char *display = NULL;
 	const char *coalesce = NULL;
+	char *output;
 	bool no_source = false;
 	const struct option options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
@@ -2730,6 +2751,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		    "Do not display Source Line column"),
 	OPT_BOOLEAN(0, "show-all", &c2c.show_all,
 		    "Show all captured HITM lines."),
+	OPT_BOOLEAN(0, "phys", &c2c.phys, "Merge shared cachelines."),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", &callchain_param,
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
@@ -2815,11 +2837,11 @@ static int perf_c2c__report(int argc, const char **argv)
 		goto out_mem2node;
 	}
 
-	c2c_hists__reinit(&c2c.hists,
+	if (asprintf(&output, "%s%s%s",
 			"cl_idx,"
 			"dcacheline,"
-			"dcacheline_node,"
-			"dcacheline_count,"
+			"dcacheline_node,",
+			c2c.phys ? "" : "dcacheline_count,",
 			"tot_recs,"
 			"percent_hitm,"
 			"tot_hitm,lcl_hitm,rmt_hitm,"
@@ -2828,10 +2850,15 @@ static int perf_c2c__report(int argc, const char **argv)
 			"ld_llcmiss,"
 			"tot_loads,"
 			"ld_fbhit,ld_l1hit,ld_l2hit,"
-			"ld_lclhit,ld_rmthit",
+			"ld_lclhit,ld_rmthit") < 0)
+		goto out_mem2node;
+
+	c2c_hists__reinit(&c2c.hists, output,
 			c2c.display == DISPLAY_TOT ? "tot_hitm" :
 			c2c.display == DISPLAY_LCL ? "lcl_hitm" : "rmt_hitm"
 			);
+
+	free(output);
 
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
