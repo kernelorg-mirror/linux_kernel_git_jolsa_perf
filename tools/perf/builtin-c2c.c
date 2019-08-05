@@ -532,10 +532,67 @@ static int c2c_header(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 })
 
 static int64_t
+sort__dcacheline_phys_cmp(struct hist_entry *left, struct hist_entry *right)
+{
+	struct c2c_hist_entry *c2c_left, *c2c_right;
+	unsigned long right_paddr = 0;
+	unsigned long left_paddr  = 0;
+	unsigned long i;
+
+	c2c_left  = container_of(left,  struct c2c_hist_entry, he);
+	c2c_right = container_of(right, struct c2c_hist_entry, he);
+
+	c2c_he__resolve_shared_mem(c2c_left);
+	c2c_he__resolve_shared_mem(c2c_right);
+
+	if (c2c_left->shared_mem  != SHARED_MEM__UNKNOWN &&
+	    c2c_right->shared_mem != SHARED_MEM__UNKNOWN)
+		return 1;
+
+	if (!c2c_right->paddr_cnt)
+		right_paddr = c2c_right->he.mem_info->daddr.phys_addr;
+
+	if (!c2c_left->paddr_cnt)
+		left_paddr = c2c_left->he.mem_info->daddr.phys_addr;
+
+	if (right_paddr && left_paddr)
+		return left_paddr - right_paddr;
+
+	if (right_paddr)
+		return tfind((const void*) right_paddr, &c2c_left->paddr_root, paddr_cmp) == NULL;
+
+	if (left_paddr)
+		return tfind((const void*) left_paddr, &c2c_right->paddr_root, paddr_cmp) == NULL;
+
+	if (c2c_right->paddr_cnt > c2c_left->paddr_cnt) {
+		struct c2c_hist_entry *tmp = c2c_left;
+
+		c2c_left = c2c_right;
+		c2c_right = tmp;
+	}
+
+	for (i = 0; i < c2c_right->paddr_cnt; i++) {
+		unsigned long paddr = c2c_right->paddr[i];
+
+		if (tfind((const void*) paddr, &c2c_left->paddr_root, paddr_cmp))
+			return 0;
+	}
+
+	return 1;
+}
+
+static int64_t
 dcacheline_cmp(struct perf_hpp_fmt *fmt __maybe_unused,
 	       struct hist_entry *left, struct hist_entry *right)
 {
-	return sort__dcacheline_cmp(left, right);
+	int64_t ret;
+
+	if (c2c.merge_phys)
+		ret = sort__dcacheline_phys_cmp(left, right);
+	else
+		ret = sort__dcacheline_cmp(left, right);
+
+	return ret;
 }
 
 static int dcacheline_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
@@ -2787,6 +2844,8 @@ static int perf_c2c__report(int argc, const char **argv)
 		    "Do not display Source Line column"),
 	OPT_BOOLEAN(0, "show-all", &c2c.show_all,
 		    "Show all captured HITM lines."),
+	OPT_BOOLEAN(0, "merge-phys", &c2c.merge_phys,
+		    "Merge shared cachelines."),
 	OPT_CALLBACK_DEFAULT('g', "call-graph", &callchain_param,
 			     "print_type,threshold[,print_limit],order,sort_key[,branch],value",
 			     callchain_help, &parse_callchain_opt,
