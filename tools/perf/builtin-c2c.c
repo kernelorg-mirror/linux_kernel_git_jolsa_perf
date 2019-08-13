@@ -18,6 +18,7 @@
 #include <linux/zalloc.h>
 #include <asm/bug.h>
 #include <sys/param.h>
+#include <sys/mman.h>
 #include "debug.h"
 #include "builtin.h"
 #include <subcmd/parse-options.h>
@@ -34,6 +35,13 @@
 #include "thread.h"
 #include "mem2node.h"
 #include "symbol.h"
+#include "map.h"
+
+enum shared_mem {
+	SHARED_MEM__UNKNOWN	= -1,
+	SHARED_MEM__NO		=  0,
+	SHARED_MEM__YES		=  1,
+};
 
 struct c2c_hists {
 	struct hists		hists;
@@ -61,6 +69,8 @@ struct c2c_hist_entry {
 	unsigned long		 paddr_cnt;
 	bool			 paddr_zero;
 	char			*nodestr;
+
+	enum shared_mem		 shared_mem;
 
 	/*
 	 * must be at the end,
@@ -243,6 +253,12 @@ static void compute_stats(struct c2c_hist_entry *c2c_he,
 		update_stats(&cstats->lcl_hitm, weight);
 	else if (stats->load)
 		update_stats(&cstats->load, weight);
+}
+
+static bool is_shared_memory(struct map *map)
+{
+	return map && map->flags & MAP_SHARED && map->dso &&
+	       !strncmp(map->dso->name, "/SYSV", sizeof("/SYSV") - 1);
 }
 
 static int process_sample_event(struct perf_tool *tool __maybe_unused,
@@ -1228,6 +1244,28 @@ cl_idx_empty_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return scnprintf(hpp->buf, hpp->size, "%*s", width, "");
 }
 
+static void
+c2c_he__resolve_shared_mem(struct c2c_hist_entry *c2c_he)
+{
+	if (c2c_he->shared_mem != SHARED_MEM__UNKNOWN)
+		c2c_he->shared_mem = is_shared_memory(c2c_he->he.mem_info->daddr.map);
+}
+
+static int
+cl_shared_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[10];
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_he__resolve_shared_mem(c2c_he);
+
+	scnprintf(buf, 10, c2c_he->shared_mem == SHARED_MEM__YES ? "S" : " ");
+	return scnprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -1622,6 +1660,14 @@ static struct c2c_dimension dim_dcacheline_num_empty = {
 	.width		= 5,
 };
 
+static struct c2c_dimension dim_dcacheline_shared = {
+	.header		= HEADER_LOW(""),
+	.name		= "cl_shared",
+	.cmp		= empty_cmp,
+	.entry		= cl_shared_entry,
+	.width		= 1,
+};
+
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_dcacheline_node,
@@ -1667,6 +1713,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline_idx,
 	&dim_dcacheline_num,
 	&dim_dcacheline_num_empty,
+	&dim_dcacheline_shared,
 	NULL,
 };
 
@@ -2817,6 +2864,7 @@ static int perf_c2c__report(int argc, const char **argv)
 
 	c2c_hists__reinit(&c2c.hists,
 			"cl_idx,"
+			"cl_shared,"
 			"dcacheline,"
 			"dcacheline_node,"
 			"dcacheline_count,"
