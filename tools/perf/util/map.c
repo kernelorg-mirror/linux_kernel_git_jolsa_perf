@@ -35,8 +35,12 @@ static inline int is_anon_memory(const char *filename, u32 flags)
 static inline int is_no_dso_memory(const char *filename)
 {
 	return !strncmp(filename, "[stack", 6) ||
-	       !strncmp(filename, "/SYSV",5)   ||
 	       !strcmp(filename, "[heap]");
+}
+
+static inline int is_shared_memory(const char *filename)
+{
+	return !strncmp(filename, "/SYSV",5);
 }
 
 static inline int is_android_lib(const char *filename)
@@ -153,12 +157,13 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 	if (map != NULL) {
 		char newfilename[PATH_MAX];
 		struct dso *dso;
-		int anon, no_dso, vdso, android;
+		int anon, no_dso, vdso, android, shared;
 
 		android = is_android_lib(filename);
 		anon = is_anon_memory(filename, flags);
 		vdso = is_vdso_map(filename);
 		no_dso = is_no_dso_memory(filename);
+		shared = is_shared_memory(filename);
 
 		map->maj = d_maj;
 		map->min = d_min;
@@ -200,7 +205,7 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 
 		map__init(map, start, start + len, pgoff, dso);
 
-		if (anon || no_dso) {
+		if (anon || no_dso || shared) {
 			map->map_ip = map->unmap_ip = identity__map_ip;
 
 			/*
