@@ -1266,6 +1266,28 @@ cl_shared_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
 	return scnprintf(hpp->buf, hpp->size, "%*s", width, buf);
 }
 
+static int
+cl_map_entry(struct perf_hpp_fmt *fmt, struct perf_hpp *hpp,
+		struct hist_entry *he)
+{
+	struct c2c_hist_entry *c2c_he;
+	int width = c2c_width(fmt, hpp, he->hists);
+	char buf[100];
+	struct map *map = he->mem_info->daddr.map;
+
+	c2c_he = container_of(he, struct c2c_hist_entry, he);
+	c2c_he__resolve_shared_mem(c2c_he);
+
+	if (map) {
+		scnprintf(buf, 100, "%lx-%lx %s", map->start, map->end,
+			  map->dso ? map->dso->name : "N/A");
+	} else {
+		scnprintf(buf, 100, "N/A");
+	}
+
+	return scnprintf(hpp->buf, hpp->size, "%*s", width, buf);
+}
+
 #define HEADER_LOW(__h)			\
 	{				\
 		.line[1] = {		\
@@ -1668,6 +1690,14 @@ static struct c2c_dimension dim_dcacheline_shared = {
 	.width		= 1,
 };
 
+static struct c2c_dimension dim_dcacheline_map = {
+	.header		= HEADER_LOW("Map"),
+	.name		= "cl_map",
+	.cmp		= empty_cmp,
+	.entry		= cl_map_entry,
+	.width		= 3,
+};
+
 static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline,
 	&dim_dcacheline_node,
@@ -1714,6 +1744,7 @@ static struct c2c_dimension *dimensions[] = {
 	&dim_dcacheline_num,
 	&dim_dcacheline_num_empty,
 	&dim_dcacheline_shared,
+	&dim_dcacheline_map,
 	NULL,
 };
 
@@ -2876,7 +2907,7 @@ static int perf_c2c__report(int argc, const char **argv)
 			"ld_llcmiss,"
 			"tot_loads,"
 			"ld_fbhit,ld_l1hit,ld_l2hit,"
-			"ld_lclhit,ld_rmthit",
+			"ld_lclhit,ld_rmthit,cl_map",
 			c2c.display == DISPLAY_TOT ? "tot_hitm" :
 			c2c.display == DISPLAY_LCL ? "lcl_hitm" : "rmt_hitm"
 			);
