@@ -1756,7 +1756,7 @@ static void ui_browser__hists_init_top(struct ui_browser *browser)
 
 static unsigned int hist_browser__refresh(struct ui_browser *browser)
 {
-	unsigned row = 0;
+	unsigned row = 0, entry = 0;
 	struct rb_node *nd;
 	struct hist_browser *hb = container_of(browser, struct hist_browser, b);
 
@@ -1796,6 +1796,9 @@ static unsigned int hist_browser__refresh(struct ui_browser *browser)
 		}
 
 		if (row == browser->rows)
+			break;
+
+		if (++entry == hb->nr_non_filtered_entries)
 			break;
 	}
 
