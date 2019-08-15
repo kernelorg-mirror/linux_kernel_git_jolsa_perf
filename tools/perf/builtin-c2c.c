@@ -1124,10 +1124,6 @@ node_entry(struct perf_hpp_fmt *fmt __maybe_unused, struct perf_hpp *hpp,
 		bitmap_and(set, c2c_he->cpuset, c2c.nodes[node], c2c.cpus_cnt);
 
 		if (!bitmap_weight(set, c2c.cpus_cnt)) {
-			if (c2c.node_info == 1) {
-				ret = scnprintf(hpp->buf, hpp->size, "%21s", " ");
-				advance_hpp(hpp, ret);
-			}
 			continue;
 		}
 
