@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <sys/mman.h>
+#include <linux/zalloc.h>
 #include <internal/mmap.h>
 #include <internal/lib.h>
 
@@ -10,6 +11,16 @@ void perf_mmap__init(struct perf_mmap *map, bool overwrite,
 	map->overwrite = overwrite;
 	map->unmap_cb  = unmap_cb;
 	refcount_set(&map->refcnt, 0);
+}
+
+struct perf_mmap *perf_mmap__new(bool overwrite, libperf_unmap_cb_t unmap_cb)
+{
+	struct perf_mmap *map = zalloc(sizeof(*map));
+
+	if (map)
+		perf_mmap__init(map, overwrite, unmap_cb);
+
+	return map;
 }
 
 size_t perf_mmap__mmap_len(struct perf_mmap *map)
