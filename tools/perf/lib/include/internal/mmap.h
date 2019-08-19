@@ -11,6 +11,7 @@
 #define PERF_SAMPLE_MAX_SIZE (1 << 16)
 
 struct perf_mmap;
+union perf_event;
 
 typedef void (*libperf_unmap_cb_t)(struct perf_mmap *map);
 
