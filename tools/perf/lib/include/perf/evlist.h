@@ -38,4 +38,11 @@ LIBPERF_API int perf_evlist__filter_pollfd(struct perf_evlist *evlist,
 LIBPERF_API int perf_evlist__mmap(struct perf_evlist *evlist, int pages);
 LIBPERF_API void perf_evlist__munmap(struct perf_evlist *evlist);
 
+LIBPERF_API struct perf_mmap *perf_evlist__next_mmap(struct perf_evlist *evlist,
+						     struct perf_mmap *map);
+#define perf_evlist__for_each_mmap(evlist, pos)			\
+	for ((pos) = perf_evlist__next_mmap((evlist), NULL);	\
+	     (pos) != NULL;					\
+	     (pos) = perf_evlist__next_mmap((evlist), (pos)))
+
 #endif /* __LIBPERF_EVLIST_H */

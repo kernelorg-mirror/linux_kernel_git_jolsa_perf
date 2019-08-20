@@ -281,3 +281,9 @@ union perf_event *perf_mmap__read_event(struct perf_mmap *map)
 
 	return event;
 }
+
+void perf_mmap__link(struct perf_mmap *prev, struct perf_mmap *map)
+{
+	if (prev)
+		prev->next = map;
+}

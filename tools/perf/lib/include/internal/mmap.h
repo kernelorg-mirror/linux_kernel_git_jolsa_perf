@@ -33,6 +33,7 @@ struct perf_mmap {
 	u64			 flush;
 	libperf_unmap_cb_t	 unmap_cb;
 	char			 event_copy[PERF_SAMPLE_MAX_SIZE] __aligned(8);
+	struct perf_mmap	*next;
 };
 
 struct perf_mmap_param {
@@ -54,4 +55,5 @@ void perf_mmap__put(struct perf_mmap *map);
 
 u64 perf_mmap__read_head(struct perf_mmap *map);
 
+void perf_mmap__link(struct perf_mmap *prev, struct perf_mmap *map);
 #endif /* __LIBPERF_INTERNAL_MMAP_H */

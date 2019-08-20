@@ -384,6 +384,7 @@ perf_evlist__mmap_cb_new(struct perf_evlist *evlist, bool overwrite, int idx)
 
 	maps = overwrite ? evlist->mmap_ovw : evlist->mmap;
 	maps[idx] = map;
+	perf_mmap__link(idx ? maps[idx - 1] : NULL, map);
 	return map;
 }
 
@@ -599,4 +600,16 @@ void perf_evlist__munmap(struct perf_evlist *evlist)
 
 	zfree(&evlist->mmap);
 	zfree(&evlist->mmap_ovw);
+}
+
+struct perf_mmap*
+perf_evlist__next_mmap(struct perf_evlist *evlist, struct perf_mmap *map)
+{
+	if (map)
+		return map->next;
+
+	if (!evlist->mmap)
+		return NULL;
+
+	return evlist->mmap[0];
 }

@@ -592,6 +592,7 @@ static struct mmap *evlist__alloc_mmap(struct evlist *evlist,
 		 * thus does perf_mmap__get() on it.
 		 */
 		perf_mmap__init(&map[i].core, overwrite, perf_mmap__unmap_cb);
+		perf_mmap__link(i ? &map[i - 1].core : NULL, &map[i].core);
 	}
 
 	return map;
