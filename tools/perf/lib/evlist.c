@@ -329,9 +329,23 @@ static void perf_evlist__set_sid_idx(struct perf_evlist *evlist,
 
 #define FD(e, x, y) (*(int *) xyarray__entry(e->fd, x, y))
 
+static struct perf_mmap*
+perf_evlist__mmap_cb_new(struct perf_evlist *evlist, bool overwrite, int idx)
+{
+	struct perf_mmap **maps, *map;
+
+	map = perf_mmap__new(overwrite, NULL);
+	if (map == NULL)
+		return NULL;
+
+	maps = overwrite ? evlist->mmap_ovw : evlist->mmap;
+	maps[idx] = map;
+	return map;
+}
+
 static int
-mmap_per_evsel(struct perf_evlist *evlist, int idx,
-	       struct perf_mmap_param *mp, int cpu_idx,
+mmap_per_evsel(struct perf_evlist *evlist, struct perf_evlist_mmap_ops *ops,
+	       int idx, struct perf_mmap_param *mp, int cpu_idx,
 	       int thread, int *_output, int *_output_overwrite)
 {
 	int evlist_cpu = perf_cpu_map__cpu(evlist->cpus, cpu_idx);
@@ -350,18 +364,16 @@ mmap_per_evsel(struct perf_evlist *evlist, int idx,
 		if (cpu == -1)
 			continue;
 
-		map = perf_mmap__new(overwrite, NULL);
+		map = ops->new(evlist, overwrite, idx);
 		if (map == NULL)
 			return -ENOMEM;
 
 		if (overwrite) {
 			mp->prot = PROT_READ;
 			output   = _output_overwrite;
-			evlist->mmap_ovw[idx] = map;
 		} else {
 			mp->prot = PROT_READ | PROT_WRITE;
 			output   = _output;
-			evlist->mmap[idx] = map;
 		}
 
 		fd = FD(evsel, cpu, thread);
@@ -412,7 +424,7 @@ mmap_per_thread(struct perf_evlist *evlist, struct perf_evlist_mmap_ops *ops,
 		if (ops->idx)
 			ops->idx(evlist, mp, thread, false);
 
-		if (mmap_per_evsel(evlist, thread, mp, 0, thread,
+		if (mmap_per_evsel(evlist, ops, thread, mp, 0, thread,
 				   &output, &output_overwrite))
 			goto out_unmap;
 	}
@@ -440,7 +452,7 @@ mmap_per_cpu(struct perf_evlist *evlist, struct perf_evlist_mmap_ops *ops,
 			ops->idx(evlist, mp, cpu, true);
 
 		for (thread = 0; thread < nr_threads; thread++) {
-			if (mmap_per_evsel(evlist, cpu, mp, cpu,
+			if (mmap_per_evsel(evlist, ops, cpu, mp, cpu,
 					   thread, &output, &output_overwrite))
 				goto out_unmap;
 		}
@@ -461,7 +473,7 @@ int perf_evlist__mmap_ops(struct perf_evlist *evlist,
 	const struct perf_cpu_map *cpus = evlist->cpus;
 	const struct perf_thread_map *threads = evlist->threads;
 
-	if (!ops)
+	if (!ops || !ops->new)
 		return -EINVAL;
 
 	perf_evlist__for_each_entry(evlist, evsel) {
@@ -480,7 +492,9 @@ int perf_evlist__mmap_ops(struct perf_evlist *evlist,
 int perf_evlist__mmap(struct perf_evlist *evlist, int pages)
 {
 	struct perf_mmap_param mp;
-	struct perf_evlist_mmap_ops ops = { 0 };
+	struct perf_evlist_mmap_ops ops = {
+		.new = perf_evlist__mmap_cb_new,
+	};
 
 	if (!evlist->mmap && perf_evlist__alloc_maps(evlist))
 		return -ENOMEM;
