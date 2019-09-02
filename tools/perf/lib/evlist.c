@@ -109,11 +109,20 @@ perf_evlist__next(struct perf_evlist *evlist, struct perf_evsel *prev)
 	return next;
 }
 
+void perf_evlist__exit(struct perf_evlist *evlist)
+{
+	perf_cpu_map__put(evlist->cpus);
+	perf_thread_map__put(evlist->threads);
+	evlist->cpus = NULL;
+	evlist->threads = NULL;
+	zfree(&evlist->mmap);
+	zfree(&evlist->mmap_ovw);
+	fdarray__exit(&evlist->pollfd);
+}
+
 void perf_evlist__delete(struct perf_evlist *evlist)
 {
-	free(evlist->mmap);
-	free(evlist->mmap_ovw);
-	fdarray__exit(&evlist->pollfd);
+	perf_evlist__exit(evlist);
 	free(evlist);
 }
 
