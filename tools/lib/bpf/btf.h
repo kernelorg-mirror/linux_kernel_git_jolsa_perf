@@ -291,9 +291,9 @@ static inline const struct btf_param *btf_params(const struct btf_type *t)
 	return (const struct btf_param *)(t + 1);
 }
 
-static inline struct btf_var *btf_var(const struct btf_type *t)
+static inline const struct btf_var *btf_var(const struct btf_type *t)
 {
-	return (struct btf_var *)(t + 1);
+	return (const struct btf_var *)(t + 1);
 }
 
 static inline struct btf_var_secinfo *
