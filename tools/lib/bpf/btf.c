@@ -1487,7 +1487,7 @@ static int btf_for_each_str_off(struct btf_dedup *d, str_off_fn_t fn, void *ctx)
 			break;
 		}
 		case BTF_KIND_FUNC_PROTO: {
-			struct btf_param *m = btf_params(t);
+			struct btf_param *m = (struct btf_param *) btf_params(t);
 			__u16 vlen = btf_vlen(t);
 
 			for (j = 0; j < vlen; j++) {
@@ -2622,7 +2622,7 @@ static int btf_dedup_ref_type(struct btf_dedup *d, __u32 type_id)
 		t->type = ref_type_id;
 
 		vlen = btf_vlen(t);
-		param = btf_params(t);
+		param = (struct btf_param *) btf_params(t);
 		for (i = 0; i < vlen; i++) {
 			ref_type_id = btf_dedup_ref_type(d, param->type);
 			if (ref_type_id < 0)
@@ -2811,7 +2811,7 @@ static int btf_dedup_remap_type(struct btf_dedup *d, __u32 type_id)
 	}
 
 	case BTF_KIND_FUNC_PROTO: {
-		struct btf_param *param = btf_params(t);
+		struct btf_param *param = (struct btf_param *) btf_params(t);
 		__u16 vlen = btf_vlen(t);
 
 		r = btf_dedup_remap_type_id(d, t->type);

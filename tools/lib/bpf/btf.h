@@ -286,9 +286,9 @@ static inline __u32 btf_member_bitfield_size(const struct btf_type *t,
 	return kflag ? BTF_MEMBER_BITFIELD_SIZE(m->offset) : 0;
 }
 
-static inline struct btf_param *btf_params(const struct btf_type *t)
+static inline const struct btf_param *btf_params(const struct btf_type *t)
 {
-	return (struct btf_param *)(t + 1);
+	return (const struct btf_param *)(t + 1);
 }
 
 static inline struct btf_var *btf_var(const struct btf_type *t)
