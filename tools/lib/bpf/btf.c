@@ -526,7 +526,8 @@ static int btf_fixup_datasec(struct bpf_object *obj, struct btf *btf,
 
 	t->size = size;
 
-	for (i = 0, vsi = btf_var_secinfos(t); i < vars; i++, vsi++) {
+	for (i = 0, vsi = (struct btf_var_secinfo *) btf_var_secinfos(t);
+	     i < vars; i++, vsi++) {
 		t_var = btf__type_by_id(btf, vsi->type);
 		var = btf_var(t_var);
 
@@ -2830,7 +2831,7 @@ static int btf_dedup_remap_type(struct btf_dedup *d, __u32 type_id)
 	}
 
 	case BTF_KIND_DATASEC: {
-		struct btf_var_secinfo *var = btf_var_secinfos(t);
+		struct btf_var_secinfo *var = (struct btf_var_secinfo *) btf_var_secinfos(t);
 		__u16 vlen = btf_vlen(t);
 
 		for (i = 0; i < vlen; i++) {

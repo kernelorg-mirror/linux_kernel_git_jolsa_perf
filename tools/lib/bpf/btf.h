@@ -296,10 +296,10 @@ static inline const struct btf_var *btf_var(const struct btf_type *t)
 	return (const struct btf_var *)(t + 1);
 }
 
-static inline struct btf_var_secinfo *
+static inline const struct btf_var_secinfo *
 btf_var_secinfos(const struct btf_type *t)
 {
-	return (struct btf_var_secinfo *)(t + 1);
+	return (const struct btf_var_secinfo *)(t + 1);
 }
 
 #ifdef __cplusplus
