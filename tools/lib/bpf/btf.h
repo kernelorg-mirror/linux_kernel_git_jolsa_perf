@@ -254,9 +254,9 @@ static inline const struct btf_array *btf_array(const struct btf_type *t)
 	return (const struct btf_array *)(t + 1);
 }
 
-static inline struct btf_enum *btf_enum(const struct btf_type *t)
+static inline const struct btf_enum *btf_enum(const struct btf_type *t)
 {
-	return (struct btf_enum *)(t + 1);
+	return (const struct btf_enum *)(t + 1);
 }
 
 static inline struct btf_member *btf_members(const struct btf_type *t)
