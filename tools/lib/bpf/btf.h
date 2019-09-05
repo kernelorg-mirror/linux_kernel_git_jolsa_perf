@@ -259,9 +259,9 @@ static inline const struct btf_enum *btf_enum(const struct btf_type *t)
 	return (const struct btf_enum *)(t + 1);
 }
 
-static inline struct btf_member *btf_members(const struct btf_type *t)
+static inline const struct btf_member *btf_members(const struct btf_type *t)
 {
-	return (struct btf_member *)(t + 1);
+	return (const struct btf_member *)(t + 1);
 }
 
 /* Get bit offset of a member with specified index. */

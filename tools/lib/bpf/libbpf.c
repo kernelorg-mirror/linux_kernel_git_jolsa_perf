@@ -1389,7 +1389,7 @@ static void bpf_object__sanitize_btf(struct bpf_object *obj)
 		} else if (!has_datasec && btf_is_datasec(t)) {
 			/* replace DATASEC with STRUCT */
 			const struct btf_var_secinfo *v = btf_var_secinfos(t);
-			struct btf_member *m = btf_members(t);
+			struct btf_member *m = (struct btf_member *) btf_members(t);
 			struct btf_type *vt;
 			char *name;
 
