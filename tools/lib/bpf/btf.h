@@ -236,17 +236,17 @@ static inline bool btf_is_datasec(const struct btf_type *t)
 
 static inline __u8 btf_int_encoding(const struct btf_type *t)
 {
-	return BTF_INT_ENCODING(*(__u32 *)(t + 1));
+	return BTF_INT_ENCODING(*(const __u32 *)(t + 1));
 }
 
 static inline __u8 btf_int_offset(const struct btf_type *t)
 {
-	return BTF_INT_OFFSET(*(__u32 *)(t + 1));
+	return BTF_INT_OFFSET(*(const __u32 *)(t + 1));
 }
 
 static inline __u8 btf_int_bits(const struct btf_type *t)
 {
-	return BTF_INT_BITS(*(__u32 *)(t + 1));
+	return BTF_INT_BITS(*(const __u32 *)(t + 1));
 }
 
 static inline struct btf_array *btf_array(const struct btf_type *t)
