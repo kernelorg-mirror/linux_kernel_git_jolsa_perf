@@ -249,9 +249,9 @@ static inline __u8 btf_int_bits(const struct btf_type *t)
 	return BTF_INT_BITS(*(const __u32 *)(t + 1));
 }
 
-static inline struct btf_array *btf_array(const struct btf_type *t)
+static inline const struct btf_array *btf_array(const struct btf_type *t)
 {
-	return (struct btf_array *)(t + 1);
+	return (const struct btf_array *)(t + 1);
 }
 
 static inline struct btf_enum *btf_enum(const struct btf_type *t)

@@ -2587,7 +2587,7 @@ static int btf_dedup_ref_type(struct btf_dedup *d, __u32 type_id)
 		break;
 
 	case BTF_KIND_ARRAY: {
-		struct btf_array *info = btf_array(t);
+		struct btf_array *info = (struct btf_array *) btf_array(t);
 
 		ref_type_id = btf_dedup_ref_type(d, info->type);
 		if (ref_type_id < 0)
@@ -2782,7 +2782,7 @@ static int btf_dedup_remap_type(struct btf_dedup *d, __u32 type_id)
 		break;
 
 	case BTF_KIND_ARRAY: {
-		struct btf_array *arr_info = btf_array(t);
+		struct btf_array *arr_info = (struct btf_array *) btf_array(t);
 
 		r = btf_dedup_remap_type_id(d, arr_info->type);
 		if (r < 0)
