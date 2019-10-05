@@ -3433,6 +3433,185 @@ errout:
 	return ERR_PTR(err);
 }
 
+extern struct btf *btf_vmlinux;
+
+bool btf_ctx_access(int off, int size, enum bpf_access_type type,
+		    const struct bpf_prog *prog,
+		    struct bpf_insn_access_aux *info)
+{
+	u32 btf_id = prog->expected_attach_type;
+	const struct btf_param *args;
+	const struct btf_type *t;
+	const char prefix[] = "btf_trace_";
+	const char *tname;
+	u32 nr_args;
+
+	if (!btf_id)
+		return true;
+
+	if (IS_ERR(btf_vmlinux)) {
+		bpf_verifier_log_write(info->env, "btf_vmlinux is malformed\n");
+		return false;
+	}
+
+	t = btf_type_by_id(btf_vmlinux, btf_id);
+	if (!t || BTF_INFO_KIND(t->info) != BTF_KIND_TYPEDEF) {
+		bpf_verifier_log_write(info->env, "btf_id is invalid\n");
+		return false;
+	}
+
+	tname = __btf_name_by_offset(btf_vmlinux, t->name_off);
+	if (strncmp(prefix, tname, sizeof(prefix) - 1)) {
+		bpf_verifier_log_write(info->env,
+				       "btf_id points to wrong type name %s\n",
+				       tname);
+		return false;
+	}
+	tname += sizeof(prefix) - 1;
+
+	t = btf_type_by_id(btf_vmlinux, t->type);
+	if (!btf_type_is_ptr(t))
+		return false;
+	t = btf_type_by_id(btf_vmlinux, t->type);
+	if (!btf_type_is_func_proto(t))
+		return false;
+
+	args = (const struct btf_param *)(t + 1);
+	/* skip first 'void *__data' argument in btf_trace_* */
+	nr_args = btf_type_vlen(t) - 1;
+	if (off >= nr_args * 8) {
+		bpf_verifier_log_write(info->env,
+				       "raw_tp '%s' doesn't have %d-th argument\n",
+				       tname, off / 8);
+		return false;
+	}
+
+	/* raw tp arg is off / 8, but typedef has extra 'void *', hence +1 */
+	t = btf_type_by_id(btf_vmlinux, args[off / 8 + 1].type);
+	if (btf_type_is_int(t))
+		/* accessing a scalar */
+		return true;
+	if (!btf_type_is_ptr(t)) {
+		bpf_verifier_log_write(info->env,
+				       "raw_tp '%s' arg%d '%s' has type %s. Only pointer access is allowed\n",
+				       tname, off / 8,
+				       __btf_name_by_offset(btf_vmlinux, t->name_off),
+				       btf_kind_str[BTF_INFO_KIND(t->info)]);
+		return false;
+	}
+	if (t->type == 0)
+		/* This is a pointer to void.
+		 * It is the same as scalar from the verifier safety pov.
+		 * No further pointer walking is allowed.
+		 */
+		return true;
+
+	/* this is a pointer to another type */
+	info->reg_type = PTR_TO_BTF_ID;
+	info->btf_id = t->type;
+
+	t = btf_type_by_id(btf_vmlinux, t->type);
+	bpf_verifier_log_write(info->env,
+			       "raw_tp '%s' arg%d has btf_id %d type %s '%s'\n",
+			       tname, off / 8, info->btf_id,
+			       btf_kind_str[BTF_INFO_KIND(t->info)],
+			       __btf_name_by_offset(btf_vmlinux, t->name_off));
+	return true;
+}
+
+int btf_struct_access(struct bpf_verifier_env *env,
+		      const struct btf_type *t, int off, int size,
+		      enum bpf_access_type atype,
+		      u32 *next_btf_id)
+{
+	const struct btf_member *member;
+	const struct btf_type *mtype;
+	const char *tname, *mname;
+	int i, moff = 0, msize;
+
+again:
+	tname = btf_name_by_offset(btf_vmlinux, t->name_off);
+	if (!btf_type_is_struct(t)) {
+		bpf_verifier_log_write(env, "Type '%s' is not a struct", tname);
+		return -EINVAL;
+	}
+	if (btf_type_vlen(t) < 1) {
+		bpf_verifier_log_write(env, "struct %s doesn't have fields", tname);
+		return -EINVAL;
+	}
+
+	for_each_member(i, t, member) {
+
+		/* offset of the field */
+		moff = btf_member_bit_offset(t, member);
+
+		if (off < moff / 8)
+			continue;
+
+		/* type of the field */
+		mtype = btf_type_by_id(btf_vmlinux, member->type);
+		mname = __btf_name_by_offset(btf_vmlinux, member->name_off);
+
+		/* skip typedef, volotile modifiers */
+		while (btf_type_is_modifier(mtype))
+			mtype = btf_type_by_id(btf_vmlinux, mtype->type);
+
+		if (btf_type_is_array(mtype))
+			/* array deref is not supported yet */
+			continue;
+
+		if (!btf_type_has_size(mtype) && !btf_type_is_ptr(mtype)) {
+			bpf_verifier_log_write(env,
+					       "field %s doesn't have size\n",
+					       mname);
+			return -EFAULT;
+		}
+		if (btf_type_is_ptr(mtype))
+			msize = 8;
+		else
+			msize = mtype->size;
+		if (off >= moff / 8 + msize)
+			/* rare case, must be a field of the union with smaller size,
+			 * let's try another field
+			 */
+			continue;
+		/* the 'off' we're looking for is either equal to start
+		 * of this field or inside of this struct
+		 */
+		if (btf_type_is_struct(mtype)) {
+			/* our field must be inside that union or struct */
+			t = mtype;
+
+			/* adjust offset we're looking for */
+			off -= moff / 8;
+			goto again;
+		}
+		if (msize != size) {
+			/* field access size doesn't match */
+			bpf_verifier_log_write(env,
+					       "cannot access %d bytes in struct %s field %s that has size %d\n",
+					       size, tname, mname, msize);
+			return -EACCES;
+		}
+
+		if (btf_type_is_ptr(mtype)) {
+			const struct btf_type *stype;
+
+			stype = btf_type_by_id(btf_vmlinux, mtype->type);
+			if (btf_type_is_struct(stype)) {
+				*next_btf_id = mtype->type;
+				return PTR_TO_BTF_ID;
+			}
+		}
+		/* all other fields are treated as scalars */
+		return SCALAR_VALUE;
+	}
+	bpf_verifier_log_write(env,
+			       "struct %s doesn't have field at offset %d\n",
+			       tname, off);
+	return -EINVAL;
+}
+
 void btf_type_seq_show(const struct btf *btf, u32 type_id, void *obj,
 		       struct seq_file *m)
 {

@@ -52,6 +52,8 @@ struct bpf_reg_state {
 		 */
 		struct bpf_map *map_ptr;
 
+		u32 btf_id; /* for PTR_TO_BTF_ID */
+
 		/* Max size from any of the above. */
 		unsigned long raw;
 	};
