@@ -700,6 +700,8 @@ tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_map_peek_elem:
 		return &bpf_map_peek_elem_proto;
 	case BPF_FUNC_probe_read:
+		if (prog->expected_attach_type)
+			return NULL;
 		return &bpf_probe_read_proto;
 	case BPF_FUNC_ktime_get_ns:
 		return &bpf_ktime_get_ns_proto;
@@ -728,6 +730,8 @@ tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_get_prandom_u32:
 		return &bpf_get_prandom_u32_proto;
 	case BPF_FUNC_probe_read_str:
+		if (prog->expected_attach_type)
+			return NULL;
 		return &bpf_probe_read_str_proto;
 #ifdef CONFIG_CGROUPS
 	case BPF_FUNC_get_current_cgroup_id:
