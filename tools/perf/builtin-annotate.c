@@ -199,7 +199,7 @@ static int process_branch_callback(struct evsel *evsel,
 		return 0;
 
 	if (a.map != NULL)
-		a.map->dso->hit = 1;
+		map_sh(a.map)->dso->hit = 1;
 
 	hist__account_cycles(sample->branch_stack, al, sample, false);
 
@@ -233,9 +233,9 @@ static int perf_evsel__add_sample(struct evsel *evsel,
 		 */
 		if (al->sym != NULL) {
 			rb_erase_cached(&al->sym->rb_node,
-				 &al->map->dso->symbols);
+				 &map_sh(al->map)->dso->symbols);
 			symbol__delete(al->sym);
-			dso__reset_find_symbol_cache(al->map->dso);
+			dso__reset_find_symbol_cache(map_sh(al->map)->dso);
 		}
 		return 0;
 	}
@@ -317,7 +317,7 @@ static void hists__find_annotations(struct hists *hists,
 		struct hist_entry *he = rb_entry(nd, struct hist_entry, rb_node);
 		struct annotation *notes;
 
-		if (he->ms.sym == NULL || he->ms.map->dso->annotate_warned)
+		if (he->ms.sym == NULL || map_sh(he->ms.map)->dso->annotate_warned)
 			goto find_next;
 
 		if (ann->sym_hist_filter &&

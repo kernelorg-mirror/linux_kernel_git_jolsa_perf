@@ -508,7 +508,7 @@ struct map *thread__find_map(struct thread *thread, u8 cpumode, u64 addr,
 		 */
 		if (load_map)
 			map__load(al->map);
-		al->addr = al->map->map_ip(al->map, al->addr);
+		al->addr = map_sh(al->map)->map_ip(al->map, al->addr);
 	}
 
 	return al->map;
@@ -566,7 +566,7 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 	dump_printf(" ... thread: %s:%d\n", thread__comm_str(thread), thread->tid);
 	thread__find_map(thread, sample->cpumode, sample->ip, al);
 	dump_printf(" ...... dso: %s\n",
-		    al->map ? al->map->dso->long_name :
+		    al->map ? map_sh(al->map)->dso->long_name :
 			al->level == 'H' ? "[hypervisor]" : "<not found>");
 
 	if (thread__is_filtered(thread))
@@ -585,7 +585,7 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 	}
 
 	if (al->map) {
-		struct dso *dso = al->map->dso;
+		struct dso *dso = map_sh(al->map)->dso;
 
 		if (symbol_conf.dso_list &&
 		    (!dso || !(strlist__has_entry(symbol_conf.dso_list,

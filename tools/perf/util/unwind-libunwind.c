@@ -31,7 +31,7 @@ int unwind__prepare_access(struct map_groups *mg, struct map *map,
 
 	if (mg->addr_space) {
 		pr_debug("unwind: thread map already set, dso=%s\n",
-			 map->dso->name);
+			 map_sh(map)->dso->name);
 		if (initialized)
 			*initialized = true;
 		return 0;
@@ -41,7 +41,7 @@ int unwind__prepare_access(struct map_groups *mg, struct map *map,
 	if (!mg->machine->env || !mg->machine->env->arch)
 		goto out_register;
 
-	dso_type = dso__type(map->dso, mg->machine);
+	dso_type = dso__type(map_sh(map)->dso, mg->machine);
 	if (dso_type == DSO__TYPE_UNKNOWN)
 		return 0;
 

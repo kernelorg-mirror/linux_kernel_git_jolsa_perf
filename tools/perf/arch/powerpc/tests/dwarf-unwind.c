@@ -34,7 +34,7 @@ static int sample_ustack(struct perf_sample *sample,
 		return -1;
 	}
 
-	stack_size = map->end - sp;
+	stack_size = map_sh(map)->end - sp;
 	stack_size = stack_size > STACK_SIZE ? STACK_SIZE : stack_size;
 
 	memcpy(buf, (void *) sp, stack_size);

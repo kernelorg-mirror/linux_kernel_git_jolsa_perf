@@ -20,9 +20,9 @@ static int check_maps(struct map_def *merged, unsigned int size, struct map_grou
 
 	map = map_groups__first(mg);
 	while (map) {
-		TEST_ASSERT_VAL("wrong map start",  map->start == merged[i].start);
-		TEST_ASSERT_VAL("wrong map end",    map->end == merged[i].end);
-		TEST_ASSERT_VAL("wrong map name",  !strcmp(map->dso->name, merged[i].name));
+		TEST_ASSERT_VAL("wrong map start",  map_sh(map)->start == merged[i].start);
+		TEST_ASSERT_VAL("wrong map end",    map_sh(map)->end == merged[i].end);
+		TEST_ASSERT_VAL("wrong map name",  !strcmp(map_sh(map)->dso->name, merged[i].name));
 		TEST_ASSERT_VAL("wrong map refcnt", refcount_read(&map->refcnt) == 2);
 
 		i++;
@@ -73,8 +73,8 @@ int test__map_groups__merge_in(struct test *t __maybe_unused, int subtest __mayb
 		map = dso__new_map(bpf_progs[i].name);
 		TEST_ASSERT_VAL("failed to create map", map);
 
-		map->start = bpf_progs[i].start;
-		map->end   = bpf_progs[i].end;
+		map_sh(map)->start = bpf_progs[i].start;
+		map_sh(map)->end   = bpf_progs[i].end;
 		map_groups__insert(&mg, map);
 		map__put(map);
 	}
@@ -89,16 +89,16 @@ int test__map_groups__merge_in(struct test *t __maybe_unused, int subtest __mayb
 	TEST_ASSERT_VAL("failed to create map", map_kcore3);
 
 	/* kcore1 map overlaps over all bpf maps */
-	map_kcore1->start = 100;
-	map_kcore1->end   = 1000;
+	map_sh(map_kcore1)->start = 100;
+	map_sh(map_kcore1)->end   = 1000;
 
 	/* kcore2 map hides behind bpf_prog_2 */
-	map_kcore2->start = 550;
-	map_kcore2->end   = 570;
+	map_sh(map_kcore2)->start = 550;
+	map_sh(map_kcore2)->end   = 570;
 
 	/* kcore3 map hides behind bpf_prog_3, kcore1 and adds new map */
-	map_kcore3->start = 880;
-	map_kcore3->end   = 1100;
+	map_sh(map_kcore3)->start = 880;
+	map_sh(map_kcore3)->end   = 1100;
 
 	ret = map_groups__merge_in(&mg, map_kcore1);
 	TEST_ASSERT_VAL("failed to merge map", !ret);

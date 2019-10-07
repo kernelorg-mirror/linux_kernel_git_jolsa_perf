@@ -124,8 +124,8 @@ static int perf_top__parse_source(struct perf_top *top, struct hist_entry *he)
 	/*
 	 * We can't annotate with just /proc/kallsyms
 	 */
-	if (map->dso->symtab_type == DSO_BINARY_TYPE__KALLSYMS &&
-	    !dso__is_kcore(map->dso)) {
+	if (map_sh(map)->dso->symtab_type == DSO_BINARY_TYPE__KALLSYMS &&
+	    !dso__is_kcore(map_sh(map)->dso)) {
 		pr_err("Can't annotate %s: No vmlinux file was found in the "
 		       "path\n", sym->name);
 		sleep(1);
@@ -164,6 +164,7 @@ static void __zero_source_counters(struct hist_entry *he)
 
 static void ui__warn_map_erange(struct map *map, struct symbol *sym, u64 ip)
 {
+	struct map_shared *sh = map_sh(map);
 	struct utsname uts;
 	int err = uname(&uts);
 
@@ -177,8 +178,8 @@ static void ui__warn_map_erange(struct map *map, struct symbol *sym, u64 ip)
 		    "Tools:  %s\n\n"
 		    "Not all samples will be on the annotation output.\n\n"
 		    "Please report to linux-kernel@vger.kernel.org\n",
-		    ip, map->dso->long_name, dso__symtab_origin(map->dso),
-		    map->start, map->end, sym->start, sym->end,
+		    ip, sh->dso->long_name, dso__symtab_origin(sh->dso),
+		    sh->start, sh->end, sym->start, sym->end,
 		    sym->binding == STB_GLOBAL ? 'g' :
 		    sym->binding == STB_LOCAL  ? 'l' : 'w', sym->name,
 		    err ? "[unknown]" : uts.machine,
@@ -186,7 +187,7 @@ static void ui__warn_map_erange(struct map *map, struct symbol *sym, u64 ip)
 	if (use_browser <= 0)
 		sleep(5);
 
-	map->erange_warned = true;
+	sh->erange_warned = true;
 }
 
 static void perf_top__record_precise_ip(struct perf_top *top,
@@ -219,7 +220,7 @@ static void perf_top__record_precise_ip(struct perf_top *top,
 		 */
 		pthread_mutex_unlock(&he->hists->lock);
 
-		if (err == -ERANGE && !he->ms.map->erange_warned)
+		if (err == -ERANGE && !map_sh(he->ms.map)->erange_warned)
 			ui__warn_map_erange(he->ms.map, sym, ip);
 		else if (err == -ENOMEM) {
 			pr_err("Not enough memory for annotating '%s' symbol!\n",
@@ -798,7 +799,7 @@ static void perf_event__process_sample(struct perf_tool *tool,
 		    __map__is_kernel(al.map) && map__has_symbols(al.map)) {
 			if (symbol_conf.vmlinux_name) {
 				char serr[256];
-				dso__strerror_load(al.map->dso, serr, sizeof(serr));
+				dso__strerror_load(map_sh(al.map)->dso, serr, sizeof(serr));
 				ui__warning("The %s file can't be used: %s\n%s",
 					    symbol_conf.vmlinux_name, serr, msg);
 			} else {

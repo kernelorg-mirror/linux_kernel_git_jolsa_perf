@@ -440,10 +440,12 @@ static int perf_event__inject_buildid(struct perf_tool *tool,
 	}
 
 	if (thread__find_map(thread, sample->cpumode, sample->ip, &al)) {
-		if (!al.map->dso->hit) {
-			al.map->dso->hit = 1;
+		struct map_shared *sh = map_sh(al.map);
+
+		if (!sh->dso->hit) {
+			sh->dso->hit = 1;
 			if (map__load(al.map) >= 0) {
-				dso__inject_build_id(al.map->dso, tool, machine);
+				dso__inject_build_id(sh->dso, tool, machine);
 				/*
 				 * If this fails, too bad, let the other side
 				 * account this as unresolved.
@@ -452,7 +454,7 @@ static int perf_event__inject_buildid(struct perf_tool *tool,
 #ifdef HAVE_LIBELF_SUPPORT
 				pr_warning("no symbols found in %s, maybe "
 					   "install a debug package?\n",
-					   al.map->dso->long_name);
+					   sh->dso->long_name);
 #endif
 			}
 		}

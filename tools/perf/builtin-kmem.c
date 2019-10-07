@@ -1017,7 +1017,7 @@ static void __print_slab_result(struct rb_root *root,
 
 		if (sym != NULL)
 			snprintf(buf, sizeof(buf), "%s+%" PRIx64 "", sym->name,
-				 addr - map->unmap_ip(map, sym->start));
+				 addr - map_sh(map)->unmap_ip(map, sym->start));
 		else
 			snprintf(buf, sizeof(buf), "%#" PRIx64 "", addr);
 		printf(" %-34s |", buf);

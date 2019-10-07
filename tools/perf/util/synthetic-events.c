@@ -444,18 +444,18 @@ int perf_event__synthesize_modules(struct perf_tool *tool, perf_event__handler_t
 		if (!__map__is_kmodule(pos))
 			continue;
 
-		size = PERF_ALIGN(pos->dso->long_name_len + 1, sizeof(u64));
+		size = PERF_ALIGN(map_sh(pos)->dso->long_name_len + 1, sizeof(u64));
 		event->mmap.header.type = PERF_RECORD_MMAP;
 		event->mmap.header.size = (sizeof(event->mmap) -
 				        (sizeof(event->mmap.filename) - size));
 		memset(event->mmap.filename + size, 0, machine->id_hdr_size);
 		event->mmap.header.size += machine->id_hdr_size;
-		event->mmap.start = pos->start;
-		event->mmap.len   = pos->end - pos->start;
+		event->mmap.start = map_sh(pos)->start;
+		event->mmap.len   = map_sh(pos)->end - map_sh(pos)->start;
 		event->mmap.pid   = machine->pid;
 
-		memcpy(event->mmap.filename, pos->dso->long_name,
-		       pos->dso->long_name_len + 1);
+		memcpy(event->mmap.filename, map_sh(pos)->dso->long_name,
+		       map_sh(pos)->dso->long_name_len + 1);
 		if (perf_tool__process_synth_event(tool, event, machine, process) != 0) {
 			rc = -1;
 			break;
@@ -856,8 +856,8 @@ static int __perf_event__synthesize_kernel_mmap(struct perf_tool *tool,
 	event->mmap.header.size = (sizeof(event->mmap) -
 			(sizeof(event->mmap.filename) - size) + machine->id_hdr_size);
 	event->mmap.pgoff = kmap->ref_reloc_sym->addr;
-	event->mmap.start = map->start;
-	event->mmap.len   = map->end - event->mmap.start;
+	event->mmap.start = map_sh(map)->start;
+	event->mmap.len   = map_sh(map)->end - event->mmap.start;
 	event->mmap.pid   = machine->pid;
 
 	err = perf_tool__process_synth_event(tool, event, machine, process);

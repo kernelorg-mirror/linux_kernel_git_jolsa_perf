@@ -53,7 +53,7 @@ int build_id__mark_dso_hit(struct perf_tool *tool __maybe_unused,
 	}
 
 	if (thread__find_map(thread, sample->cpumode, sample->ip, &al))
-		al.map->dso->hit = 1;
+		map_sh(al.map)->dso->hit = 1;
 
 	thread__put(thread);
 	return 0;

@@ -443,14 +443,14 @@ int thread__memcpy(struct thread *thread, struct machine *machine,
        if (machine__kernel_ip(machine, ip))
                cpumode = PERF_RECORD_MISC_KERNEL;
 
-       if (!thread__find_map(thread, cpumode, ip, &al) || !al.map->dso ||
-	   al.map->dso->data.status == DSO_DATA_STATUS_ERROR ||
+	if (!thread__find_map(thread, cpumode, ip, &al) || !map_sh(al.map)->dso ||
+	   map_sh(al.map)->dso->data.status == DSO_DATA_STATUS_ERROR ||
 	   map__load(al.map) < 0)
-               return -1;
+		return -1;
 
-       offset = al.map->map_ip(al.map, ip);
-       if (is64bit)
-               *is64bit = al.map->dso->is_64_bit;
+	offset = map_sh(al.map)->map_ip(al.map, ip);
+	if (is64bit)
+		*is64bit = map_sh(al.map)->dso->is_64_bit;
 
-       return dso__data_read_offset(al.map->dso, machine, offset, buf, len);
+	return dso__data_read_offset(map_sh(al.map)->dso, machine, offset, buf, len);
 }

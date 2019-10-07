@@ -39,7 +39,7 @@ static int s390_call__parse(struct arch *arch, struct ins_operands *ops,
 	target.addr = map__objdump_2mem(map, ops->target.addr);
 
 	if (map_groups__find_ams(&target) == 0 &&
-	    map__rip_2objdump(target.map, map->map_ip(target.map, target.addr)) == ops->target.addr)
+	    map__rip_2objdump(target.map, map_sh(map)->map_ip(target.map, target.addr)) == ops->target.addr)
 		ops->target.sym = target.sym;
 
 	return 0;

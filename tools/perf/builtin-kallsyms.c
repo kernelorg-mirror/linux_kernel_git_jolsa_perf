@@ -28,6 +28,7 @@ static int __cmd_kallsyms(int argc, const char **argv)
 
 	for (i = 0; i < argc; ++i) {
 		struct map *map;
+		struct map_shared *sh;
 		struct symbol *symbol = machine__find_kernel_symbol_by_name(machine, argv[i], &map);
 
 		if (symbol == NULL) {
@@ -35,9 +36,11 @@ static int __cmd_kallsyms(int argc, const char **argv)
 			continue;
 		}
 
+		sh = map_sh(map);
+
 		printf("%s: %s %s %#" PRIx64 "-%#" PRIx64 " (%#" PRIx64 "-%#" PRIx64")\n",
-			symbol->name, map->dso->short_name, map->dso->long_name,
-			map->unmap_ip(map, symbol->start), map->unmap_ip(map, symbol->end),
+			symbol->name, sh->dso->short_name, sh->dso->long_name,
+			sh->unmap_ip(map, symbol->start), sh->unmap_ip(map, symbol->end),
 			symbol->start, symbol->end);
 	}
 

@@ -169,7 +169,7 @@ dump_raw_samples(struct perf_tool *tool,
 		goto out_put;
 
 	if (al.map != NULL)
-		al.map->dso->hit = 1;
+		map_sh(al.map)->dso->hit = 1;
 
 	if (mem->phys_addr) {
 		if (symbol_conf.field_sep) {
@@ -197,7 +197,7 @@ dump_raw_samples(struct perf_tool *tool,
 			symbol_conf.field_sep,
 			sample->data_src,
 			symbol_conf.field_sep,
-			al.map ? (al.map->dso ? al.map->dso->long_name : "???") : "???",
+			al.map ? (map_sh(al.map)->dso ? map_sh(al.map)->dso->long_name : "???") : "???",
 			al.sym ? al.sym->name : "???");
 	} else {
 		if (symbol_conf.field_sep) {
@@ -222,7 +222,7 @@ dump_raw_samples(struct perf_tool *tool,
 			symbol_conf.field_sep,
 			sample->data_src,
 			symbol_conf.field_sep,
-			al.map ? (al.map->dso ? al.map->dso->long_name : "???") : "???",
+			al.map ? (map_sh(al.map)->dso ? map_sh(al.map)->dso->long_name : "???") : "???",
 			al.sym ? al.sym->name : "???");
 	}
 out_put:

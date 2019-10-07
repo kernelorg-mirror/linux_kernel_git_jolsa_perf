@@ -695,8 +695,8 @@ static enum match_result match_chain_strings(const char *left,
 static enum match_result match_chain_dso_addresses(struct map *left_map, u64 left_ip,
 						   struct map *right_map, u64 right_ip)
 {
-	struct dso *left_dso = left_map ? left_map->dso : NULL;
-	struct dso *right_dso = right_map ? right_map->dso : NULL;
+	struct dso *left_dso = left_map ? map_sh(left_map)->dso : NULL;
+	struct dso *right_dso = right_map ? map_sh(right_map)->dso : NULL;
 
 	if (left_dso != right_dso)
 		return left_dso < right_dso ? MATCH_LT : MATCH_GT;
@@ -1167,7 +1167,7 @@ char *callchain_list__sym_name(struct callchain_list *cl,
 	if (show_dso)
 		scnprintf(bf + printed, bfsize - printed, " %s",
 			  cl->ms.map ?
-			  cl->ms.map->dso->short_name :
+			  map_sh(cl->ms.map)->dso->short_name :
 			  "unknown");
 
 	return bf;

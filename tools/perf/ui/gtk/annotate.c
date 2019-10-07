@@ -170,7 +170,7 @@ static int symbol__gtk_annotate(struct symbol *sym, struct map *map,
 	GtkWidget *tab_label;
 	int err;
 
-	if (map->dso->annotate_warned)
+	if (map_sh(map)->dso->annotate_warned)
 		return -1;
 
 	err = symbol__annotate(sym, map, evsel, 0, &annotation__default_options, NULL);

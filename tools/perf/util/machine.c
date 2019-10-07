@@ -727,17 +727,17 @@ static int machine__process_ksymbol_register(struct machine *machine,
 		if (!map)
 			return -ENOMEM;
 
-		map->start = event->ksymbol.addr;
-		map->end = map->start + event->ksymbol.len;
+		map_sh(map)->start = event->ksymbol.addr;
+		map_sh(map)->end = map_sh(map)->start + event->ksymbol.len;
 		map_groups__insert(&machine->kmaps, map);
 	}
 
-	sym = symbol__new(map->map_ip(map, map->start),
+	sym = symbol__new(map_sh(map)->map_ip(map, map_sh(map)->start),
 			  event->ksymbol.len,
 			  0, 0, event->ksymbol.name);
 	if (!sym)
 		return -ENOMEM;
-	dso__insert_symbol(map->dso, sym);
+	dso__insert_symbol(map_sh(map)->dso, sym);
 	return 0;
 }
 
@@ -802,7 +802,7 @@ struct map *machine__findnew_module_map(struct machine *machine, u64 start,
 		 * a chance to find the file path of that module by fixing
 		 * long_name.
 		 */
-		dso__adjust_kmod_long_name(map->dso, filename);
+		dso__adjust_kmod_long_name(map_sh(map)->dso, filename);
 		goto out;
 	}
 
@@ -861,7 +861,7 @@ size_t machine__fprintf_vmlinux_path(struct machine *machine, FILE *fp)
 {
 	int i;
 	size_t printed = 0;
-	struct dso *kdso = machine__kernel_map(machine)->dso;
+	struct dso *kdso = map_sh(machine__kernel_map(machine))->dso;
 
 	if (kdso->has_build_id) {
 		char filename[PATH_MAX];
@@ -993,8 +993,8 @@ int machine__create_extra_kernel_map(struct machine *machine,
 	if (!map)
 		return -1;
 
-	map->end   = xm->end;
-	map->pgoff = xm->pgoff;
+	map_sh(map)->end   = xm->end;
+	map_sh(map)->pgoff = xm->pgoff;
 
 	kmap = map__kmap(map);
 
@@ -1004,7 +1004,7 @@ int machine__create_extra_kernel_map(struct machine *machine,
 	map_groups__insert(&machine->kmaps, map);
 
 	pr_debug2("Added extra kernel map %s %" PRIx64 "-%" PRIx64 "\n",
-		  kmap->name, map->start, map->end);
+		  kmap->name, map_sh(map)->start, map_sh(map)->end);
 
 	map__put(map);
 
@@ -1064,9 +1064,9 @@ int machine__map_x86_64_entry_trampolines(struct machine *machine,
 		if (!kmap || !is_entry_trampoline(kmap->name))
 			continue;
 
-		dest_map = map_groups__find(kmaps, map->pgoff);
+		dest_map = map_groups__find(kmaps, map_sh(map)->pgoff);
 		if (dest_map != map)
-			map->pgoff = dest_map->map_ip(dest_map, map->pgoff);
+			map_sh(map)->pgoff = map_sh(dest_map)->map_ip(dest_map, map_sh(map)->pgoff);
 		found = true;
 	}
 	if (found || machine->trampolines_mapped)
@@ -1119,7 +1119,7 @@ __machine__create_kernel_maps(struct machine *machine, struct dso *kernel)
 	if (machine->vmlinux_map == NULL)
 		return -1;
 
-	machine->vmlinux_map->map_ip = machine->vmlinux_map->unmap_ip = identity__map_ip;
+	map_sh(machine->vmlinux_map)->map_ip = map_sh(machine->vmlinux_map)->unmap_ip = identity__map_ip;
 	map = machine__kernel_map(machine);
 	kmap = map__kmap(map);
 	if (!kmap)
@@ -1226,10 +1226,10 @@ int machines__create_kernel_maps(struct machines *machines, pid_t pid)
 int machine__load_kallsyms(struct machine *machine, const char *filename)
 {
 	struct map *map = machine__kernel_map(machine);
-	int ret = __dso__load_kallsyms(map->dso, filename, map, true);
+	int ret = __dso__load_kallsyms(map_sh(map)->dso, filename, map, true);
 
 	if (ret > 0) {
-		dso__set_loaded(map->dso);
+		dso__set_loaded(map_sh(map)->dso);
 		/*
 		 * Since /proc/kallsyms will have multiple sessions for the
 		 * kernel, with modules between them, fixup the end of all
@@ -1244,10 +1244,10 @@ int machine__load_kallsyms(struct machine *machine, const char *filename)
 int machine__load_vmlinux_path(struct machine *machine)
 {
 	struct map *map = machine__kernel_map(machine);
-	int ret = dso__load_vmlinux_path(map->dso, map);
+	int ret = dso__load_vmlinux_path(map_sh(map)->dso, map);
 
 	if (ret > 0)
-		dso__set_loaded(map->dso);
+		dso__set_loaded(map_sh(map)->dso);
 
 	return ret;
 }
@@ -1299,16 +1299,16 @@ static int map_groups__set_module_path(struct map_groups *mg, const char *path,
 	if (long_name == NULL)
 		return -ENOMEM;
 
-	dso__set_long_name(map->dso, long_name, true);
-	dso__kernel_module_get_build_id(map->dso, "");
+	dso__set_long_name(map_sh(map)->dso, long_name, true);
+	dso__kernel_module_get_build_id(map_sh(map)->dso, "");
 
 	/*
 	 * Full name could reveal us kmod compression, so
 	 * we need to update the symtab_type if needed.
 	 */
-	if (m->comp && is_kmod_dso(map->dso)) {
-		map->dso->symtab_type++;
-		map->dso->comp = m->comp;
+	if (m->comp && is_kmod_dso(map_sh(map)->dso)) {
+		map_sh(map)->dso->symtab_type++;
+		map_sh(map)->dso->comp = m->comp;
 	}
 
 	return 0;
@@ -1407,9 +1407,9 @@ static int machine__create_module(void *arg, const char *name, u64 start,
 	map = machine__findnew_module_map(machine, start, name);
 	if (map == NULL)
 		return -1;
-	map->end = start + size;
+	map_sh(map)->end = start + size;
 
-	dso__kernel_module_get_build_id(map->dso, machine->root_dir);
+	dso__kernel_module_get_build_id(map_sh(map)->dso, machine->root_dir);
 
 	return 0;
 }
@@ -1443,14 +1443,14 @@ static int machine__create_modules(struct machine *machine)
 static void machine__set_kernel_mmap(struct machine *machine,
 				     u64 start, u64 end)
 {
-	machine->vmlinux_map->start = start;
-	machine->vmlinux_map->end   = end;
+	map_sh(machine->vmlinux_map)->start = start;
+	map_sh(machine->vmlinux_map)->end   = end;
 	/*
 	 * Be a bit paranoid here, some perf.data file came with
 	 * a zero sized synthesized MMAP event for the kernel.
 	 */
 	if (start == 0 && end == 0)
-		machine->vmlinux_map->end = ~0ULL;
+		map_sh(machine->vmlinux_map)->end = ~0ULL;
 }
 
 static void machine__update_kernel_mmap(struct machine *machine,
@@ -1513,7 +1513,7 @@ int machine__create_kernel_maps(struct machine *machine)
 		/* update end address of the kernel map using adjacent module address */
 		map = map__next(machine__kernel_map(machine));
 		if (map)
-			machine__set_kernel_mmap(machine, start, map->start);
+			machine__set_kernel_mmap(machine, start, map_sh(map)->start);
 	}
 
 out_put:
@@ -1544,7 +1544,7 @@ static int machine__process_extra_kernel_map(struct machine *machine,
 					     union perf_event *event)
 {
 	struct map *kernel_map = machine__kernel_map(machine);
-	struct dso *kernel = kernel_map ? kernel_map->dso : NULL;
+	struct dso *kernel = kernel_map ? map_sh(kernel_map)->dso : NULL;
 	struct extra_kernel_map xm = {
 		.start = event->mmap.start,
 		.end   = event->mmap.start + event->mmap.len,
@@ -1585,7 +1585,7 @@ static int machine__process_kernel_mmap_event(struct machine *machine,
 		if (map == NULL)
 			goto out_problem;
 
-		map->end = map->start + event->mmap.len;
+		map_sh(map)->end = map_sh(map)->start + event->mmap.len;
 	} else if (is_kernel_mmap) {
 		const char *symbol_name = (event->mmap.filename +
 				strlen(machine->mmap_name));
@@ -2009,14 +2009,14 @@ static char *callchain_srcline(struct map *map, struct symbol *sym, u64 ip)
 	if (!map || callchain_param.key == CCKEY_FUNCTION)
 		return srcline;
 
-	srcline = srcline__tree_find(&map->dso->srclines, ip);
+	srcline = srcline__tree_find(&map_sh(map)->dso->srclines, ip);
 	if (!srcline) {
 		bool show_sym = false;
 		bool show_addr = callchain_param.key == CCKEY_ADDRESS;
 
-		srcline = get_srcline(map->dso, map__rip_2objdump(map, ip),
+		srcline = get_srcline(map_sh(map)->dso, map__rip_2objdump(map, ip),
 				      sym, show_sym, show_addr, ip);
-		srcline__tree_insert(&map->dso->srclines, ip, srcline);
+		srcline__tree_insert(&map_sh(map)->dso->srclines, ip, srcline);
 	}
 
 	return srcline;
@@ -2458,12 +2458,12 @@ static int append_inlines(struct callchain_cursor *cursor,
 	addr = map__map_ip(map, ip);
 	addr = map__rip_2objdump(map, addr);
 
-	inline_node = inlines__tree_find(&map->dso->inlined_nodes, addr);
+	inline_node = inlines__tree_find(&map_sh(map)->dso->inlined_nodes, addr);
 	if (!inline_node) {
-		inline_node = dso__parse_addr_inlines(map->dso, addr, sym);
+		inline_node = dso__parse_addr_inlines(map_sh(map)->dso, addr, sym);
 		if (!inline_node)
 			return ret;
-		inlines__tree_insert(&map->dso->inlined_nodes, inline_node);
+		inlines__tree_insert(&map_sh(map)->dso->inlined_nodes, inline_node);
 	}
 
 	list_for_each_entry(ilist, &inline_node->val, list) {
@@ -2693,7 +2693,7 @@ int machine__get_kernel_start(struct machine *machine)
 		 * kernel_start = 1ULL << 63 for x86_64.
 		 */
 		if (!err && !machine__is(machine, "x86_64"))
-			machine->kernel_start = map->start;
+			machine->kernel_start = map_sh(map)->start;
 	}
 	return err;
 }
@@ -2739,7 +2739,7 @@ char *machine__resolve_kernel_addr(void *vmachine, unsigned long long *addrp, ch
 	if (sym == NULL)
 		return NULL;
 
-	*modp = __map__is_kmodule(map) ? (char *)map->dso->short_name : NULL;
-	*addrp = map->unmap_ip(map, sym->start);
+	*modp = __map__is_kmodule(map) ? (char *)map_sh(map)->dso->short_name : NULL;
+	*addrp = map_sh(map)->unmap_ip(map, sym->start);
 	return sym->name;
 }

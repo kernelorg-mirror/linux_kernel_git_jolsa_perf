@@ -393,7 +393,7 @@ static void ui_browser__init_asm_mode(struct ui_browser *browser)
 static int sym_title(struct symbol *sym, struct map *map, char *title,
 		     size_t sz, int percent_type)
 {
-	return snprintf(title, sz, "%s  %s [Percent: %s]", sym->name, map->dso->long_name,
+	return snprintf(title, sz, "%s  %s [Percent: %s]", sym->name, map_sh(map)->dso->long_name,
 			percent_type_str(percent_type));
 }
 
@@ -915,7 +915,7 @@ int symbol__tui_annotate(struct symbol *sym, struct map *map,
 	if (sym == NULL)
 		return -1;
 
-	if (map->dso->annotate_warned)
+	if (map_sh(map)->dso->annotate_warned)
 		return -1;
 
 	err = symbol__annotate2(sym, map, evsel, opts, &browser.arch);

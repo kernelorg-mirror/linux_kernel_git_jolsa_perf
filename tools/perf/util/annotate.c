@@ -272,7 +272,7 @@ find_target:
 	target.addr = map__objdump_2mem(map, ops->target.addr);
 
 	if (map_groups__find_ams(&target) == 0 &&
-	    map__rip_2objdump(target.map, map->map_ip(target.map, target.addr)) == ops->target.addr)
+	    map__rip_2objdump(target.map, map_sh(map)->map_ip(target.map, target.addr)) == ops->target.addr)
 		ops->target.sym = target.sym;
 
 	return 0;
@@ -368,8 +368,8 @@ static int jump__parse(struct arch *arch, struct ins_operands *ops, struct map_s
 	}
 
 	target.addr = map__objdump_2mem(map, ops->target.addr);
-	start = map->unmap_ip(map, sym->start),
-	end = map->unmap_ip(map, sym->end);
+	start = map_sh(map)->unmap_ip(map, sym->start),
+	end = map_sh(map)->unmap_ip(map, sym->end);
 
 	ops->target.outside = target.addr < start || target.addr > end;
 
@@ -392,7 +392,7 @@ static int jump__parse(struct arch *arch, struct ins_operands *ops, struct map_s
 	 * the symbol searching and disassembly should be done.
 	 */
 	if (map_groups__find_ams(&target) == 0 &&
-	    map__rip_2objdump(target.map, map->map_ip(target.map, target.addr)) == ops->target.addr)
+	    map__rip_2objdump(target.map, map_sh(map)->map_ip(target.map, target.addr)) == ops->target.addr)
 		ops->target.sym = target.sym;
 
 	if (!ops->target.outside) {
@@ -872,7 +872,7 @@ static int __symbol__inc_addr_samples(struct symbol *sym, struct map *map,
 	unsigned offset;
 	struct sym_hist *h;
 
-	pr_debug3("%s: addr=%#" PRIx64 "\n", __func__, map->unmap_ip(map, addr));
+	pr_debug3("%s: addr=%#" PRIx64 "\n", __func__, map_sh(map)->unmap_ip(map, addr));
 
 	if ((addr < sym->start || addr >= sym->end) &&
 	    (addr != sym->end || sym->start != sym->end)) {
@@ -999,13 +999,13 @@ int addr_map_symbol__account_cycles(struct addr_map_symbol *ams,
 	if (start &&
 		(start->sym == ams->sym ||
 		 (ams->sym &&
-		   start->addr == ams->sym->start + ams->map->start)))
+		   start->addr == ams->sym->start + map_sh(ams->map)->start)))
 		saddr = start->al_addr;
 	if (saddr == 0)
 		pr_debug2("BB with bad start: addr %"PRIx64" start %"PRIx64" sym %"PRIx64" saddr %"PRIx64"\n",
 			ams->addr,
 			start ? start->addr : 0,
-			ams->sym ? ams->sym->start + ams->map->start : 0,
+			ams->sym ? ams->sym->start + map_sh(ams->map)->start : 0,
 			saddr);
 	err = symbol__account_cycles(ams->al_addr, saddr, ams->sym, cycles);
 	if (err)
@@ -1586,7 +1586,7 @@ static void delete_last_nop(struct symbol *sym)
 int symbol__strerror_disassemble(struct symbol *sym __maybe_unused, struct map *map,
 			      int errnum, char *buf, size_t buflen)
 {
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 
 	BUG_ON(buflen == 0);
 
@@ -1706,7 +1706,7 @@ static int symbol__disassemble_bpf(struct symbol *sym,
 	disassembler_ftype disassemble;
 	struct map *map = args->ms.map;
 	struct disassemble_info info;
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 	int pc = 0, count, sub_id;
 	struct btf *btf = NULL;
 	char tpath[PATH_MAX];
@@ -1908,7 +1908,7 @@ static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 {
 	struct annotation_options *opts = args->options;
 	struct map *map = args->ms.map;
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 	char *command;
 	FILE *file;
 	char symfs_filename[PATH_MAX];
@@ -1934,8 +1934,8 @@ static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 		return err;
 
 	pr_debug("%s: filename=%s, sym=%s, start=%#" PRIx64 ", end=%#" PRIx64 "\n", __func__,
-		 symfs_filename, sym->name, map->unmap_ip(map, sym->start),
-		 map->unmap_ip(map, sym->end));
+		 symfs_filename, sym->name, map_sh(map)->unmap_ip(map, sym->start),
+		 map_sh(map)->unmap_ip(map, sym->end));
 
 	pr_debug("annotating [%p] %30s : [%p] %30s\n",
 		 dso, dso->long_name, sym, sym->name);
@@ -2339,7 +2339,7 @@ int symbol__annotate_printf(struct symbol *sym, struct map *map,
 			    struct evsel *evsel,
 			    struct annotation_options *opts)
 {
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 	char *filename;
 	const char *d_filename;
 	const char *evsel_name = perf_evsel__name(evsel);
@@ -2522,7 +2522,7 @@ int map_symbol__annotation_dump(struct map_symbol *ms, struct evsel *evsel,
 	}
 
 	fprintf(fp, "%s() %s\nEvent: %s\n\n",
-		ms->sym->name, ms->map->dso->long_name, ev_name);
+		ms->sym->name, map_sh(ms->map)->dso->long_name, ev_name);
 	symbol__annotate_fprintf2(ms->sym, fp, opts);
 
 	fclose(fp);
@@ -2734,7 +2734,7 @@ static void annotation__calc_lines(struct annotation *notes, struct map *map,
 		if (percent_max <= 0.5)
 			continue;
 
-		al->path = get_srcline(map->dso, notes->start + al->offset, NULL,
+		al->path = get_srcline(map_sh(map)->dso, notes->start + al->offset, NULL,
 				       false, true, notes->start + al->offset);
 		insert_source_line(&tmp_root, al, opts);
 	}
@@ -2755,7 +2755,7 @@ int symbol__tty_annotate2(struct symbol *sym, struct map *map,
 			  struct evsel *evsel,
 			  struct annotation_options *opts)
 {
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 	struct rb_root source_line = RB_ROOT;
 	struct hists *hists = evsel__hists(evsel);
 	char buf[1024];
@@ -2783,7 +2783,7 @@ int symbol__tty_annotate(struct symbol *sym, struct map *map,
 			 struct evsel *evsel,
 			 struct annotation_options *opts)
 {
-	struct dso *dso = map->dso;
+	struct dso *dso = map_sh(map)->dso;
 	struct rb_root source_line = RB_ROOT;
 
 	if (symbol__annotate(sym, map, evsel, 0, opts, NULL) < 0)

@@ -17,13 +17,9 @@ struct ref_reloc_sym;
 struct map_groups;
 struct machine;
 struct evsel;
+struct map;
 
-struct map {
-	union {
-		struct rb_node	rb_node;
-		struct list_head node;
-	};
-	struct rb_node          rb_node_name;
+struct map_shared {
 	u64			start;
 	u64			end;
 	bool			erange_warned;
@@ -42,9 +38,20 @@ struct map {
 	u64			(*unmap_ip)(struct map *, u64);
 
 	struct dso		*dso;
-	struct map_groups	*groups;
-	refcount_t		refcnt;
 };
+
+struct map {
+	union {
+		struct rb_node   rb_node;
+		struct list_head node;
+	};
+	struct rb_node		 rb_node_name;
+	struct map_shared	 shared;
+	struct map_groups	*groups;
+	refcount_t		 refcnt;
+};
+
+#define map_sh(__m)  (&((__m)->shared))
 
 struct kmap;
 
@@ -54,12 +61,12 @@ struct map_groups *map__kmaps(struct map *map);
 
 static inline u64 map__map_ip(struct map *map, u64 ip)
 {
-	return ip - map->start + map->pgoff;
+	return ip - map_sh(map)->start + map_sh(map)->pgoff;
 }
 
 static inline u64 map__unmap_ip(struct map *map, u64 ip)
 {
-	return ip + map->start - map->pgoff;
+	return ip + map_sh(map)->start - map_sh(map)->pgoff;
 }
 
 static inline u64 identity__map_ip(struct map *map __maybe_unused, u64 ip)
@@ -69,7 +76,7 @@ static inline u64 identity__map_ip(struct map *map __maybe_unused, u64 ip)
 
 static inline size_t map__size(const struct map *map)
 {
-	return map->end - map->start;
+	return map_sh(map)->end - map_sh(map)->start;
 }
 
 /* rip/ip <-> addr suitable for passing to `objdump --start-address=` */
@@ -89,7 +96,7 @@ struct thread;
  * Note: caller must ensure map->dso is not NULL (map is loaded).
  */
 #define map__for_each_symbol(map, pos, n)	\
-	dso__for_each_symbol(map->dso, pos, n)
+	dso__for_each_symbol(map_sh(map)->dso, pos, n)
 
 /* map__for_each_symbol_with_name - iterate over the symbols in the given map
  *                                  that have the given name

@@ -167,8 +167,8 @@ struct sort_entry sort_comm = {
 
 static int64_t _sort__dso_cmp(struct map *map_l, struct map *map_r)
 {
-	struct dso *dso_l = map_l ? map_l->dso : NULL;
-	struct dso *dso_r = map_r ? map_r->dso : NULL;
+	struct dso *dso_l = map_l ? map_sh(map_l)->dso : NULL;
+	struct dso *dso_r = map_r ? map_sh(map_r)->dso : NULL;
 	const char *dso_name_l, *dso_name_r;
 
 	if (!dso_l || !dso_r)
@@ -194,9 +194,9 @@ sort__dso_cmp(struct hist_entry *left, struct hist_entry *right)
 static int _hist_entry__dso_snprintf(struct map *map, char *bf,
 				     size_t size, unsigned int width)
 {
-	if (map && map->dso) {
-		const char *dso_name = verbose > 0 ? map->dso->long_name :
-			map->dso->short_name;
+	if (map && map_sh(map)->dso) {
+		const char *dso_name = verbose > 0 ? map_sh(map)->dso->long_name :
+			map_sh(map)->dso->short_name;
 		return repsep_snprintf(bf, size, "%-*.*s", width, width, dso_name);
 	}
 
@@ -216,7 +216,7 @@ static int hist_entry__dso_filter(struct hist_entry *he, int type, const void *a
 	if (type != HIST_FILTER__DSO)
 		return -1;
 
-	return dso && (!he->ms.map || he->ms.map->dso != dso);
+	return dso && (!he->ms.map || map_sh(he->ms.map)->dso != dso);
 }
 
 struct sort_entry sort_dso = {
@@ -294,7 +294,7 @@ static int _hist_entry__sym_snprintf(struct map *map, struct symbol *sym,
 	size_t ret = 0;
 
 	if (verbose > 0) {
-		char o = map ? dso__symtab_origin(map->dso) : '!';
+		char o = map ? dso__symtab_origin(map_sh(map)->dso) : '!';
 		ret += repsep_snprintf(bf, size, "%-#*llx %c ",
 				       BITS_PER_LONG / 4 + 2, ip, o);
 	}
@@ -304,7 +304,7 @@ static int _hist_entry__sym_snprintf(struct map *map, struct symbol *sym,
 		if (sym->type == STT_OBJECT) {
 			ret += repsep_snprintf(bf + ret, size - ret, "%s", sym->name);
 			ret += repsep_snprintf(bf + ret, size - ret, "+0x%llx",
-					ip - map->unmap_ip(map, sym->start));
+					ip - map_sh(map)->unmap_ip(map, sym->start));
 		} else {
 			ret += repsep_snprintf(bf + ret, size - ret, "%.*s",
 					       width - ret,
@@ -504,7 +504,7 @@ static char *hist_entry__get_srcfile(struct hist_entry *e)
 	if (!map)
 		return no_srcfile;
 
-	sf = __get_srcline(map->dso, map__rip_2objdump(map, e->ip),
+	sf = __get_srcline(map_sh(map)->dso, map__rip_2objdump(map, e->ip),
 			 e->ms.sym, false, true, true, e->ip);
 	if (!strcmp(sf, SRCLINE_UNKNOWN))
 		return no_srcfile;
@@ -792,7 +792,7 @@ static int hist_entry__dso_from_filter(struct hist_entry *he, int type,
 		return -1;
 
 	return dso && (!he->branch_info || !he->branch_info->from.map ||
-		       he->branch_info->from.map->dso != dso);
+		       map_sh(he->branch_info->from.map)->dso != dso);
 }
 
 static int64_t
@@ -824,7 +824,7 @@ static int hist_entry__dso_to_filter(struct hist_entry *he, int type,
 		return -1;
 
 	return dso && (!he->branch_info || !he->branch_info->to.map ||
-		       he->branch_info->to.map->dso != dso);
+		       map_sh(he->branch_info->to.map)->dso != dso);
 }
 
 static int64_t
@@ -1200,6 +1200,7 @@ sort__dcacheline_cmp(struct hist_entry *left, struct hist_entry *right)
 {
 	u64 l, r;
 	struct map *l_map, *r_map;
+	struct map_shared *ls_map, *rs_map;
 
 	if (!left->mem_info)  return -1;
 	if (!right->mem_info) return 1;
@@ -1218,17 +1219,20 @@ sort__dcacheline_cmp(struct hist_entry *left, struct hist_entry *right)
 	if (!l_map) return -1;
 	if (!r_map) return 1;
 
-	if (l_map->maj > r_map->maj) return -1;
-	if (l_map->maj < r_map->maj) return 1;
+	ls_map = map_sh(l_map);
+	rs_map = map_sh(r_map);
 
-	if (l_map->min > r_map->min) return -1;
-	if (l_map->min < r_map->min) return 1;
+	if (ls_map->maj > rs_map->maj) return -1;
+	if (ls_map->maj < rs_map->maj) return 1;
 
-	if (l_map->ino > r_map->ino) return -1;
-	if (l_map->ino < r_map->ino) return 1;
+	if (ls_map->min > rs_map->min) return -1;
+	if (ls_map->min < rs_map->min) return 1;
 
-	if (l_map->ino_generation > r_map->ino_generation) return -1;
-	if (l_map->ino_generation < r_map->ino_generation) return 1;
+	if (ls_map->ino > rs_map->ino) return -1;
+	if (ls_map->ino < rs_map->ino) return 1;
+
+	if (ls_map->ino_generation > rs_map->ino_generation) return -1;
+	if (ls_map->ino_generation < rs_map->ino_generation) return 1;
 
 	/*
 	 * Addresses with no major/minor numbers are assumed to be
@@ -1239,9 +1243,9 @@ sort__dcacheline_cmp(struct hist_entry *left, struct hist_entry *right)
 	 */
 
 	if ((left->cpumode != PERF_RECORD_MISC_KERNEL) &&
-	    (!(l_map->flags & MAP_SHARED)) &&
-	    !l_map->maj && !l_map->min && !l_map->ino &&
-	    !l_map->ino_generation) {
+	    (!(ls_map->flags & MAP_SHARED)) &&
+	    !ls_map->maj && !ls_map->min && !ls_map->ino &&
+	    !ls_map->ino_generation) {
 		/* userspace anonymous */
 
 		if (left->thread->pid_ > right->thread->pid_) return -1;
@@ -1275,10 +1279,10 @@ static int hist_entry__dcacheline_snprintf(struct hist_entry *he, char *bf,
 
 		/* print [s] for shared data mmaps */
 		if ((he->cpumode != PERF_RECORD_MISC_KERNEL) &&
-		     map && !(map->prot & PROT_EXEC) &&
-		    (map->flags & MAP_SHARED) &&
-		    (map->maj || map->min || map->ino ||
-		     map->ino_generation))
+		     map && !(map_sh(map)->prot & PROT_EXEC) &&
+		    (map_sh(map)->flags & MAP_SHARED) &&
+		    (map_sh(map)->maj || map_sh(map)->min || map_sh(map)->ino ||
+		     map_sh(map)->ino_generation))
 			level = 's';
 		else if (!map)
 			level = 'X';
@@ -1629,7 +1633,7 @@ sort__dso_size_cmp(struct hist_entry *left, struct hist_entry *right)
 static int _hist_entry__dso_size_snprintf(struct map *map, char *bf,
 					  size_t bf_size, unsigned int width)
 {
-	if (map && map->dso)
+	if (map && map_sh(map)->dso)
 		return repsep_snprintf(bf, bf_size, "%*d", width,
 				       map__size(map));
 

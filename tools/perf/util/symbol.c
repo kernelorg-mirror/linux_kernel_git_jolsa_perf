@@ -251,8 +251,8 @@ void map_groups__fixup_end(struct map_groups *mg)
 		goto out_unlock;
 
 	for (next = map__next(curr); next; next = map__next(curr)) {
-		if (!curr->end)
-			curr->end = next->start;
+		if (!map_sh(curr)->end)
+			map_sh(curr)->end = map_sh(next)->start;
 		curr = next;
 	}
 
@@ -260,8 +260,8 @@ void map_groups__fixup_end(struct map_groups *mg)
 	 * We still haven't the actual symbols, so guess the
 	 * last map final address.
 	 */
-	if (!curr->end)
-		curr->end = ~0ULL;
+	if (!map_sh(curr)->end)
+		map_sh(curr)->end = ~0ULL;
 
 out_unlock:
 	up_write(&maps->lock);
@@ -735,12 +735,12 @@ static int map_groups__split_kallsyms_for_kcore(struct map_groups *kmaps, struct
 			continue;
 		}
 
-		pos->start -= curr_map->start - curr_map->pgoff;
-		if (pos->end > curr_map->end)
-			pos->end = curr_map->end;
+		pos->start -= map_sh(curr_map)->start - map_sh(curr_map)->pgoff;
+		if (pos->end > map_sh(curr_map)->end)
+			pos->end = map_sh(curr_map)->end;
 		if (pos->end)
-			pos->end -= curr_map->start - curr_map->pgoff;
-		symbols__insert(&curr_map->dso->symbols, pos);
+			pos->end -= map_sh(curr_map)->start - map_sh(curr_map)->pgoff;
+		symbols__insert(&map_sh(curr_map)->dso->symbols, pos);
 		++count;
 	}
 
@@ -787,7 +787,7 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 
 			*module++ = '\0';
 
-			if (strcmp(curr_map->dso->short_name, module)) {
+			if (strcmp(map_sh(curr_map)->dso->short_name, module)) {
 				if (curr_map != initial_map &&
 				    dso->kernel == DSO_TYPE_GUEST_KERNEL &&
 				    machine__is_default_guest(machine)) {
@@ -798,7 +798,7 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 					 * symbols are in its kmap. Mark it as
 					 * loaded.
 					 */
-					dso__set_loaded(curr_map->dso);
+					dso__set_loaded(map_sh(curr_map)->dso);
 				}
 
 				curr_map = map_groups__find_by_name(kmaps, module);
@@ -811,7 +811,7 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 					goto discard_symbol;
 				}
 
-				if (curr_map->dso->loaded &&
+				if (map_sh(curr_map)->dso->loaded &&
 				    !machine__is_default_guest(machine))
 					goto discard_symbol;
 			}
@@ -819,8 +819,8 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 			 * So that we look just like we get from .ko files,
 			 * i.e. not prelinked, relative to initial_map->start.
 			 */
-			pos->start = curr_map->map_ip(curr_map, pos->start);
-			pos->end   = curr_map->map_ip(curr_map, pos->end);
+			pos->start = map_sh(curr_map)->map_ip(curr_map, pos->start);
+			pos->end   = map_sh(curr_map)->map_ip(curr_map, pos->end);
 		} else if (x86_64 && is_entry_trampoline(pos->name)) {
 			/*
 			 * These symbols are not needed anymore since the
@@ -867,7 +867,7 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 				return -1;
 			}
 
-			curr_map->map_ip = curr_map->unmap_ip = identity__map_ip;
+			map_sh(curr_map)->map_ip = map_sh(curr_map)->unmap_ip = identity__map_ip;
 			map_groups__insert(kmaps, curr_map);
 			++kernel_range;
 		} else if (delta) {
@@ -878,7 +878,7 @@ static int map_groups__split_kallsyms(struct map_groups *kmaps, struct dso *dso,
 add_symbol:
 		if (curr_map != initial_map) {
 			rb_erase_cached(&pos->rb_node, root);
-			symbols__insert(&curr_map->dso->symbols, pos);
+			symbols__insert(&map_sh(curr_map)->dso->symbols, pos);
 			++moved;
 		} else
 			++count;
@@ -892,7 +892,7 @@ discard_symbol:
 	if (curr_map != initial_map &&
 	    dso->kernel == DSO_TYPE_GUEST_KERNEL &&
 	    machine__is_default_guest(kmaps->machine)) {
-		dso__set_loaded(curr_map->dso);
+		dso__set_loaded(map_sh(curr_map)->dso);
 	}
 
 	return count + moved;
@@ -1080,8 +1080,8 @@ static int do_validate_kcore_modules(const char *filename,
 		}
 
 		/* Module must be in memory at the same address */
-		mi = find_module(old_map->dso->short_name, &modules);
-		if (!mi || mi->start != old_map->start) {
+		mi = find_module(map_sh(old_map)->dso->short_name, &modules);
+		if (!mi || mi->start != map_sh(old_map)->start) {
 			err = -EINVAL;
 			goto out;
 		}
@@ -1172,8 +1172,8 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 	if (map == NULL)
 		return -ENOMEM;
 
-	map->end = map->start + len;
-	map->pgoff = pgoff;
+	map_sh(map)->end = map_sh(map)->start + len;
+	map_sh(map)->pgoff = pgoff;
 
 	list_add(&map->node, &md->maps);
 
@@ -1193,21 +1193,21 @@ int map_groups__merge_in(struct map_groups *kmaps, struct map *new_map)
 	     old_map = map_groups__next(old_map)) {
 
 		/* no overload with this one */
-		if (new_map->end < old_map->start ||
-		    new_map->start >= old_map->end)
+		if (map_sh(new_map)->end < map_sh(old_map)->start ||
+		    map_sh(new_map)->start >= map_sh(old_map)->end)
 			continue;
 
-		if (new_map->start < old_map->start) {
+		if (map_sh(new_map)->start < map_sh(old_map)->start) {
 			/*
 			 * |new......
 			 *       |old....
 			 */
-			if (new_map->end < old_map->end) {
+			if (map_sh(new_map)->end < map_sh(old_map)->end) {
 				/*
 				 * |new......|     -> |new..|
 				 *       |old....| ->       |old....|
 				 */
-				new_map->end = old_map->start;
+				map_sh(new_map)->end = map_sh(old_map)->start;
 			} else {
 				/*
 				 * |new.............| -> |new..|       |new..|
@@ -1218,16 +1218,16 @@ int map_groups__merge_in(struct map_groups *kmaps, struct map *new_map)
 				if (!m)
 					return -ENOMEM;
 
-				m->end = old_map->start;
+				map_sh(m)->end = map_sh(old_map)->start;
 				list_add_tail(&m->node, &merged);
-				new_map->start = old_map->end;
+				map_sh(new_map)->start = map_sh(old_map)->end;
 			}
 		} else {
 			/*
 			 *      |new......
 			 * |old....
 			 */
-			if (new_map->end < old_map->end) {
+			if (map_sh(new_map)->end < map_sh(old_map)->end) {
 				/*
 				 *      |new..|   -> x
 				 * |old.........| -> |old.........|
@@ -1240,7 +1240,7 @@ int map_groups__merge_in(struct map_groups *kmaps, struct map *new_map)
 				 *      |new......| ->         |new...|
 				 * |old....|        -> |old....|
 				 */
-				new_map->start = old_map->end;
+				map_sh(new_map)->start = map_sh(old_map)->end;
 			}
 		}
 	}
@@ -1299,7 +1299,7 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 	}
 
 	/* Read new maps into temporary lists */
-	err = file__read_maps(fd, map->prot & PROT_EXEC, kcore_mapfn, &md,
+	err = file__read_maps(fd, map_sh(map)->prot & PROT_EXEC, kcore_mapfn, &md,
 			      &is_64_bit);
 	if (err)
 		goto out_err;
@@ -1329,7 +1329,7 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 	/* Find the kernel map using the '_stext' symbol */
 	if (!kallsyms__get_function_start(kallsyms_filename, "_stext", &stext)) {
 		list_for_each_entry(new_map, &md.maps, node) {
-			if (stext >= new_map->start && stext < new_map->end) {
+			if (stext >= map_sh(new_map)->start && stext < map_sh(new_map)->end) {
 				replacement_map = new_map;
 				break;
 			}
@@ -1344,11 +1344,11 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 		new_map = list_entry(md.maps.next, struct map, node);
 		list_del_init(&new_map->node);
 		if (new_map == replacement_map) {
-			map->start	= new_map->start;
-			map->end	= new_map->end;
-			map->pgoff	= new_map->pgoff;
-			map->map_ip	= new_map->map_ip;
-			map->unmap_ip	= new_map->unmap_ip;
+			map_sh(map)->start	= map_sh(new_map)->start;
+			map_sh(map)->end	= map_sh(new_map)->end;
+			map_sh(map)->pgoff	= map_sh(new_map)->pgoff;
+			map_sh(map)->map_ip	= map_sh(new_map)->map_ip;
+			map_sh(map)->unmap_ip	= map_sh(new_map)->unmap_ip;
 			/* Ensure maps are correctly ordered */
 			map__get(map);
 			map_groups__remove(kmaps, map);
@@ -1391,7 +1391,7 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 
 	close(fd);
 
-	if (map->prot & PROT_EXEC)
+	if (map_sh(map)->prot & PROT_EXEC)
 		pr_debug("Using %s for kernel object code\n", kcore_filename);
 	else
 		pr_debug("Using %s for kernel data\n", kcore_filename);
@@ -1797,7 +1797,7 @@ struct map *map_groups__find_by_name(struct map_groups *mg, const char *name)
 
 		map = rb_entry(node, struct map, rb_node_name);
 
-		rc = strcmp(map->dso->short_name, name);
+		rc = strcmp(map_sh(map)->dso->short_name, name);
 		if (rc < 0)
 			node = node->rb_left;
 		else if (rc > 0)

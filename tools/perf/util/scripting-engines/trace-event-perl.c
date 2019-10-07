@@ -315,11 +315,11 @@ static SV *perl_process_callchain(struct perf_sample *sample,
 		if (node->map) {
 			struct map *map = node->map;
 			const char *dsoname = "[unknown]";
-			if (map && map->dso) {
-				if (symbol_conf.show_kernel_path && map->dso->long_name)
-					dsoname = map->dso->long_name;
+			if (map && map_sh(map)->dso) {
+				if (symbol_conf.show_kernel_path && map_sh(map)->dso->long_name)
+					dsoname = map_sh(map)->dso->long_name;
 				else
-					dsoname = map->dso->name;
+					dsoname = map_sh(map)->dso->name;
 			}
 			if (!hv_stores(elem, "dso", newSVpv(dsoname,0))) {
 				hv_undef(elem);

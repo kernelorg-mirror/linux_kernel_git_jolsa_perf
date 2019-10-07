@@ -842,11 +842,11 @@ static int perf_sample__fprintf_brstackoff(struct perf_sample *sample,
 		to   = br->entries[i].to;
 
 		if (thread__find_map_fb(thread, sample->cpumode, from, &alf) &&
-		    !alf.map->dso->adjust_symbols)
+		    !map_sh(alf.map)->dso->adjust_symbols)
 			from = map__map_ip(alf.map, from);
 
 		if (thread__find_map_fb(thread, sample->cpumode, to, &alt) &&
-		    !alt.map->dso->adjust_symbols)
+		    !map_sh(alt.map)->dso->adjust_symbols)
 			to = map__map_ip(alt.map, to);
 
 		printed += fprintf(fp, " 0x%"PRIx64, from);
@@ -909,11 +909,11 @@ static int grab_bb(u8 *buffer, u64 start, u64 end,
 		return 0;
 	}
 
-	if (!thread__find_map(thread, *cpumode, start, &al) || !al.map->dso) {
+	if (!thread__find_map(thread, *cpumode, start, &al) || !map_sh(al.map)->dso) {
 		pr_debug("\tcannot resolve %" PRIx64 "-%" PRIx64 "\n", start, end);
 		return 0;
 	}
-	if (al.map->dso->data.status == DSO_DATA_STATUS_ERROR) {
+	if (map_sh(al.map)->dso->data.status == DSO_DATA_STATUS_ERROR) {
 		pr_debug("\tcannot resolve %" PRIx64 "-%" PRIx64 "\n", start, end);
 		return 0;
 	}
@@ -921,11 +921,11 @@ static int grab_bb(u8 *buffer, u64 start, u64 end,
 	/* Load maps to ensure dso->is_64_bit has been updated */
 	map__load(al.map);
 
-	offset = al.map->map_ip(al.map, start);
-	len = dso__data_read_offset(al.map->dso, machine, offset, (u8 *)buffer,
+	offset = map_sh(al.map)->map_ip(al.map, start);
+	len = dso__data_read_offset(map_sh(al.map)->dso, machine, offset, (u8 *)buffer,
 				    end - start + MAXINSN);
 
-	*is64bit = al.map->dso->is_64_bit;
+	*is64bit = map_sh(al.map)->dso->is_64_bit;
 	if (len <= 0)
 		pr_debug("\tcannot fetch code for block at %" PRIx64 "-%" PRIx64 "\n",
 			start, end);
@@ -992,7 +992,7 @@ static int ip__fprintf_sym(uint64_t addr, struct thread *thread,
 	if (al.addr < al.sym->end)
 		off = al.addr - al.sym->start;
 	else
-		off = al.addr - al.map->start - al.sym->start;
+		off = al.addr - map_sh(al.map)->start - al.sym->start;
 	printed += fprintf(fp, "\t%s", al.sym->name);
 	if (off)
 		printed += fprintf(fp, "%+d", off);

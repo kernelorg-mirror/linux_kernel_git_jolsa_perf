@@ -288,7 +288,7 @@ static int process_sample_event(struct perf_tool *tool,
 	}
 
 	if (al.map != NULL)
-		al.map->dso->hit = 1;
+		map_sh(al.map)->dso->hit = 1;
 
 	if (ui__has_annotation() || rep->symbol_ipc) {
 		hist__account_cycles(sample->branch_stack, &al, sample,
@@ -531,7 +531,7 @@ static void report__warn_kptr_restrict(const struct report *rep)
 		return;
 
 	if (kernel_map == NULL ||
-	    (kernel_map->dso->hit &&
+	    (map_sh(kernel_map)->dso->hit &&
 	     (kernel_kmap->ref_reloc_sym == NULL ||
 	      kernel_kmap->ref_reloc_sym->addr == 0))) {
 		const char *desc =
@@ -731,15 +731,16 @@ static size_t maps__fprintf_task(struct maps *maps, int indent, FILE *fp)
 
 	for (nd = rb_first(&maps->entries); nd; nd = rb_next(nd)) {
 		struct map *map = rb_entry(nd, struct map, rb_node);
+		struct map_shared *sh = map_sh(map);
 
 		printed += fprintf(fp, "%*s  %" PRIx64 "-%" PRIx64 " %c%c%c%c %08" PRIx64 " %" PRIu64 " %s\n",
-				   indent, "", map->start, map->end,
-				   map->prot & PROT_READ ? 'r' : '-',
-				   map->prot & PROT_WRITE ? 'w' : '-',
-				   map->prot & PROT_EXEC ? 'x' : '-',
-				   map->flags & MAP_SHARED ? 's' : 'p',
-				   map->pgoff,
-				   map->ino, map->dso->name);
+				   indent, "", sh->start, sh->end,
+				   sh->prot  & PROT_READ ?  'r' : '-',
+				   sh->prot  & PROT_WRITE ? 'w' : '-',
+				   sh->prot  & PROT_EXEC ?  'x' : '-',
+				   sh->flags & MAP_SHARED ? 's' : 'p',
+				   sh->pgoff,
+				   sh->ino, sh->dso->name);
 	}
 
 	return printed;

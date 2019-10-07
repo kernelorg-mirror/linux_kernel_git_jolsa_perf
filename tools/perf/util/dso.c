@@ -1074,7 +1074,7 @@ ssize_t dso__data_read_addr(struct dso *dso, struct map *map,
 			    struct machine *machine, u64 addr,
 			    u8 *data, ssize_t size)
 {
-	u64 offset = map->map_ip(map, addr);
+	u64 offset = map_sh(map)->map_ip(map, addr);
 	return dso__data_read_offset(dso, machine, offset, data, size);
 }
 
@@ -1114,7 +1114,7 @@ ssize_t dso__data_write_cache_addr(struct dso *dso, struct map *map,
 				   struct machine *machine, u64 addr,
 				   const u8 *data, ssize_t size)
 {
-	u64 offset = map->map_ip(map, addr);
+	u64 offset = map_sh(map)->map_ip(map, addr);
 	return dso__data_write_cache_offs(dso, machine, offset, data, size);
 }
 

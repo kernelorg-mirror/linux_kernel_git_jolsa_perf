@@ -31,6 +31,8 @@ static int __report_module(struct addr_location *al, u64 ip,
 {
 	Dwfl_Module *mod;
 	struct dso *dso = NULL;
+	struct map_shared *sh;
+
 	/*
 	 * Some callers will use al->sym, so we can't just use the
 	 * cheaper thread__find_map() here.
@@ -38,23 +40,25 @@ static int __report_module(struct addr_location *al, u64 ip,
 	thread__find_symbol(ui->thread, PERF_RECORD_MISC_USER, ip, al);
 
 	if (al->map)
-		dso = al->map->dso;
+		dso = map_sh(al->map)->dso;
 
 	if (!dso)
 		return 0;
+
+	sh = map_sh(al->map);
 
 	mod = dwfl_addrmodule(ui->dwfl, ip);
 	if (mod) {
 		Dwarf_Addr s;
 
 		dwfl_module_info(mod, NULL, &s, NULL, NULL, NULL, NULL, NULL);
-		if (s != al->map->start - al->map->pgoff)
+		if (s != sh->start - sh->pgoff)
 			mod = 0;
 	}
 
 	if (!mod)
 		mod = dwfl_report_elf(ui->dwfl, dso->short_name,
-				      (dso->symsrc_filename ? dso->symsrc_filename : dso->long_name), -1, al->map->start - al->map->pgoff,
+				      (dso->symsrc_filename ? dso->symsrc_filename : dso->long_name), -1, sh->start - sh->pgoff,
 				      false);
 
 	return mod && dwfl_addrmodule(ui->dwfl, ip) == mod ? 0 : -1;
@@ -87,7 +91,7 @@ static int entry(u64 ip, struct unwind_info *ui)
 	pr_debug("unwind: %s:ip = 0x%" PRIx64 " (0x%" PRIx64 ")\n",
 		 al.sym ? al.sym->name : "''",
 		 ip,
-		 al.map ? al.map->map_ip(al.map, ip) : (u64) 0);
+		 al.map ? map_sh(al.map)->map_ip(al.map, ip) : (u64) 0);
 	return 0;
 }
 
@@ -112,10 +116,10 @@ static int access_dso_mem(struct unwind_info *ui, Dwarf_Addr addr,
 		return -1;
 	}
 
-	if (!al.map->dso)
+	if (!map_sh(al.map)->dso)
 		return -1;
 
-	size = dso__data_read_addr(al.map->dso, al.map, ui->machine,
+	size = dso__data_read_addr(map_sh(al.map)->dso, al.map, ui->machine,
 				   addr, (u8 *) data, sizeof(*data));
 
 	return !(size == sizeof(*data));

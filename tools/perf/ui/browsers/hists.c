@@ -2402,7 +2402,7 @@ add_annotate_opt(struct hist_browser *browser __maybe_unused,
 		 struct popup_action *act, char **optstr,
 		 struct map *map, struct symbol *sym)
 {
-	if (sym == NULL || map->dso->annotate_warned)
+	if (sym == NULL || map_sh(map)->dso->annotate_warned)
 		return 0;
 
 	if (asprintf(optstr, "Annotate %s", sym->name) < 0)
@@ -2491,8 +2491,8 @@ do_zoom_dso(struct hist_browser *browser, struct popup_action *act)
 		ui_helpline__pop();
 	} else {
 		ui_helpline__fpush("To zoom out press ESC or ENTER + \"Zoom out of %s DSO\"",
-				   __map__is_kernel(map) ? "the Kernel" : map->dso->short_name);
-		browser->hists->dso_filter = map->dso;
+				   __map__is_kernel(map) ? "the Kernel" : map_sh(map)->dso->short_name);
+		browser->hists->dso_filter = map_sh(map)->dso;
 		perf_hpp__set_elide(HISTC_DSO, true);
 		pstack__push(browser->pstack, &browser->hists->dso_filter);
 	}
@@ -2511,7 +2511,7 @@ add_dso_opt(struct hist_browser *browser, struct popup_action *act,
 
 	if (asprintf(optstr, "Zoom %s %s DSO",
 		     browser->hists->dso_filter ? "out of" : "into",
-		     __map__is_kernel(map) ? "the Kernel" : map->dso->short_name) < 0)
+		     __map__is_kernel(map) ? "the Kernel" : map_sh(map)->dso->short_name) < 0)
 		return 0;
 
 	act->ms.map = map;
@@ -2939,7 +2939,7 @@ static int perf_evsel__hists_browse(struct evsel *evsel, int nr_events,
 
 			if (browser->selection == NULL ||
 			    browser->selection->sym == NULL ||
-			    browser->selection->map->dso->annotate_warned)
+			    map_sh(browser->selection->map)->dso->annotate_warned)
 				continue;
 
 			actions->ms.map = browser->selection->map;

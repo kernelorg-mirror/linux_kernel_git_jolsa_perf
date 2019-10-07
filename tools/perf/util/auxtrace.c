@@ -1957,7 +1957,7 @@ static struct dso *load_dso(const char *name)
 	if (map__load(map) < 0)
 		pr_err("File '%s' not found or has no symbols.\n", name);
 
-	dso = dso__get(map->dso);
+	dso = dso__get(map_sh(map)->dso);
 
 	map__put(map);
 
