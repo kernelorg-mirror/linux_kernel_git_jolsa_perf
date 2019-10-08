@@ -145,6 +145,7 @@ void map__init(struct map *map, u64 start, u64 end, u64 pgoff, struct dso *dso)
 	map->groups   = NULL;
 	sh->erange_warned = false;
 	refcount_set(&map->refcnt, 1);
+	refcount_set(&sh->refcnt, 1);
 }
 
 struct map *map__new(struct machine *machine, u64 start, u64 len,
@@ -153,14 +154,16 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 		     struct thread *thread)
 {
 	struct map *map = malloc(sizeof(*map));
+	struct map_shared *sh = malloc(sizeof(*sh));
 	struct nsinfo *nsi = NULL;
 	struct nsinfo *nnsi;
 
-	if (map != NULL) {
+	if (map != NULL && sh != NULL) {
 		char newfilename[PATH_MAX];
 		struct dso *dso;
 		int anon, no_dso, vdso, android;
-		struct map_shared *sh = map_sh(map);
+
+		map->shared = sh;
 
 		android = is_android_lib(filename);
 		anon = is_anon_memory(filename, flags);
@@ -220,11 +223,12 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 		}
 		dso->nsinfo = nsi;
 		dso__put(dso);
+		return map;
 	}
-	return map;
 out_delete:
 	nsinfo__put(nsi);
 	free(map);
+	free(sh);
 	return NULL;
 }
 
@@ -235,13 +239,19 @@ out_delete:
  */
 struct map *map__new2(u64 start, struct dso *dso)
 {
+	struct map_shared *sh = zalloc(sizeof(*sh));
 	struct map *map = calloc(1, (sizeof(*map) +
 				     (dso->kernel ? sizeof(struct kmap) : 0)));
-	if (map != NULL) {
+
+	if (map != NULL && sh != NULL) {
+		map->shared = sh;
 		/*
 		 * ->end will be filled after we load all the symbols
 		 */
 		map__init(map, start, 0, 0, dso);
+	} else {
+		zfree(&map);
+		free(sh);
 	}
 
 	return map;
@@ -289,15 +299,29 @@ bool map__has_symbols(const struct map *map)
 	return dso__has_symbols(map_sh(map)->dso);
 }
 
-static void map__exit(struct map *map)
+static void map_shared__delete(struct map_shared *sh)
 {
-	BUG_ON(refcount_read(&map->refcnt) != 0);
-	dso__zput(map_sh(map)->dso);
+	dso__put(sh->dso);
+	free(sh);
+}
+
+static struct map_shared *map_shared__get(struct map_shared *sh)
+{
+	if (sh)
+		refcount_inc(&sh->refcnt);
+	return sh;
+}
+
+static void map_shared__put(struct map_shared *sh)
+{
+	if (sh && refcount_dec_and_test(&sh->refcnt))
+		map_shared__delete(sh);
 }
 
 void map__delete(struct map *map)
 {
-	map__exit(map);
+	BUG_ON(refcount_read(&map->refcnt) != 0);
+	map_shared__put(map->shared);
 	free(map);
 }
 
@@ -390,12 +414,26 @@ struct symbol *map__find_symbol_by_name(struct map *map, const char *name)
 	return dso__find_symbol_by_name(map_sh(map)->dso, name);
 }
 
-struct map *map__clone(struct map *from)
+struct map *map__clone(struct map *from, bool share)
 {
 	struct map *map = memdup(from, sizeof(*map));
+	struct map_shared *sh;
 
 	if (map != NULL) {
 		refcount_set(&map->refcnt, 1);
+
+		if (share) {
+			sh = map_shared__get(map->shared);
+		} else {
+			sh = memdup(map->shared, sizeof(*sh));
+			if (!sh) {
+				free(map);
+				return NULL;
+			}
+			map->shared = sh;
+			refcount_set(&sh->refcnt, 1);
+		}
+
 		RB_CLEAR_NODE(&map->rb_node);
 		dso__get(map_sh(map)->dso);
 		map->groups = NULL;
@@ -840,7 +878,7 @@ static int maps__fixup_overlappings(struct maps *maps, struct map *map, FILE *fp
 		 * overlapped by the new map:
 		 */
 		if (map_sh(map)->start > map_sh(pos)->start) {
-			struct map *before = map__clone(pos);
+			struct map *before = map__clone(pos, false);
 
 			if (before == NULL) {
 				err = -ENOMEM;
@@ -855,7 +893,7 @@ static int maps__fixup_overlappings(struct maps *maps, struct map *map, FILE *fp
 		}
 
 		if (map_sh(map)->end < map_sh(pos)->end) {
-			struct map *after = map__clone(pos);
+			struct map *after = map__clone(pos, false);
 
 			if (after == NULL) {
 				err = -ENOMEM;
@@ -902,7 +940,7 @@ int map_groups__clone(struct thread *thread, struct map_groups *parent)
 	down_read(&maps->lock);
 
 	for (map = maps__first(maps); map; map = map__next(map)) {
-		struct map *new = map__clone(map);
+		struct map *new = map__clone(map, true);
 		if (new == NULL)
 			goto out_unlock;
 

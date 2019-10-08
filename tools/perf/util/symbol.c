@@ -1213,7 +1213,7 @@ int map_groups__merge_in(struct map_groups *kmaps, struct map *new_map)
 				 * |new.............| -> |new..|       |new..|
 				 *       |old....|    ->       |old....|
 				 */
-				struct map *m = map__clone(new_map);
+				struct map *m = map__clone(new_map, false);
 
 				if (!m)
 					return -ENOMEM;

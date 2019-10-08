@@ -38,6 +38,7 @@ struct map_shared {
 	u64			(*unmap_ip)(struct map *, u64);
 
 	struct dso		*dso;
+	refcount_t		 refcnt;
 };
 
 struct map {
@@ -46,12 +47,12 @@ struct map {
 		struct list_head node;
 	};
 	struct rb_node		 rb_node_name;
-	struct map_shared	 shared;
+	struct map_shared	*shared;
 	struct map_groups	*groups;
 	refcount_t		 refcnt;
 };
 
-#define map_sh(__m)  (&((__m)->shared))
+#define map_sh(__m)  ((__m)->shared)
 
 struct kmap;
 
@@ -123,7 +124,7 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 		     char *filename, struct thread *thread);
 struct map *map__new2(u64 start, struct dso *dso);
 void map__delete(struct map *map);
-struct map *map__clone(struct map *map);
+struct map *map__clone(struct map *map, bool share);
 
 static inline struct map *map__get(struct map *map)
 {
