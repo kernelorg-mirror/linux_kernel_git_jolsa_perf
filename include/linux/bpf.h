@@ -212,6 +212,7 @@ enum bpf_arg_type {
 	ARG_PTR_TO_INT,		/* pointer to int */
 	ARG_PTR_TO_LONG,	/* pointer to long */
 	ARG_PTR_TO_SOCKET,	/* pointer to bpf_sock (fullsock) */
+	ARG_PTR_TO_BTF_ID,	/* pointer to in-kernel struct */
 };
 
 /* type of values returned from helper functions */
@@ -239,6 +240,7 @@ struct bpf_func_proto {
 	enum bpf_arg_type arg3_type;
 	enum bpf_arg_type arg4_type;
 	enum bpf_arg_type arg5_type;
+	u32 *btf_id; /* BTF ids of arguments */
 };
 
 /* bpf_context is intentionally undefined structure. Pointer to bpf_context is
@@ -762,6 +764,7 @@ int btf_struct_access(struct bpf_verifier_env *env,
 		      const struct btf_type *t, int off, int size,
 		      enum bpf_access_type atype,
 		      u32 *next_btf_id);
+u32 btf_resolve_helper_id(struct bpf_verifier_env *env, void *, int);
 
 #else /* !CONFIG_BPF_SYSCALL */
 static inline struct bpf_prog *bpf_prog_get(u32 ufd)
