@@ -762,6 +762,39 @@ static const struct bpf_func_proto bpf_send_signal_proto = {
 	.arg1_type	= ARG_ANYTHING,
 };
 
+BPF_CALL_3(bpf_file_path, struct file *, file, char *, buf, u32, sz)
+{
+	char *path;
+	int len;
+
+	if (!file || IS_ERR(file))
+		return -1;
+
+	path = file_path(file, buf, sz - 1);
+	if (IS_ERR(path)) {
+		len = PTR_ERR(path);
+	} else {
+		len = strlen(path);
+		if (len && path != buf) {
+			memmove(buf, path, len);
+			buf[len] = 0;
+		}
+	}
+
+	return len;
+}
+
+static u32 bpf_file_path_btf_ids[3];
+static const struct bpf_func_proto bpf_file_path_proto = {
+	.func		= bpf_file_path,
+	.gpl_only	= true,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_BTF_ID,
+	.arg2_type	= ARG_PTR_TO_MEM,
+	.arg3_type	= ARG_CONST_SIZE,
+	.btf_id		= bpf_file_path_btf_ids,
+};
+
 static const struct bpf_func_proto *
 tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
@@ -1278,6 +1311,8 @@ tracing_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_skb_output:
 		return &bpf_skb_output_proto;
 #endif
+	case BPF_FUNC_file_path:
+		return &bpf_file_path_proto;
 	default:
 		if (prog->expected_attach_type == BPF_TRACE_FENTRY ||
 		    prog->expected_attach_type == BPF_TRACE_FEXIT)
