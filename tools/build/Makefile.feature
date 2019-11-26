@@ -50,6 +50,7 @@ FEATURE_TESTS_BASIC :=                  \
         libelf-mmap                     \
         libnuma                         \
         numa_num_possible_cpus          \
+        libpci                          \
         libperl                         \
         libpython                       \
         libpython-version               \
@@ -116,6 +117,7 @@ FEATURE_DISPLAY ?=              \
          libelf                 \
          libnuma                \
          numa_num_possible_cpus \
+         libpci                 \
          libperl                \
          libpython              \
          libcrypto              \

@@ -76,6 +76,7 @@ static void library_status(void)
 	STATUS(HAVE_LIBUNWIND_SUPPORT, libunwind);
 	STATUS(HAVE_DWARF_SUPPORT, libdw-dwarf-unwind);
 	STATUS(HAVE_ZLIB_SUPPORT, zlib);
+	STATUS(HAVE_LIBPCI_SUPPORT, libpci);
 	STATUS(HAVE_LZMA_SUPPORT, lzma);
 	STATUS(HAVE_AUXTRACE_SUPPORT, get_cpuid);
 	STATUS(HAVE_LIBBPF_SUPPORT, bpf);

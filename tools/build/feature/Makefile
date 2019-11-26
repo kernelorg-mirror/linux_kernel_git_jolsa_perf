@@ -28,6 +28,7 @@ FILES=                                          \
          test-libelf-mmap.bin                   \
          test-libnuma.bin                       \
          test-numa_num_possible_cpus.bin        \
+         test-libpci.bin                        \
          test-libperl.bin                       \
          test-libpython.bin                     \
          test-libpython-version.bin             \
@@ -210,6 +211,9 @@ PERL_EMBED_LDFLAGS = $(call strip-libs,$(PERL_EMBED_LDOPTS))
 PERL_EMBED_LIBADD = $(call grep-libs,$(PERL_EMBED_LDOPTS))
 PERL_EMBED_CCOPTS = `perl -MExtUtils::Embed -e ccopts 2>/dev/null`
 FLAGS_PERL_EMBED=$(PERL_EMBED_CCOPTS) $(PERL_EMBED_LDOPTS)
+
+$(OUTPUT)test-libpci.bin:
+	$(BUILD) -lpci
 
 $(OUTPUT)test-libperl.bin:
 	$(BUILD) $(FLAGS_PERL_EMBED)

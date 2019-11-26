@@ -74,6 +74,10 @@
 # include "test-libunwind.c"
 #undef main
 
+#define main main_test_libpci
+# include "test-libpci.c"
+#undef
+
 #define main main_test_libaudit
 # include "test-libaudit.c"
 #undef main
@@ -210,6 +214,7 @@ int main(int argc, char *argv[])
 	main_test_libunwind();
 	main_test_libaudit();
 	main_test_libslang();
+	main_test_libpci();
 	main_test_gtk2(argc, argv);
 	main_test_gtk2_infobar(argc, argv);
 	main_test_libbfd();
