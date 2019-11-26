@@ -113,6 +113,7 @@ struct dev_info {
 	u8 die;
 	u8 pmu_idx;
 	u8 root_port_nr;
+	char *name;
 };
 
 struct iio_device {
@@ -210,7 +211,12 @@ static struct iio_device *iio_device_new(struct dev_info *info)
 	if (p) {
 		INIT_LIST_HEAD(&(p->node));
 		p->dev_info = *info;
+		p->dev_info.name = strdup(pci_device_name(info->bdf));
 		p->idx = -1;
+		if (!p->dev_info.name) {
+			free(p);
+			p = NULL;
+		}
 	}
 	return p;
 }
@@ -219,6 +225,7 @@ static void iio_device_delete(struct iio_device *device)
 {
 	if (device) {
 		list_del_init(&(device->node));
+		free(device->dev_info.name);
 		free(device);
 	}
 }
@@ -227,11 +234,11 @@ static void iiostat_device_show(FILE *output,
 			const struct iio_device * const device)
 {
 	if (output && device)
-		fprintf(output, "S%d-RootPort%d-uncore_iio_%d<%02x:%02x.%x>\n",
+		fprintf(output, "S%d-RootPort%d-uncore_iio_%d<%02x:%02x.%x %s>\n",
 			device->dev_info.die,
 			device->dev_info.root_port_nr, device->dev_info.pmu_idx,
 			device->dev_info.bdf.busno, device->dev_info.bdf.devno,
-			device->dev_info.bdf.funcno);
+			device->dev_info.bdf.funcno, device->dev_info.name);
 }
 
 static struct iio_devs_list *iio_devs_list_new(void)
@@ -426,9 +433,12 @@ static int iio_devs_scan(struct iio_devs_list **list)
 	if (!rp_nr)
 		return -ENOMEM;
 
+	pci_library_init();
+
 	interim = iio_devs_list_new();
 	if (!interim) {
 		free(rp_nr);
+		pci_library_cleanup();
 		return -ENOMEM;
 	}
 
@@ -457,6 +467,7 @@ static int iio_devs_scan(struct iio_devs_list **list)
 		iio_devs_list_free(interim);
 
 	free(rp_nr);
+	pci_library_cleanup();
 
 	return ret;
 }

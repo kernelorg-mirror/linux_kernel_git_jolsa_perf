@@ -17,6 +17,10 @@ struct bdf {
 	u8 funcno;
 };
 
+void pci_library_init(void);
+void pci_library_cleanup(void);
+
+char *pci_device_name(struct bdf bdf);
 bool pci_device_probe(struct bdf bdf);
 bool is_pci_device_root_port(struct bdf bdf, u8 *secondary, u8 *subordinate);
 

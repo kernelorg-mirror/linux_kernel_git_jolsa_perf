@@ -8,6 +8,9 @@
  *	    Alexander Antonov <alexander.antonov@intel.com>
  */
 #include "pci.h"
+#ifdef HAVE_LIBPCI_SUPPORT
+#include <pci/pci.h>
+#endif
 #include <api/fs/fs.h>
 #include <linux/kernel.h>
 #include <string.h>
@@ -15,6 +18,49 @@
 
 #define PCI_DEVICE_PATH_TEMPLATE "bus/pci/devices/0000:%02x:%02x.0"
 #define PCI_DEVICE_FILE_TEMPLATE PCI_DEVICE_PATH_TEMPLATE"/%s"
+
+#ifdef HAVE_LIBPCI_SUPPORT
+static struct pci_access *pacc;
+#endif
+
+void pci_library_init(void)
+{
+#ifdef HAVE_LIBPCI_SUPPORT
+	pacc = pci_alloc();
+	if (pacc) {
+		pci_init(pacc);
+		pci_scan_bus(pacc);
+	}
+#endif
+}
+
+void pci_library_cleanup(void)
+{
+#ifdef HAVE_LIBPCI_SUPPORT
+	pci_cleanup(pacc);
+#endif
+}
+
+char *pci_device_name(struct bdf bdf __maybe_unused)
+{
+#ifdef HAVE_LIBPCI_SUPPORT
+	struct pci_dev *device;
+	char namebuf[PATH_MAX];
+
+	if (pacc) {
+		device = pci_get_dev(pacc, 0, bdf.busno, bdf.devno, bdf.funcno);
+		if (device) {
+			pci_fill_info(device, PCI_FILL_IDENT);
+			return pci_lookup_name(pacc, namebuf, sizeof(namebuf),
+					       PCI_LOOKUP_DEVICE, device->vendor_id,
+					       device->device_id);
+		}
+	}
+	return (char *)"";
+#else
+	return (char *)"";
+#endif
+}
 
 static bool directory_exists(const char * const path)
 {
