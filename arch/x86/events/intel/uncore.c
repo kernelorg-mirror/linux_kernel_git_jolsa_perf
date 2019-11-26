@@ -18,6 +18,11 @@ struct list_head pci2phy_map_head = LIST_HEAD_INIT(pci2phy_map_head);
 struct pci_extra_dev *uncore_extra_pci_dev;
 static int max_dies;
 
+int get_max_dies(void)
+{
+	return max_dies;
+}
+
 /* mask of cpus that collect uncore events */
 static cpumask_t uncore_cpu_mask;
 
@@ -816,6 +821,16 @@ static ssize_t uncore_get_attr_cpumask(struct device *dev,
 
 static DEVICE_ATTR(cpumask, S_IRUGO, uncore_get_attr_cpumask, NULL);
 
+static ssize_t platform_mapping_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct intel_uncore_pmu *pmu = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE - 1, "%s\n", pmu->platform_mapping ?
+		       (char *)pmu->platform_mapping : "0");
+}
+static DEVICE_ATTR_RO(platform_mapping);
+
 static struct attribute *uncore_pmu_attrs[] = {
 	&dev_attr_cpumask.attr,
 	NULL,
@@ -823,6 +838,15 @@ static struct attribute *uncore_pmu_attrs[] = {
 
 static const struct attribute_group uncore_pmu_attr_group = {
 	.attrs = uncore_pmu_attrs,
+};
+
+static struct attribute *platform_attrs[] = {
+	&dev_attr_platform_mapping.attr,
+	NULL,
+};
+
+static const struct attribute_group uncore_platform_discovery_group = {
+	.attrs = platform_attrs,
 };
 
 static int uncore_pmu_register(struct intel_uncore_pmu *pmu)
@@ -905,11 +929,27 @@ static void uncore_types_exit(struct intel_uncore_type **types)
 		uncore_type_exit(*types);
 }
 
+static void uncore_type_attrs_compaction(struct intel_uncore_type *type)
+{
+	int i, j;
+
+	for (i = 0, j = 0; i < UNCORE_MAX_NUM_ATTR_GROUP; i++) {
+		if (!type->attr_groups[i])
+			continue;
+		if (i > j) {
+			type->attr_groups[j] = type->attr_groups[i];
+			type->attr_groups[i] = NULL;
+		}
+		j++;
+	}
+}
+
 static int __init uncore_type_init(struct intel_uncore_type *type, bool setid)
 {
 	struct intel_uncore_pmu *pmus;
 	size_t size;
 	int i, j;
+	int ret;
 
 	pmus = kcalloc(type->num_boxes, sizeof(*pmus), GFP_KERNEL);
 	if (!pmus)
@@ -922,8 +962,10 @@ static int __init uncore_type_init(struct intel_uncore_type *type, bool setid)
 		pmus[i].pmu_idx	= i;
 		pmus[i].type	= type;
 		pmus[i].boxes	= kzalloc(size, GFP_KERNEL);
-		if (!pmus[i].boxes)
+		if (!pmus[i].boxes) {
+			ret = -ENOMEM;
 			goto err;
+		}
 	}
 
 	type->pmus = pmus;
@@ -940,8 +982,10 @@ static int __init uncore_type_init(struct intel_uncore_type *type, bool setid)
 
 		attr_group = kzalloc(struct_size(attr_group, attrs, i + 1),
 								GFP_KERNEL);
-		if (!attr_group)
+		if (!attr_group) {
+			ret = -ENOMEM;
 			goto err;
+		}
 
 		attr_group->group.name = "events";
 		attr_group->group.attrs = attr_group->attrs;
@@ -954,6 +998,17 @@ static int __init uncore_type_init(struct intel_uncore_type *type, bool setid)
 
 	type->pmu_group = &uncore_pmu_attr_group;
 
+	/*
+	 * Exposing mapping of Uncore units to corresponding Uncore PMUs
+	 * through /sys/devices/uncore_<type>_<idx>/platform_mapping
+	 */
+	if (type->get_topology && type->set_mapping)
+		if (!type->get_topology(type) && !type->set_mapping(type))
+			type->platform_discovery = &uncore_platform_discovery_group;
+
+	/* For optional attributes, we can safely remove embedded NULL attr_groups elements */
+	uncore_type_attrs_compaction(type);
+
 	return 0;
 
 err:
@@ -961,7 +1016,7 @@ err:
 		kfree(pmus[i].boxes);
 	kfree(pmus);
 
-	return -ENOMEM;
+	return ret;
 }
 
 static int __init

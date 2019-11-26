@@ -43,6 +43,8 @@ struct intel_uncore_box;
 struct uncore_event_desc;
 struct freerunning_counters;
 
+#define UNCORE_MAX_NUM_ATTR_GROUP 5
+
 struct intel_uncore_type {
 	const char *name;
 	int num_counters;
@@ -71,13 +73,19 @@ struct intel_uncore_type {
 	struct intel_uncore_ops *ops;
 	struct uncore_event_desc *event_descs;
 	struct freerunning_counters *freerunning;
-	const struct attribute_group *attr_groups[4];
+	const struct attribute_group *attr_groups[UNCORE_MAX_NUM_ATTR_GROUP];
 	struct pmu *pmu; /* for custom pmu ops */
+	void *platform_topology;
+	/* finding Uncore units */
+	int (*get_topology)(struct intel_uncore_type *type);
+	/* mapping Uncore units to PMON ranges */
+	int (*set_mapping)(struct intel_uncore_type *type);
 };
 
 #define pmu_group attr_groups[0]
 #define format_group attr_groups[1]
 #define events_group attr_groups[2]
+#define platform_discovery attr_groups[3]
 
 struct intel_uncore_ops {
 	void (*init_box)(struct intel_uncore_box *);
@@ -99,6 +107,7 @@ struct intel_uncore_pmu {
 	int				pmu_idx;
 	int				func_id;
 	bool				registered;
+	void				*platform_mapping;
 	atomic_t			activeboxes;
 	struct intel_uncore_type	*type;
 	struct intel_uncore_box		**boxes;
@@ -489,6 +498,8 @@ static inline struct intel_uncore_box *uncore_event_to_box(struct perf_event *ev
 {
 	return event->pmu_private;
 }
+
+int get_max_dies(void);
 
 struct intel_uncore_box *uncore_pmu_to_box(struct intel_uncore_pmu *pmu, int cpu);
 u64 uncore_msr_read_counter(struct intel_uncore_box *box, struct perf_event *event);

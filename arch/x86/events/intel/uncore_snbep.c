@@ -273,6 +273,28 @@
 #define SKX_CPUNODEID			0xc0
 #define SKX_GIDNIDMAP			0xd4
 
+/*
+ * The CPU_BUS_NUMBER MSR returns the values of the respective CPUBUSNO CSR
+ * that BIOS programmed. MSR has package scope.
+ * |  Bit  |  Default  |  Description
+ * | [63]  |    00h    | VALID - When set, indicates the CPU bus
+ *                       numbers have been initialized. (RO)
+ * |[62:48]|    ---    | Reserved
+ * |[47:40]|    00h    | BUS_NUM_5 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(5). (RO)
+ * |[39:32]|    00h    | BUS_NUM_4 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(4). (RO)
+ * |[31:24]|    00h    | BUS_NUM_3 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(3). (RO)
+ * |[23:16]|    00h    | BUS_NUM_2 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(2). (RO)
+ * |[15:8] |    00h    | BUS_NUM_1 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(1). (RO)
+ * | [7:0] |    00h    | BUS_NUM_0 — Return the bus number BIOS assigned
+ *                       CPUBUSNO(0). (RO)
+ */
+#define SKX_MSR_CPU_BUS_NUMBER		0x300
+
 /* SKX CHA */
 #define SKX_CHA_MSR_PMON_BOX_FILTER_TID		(0x1ffULL << 0)
 #define SKX_CHA_MSR_PMON_BOX_FILTER_LINK	(0xfULL << 9)
@@ -3580,6 +3602,9 @@ static struct intel_uncore_ops skx_uncore_iio_ops = {
 	.read_counter		= uncore_msr_read_counter,
 };
 
+static int skx_iio_get_topology(struct intel_uncore_type *type);
+static int skx_iio_set_mapping(struct intel_uncore_type *type);
+
 static struct intel_uncore_type skx_uncore_iio = {
 	.name			= "iio",
 	.num_counters		= 4,
@@ -3594,6 +3619,8 @@ static struct intel_uncore_type skx_uncore_iio = {
 	.constraints		= skx_uncore_iio_constraints,
 	.ops			= &skx_uncore_iio_ops,
 	.format_group		= &skx_uncore_iio_format_group,
+	.get_topology		= skx_iio_get_topology,
+	.set_mapping		= skx_iio_set_mapping,
 };
 
 enum perf_uncore_iio_freerunning_type_id {
@@ -3778,6 +3805,123 @@ static int skx_count_chabox(void)
 out:
 	pci_dev_put(dev);
 	return hweight32(val);
+}
+
+static inline u8 skx_iio_topology_byte(void *platform_topology,
+					int die, int idx)
+{
+	return *((u8 *)(platform_topology) + die * sizeof(u64) + idx);
+}
+
+static inline bool skx_iio_topology_valid(u64 msr_value)
+{
+	return msr_value & ((u64)1 << 63);
+}
+
+static int skx_msr_cpu_bus_read(int cpu, int die)
+{
+	int ret = rdmsrl_on_cpu(cpu, SKX_MSR_CPU_BUS_NUMBER,
+				((u64 *)skx_uncore_iio.platform_topology) + die);
+
+	if (!ret) {
+		if (!skx_iio_topology_valid(*(((u64 *)skx_uncore_iio.platform_topology) + die)))
+			ret = -1;
+	}
+	return ret;
+}
+
+static int skx_iio_get_topology(struct intel_uncore_type *type)
+{
+	int ret, cpu, die, current_die;
+	struct pci_bus *bus = NULL;
+
+	while ((bus = pci_find_next_bus(bus)) != NULL)
+		if (pci_domain_nr(bus)) {
+			pr_info("Mapping of I/O stack to PMON ranges is not supported for multi-segment topology\n");
+			return -1;
+		}
+
+	/* Size of SKX_MSR_CPU_BUS_NUMBER is 8 bytes, the MSR has package scope.*/
+	type->platform_topology =
+		kzalloc(get_max_dies() * sizeof(u64), GFP_KERNEL);
+	if (!type->platform_topology)
+		return -ENOMEM;
+
+	/*
+	 * Using cpus_read_lock() to ensure cpu is not going down between
+	 * looking at cpu_online_mask.
+	 */
+	cpus_read_lock();
+	/* Invalid value to start loop.*/
+	current_die = -1;
+	for_each_online_cpu(cpu) {
+		die = topology_logical_die_id(cpu);
+		if (current_die == die)
+			continue;
+		ret = skx_msr_cpu_bus_read(cpu, die);
+		if (ret)
+			break;
+		current_die = die;
+	}
+	cpus_read_unlock();
+
+	if (ret)
+		kfree(type->platform_topology);
+	return ret;
+}
+
+static int skx_iio_set_mapping(struct intel_uncore_type *type)
+{
+	/*
+	 * Each IIO stack (PCIe root port) has its own IIO PMON block, so each
+	 * platform_mapping holds bus number(s) of PCIe root port(s), which can
+	 * be monitored by that IIO PMON block.
+	 *
+	 * For example, on a 4-die Xeon platform with up to 6 IIO stacks per die
+	 * and, therefore, 6 IIO PMON blocks per die, the platform_mapping of IIO
+	 * PMON block 0 holds "0000:00,0000:40,0000:80,0000:c0":
+	 *
+	 * $ cat /sys/devices/uncore_iio_0/platform_mapping
+	 * 0000:00,0000:40,0000:80,0000:c0
+	 *
+	 * Which means:
+	 * IIO PMON block 0 on the die 0 belongs to PCIe root port located on bus 0x00, domain 0x0000
+	 * IIO PMON block 0 on the die 1 belongs to PCIe root port located on bus 0x40, domain 0x0000
+	 * IIO PMON block 0 on the die 2 belongs to PCIe root port located on bus 0x80, domain 0x0000
+	 * IIO PMON block 0 on the die 3 belongs to PCIe root port located on bus 0xc0, domain 0x0000
+	 */
+
+	int ret = 0;
+	int die, i;
+	char *buf;
+	struct intel_uncore_pmu *pmu;
+	const int template_len = 8;
+
+	for (i = 0; i < type->num_boxes; i++) {
+		pmu = type->pmus + i;
+		/* Root bus 0x00 is valid only for die 0 AND pmu_idx = 0. */
+		if (skx_iio_topology_byte(type->platform_topology, 0, pmu->pmu_idx) || (!pmu->pmu_idx)) {
+			pmu->platform_mapping =
+				kzalloc(get_max_dies() * template_len + 1, GFP_KERNEL);
+			if (pmu->platform_mapping) {
+				buf = (char *)pmu->platform_mapping;
+				for (die = 0; die < get_max_dies(); die++)
+					buf += snprintf(buf, template_len + 1, "%04x:%02x,", 0,
+						skx_iio_topology_byte(type->platform_topology,
+								      die, pmu->pmu_idx));
+
+				*(--buf) = '\0';
+			} else {
+				for (; i >= 0; i--)
+					kfree((type->pmus + i)->platform_mapping);
+				ret = -ENOMEM;
+				break;
+			}
+		}
+	}
+
+	kfree(type->platform_topology);
+	return ret;
 }
 
 void skx_uncore_cpu_init(void)
