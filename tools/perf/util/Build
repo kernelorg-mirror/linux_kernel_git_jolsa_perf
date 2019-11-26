@@ -24,6 +24,7 @@ perf-y += memswap.o
 perf-y += parse-events.o
 perf-y += perf_regs.o
 perf-y += path.o
+perf-y += pci.o
 perf-y += print_binary.o
 perf-y += rlimit.o
 perf-y += argv_split.o
