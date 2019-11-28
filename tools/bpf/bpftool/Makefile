@@ -1,4 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
+
+# To detect and link with libbpf package run:
+#   make LIBBPF_PACKAGE=1
+# build will try to detect installed devel/static package of libbpf.
+#
+
 include ../../scripts/Makefile.include
 include ../../scripts/utilities.mak
 
@@ -23,15 +29,13 @@ else
   LIBBPF_BUILD_PATH = $(LIBBPF_SRC_DIR)
 endif
 
-LIBBPF = $(LIBBPF_BUILD_PATH)libbpf.a
-
 BPFTOOL_VERSION := $(shell make -rR --no-print-directory -sC ../../.. kernelversion)
 
-$(LIBBPF): FORCE
+$(LIBBPF_BUILD_PATH)libbpf.a: FORCE
 	$(if $(LIBBPF_BUILD_OUTPUT),@mkdir -p $(LIBBPF_BUILD_OUTPUT))
 	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_BUILD_OUTPUT) $(LIBBPF_BUILD_OUTPUT)libbpf.a
 
-$(LIBBPF)-clean:
+$(LIBBPF_BUILD_PATH)libbpf.a-clean:
 	$(call QUIET_CLEAN, libbpf)
 	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_BUILD_OUTPUT) clean >/dev/null
 
@@ -55,7 +59,7 @@ ifneq ($(EXTRA_LDFLAGS),)
 LDFLAGS += $(EXTRA_LDFLAGS)
 endif
 
-LIBS = $(LIBBPF) -lelf -lz
+LIBS = -l:libbpf.a -lelf -lz
 
 INSTALL ?= install
 RM ?= rm -f
@@ -65,6 +69,11 @@ FEATURE_USER = .bpftool
 FEATURE_TESTS = libbfd disassembler-four-args reallocarray zlib \
 	clang-bpf-global-var
 FEATURE_DISPLAY = libbfd disassembler-four-args zlib clang-bpf-global-var
+
+ifdef LIBBPF_PACKAGE
+  FEATURE_TESTS   += libbpf-static
+  FEATURE_DISPLAY += libbpf-static
+endif
 
 check_feat := 1
 NON_CHECK_FEAT_TARGETS := clean uninstall doc doc-clean doc-install doc-uninstall
@@ -88,6 +97,17 @@ endif
 
 ifeq ($(feature-reallocarray), 0)
 CFLAGS += -DCOMPAT_NEED_REALLOCARRAY
+endif
+
+ifdef LIBBPF_PACKAGE
+  ifeq ($(feature-libbpf-static), 1)
+    CFLAGS := -I/usr/include/bpf/uapi $(CFLAGS)
+  else
+    dummy := $(error Error: No libbpf devel library found, please install libbpf-devel or libbpf-dev.)
+  endif
+else
+  LIBBPF   = $(LIBBPF_BUILD_PATH)libbpf.a
+  LDFLAGS += -L$(LIBBPF_BUILD_PATH)
 endif
 
 include $(wildcard $(OUTPUT)*.d)
