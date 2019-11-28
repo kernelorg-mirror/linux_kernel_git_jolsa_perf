@@ -1,6 +1,21 @@
 # SPDX-License-Identifier: GPL-2.0-only
+
+# To link dynamically with libbpf run:
+#   make LIBBPF_DYNAMIC=1
+# build will try to detect installed devel package of libbpf.
+#
+# For linking dynamically with libbpf installed at specific PATH run:
+#   make LIBBPF_DYNAMIC=1 LIBBPF_DIR=<PATH>
+
 include ../../scripts/Makefile.include
 include ../../scripts/utilities.mak
+include ../../scripts/Makefile.arch
+
+ifeq ($(LP64), 1)
+  libdir_relative = lib64
+else
+  libdir_relative = lib
+endif
 
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(CURDIR)))
@@ -63,6 +78,17 @@ RM ?= rm -f
 FEATURE_USER = .bpftool
 FEATURE_TESTS = libbfd disassembler-four-args reallocarray zlib
 FEATURE_DISPLAY = libbfd disassembler-four-args zlib
+ifdef LIBBPF_DYNAMIC
+  FEATURE_TESTS   += libbpf
+  FEATURE_DISPLAY += libbpf
+
+  ifdef LIBBPF_DIR
+    LIBBPF_CFLAGS  := -I$(LIBBPF_DIR)/include
+    LIBBPF_LDFLAGS := -L$(LIBBPF_DIR)/$(libdir_relative)
+    FEATURE_CHECK_CFLAGS-libbpf  := $(LIBBPF_CFLAGS)
+    FEATURE_CHECK_LDFLAGS-libbpf := $(LIBBPF_LDFLAGS)
+  endif
+endif
 
 check_feat := 1
 NON_CHECK_FEAT_TARGETS := clean uninstall doc doc-clean doc-install doc-uninstall
@@ -86,6 +112,18 @@ endif
 
 ifeq ($(feature-reallocarray), 0)
 CFLAGS += -DCOMPAT_NEED_REALLOCARRAY
+endif
+
+ifdef LIBBPF_DYNAMIC
+  ifeq ($(feature-libbpf), 1)
+    # bpftool uses non-exported functions from libbpf, so just add the dynamic
+    # version of libbpf and let the linker figure it out
+    LIBS    := -lbpf $(LIBS)
+    CFLAGS  += $(LIBBPF_CFLAGS)
+    LDFLAGS += $(LIBBPF_LDFLAGS)
+  else
+    dummy := $(error Error: No libbpf devel library found, please install libbpf-devel or libbpf-dev.)
+  endif
 endif
 
 include $(wildcard $(OUTPUT)*.d)
