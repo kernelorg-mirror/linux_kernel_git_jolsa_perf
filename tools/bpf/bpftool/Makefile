@@ -33,12 +33,12 @@ LIBBPF_SRC_DIR = $(srctree)/tools/lib/bpf/
 
 ifneq ($(OUTPUT),)
   LIBBPF_BUILD_OUTPUT = $(OUTPUT)/libbpf/
-  LIBBPF_PATH = $(LIBBPF_BUILD_OUTPUT)
+  LIBBPF_BUILD_PATH = $(LIBBPF_BUILD_OUTPUT)
 else
-  LIBBPF_PATH = $(LIBBPF_SRC_DIR)
+  LIBBPF_BUILD_PATH = $(LIBBPF_SRC_DIR)
 endif
 
-LIBBPF = $(LIBBPF_PATH)libbpf.a
+LIBBPF = $(LIBBPF_BUILD_PATH)libbpf.a
 
 BPFTOOL_VERSION := $(shell make -rR --no-print-directory -sC ../../.. kernelversion)
 
