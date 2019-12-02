@@ -85,6 +85,55 @@ make_with_tmpdir() {
 	echo
 }
 
+# Assumes current directory is tools/bpf/bpftool
+make_with_dynamic_libbpf() {
+	TMPDIR=$(mktemp -d)
+	echo -e "\$PWD:    $PWD"
+
+	# It might be needed to clean build tree first because features
+	# framework does not detect the change properly
+	echo -e "command: make -s -C ../../build/feature clean >/dev/null"
+	make $J -s -C ../../build/feature clean >/dev/null
+	if [ $? -ne 0 ] ; then
+		ERROR=1
+	fi
+	echo -e "command: make -s -C ../../lib/bpf clean >/dev/null"
+	make $J -s -C ../../lib/bpf clean >/dev/null
+	if [ $? -ne 0 ] ; then
+		ERROR=1
+	fi
+
+	# Now install libbpf into TMPDIR
+	echo -e "command: make -s -C ../../lib/bpf prefix=$TMPDIR install_lib install_headers >/dev/null"
+	make $J -s -C ../../lib/bpf prefix=$TMPDIR install_lib install_headers >/dev/null
+	if [ $? -ne 0 ] ; then
+		ERROR=1
+	fi
+
+	# And final bpftool build (with clean first) with libbpf dynamic link
+	echo -e "command: make -s clean >/dev/null"
+	if [ $? -ne 0 ] ; then
+		ERROR=1
+	fi
+	echo -e "command: make -s LIBBPF_DYNAMIC=1 LIBBPF_DIR=$TMPDIR >/dev/null"
+	make $J -s LIBBPF_DYNAMIC=1 LIBBPF_DIR=$TMPDIR >/dev/null
+	if [ $? -ne 0 ] ; then
+		ERROR=1
+	fi
+
+	check .
+	ldd bpftool | grep -q libbpf.so
+	if [ $? -ne 0 ] ; then
+		printf "FAILURE: Did not find libbpf linked\n"
+	else
+		echo "binary:  linked with libbpf"
+	fi
+	make -s -C ../../lib/bpf clean
+	make -s clean
+	rm -rf -- $TMPDIR
+	echo
+}
+
 echo "Trying to build bpftool"
 echo -e "... through kbuild\n"
 
@@ -145,3 +194,7 @@ make_and_clean
 make_with_tmpdir OUTPUT
 
 make_with_tmpdir O
+
+echo -e "... with dynamic libbpf\n"
+
+make_with_dynamic_libbpf
