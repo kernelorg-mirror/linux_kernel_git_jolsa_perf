@@ -32,8 +32,8 @@ endif
 LIBBPF_SRC_DIR = $(srctree)/tools/lib/bpf/
 
 ifneq ($(OUTPUT),)
-  LIBBPF_OUTPUT = $(OUTPUT)/libbpf/
-  LIBBPF_PATH = $(LIBBPF_OUTPUT)
+  LIBBPF_BUILD_OUTPUT = $(OUTPUT)/libbpf/
+  LIBBPF_PATH = $(LIBBPF_BUILD_OUTPUT)
 else
   LIBBPF_PATH = $(LIBBPF_SRC_DIR)
 endif
@@ -43,12 +43,12 @@ LIBBPF = $(LIBBPF_PATH)libbpf.a
 BPFTOOL_VERSION := $(shell make -rR --no-print-directory -sC ../../.. kernelversion)
 
 $(LIBBPF): FORCE
-	$(if $(LIBBPF_OUTPUT),@mkdir -p $(LIBBPF_OUTPUT))
-	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_OUTPUT) $(LIBBPF_OUTPUT)libbpf.a
+	$(if $(LIBBPF_BUILD_OUTPUT),@mkdir -p $(LIBBPF_BUILD_OUTPUT))
+	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_BUILD_OUTPUT) $(LIBBPF_BUILD_OUTPUT)libbpf.a
 
 $(LIBBPF)-clean:
 	$(call QUIET_CLEAN, libbpf)
-	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_OUTPUT) clean >/dev/null
+	$(Q)$(MAKE) -C $(LIBBPF_SRC_DIR) OUTPUT=$(LIBBPF_BUILD_OUTPUT) clean >/dev/null
 
 prefix ?= /usr/local
 bash_compdir ?= /usr/share/bash-completion/completions
