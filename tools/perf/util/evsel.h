@@ -104,6 +104,7 @@ struct evsel {
 		perf_evsel__sb_cb_t	*cb;
 		void			*data;
 	} side_band;
+	void			*perf_device;
 };
 
 struct perf_missing_features {

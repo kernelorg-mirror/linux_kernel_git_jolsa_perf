@@ -46,6 +46,7 @@ enum aggr_mode {
 	AGGR_DIE,
 	AGGR_CORE,
 	AGGR_THREAD,
+	AGGR_DEVICE,
 	AGGR_UNSET,
 	AGGR_NODE,
 };
@@ -110,6 +111,7 @@ struct perf_stat_config {
 	bool			 all_kernel;
 	bool			 all_user;
 	FILE			*output;
+	bool			 iiostat_run;
 	unsigned int		 interval;
 	unsigned int		 timeout;
 	unsigned int		 initial_delay;

@@ -267,6 +267,18 @@ See perf list output for the possble metrics and metricgroups.
 -A::
 --no-aggr::
 Do not aggregate counts across all monitored CPUs.
+--iiostat::
+This mode is intended to provide four I/O performance metrics per each
+IO device below IIO stacks:
+    --Inbound Read(Mb)   - I/O device reads from the host memory, in Mb
+    --Inbound Write(Mb)  - I/O device writes to the host memory, in Mb
+    --Outbound Read(Mb)  - CPU reads from I/O device, in Mb
+    --Outbound Write(Mb) - CPU writes to I/O device, in Mb
+
+Each metric requiries only one IIO event which increments at every 4B
+transfer in corresponding direction. The formulas to compute metrics
+are generic:
+    #EventCount * 4B / (1024 * 1024)
 
 --topdown::
 Print top down level 1 metrics if supported by the CPU. This allows to

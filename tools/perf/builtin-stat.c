@@ -67,6 +67,7 @@
 #include "util/top.h"
 #include "util/affinity.h"
 #include "asm/bug.h"
+#include "util/iiostat.h"
 
 #include <linux/time64.h>
 #include <linux/zalloc.h>
@@ -187,6 +188,7 @@ static struct perf_stat_config stat_config = {
 	.metric_only_len	= METRIC_ONLY_LEN,
 	.walltime_nsecs_stats	= &walltime_nsecs_stats,
 	.big_num		= true,
+	.iiostat_run		= false,
 };
 
 static inline void diff_timespec(struct timespec *r, struct timespec *a,
@@ -841,6 +843,13 @@ static int parse_metric_groups(const struct option *opt,
 	return metricgroup__parse_groups(opt, str, &stat_config.metric_events);
 }
 
+__weak int iiostat_parse(const struct option *opt __maybe_unused,
+						const char *str __maybe_unused,
+						int unset __maybe_unused)
+{
+	return 0;
+}
+
 static struct option stat_options[] = {
 	OPT_BOOLEAN('T', "transaction", &transaction_run,
 		    "hardware transaction statistics"),
@@ -1053,6 +1062,7 @@ static int perf_stat_init_aggr_mode(void)
 		break;
 	case AGGR_GLOBAL:
 	case AGGR_THREAD:
+	case AGGR_DEVICE:
 	case AGGR_UNSET:
 	default:
 		break;
@@ -1243,6 +1253,7 @@ static int perf_stat_init_aggr_mode_file(struct perf_stat *st)
 	case AGGR_NONE:
 	case AGGR_GLOBAL:
 	case AGGR_THREAD:
+	case AGGR_DEVICE:
 	case AGGR_UNSET:
 	default:
 		break;
@@ -1298,6 +1309,12 @@ __weak bool arch_topdown_check_group(bool *warn)
 
 __weak void arch_topdown_group_warn(void)
 {
+}
+
+__weak int iiostat_print_device_list(struct evlist *evlist __maybe_unused,
+				      struct perf_stat_config *config __maybe_unused)
+{
+	return 0;
 }
 
 /*
@@ -1530,6 +1547,10 @@ static int add_default_attributes(void)
 		}
 		free(str);
 	}
+
+	if (stat_config.iiostat_run &&
+		iiostat_print_device_list(evsel_list, &stat_config) < 0)
+		return -1;
 
 	if (!evsel_list->core.nr_entries) {
 		if (target__has_cpu(&target))
@@ -1855,6 +1876,10 @@ static void setup_system_wide(int forks)
 	}
 }
 
+__weak void iiostat_delete_device_list(struct evlist *evlist __maybe_unused)
+{
+}
+
 int cmd_stat(int argc, const char **argv)
 {
 	const char * const stat_usage[] = {
@@ -2019,7 +2044,7 @@ int cmd_stat(int argc, const char **argv)
 	 * --per-thread is aggregated per thread, we dont mix it with cpu mode
 	 */
 	if (((stat_config.aggr_mode != AGGR_GLOBAL &&
-	      stat_config.aggr_mode != AGGR_THREAD) || nr_cgroups) &&
+	      stat_config.aggr_mode != AGGR_THREAD && stat_config.aggr_mode != AGGR_DEVICE) || nr_cgroups) &&
 	    !target__has_cpu(&target)) {
 		fprintf(stderr, "both cgroup and no-aggregation "
 			"modes only available in system-wide mode\n");
@@ -2183,6 +2208,9 @@ int cmd_stat(int argc, const char **argv)
 	perf_stat__exit_aggr_mode();
 	perf_evlist__free_stats(evsel_list);
 out:
+	if (stat_config.iiostat_run)
+		iiostat_delete_device_list(evsel_list);
+
 	zfree(&stat_config.walltime_run);
 
 	if (smi_cost && smi_reset)

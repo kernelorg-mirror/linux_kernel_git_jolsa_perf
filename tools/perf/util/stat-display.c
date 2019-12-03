@@ -16,6 +16,8 @@
 #include <linux/ctype.h>
 #include "cgroup.h"
 #include <api/fs/fs.h>
+#include "iiostat.h"
+#include "debug.h"
 
 #define CNTR_NOT_SUPPORTED	"<not supported>"
 #define CNTR_NOT_COUNTED	"<not counted>"
@@ -132,6 +134,7 @@ static void aggr_printout(struct perf_stat_config *config,
 			config->csv_sep);
 		break;
 	case AGGR_GLOBAL:
+	case AGGR_DEVICE:
 	case AGGR_UNSET:
 	default:
 		break;
@@ -310,6 +313,11 @@ static void print_metric_header(struct perf_stat_config *config,
 	struct outstate *os = ctx;
 	char tbuf[1024];
 
+	if (os->evsel->perf_device && os->evsel->evlist->selected->perf_device
+	    && config->iiostat_run &&
+	    os->evsel->perf_device != os->evsel->evlist->selected->perf_device)
+		return;
+
 	if (!valid_only_metric(unit))
 		return;
 	unit = fixunit(tbuf, os->evsel, unit);
@@ -331,7 +339,7 @@ static int first_shadow_cpu(struct perf_stat_config *config,
 	if (config->aggr_mode == AGGR_NONE)
 		return id;
 
-	if (config->aggr_mode == AGGR_GLOBAL)
+	if (config->aggr_mode == AGGR_GLOBAL || config->aggr_mode == AGGR_DEVICE)
 		return 0;
 
 	for (i = 0; i < perf_evsel__nr_cpus(evsel); i++) {
@@ -425,6 +433,7 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 	if (config->csv_output && !config->metric_only) {
 		static int aggr_fields[] = {
 			[AGGR_GLOBAL] = 0,
+			[AGGR_DEVICE] = 0,
 			[AGGR_THREAD] = 1,
 			[AGGR_NONE] = 1,
 			[AGGR_SOCKET] = 2,
@@ -908,6 +917,7 @@ static int aggr_header_lens[] = {
 	[AGGR_NONE] = 6,
 	[AGGR_THREAD] = 24,
 	[AGGR_GLOBAL] = 0,
+	[AGGR_DEVICE] = 0,
 };
 
 static const char *aggr_header_csv[] = {
@@ -916,7 +926,8 @@ static const char *aggr_header_csv[] = {
 	[AGGR_SOCKET] 	= 	"socket,cpus",
 	[AGGR_NONE] 	= 	"cpu,",
 	[AGGR_THREAD] 	= 	"comm-pid,",
-	[AGGR_GLOBAL] 	=	""
+	[AGGR_GLOBAL]	=	"",
+	[AGGR_DEVICE]	=	"device,"
 };
 
 static void print_metric_headers(struct perf_stat_config *config,
@@ -940,6 +951,8 @@ static void print_metric_headers(struct perf_stat_config *config,
 			fputs("time,", config->output);
 		fputs(aggr_header_csv[config->aggr_mode], config->output);
 	}
+	if (config->iiostat_run && !config->interval && !config->csv_output)
+		fprintf(config->output, " device         ");
 
 	/* Print metrics headers only */
 	evlist__for_each_entry(evlist, counter) {
@@ -958,6 +971,13 @@ static void print_metric_headers(struct perf_stat_config *config,
 	fputc('\n', config->output);
 }
 
+__weak void iiostat_prefix(struct perf_stat_config *config __maybe_unused,
+			    struct evlist *evlist __maybe_unused,
+			    char *prefix __maybe_unused,
+			    struct timespec *ts __maybe_unused)
+{
+}
+
 static void print_interval(struct perf_stat_config *config,
 			   struct evlist *evlist,
 			   char *prefix, struct timespec *ts)
@@ -970,7 +990,8 @@ static void print_interval(struct perf_stat_config *config,
 	if (config->interval_clear)
 		puts(CONSOLE_CLEAR);
 
-	sprintf(prefix, "%6lu.%09lu%s", ts->tv_sec, ts->tv_nsec, config->csv_sep);
+	if (!config->iiostat_run)
+		sprintf(prefix, "%6lu.%09lu%s", ts->tv_sec, ts->tv_nsec, config->csv_sep);
 
 	if ((num_print_interval == 0 && !config->csv_output) || config->interval_clear) {
 		switch (config->aggr_mode) {
@@ -1003,6 +1024,9 @@ static void print_interval(struct perf_stat_config *config,
 			fprintf(output, "#           time             comm-pid");
 			if (!metric_only)
 				fprintf(output, "                  counts %*s events\n", unit_width, "unit");
+			break;
+		case AGGR_DEVICE:
+			fprintf(output, "#           time  device        ");
 			break;
 		case AGGR_GLOBAL:
 		default:
@@ -1181,6 +1205,10 @@ perf_evlist__print_counters(struct evlist *evlist,
 	int interval = config->interval;
 	struct evsel *counter;
 	char buf[64], *prefix = NULL;
+	void *device = NULL;
+
+	if (config->iiostat_run)
+		evlist->selected = evlist__first(evlist);
 
 	if (interval)
 		print_interval(config, evlist, prefix = buf, ts);
@@ -1194,7 +1222,7 @@ perf_evlist__print_counters(struct evlist *evlist,
 			print_metric_headers(config, evlist, prefix, false);
 		if (num_print_iv++ == 25)
 			num_print_iv = 0;
-		if (config->aggr_mode == AGGR_GLOBAL && prefix)
+		if ((config->aggr_mode == AGGR_GLOBAL) && prefix)
 			fprintf(config->output, "%s", prefix);
 	}
 
@@ -1227,6 +1255,23 @@ perf_evlist__print_counters(struct evlist *evlist,
 				else
 					print_counter(config, counter, prefix);
 			}
+		}
+		break;
+	case AGGR_DEVICE:
+		counter = evlist__first(evlist);
+		perf_evlist__set_selected(evlist, counter);
+		iiostat_prefix(config, evlist, prefix = buf, ts);
+		fprintf(config->output, "%s", prefix);
+		evlist__for_each_entry(evlist, counter) {
+			device = evlist->selected->perf_device;
+			if (device && device != counter->perf_device) {
+				perf_evlist__set_selected(evlist, counter);
+				iiostat_prefix(config, evlist, prefix, ts);
+				fprintf(config->output, "\n%s", prefix);
+			}
+			print_counter_aggr(config, counter, prefix);
+			if ((counter->idx + 1) == evlist->core.nr_entries)
+				fputc('\n', config->output);
 		}
 		break;
 	case AGGR_UNSET:
