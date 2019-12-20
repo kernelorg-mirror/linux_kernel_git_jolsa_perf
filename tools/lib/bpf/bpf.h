@@ -77,7 +77,6 @@ struct bpf_load_program_attr {
 	const char *license;
 	union {
 		__u32 kern_version;
-		__u32 attach_prog_fd;
 	};
 	union {
 		__u32 prog_ifindex;
@@ -92,6 +91,7 @@ struct bpf_load_program_attr {
 	__u32 line_info_cnt;
 	__u32 log_level;
 	__u32 prog_flags;
+	__u32 attach_prog_fd;
 };
 
 /* Flags to direct loading requirements */
