@@ -3712,12 +3712,6 @@ bool btf_ctx_access(int off, int size, enum bpf_access_type type,
 	/* skip modifiers */
 	while (btf_type_is_modifier(t))
 		t = btf_type_by_id(btf, t->type);
-	if (!btf_type_is_struct(t)) {
-		bpf_log(log,
-			"func '%s' arg%d type %s is not a struct\n",
-			tname, arg, btf_kind_str[BTF_INFO_KIND(t->info)]);
-		return false;
-	}
 	bpf_log(log, "func '%s' arg%d has btf_id %d type %s '%s'\n",
 		tname, arg, info->btf_id, btf_kind_str[BTF_INFO_KIND(t->info)],
 		__btf_name_by_offset(btf, t->name_off));
