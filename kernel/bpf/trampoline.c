@@ -4,15 +4,43 @@
 #include <linux/bpf.h>
 #include <linux/filter.h>
 #include <linux/ftrace.h>
+#include <linux/rbtree_latch.h>
 
 /* btf_vmlinux has ~22k attachable functions. 1k htab is enough. */
 #define TRAMPOLINE_HASH_BITS 10
 #define TRAMPOLINE_TABLE_SIZE (1 << TRAMPOLINE_HASH_BITS)
 
 static struct hlist_head trampoline_table[TRAMPOLINE_TABLE_SIZE];
+static struct latch_tree_root tree __cacheline_aligned;
 
 /* serializes access to trampoline_table */
 static DEFINE_MUTEX(trampoline_mutex);
+
+static __always_inline bool tree_less(struct latch_tree_node *a,
+				      struct latch_tree_node *b)
+{
+	struct bpf_trampoline *ta = container_of(a, struct bpf_trampoline, tnode);
+	struct bpf_trampoline *tb = container_of(b, struct bpf_trampoline, tnode);
+
+	return ta->image < tb->image;
+}
+
+static __always_inline int tree_comp(void *addr, struct latch_tree_node *n)
+{
+	struct bpf_trampoline *tr = container_of(n, struct bpf_trampoline, tnode);
+
+	if (addr < tr->image)
+		return -1;
+	if (addr >= tr->image + PAGE_SIZE)
+		return  1;
+
+	return 0;
+}
+
+static const struct latch_tree_ops tree_ops = {
+	.less	= tree_less,
+	.comp	= tree_comp,
+};
 
 void *bpf_jit_alloc_exec_page(void)
 {
@@ -28,6 +56,11 @@ void *bpf_jit_alloc_exec_page(void)
 	 */
 	set_memory_x((long)image, 1);
 	return image;
+}
+
+bool is_bpf_trampoline(void *addr)
+{
+	return latch_tree_find(addr, &tree, &tree_ops) != NULL;
 }
 
 struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
@@ -65,6 +98,7 @@ struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 	for (i = 0; i < BPF_TRAMP_MAX; i++)
 		INIT_HLIST_HEAD(&tr->progs_hlist[i]);
 	tr->image = image;
+	latch_tree_insert(&tr->tnode, &tree, &tree_ops);
 out:
 	mutex_unlock(&trampoline_mutex);
 	return tr;
@@ -252,6 +286,7 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 		goto out;
 	bpf_jit_free_exec(tr->image);
 	hlist_del(&tr->hlist);
+	latch_tree_erase(&tr->tnode, &tree, &tree_ops);
 	kfree(tr);
 out:
 	mutex_unlock(&trampoline_mutex);

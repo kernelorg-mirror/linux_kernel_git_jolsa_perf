@@ -470,6 +470,7 @@ struct bpf_trampoline {
 	/* Executable image of trampoline */
 	void *image;
 	u64 selector;
+	struct latch_tree_node tnode;
 };
 
 #define BPF_DISPATCHER_MAX 48 /* Fits in 2048B */
@@ -502,6 +503,7 @@ struct bpf_trampoline *bpf_trampoline_lookup(u64 key);
 int bpf_trampoline_link_prog(struct bpf_prog *prog);
 int bpf_trampoline_unlink_prog(struct bpf_prog *prog);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
+bool is_bpf_trampoline(void *addr);
 void *bpf_jit_alloc_exec_page(void);
 #define BPF_DISPATCHER_INIT(name) {			\
 	.mutex = __MUTEX_INITIALIZER(name.mutex),	\
@@ -555,6 +557,10 @@ static inline void bpf_trampoline_put(struct bpf_trampoline *tr) {}
 static inline void bpf_dispatcher_change_prog(struct bpf_dispatcher *d,
 					      struct bpf_prog *from,
 					      struct bpf_prog *to) {}
+static inline bool is_bpf_trampoline(void *addr)
+{
+	return false;
+}
 #endif
 
 struct bpf_func_info_aux {

@@ -704,6 +704,8 @@ bool is_bpf_text_address(unsigned long addr)
 
 	rcu_read_lock();
 	ret = bpf_prog_kallsyms_find(addr) != NULL;
+	if (!ret)
+		ret = is_bpf_trampoline((void*) addr);
 	rcu_read_unlock();
 
 	return ret;
