@@ -307,9 +307,9 @@ union ftrace_op_code_union {
 
 #define RET_SIZE		1
 
-static unsigned long
-create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
+static void create_trampoline(struct ftrace_ops *ops)
 {
+	unsigned int tramp_size;
 	unsigned long start_offset;
 	unsigned long end_offset;
 	unsigned long op_offset;
@@ -347,10 +347,10 @@ create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
 	 */
 	trampoline = alloc_tramp(size + RET_SIZE + sizeof(void *));
 	if (!trampoline)
-		return 0;
+		return;
 
-	*tramp_size = size + RET_SIZE + sizeof(void *);
-	npages = DIV_ROUND_UP(*tramp_size, PAGE_SIZE);
+	tramp_size = size + RET_SIZE + sizeof(void *);
+	npages = DIV_ROUND_UP(tramp_size, PAGE_SIZE);
 
 	/* Copy ftrace_caller onto the trampoline memory */
 	ret = probe_kernel_read(trampoline, (void *)start_offset, size);
@@ -403,15 +403,18 @@ create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
 
 	/* ALLOC_TRAMP flags lets us know we created it */
 	ops->flags |= FTRACE_OPS_FL_ALLOC_TRAMP;
+	ops->trampoline = (unsigned long)trampoline;
+	ops->trampoline_size = tramp_size;
+
+	ftrace_add_trampoline_to_kallsyms(ops);
 
 	set_vm_flush_reset_perms(trampoline);
 
 	set_memory_ro((unsigned long)trampoline, npages);
 	set_memory_x((unsigned long)trampoline, npages);
-	return (unsigned long)trampoline;
+	return;
 fail:
 	tramp_free(trampoline);
-	return 0;
 }
 
 static unsigned long calc_trampoline_call_offset(bool save_regs)
@@ -435,14 +438,10 @@ void arch_ftrace_update_trampoline(struct ftrace_ops *ops)
 	ftrace_func_t func;
 	unsigned long offset;
 	unsigned long ip;
-	unsigned int size;
 	const char *new;
 
 	if (!ops->trampoline) {
-		ops->trampoline = create_trampoline(ops, &size);
-		if (!ops->trampoline)
-			return;
-		ops->trampoline_size = size;
+		create_trampoline(ops);
 		return;
 	}
 
@@ -534,6 +533,9 @@ void arch_ftrace_trampoline_free(struct ftrace_ops *ops)
 {
 	if (!ops || !(ops->flags & FTRACE_OPS_FL_ALLOC_TRAMP))
 		return;
+
+	ftrace_remove_trampoline_from_kallsyms(ops);
+	synchronize_rcu();
 
 	tramp_free((void *)ops->trampoline);
 	ops->trampoline = 0;
