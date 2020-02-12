@@ -406,7 +406,10 @@ static void create_trampoline(struct ftrace_ops *ops)
 	ops->trampoline = (unsigned long)trampoline;
 	ops->trampoline_size = tramp_size;
 
+	/* Add to kallsyms before the perf events */
 	ftrace_add_trampoline_to_kallsyms(ops);
+	perf_event_ksymbol(PERF_RECORD_KSYMBOL_TYPE_OOL, (u64)trampoline,
+			   tramp_size, false, FTRACE_TRAMPOLINE_SYM);
 
 	set_vm_flush_reset_perms(trampoline);
 
@@ -534,6 +537,9 @@ void arch_ftrace_trampoline_free(struct ftrace_ops *ops)
 	if (!ops || !(ops->flags & FTRACE_OPS_FL_ALLOC_TRAMP))
 		return;
 
+	perf_event_ksymbol(PERF_RECORD_KSYMBOL_TYPE_OOL, (u64)ops->trampoline,
+			   ops->trampoline_size, true, FTRACE_TRAMPOLINE_SYM);
+	/* Remove from kallsyms after the perf events */
 	ftrace_remove_trampoline_from_kallsyms(ops);
 	synchronize_rcu();
 
