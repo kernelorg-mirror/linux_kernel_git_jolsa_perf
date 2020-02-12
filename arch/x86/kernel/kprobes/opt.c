@@ -6,6 +6,7 @@
  * Copyright (C) Hitachi Ltd., 2012
  */
 #include <linux/kprobes.h>
+#include <linux/perf_event.h>
 #include <linux/ptrace.h>
 #include <linux/string.h>
 #include <linux/slab.h>
@@ -332,6 +333,10 @@ static
 void __arch_remove_optimized_kprobe(struct optimized_kprobe *op, int dirty)
 {
 	if (op->optinsn.insn) {
+		/* Record the perf event before freeing the slot */
+		if (dirty)
+			perf_event_text_poke(op->optinsn.insn, op->optinsn.insn,
+					     op->optinsn.tp_len, NULL, 0);
 		free_optinsn_slot(op->optinsn.insn, dirty);
 		op->optinsn.insn = NULL;
 		op->optinsn.size = 0;
@@ -401,6 +406,9 @@ int arch_prepare_optimized_kprobe(struct optimized_kprobe *op,
 			   (u8 *)op->kp.addr + op->optinsn.size);
 	len += JMP32_INSN_SIZE;
 
+	op->optinsn.tp_len = len;
+	perf_event_text_poke(slot, NULL, 0, buf, len);
+
 	/* We have to use text_poke() for instruction buffer because it is RO */
 	text_poke(slot, buf, len);
 	ret = 0;
@@ -439,7 +447,8 @@ void arch_optimize_kprobes(struct list_head *oplist)
 		insn_buff[0] = JMP32_INSN_OPCODE;
 		*(s32 *)(&insn_buff[1]) = rel;
 
-		text_poke_bp(op->kp.addr, insn_buff, JMP32_INSN_SIZE, NULL);
+		__text_poke_bp(op->kp.addr, insn_buff, JMP32_INSN_SIZE, NULL,
+			       &op->kp.opcode);
 
 		list_del_init(&op->list);
 	}
@@ -454,9 +463,16 @@ void arch_optimize_kprobes(struct list_head *oplist)
  */
 void arch_unoptimize_kprobe(struct optimized_kprobe *op)
 {
+	u8 old[POKE_MAX_OPCODE_SIZE];
+	u8 new[POKE_MAX_OPCODE_SIZE] = { op->kp.opcode, };
+	size_t len = INT3_INSN_SIZE + DISP32_SIZE;
+
+	memcpy(old, op->kp.addr, len);
 	arch_arm_kprobe(&op->kp);
 	text_poke(op->kp.addr + INT3_INSN_SIZE,
 		  op->optinsn.copied_insn, DISP32_SIZE);
+	memcpy(new + INT3_INSN_SIZE, op->optinsn.copied_insn, DISP32_SIZE);
+	perf_event_text_poke(op->kp.addr, old, len, new, len);
 	text_poke_sync();
 }
 

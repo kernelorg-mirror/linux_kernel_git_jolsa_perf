@@ -1075,6 +1075,7 @@ static int tp_vec_nr;
  * text_poke_bp_batch() -- update instructions on live kernel on SMP
  * @tp:			vector of instructions to patch
  * @nr_entries:		number of entries in the vector
+ * @oldptr:		pointer to original old insn byte
  *
  * Modify multi-byte instruction by using int3 breakpoint on SMP.
  * We completely avoid stop_machine() here, and achieve the
@@ -1092,7 +1093,8 @@ static int tp_vec_nr;
  *		  replacing opcode
  *	- sync cores
  */
-static void text_poke_bp_batch(struct text_poke_loc *tp, unsigned int nr_entries)
+static void text_poke_bp_batch(struct text_poke_loc *tp,
+			       unsigned int nr_entries, const u8 *oldptr)
 {
 	struct bp_patching_desc desc = {
 		.vec = tp,
@@ -1117,7 +1119,7 @@ static void text_poke_bp_batch(struct text_poke_loc *tp, unsigned int nr_entries
 	 * First step: add a int3 trap to the address that will be patched.
 	 */
 	for (i = 0; i < nr_entries; i++) {
-		tp[i].old = *(u8 *)text_poke_addr(&tp[i]);
+		tp[i].old = oldptr ? *oldptr : *(u8 *)text_poke_addr(&tp[i]);
 		text_poke(text_poke_addr(&tp[i]), &int3, INT3_INSN_SIZE);
 	}
 
@@ -1274,7 +1276,7 @@ static bool tp_order_fail(void *addr)
 static void text_poke_flush(void *addr)
 {
 	if (tp_vec_nr == TP_VEC_MAX || tp_order_fail(addr)) {
-		text_poke_bp_batch(tp_vec, tp_vec_nr);
+		text_poke_bp_batch(tp_vec, tp_vec_nr, NULL);
 		tp_vec_nr = 0;
 	}
 }
@@ -1299,6 +1301,20 @@ void __ref text_poke_queue(void *addr, const void *opcode, size_t len, const voi
 	text_poke_loc_init(tp, addr, opcode, len, emulate);
 }
 
+void __ref __text_poke_bp(void *addr, const void *opcode, size_t len,
+			  const void *emulate, const u8 *oldptr)
+{
+	struct text_poke_loc tp;
+
+	if (unlikely(system_state == SYSTEM_BOOTING)) {
+		text_poke_early(addr, opcode, len);
+		return;
+	}
+
+	text_poke_loc_init(&tp, addr, opcode, len, emulate);
+	text_poke_bp_batch(&tp, 1, oldptr);
+}
+
 /**
  * text_poke_bp() -- update instructions on live kernel on SMP
  * @addr:	address to patch
@@ -1310,15 +1326,8 @@ void __ref text_poke_queue(void *addr, const void *opcode, size_t len, const voi
  * dynamically allocated memory. This function should be used when it is
  * not possible to allocate memory.
  */
-void __ref text_poke_bp(void *addr, const void *opcode, size_t len, const void *emulate)
+void __ref text_poke_bp(void *addr, const void *opcode, size_t len,
+			const void *emulate)
 {
-	struct text_poke_loc tp;
-
-	if (unlikely(system_state == SYSTEM_BOOTING)) {
-		text_poke_early(addr, opcode, len);
-		return;
-	}
-
-	text_poke_loc_init(&tp, addr, opcode, len, emulate);
-	text_poke_bp_batch(&tp, 1);
+	return __text_poke_bp(addr, opcode, len, emulate, NULL);
 }

@@ -65,11 +65,15 @@ struct arch_specific_insn {
 	 */
 	bool boostable;
 	bool if_modifier;
+	/* Number of bytes of text poked */
+	int tp_len;
 };
 
 struct arch_optimized_insn {
 	/* copy of the original instructions */
 	kprobe_opcode_t copied_insn[DISP32_SIZE];
+	/* Number of bytes of text poked */
+	int tp_len;
 	/* detour code buffer */
 	kprobe_opcode_t *insn;
 	/* the size of instructions copied to detour code buffer */
