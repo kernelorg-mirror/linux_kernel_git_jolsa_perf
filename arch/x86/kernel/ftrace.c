@@ -410,6 +410,8 @@ static void create_trampoline(struct ftrace_ops *ops)
 	ftrace_add_trampoline_to_kallsyms(ops);
 	perf_event_ksymbol(PERF_RECORD_KSYMBOL_TYPE_OOL, (u64)trampoline,
 			   tramp_size, false, FTRACE_TRAMPOLINE_SYM);
+	/* Record the perf text poke event after the ksymbol register event */
+	perf_event_text_poke(trampoline, NULL, 0, trampoline, tramp_size);
 
 	set_vm_flush_reset_perms(trampoline);
 
@@ -537,6 +539,9 @@ void arch_ftrace_trampoline_free(struct ftrace_ops *ops)
 	if (!ops || !(ops->flags & FTRACE_OPS_FL_ALLOC_TRAMP))
 		return;
 
+	/* Record the text poke event before the ksymbol unregister event */
+	perf_event_text_poke((void *)ops->trampoline, (void *)ops->trampoline,
+			     ops->trampoline_size, NULL, 0);
 	perf_event_ksymbol(PERF_RECORD_KSYMBOL_TYPE_OOL, (u64)ops->trampoline,
 			   ops->trampoline_size, true, FTRACE_TRAMPOLINE_SYM);
 	/* Remove from kallsyms after the perf events */
