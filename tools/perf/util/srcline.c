@@ -18,14 +18,19 @@
 
 bool srcline_full_filename;
 
-static const char *dso__name(struct dso *dso)
+static const char *dso__name(struct dso *dso, char *buf, size_t size)
 {
 	const char *dso_name;
 
 	if (dso->symsrc_filename)
 		dso_name = dso->symsrc_filename;
-	else
-		dso_name = dso->long_name;
+	else {
+		if (dso->binary_type == DSO_BINARY_TYPE__BUILD_ID_CACHE &&
+		    dso__build_id_filename(dso, buf, size, false) != NULL)
+			dso_name = buf;
+		else
+			dso_name = dso->long_name;
+	}
 
 	if (dso_name[0] == '[')
 		return NULL;
@@ -520,6 +525,7 @@ char *__get_srcline(struct dso *dso, u64 addr, struct symbol *sym,
 		  bool show_sym, bool show_addr, bool unwind_inlines,
 		  u64 ip)
 {
+	char buf[PATH_MAX];
 	char *file = NULL;
 	unsigned line = 0;
 	char *srcline;
@@ -528,7 +534,7 @@ char *__get_srcline(struct dso *dso, u64 addr, struct symbol *sym,
 	if (!dso->has_srcline)
 		goto out;
 
-	dso_name = dso__name(dso);
+	dso_name = dso__name(dso, buf, PATH_MAX);
 	if (dso_name == NULL)
 		goto out;
 
@@ -568,13 +574,14 @@ out:
 /* Returns filename and fills in line number in line */
 char *get_srcline_split(struct dso *dso, u64 addr, unsigned *line)
 {
+	char buf[PATH_MAX];
 	char *file = NULL;
 	const char *dso_name;
 
 	if (!dso->has_srcline)
 		goto out;
 
-	dso_name = dso__name(dso);
+	dso_name = dso__name(dso, buf, PATH_MAX);
 	if (dso_name == NULL)
 		goto out;
 
@@ -677,9 +684,10 @@ void srcline__tree_delete(struct rb_root_cached *tree)
 struct inline_node *dso__parse_addr_inlines(struct dso *dso, u64 addr,
 					    struct symbol *sym)
 {
+	char buf[PATH_MAX];
 	const char *dso_name;
 
-	dso_name = dso__name(dso);
+	dso_name = dso__name(dso, buf, PATH_MAX);
 	if (dso_name == NULL)
 		return NULL;
 
