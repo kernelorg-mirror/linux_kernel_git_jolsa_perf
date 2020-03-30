@@ -156,7 +156,9 @@ clean: $(LIBBPF)-clean
 	$(Q)$(RM) -r -- $(OUTPUT)libbpf/
 	$(call QUIET_CLEAN, core-gen)
 	$(Q)$(RM) -- $(OUTPUT)FEATURE-DUMP.bpftool
-	$(Q)$(RM) -r -- $(OUTPUT)feature/
+	$(call QUIET_CLEAN, config)
+	$(Q)$(MAKE) -C $(srctree)/tools/build/feature/ $(if $(OUTPUT),OUTPUT=$(OUTPUT)feature/,) clean >/dev/null
+
 
 install: $(OUTPUT)bpftool
 	$(call QUIET_INSTALL, bpftool)
