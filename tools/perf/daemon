@@ -1,0 +1,35 @@
+
+config:
+	[daemon]
+	base=/opt/perfdata
+
+	[session-1]
+	run = -m 10M -e cycles -o /opt/perfdata/1/perf.data --overwrite --switch-output -a
+
+	[session-2]
+	run = -m 20M -e sched:* -o /opt/perfdata/2/perf.data --overwrite --switch-output -a
+
+
+.perfconfig:
+	[daemon]
+	base = /opt/perfdata
+
+
+socket:
+	$(base)control
+
+
+perf daemon list
+perf daemon signal
+
+perf daemon -l
+perf daemon -s
+perf daemon -s all
+perf daemon -s 1
+perf daemon -s 1,2
+
+
+todo:
+	- add timestamp to log messages
+	- fix inotify
+	- man page for perf daemon
