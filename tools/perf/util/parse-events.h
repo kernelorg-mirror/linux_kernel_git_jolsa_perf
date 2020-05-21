@@ -126,9 +126,10 @@ struct parse_events_state {
 	int			   idx;
 	int			   nr_groups;
 	struct parse_events_error *error;
-	struct evlist	  *evlist;
+	struct evlist		  *evlist;
 	struct list_head	  *terms;
 	int			   stoken;
+	bool			   fake_pmu;
 };
 
 void parse_events__handle_error(struct parse_events_error *err, int idx,
