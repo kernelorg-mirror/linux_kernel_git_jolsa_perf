@@ -490,6 +490,122 @@ static int test_parsing(void)
 	return ret == 0 ? TEST_OK : TEST_SKIP;
 }
 
+struct test_metric {
+	const char *str;
+};
+
+static struct test_metric metrics[] = {
+	{ "(unc_p_power_state_occupancy.cores_c0 / unc_p_clockticks) * 100." },
+	{ "imx8_ddr0@read\\-cycles@ * 4 * 4", },
+	{ "imx8_ddr0@axid\\-read\\,axi_mask\\=0xffff\\,axi_id\\=0x0000@ * 4", },
+	{ "(cstate_pkg@c2\\-residency@ / msr@tsc@) * 100", },
+	{ "(imx8_ddr0@read\\-cycles@ + imx8_ddr0@write\\-cycles@)", },
+};
+
+static int check_id(const char *id)
+{
+	struct parse_events_error error;
+	struct evlist *evlist;
+	int ret;
+
+	/* Numbers are always valid. */
+	if (is_number(id))
+		return 0;
+
+	evlist = evlist__new();
+	if (!evlist)
+		return -1;
+
+	memset(&error, 0, sizeof(error));
+	ret = parse_events_fake(evlist, id, &error);
+	if (ret) {
+		pr_debug("str        : %s\n", error.str);
+		pr_debug("help       : %s\n", error.help);
+		pr_debug("first_str  : %s\n", error.first_str);
+		pr_debug("first_help : %s\n", error.first_help);
+	}
+
+	evlist__delete(evlist);
+	free(error.str);
+	free(error.help);
+	free(error.first_str);
+	free(error.first_help);
+	return ret;
+}
+
+static int metric_parse_fake(const char *str)
+{
+	struct expr_parse_ctx ctx;
+	struct hashmap_entry *cur;
+	double result;
+	int ret = -1;
+	size_t bkt;
+	int i;
+
+	pr_debug("parsing '%s'\n", str);
+
+	expr__ctx_init(&ctx);
+	if (expr__find_other(str, NULL, &ctx, 0) < 0) {
+		pr_err("expr__find_other failed\n");
+		return -1;
+	}
+
+	i = 1;
+	hashmap__for_each_entry((&ctx.ids), cur, bkt)
+		expr__add_id(&ctx, strdup(cur->key), i++);
+
+	hashmap__for_each_entry((&ctx.ids), cur, bkt) {
+		if (check_id(cur->key)) {
+			pr_err("check_id failed\n");
+			goto out;
+		}
+	}
+
+	if (!expr__parse(&result, &ctx, str, 1))
+		ret = 0;
+	else
+		pr_err("expr__parse failed\n");
+
+out:
+	expr__ctx_clear(&ctx);
+	return ret;
+
+}
+
+static int test_parsing_fake(void)
+{
+	struct pmu_events_map *map;
+	struct pmu_event *pe;
+	unsigned int i, j;
+	int err = 0;
+
+	for (i = 0; !err && i < ARRAY_SIZE(metrics); i++)
+		err = metric_parse_fake(metrics[i].str);
+
+	if (err)
+		return err;
+
+	i = 0;
+	for (;;) {
+		map = &pmu_events_map[i++];
+		if (!map->table)
+			break;
+		j = 0;
+		for (;;) {
+			pe = &map->table[j++];
+			if (!pe->name && !pe->metric_group && !pe->metric_name)
+				break;
+			if (!pe->metric_expr)
+				continue;
+			err = metric_parse_fake(pe->metric_expr);
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
 static const struct {
 	int (*func)(void);
 	const char *desc;
@@ -505,6 +621,10 @@ static const struct {
 	{
 		.func = test_parsing,
 		.desc = "Parsing of PMU event table metrics",
+	},
+	{
+		.func = test_parsing_fake,
+		.desc = "Parsing of PMU event table metrics with fake PMUs",
 	},
 };
 
