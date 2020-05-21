@@ -2082,22 +2082,15 @@ int parse_events_terms(struct list_head *terms, const char *str)
 	return ret;
 }
 
-int parse_events(struct evlist *evlist, const char *str,
-		 struct parse_events_error *err)
+static int parse_events_state(struct parse_events_state *parse_state,
+			      struct evlist *evlist, const char *str)
 {
-	struct parse_events_state parse_state = {
-		.list   = LIST_HEAD_INIT(parse_state.list),
-		.idx    = evlist->core.nr_entries,
-		.error  = err,
-		.evlist = evlist,
-		.stoken = PE_START_EVENTS,
-	};
 	int ret;
 
-	ret = parse_events__scanner(str, &parse_state);
+	ret = parse_events__scanner(str, parse_state);
 	perf_pmu__parse_cleanup();
 
-	if (!ret && list_empty(&parse_state.list)) {
+	if (!ret && list_empty(&parse_state->list)) {
 		WARN_ONCE(true, "WARNING: event parser found nothing\n");
 		return -1;
 	}
@@ -2105,12 +2098,12 @@ int parse_events(struct evlist *evlist, const char *str,
 	/*
 	 * Add list to the evlist even with errors to allow callers to clean up.
 	 */
-	perf_evlist__splice_list_tail(evlist, &parse_state.list);
+	perf_evlist__splice_list_tail(evlist, &parse_state->list);
 
 	if (!ret) {
 		struct evsel *last;
 
-		evlist->nr_groups += parse_state.nr_groups;
+		evlist->nr_groups += parse_state->nr_groups;
 		last = evlist__last(evlist);
 		last->cmdline_group_boundary = true;
 
@@ -2123,6 +2116,35 @@ int parse_events(struct evlist *evlist, const char *str,
 	 * need to bother.
 	 */
 	return ret;
+}
+
+int parse_events(struct evlist *evlist, const char *str,
+		 struct parse_events_error *err)
+{
+	struct parse_events_state parse_state = {
+		.list   = LIST_HEAD_INIT(parse_state.list),
+		.idx    = evlist->core.nr_entries,
+		.error  = err,
+		.evlist = evlist,
+		.stoken = PE_START_EVENTS,
+	};
+
+	return parse_events_state(&parse_state, evlist, str);
+}
+
+int parse_events_fake(struct evlist *evlist, const char *str,
+		      struct parse_events_error *err)
+{
+	struct parse_events_state parse_state = {
+		.list     = LIST_HEAD_INIT(parse_state.list),
+		.idx      = evlist->core.nr_entries,
+		.error    = err,
+		.evlist   = evlist,
+		.stoken   = PE_START_EVENTS,
+		.fake_pmu = true,
+	};
+
+	return parse_events_state(&parse_state, evlist, str);
 }
 
 #define MAX_WIDTH 1000
