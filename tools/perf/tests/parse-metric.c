@@ -20,6 +20,18 @@ static struct pmu_event pme_test[] = {
 			  "( 1 + cpu_clk_unhalted.one_thread_active / cpu_clk_unhalted.ref_xclk ) )))",
 	.metric_name	= "Frontend_Bound_SMT",
 },
+{
+	.metric_expr	= "l1d\\-loads\\-misses / inst_retired.any",
+	.metric_name	= "dcache_miss_cpi",
+},
+{
+	.metric_expr	= "l1i\\-loads\\-misses / inst_retired.any",
+	.metric_name	= "icache_miss_cycles",
+},
+{
+	.metric_expr	= "(metric:dcache_miss_cpi + metric:icache_miss_cycles)",
+	.metric_name	= "cache_miss_cycles",
+},
 };
 
 static struct pmu_events_map map = {
@@ -155,9 +167,51 @@ static int test_frontend(void)
 	return 0;
 }
 
+static int test_cache_miss_cycles(void)
+{
+	double ratio;
+	struct rblist metric_events = {
+		.nr_entries = 0,
+	};
+	struct evlist *evlist;
+	struct evsel *evsel;
+	struct value vals[] = {
+		{ .event = "l1d-loads-misses",  .val = 300 },
+		{ .event = "l1i-loads-misses",  .val = 200 },
+		{ .event = "inst_retired.any",  .val = 400 },
+		{ 0 },
+	};
+	struct runtime_stat st;
+	int err;
+
+	evlist = evlist__new();
+	if (!evlist)
+		return -1;
+
+	err = metricgroup__parse_groups_test(evlist, &map,
+					     "cache_miss_cycles",
+					     false, false,
+					     &metric_events);
+
+	TEST_ASSERT_VAL("failed to parse metrics", err == 0);
+
+	runtime_stat__init(&st);
+	load_runtime_stat(&st, evlist, vals);
+
+	evsel = evlist__first(evlist);
+	ratio = compute_single(&metric_events, evsel, &st);
+
+	TEST_ASSERT_VAL("cache_miss_cycles failed, wrong ratio", ratio == 0.45);
+
+	runtime_stat__exit(&st);
+	evlist__delete(evlist);
+	return 0;
+}
+
 int test__parse_metric(struct test *test __maybe_unused, int subtest __maybe_unused)
 {
 	TEST_ASSERT_VAL("IPC failed", test_ipc() == 0);
 	TEST_ASSERT_VAL("frontend failed", test_frontend() == 0);
+	TEST_ASSERT_VAL("cache_miss_cycles failed", test_cache_miss_cycles() == 0);
 	return 0;
 }
