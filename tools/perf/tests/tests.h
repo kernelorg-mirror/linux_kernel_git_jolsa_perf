@@ -118,6 +118,7 @@ int test__time_utils(struct test *t, int subtest);
 int test__jit_write_elf(struct test *test, int subtest);
 int test__api_io(struct test *test, int subtest);
 int test__demangle_java(struct test *test, int subtest);
+int test__parse_metric(struct test *test, int subtest);
 
 bool test__bp_signal_is_supported(void);
 bool test__bp_account_is_supported(void);
