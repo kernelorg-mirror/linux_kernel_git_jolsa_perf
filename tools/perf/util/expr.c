@@ -67,14 +67,10 @@ int expr__add_val(struct expr_parse_ctx *ctx, const char *name, double val)
 	return ret;
 }
 
-int expr__get_id(struct expr_parse_ctx *ctx, const char *id, double *val_ptr)
+int expr__get_id(struct expr_parse_ctx *ctx, const char *id,
+		 struct expr_parse_data **data)
 {
-	struct expr_parse_data *data;
-
-	if (!hashmap__find(&ctx->ids, id, (void **)&data))
-		return -1;
-	*val_ptr = (data == NULL) ?  0.0 : data->val;
-	return 0;
+	return hashmap__find(&ctx->ids, id, (void **)data) ? 0 : -1;
 }
 
 void expr__ctx_init(struct expr_parse_ctx *ctx)
