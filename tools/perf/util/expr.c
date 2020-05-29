@@ -85,9 +85,9 @@ int expr__add_other(struct expr_parse_ctx *ctx, struct metric_other *other)
 		return -ENOMEM;
 	}
 
-	data_ptr->other = true;
-	data_ptr->metric_name = other->metric_name;
-	data_ptr->metric_expr = other->metric_expr;
+	data_ptr->is_other = true;
+	data_ptr->other.metric_name = other->metric_name;
+	data_ptr->other.metric_expr = other->metric_expr;
 
 	ret = hashmap__set(&ctx->ids, name, data_ptr,
 			   (const void **)&old_key, (void **)&old_data);

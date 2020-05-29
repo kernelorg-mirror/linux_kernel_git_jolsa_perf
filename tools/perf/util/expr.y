@@ -83,6 +83,15 @@ expr:	  NUMBER
 						free($1);
 						YYABORT;
 					}
+
+					if (data->is_other && !data->other.counted) {
+						if (expr__parse(&data->val, ctx, data->other.metric_expr, 1)) {
+							pr_debug("%s failed to count\n", $1);
+							free($1);
+							YYABORT;
+						}
+					}
+
 					$$ = data->val;
 					free($1);
 				}

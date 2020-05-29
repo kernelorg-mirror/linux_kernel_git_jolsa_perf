@@ -18,12 +18,15 @@ struct expr_parse_ctx {
 };
 
 struct expr_parse_data {
-	bool other;
+	bool is_other;
 
 	union {
 		double	val;
-		const char *metric_name;
-		const char *metric_expr;
+		struct {
+			const char *metric_name;
+			const char *metric_expr;
+			bool counted;
+		} other;
 	};
 };
 
