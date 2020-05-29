@@ -47,6 +47,11 @@ static void expr_error(double *final_val __maybe_unused,
 	pr_debug("%s\n", s);
 }
 
+static bool is_metric(const char *name)
+{
+	return !strncmp(name, "metric:", sizeof("metric:") - 1);
+}
+
 %}
 %%
 
@@ -77,14 +82,21 @@ if_expr:
 expr:	  NUMBER
 	| ID			{
 					struct expr_parse_data *data;
+					char *lookup = $1;
 
-					if (expr__get_id(ctx, $1, &data)) {
+					if (is_metric($1))
+						lookup += sizeof("metric:") - 1;
+
+					if (expr__get_id(ctx, lookup, &data)) {
 						pr_debug("%s not found\n", $1);
 						free($1);
 						YYABORT;
 					}
 
+					pr_debug("lookup: other %d, counted %d, %s\n", data->is_other, data->other.counted, lookup);
+
 					if (data->is_other && !data->other.counted) {
+						data->other.counted = true;
 						if (expr__parse(&data->val, ctx, data->other.metric_expr, 1)) {
 							pr_debug("%s failed to count\n", $1);
 							free($1);

@@ -224,6 +224,7 @@ static int metricgroup__setup_events(struct list_head *groups,
 
 	list_for_each_entry (eg, groups, nd) {
 		struct evsel **metric_events;
+		struct metric_other *other = NULL;
 
 		metric_events = calloc(sizeof(void *),
 				hashmap__size(&eg->pctx.ids) + 1);
@@ -256,7 +257,6 @@ static int metricgroup__setup_events(struct list_head *groups,
 			break;
 		}
 		if (eg->other_cnt) {
-			struct metric_other *other;
 			struct eother *eo;
 
 			other = zalloc(sizeof(struct metric_other) * (eg->other_cnt + 1));
@@ -269,12 +269,13 @@ static int metricgroup__setup_events(struct list_head *groups,
 
 			i = 0;
 			list_for_each_entry(eo, &eg->other, list) {
-				expr->metric_other[i].metric_name = eo->metric_name;
-				expr->metric_other[i].metric_expr = eo->metric_expr;
+				other[i].metric_name = eo->metric_name;
+				other[i].metric_expr = eo->metric_expr;
 				i++;
 			}
 		};
 
+		expr->metric_other = other;
 		expr->metric_expr = eg->metric_expr;
 		expr->metric_name = eg->metric_name;
 		expr->metric_unit = eg->metric_unit;
@@ -294,6 +295,11 @@ static int metricgroup__setup_events(struct list_head *groups,
 	return ret;
 }
 
+static bool is_metric(const char *name)
+{
+	return !strncmp(name, "metric:", sizeof("metric:") - 1);
+}
+
 static bool match_metric(const char *n, const char *list)
 {
 	int len;
@@ -301,8 +307,8 @@ static bool match_metric(const char *n, const char *list)
 
 	if (!list)
 		return false;
-	if (!strncmp("metric:", list, sizeof("metric:")))
-		list += sizeof("metric:");
+	if (is_metric(list))
+		list += sizeof("metric:") - 1;
 	if (!strcmp(list, "all"))
 		return true;
 	if (!n)
@@ -506,6 +512,8 @@ static void metricgroup__add_metric_weak_group(struct strbuf *events,
 	bool no_group = true, has_duration = false;
 
 	hashmap__for_each_entry((&ctx->ids), cur, bkt) {
+		if (is_metric(cur->key))
+			continue;
 		pr_debug("found event %s\n", (const char *)cur->key);
 		/*
 		 * Duration time maps to a software event and can make
@@ -537,6 +545,8 @@ static void metricgroup__add_metric_non_group(struct strbuf *events,
 	bool first = true;
 
 	hashmap__for_each_entry((&ctx->ids), cur, bkt) {
+		if (is_metric(cur->key))
+			continue;
 		if (!first)
 			strbuf_addf(events, ",");
 		strbuf_addf(events, "%s", (const char *)cur->key);
@@ -591,7 +601,7 @@ static int __metricgroup__add_metric(struct list_head *group_list,
 	struct eother *eo;
 	struct egroup *eg;
 
-	if (egp == NULL) {
+	if (*egp == NULL) {
 		eg = malloc(sizeof(*eg));
 		if (!eg)
 			return -ENOMEM;
@@ -604,6 +614,7 @@ static int __metricgroup__add_metric(struct list_head *group_list,
 		eg->has_constraint = metric_no_group || metricgroup__has_constraint(pe);
 		INIT_LIST_HEAD(&eg->other);
 		eg->other_cnt = 0;
+		*egp = eg;
 	} else {
 		eg = *egp;
 
@@ -624,7 +635,7 @@ static int __metricgroup__add_metric(struct list_head *group_list,
 		return -EINVAL;
 	}
 
-	if (egp)
+	if (eg->other_cnt)
 		return 0;
 
 	if (list_empty(group_list))
@@ -652,10 +663,13 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct pmu_events_map *map,
 				   struct egroup *egp)
 {
+	struct hashmap_entry *cur, *tmp;
 	struct pmu_event *pe;
 	struct egroup *eg;
+	size_t bkt;
 	int i, ret;
 	bool has_match = false;
+	bool base = egp == NULL;
 
 	if (!map)
 		return 0;
@@ -673,8 +687,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 			continue;
 		if (match_metric(pe->metric_group, metric) ||
 		    match_metric(pe->metric_name, metric)) {
-			struct hashmap_entry *cur;
-			size_t bkt;
+			bool all = false;
 
 			has_match = true;
 			pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
@@ -705,19 +718,47 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				}
 			}
 
-			hashmap__for_each_entry((&egp->pctx.ids), cur, bkt) {
-				if (strcmp(cur->key, "metric:"))
-					continue;
-				ret = metricgroup__add_metric(cur->key, metric_no_group, events,
-							      group_list, map, egp);
-				if (ret)
-					return ret;
+			while (!all) {
+				all = true;
+				hashmap__for_each_entry((&egp->pctx.ids), cur, bkt) {
+					struct expr_parse_data *data;
+
+					if (!is_metric(cur->key))
+						continue;
+
+					if (expr__get_id(&egp->pctx, cur->key, &data))
+						continue;
+
+					if (data->used)
+						continue;
+
+					data->used = true;
+					all = false;
+
+					ret = metricgroup__add_metric(cur->key, metric_no_group, events,
+								      group_list, map, egp);
+					if (ret)
+						return ret;
+				}
 			}
 		}
 	}
 
-	if (egp)
+	if (!base)
 		return 0;
+
+	hashmap__for_each_entry_safe((&egp->pctx.ids), cur, tmp, bkt) {
+		double *old_val = NULL;
+		char *old_key = NULL;
+
+		if (!is_metric(cur->key))
+			continue;
+
+		hashmap__delete(&egp->pctx.ids, cur->key,
+				(const void **)&old_key, (void **)&old_val);
+		free(old_key);
+		free(old_val);
+	}
 
 	list_for_each_entry(eg, group_list, nd) {
 		if (events->len > 0)

@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include "metricgroup.h"
+#include "debug.h"
 #include "expr.h"
 #include "expr-bison.h"
 #include "expr-flex.h"
@@ -41,6 +42,7 @@ int expr__add_id(struct expr_parse_ctx *ctx, const char *name)
 	if (!data_ptr)
 		return -ENOMEM;
 
+	data_ptr->used = false;
 	ret = hashmap__set(&ctx->ids, name, data_ptr,
 			   (const void **)&old_key, (void **)&old_data);
 	free(old_key);
@@ -60,6 +62,7 @@ int expr__add_val(struct expr_parse_ctx *ctx, const char *name, double val)
 		if (!data_ptr)
 			return -ENOMEM;
 		data_ptr->val = val;
+		data_ptr->is_other = false;
 	}
 	ret = hashmap__set(&ctx->ids, name, data_ptr,
 			   (const void **)&old_key, (void **)&old_data);
@@ -88,6 +91,9 @@ int expr__add_other(struct expr_parse_ctx *ctx, struct metric_other *other)
 	data_ptr->is_other = true;
 	data_ptr->other.metric_name = other->metric_name;
 	data_ptr->other.metric_expr = other->metric_expr;
+	data_ptr->other.counted = false;
+
+	pr_debug("expr__add_other %s: %s\n", other->metric_name, other->metric_expr);
 
 	ret = hashmap__set(&ctx->ids, name, data_ptr,
 			   (const void **)&old_key, (void **)&old_data);
@@ -153,6 +159,7 @@ __expr__parse(double *val, struct expr_parse_ctx *ctx, const char *expr,
 int expr__parse(double *final_val, struct expr_parse_ctx *ctx,
 		const char *expr, int runtime)
 {
+	pr_debug("parsing metric: %s\n", expr);
 	return __expr__parse(final_val, ctx, expr, EXPR_PARSE, runtime) ? -1 : 0;
 }
 

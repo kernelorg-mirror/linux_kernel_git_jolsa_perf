@@ -9,6 +9,8 @@
 #include "debug.h"
 #include "expr.h"
 #include "stat.h"
+#include <perf/cpumap.h>
+#include <perf/evlist.h>
 
 static struct pmu_event pme_test[] = {
 {
@@ -183,6 +185,7 @@ static int test_cache_miss_cycles(void)
 	};
 	struct runtime_stat st;
 	int err;
+	struct perf_cpu_map *cpus;
 
 	evlist = evlist__new();
 	if (!evlist)
@@ -195,13 +198,18 @@ static int test_cache_miss_cycles(void)
 
 	TEST_ASSERT_VAL("failed to parse metrics", err == 0);
 
+	cpus = perf_cpu_map__new("0");
+	perf_evlist__set_maps(&evlist->core, cpus, NULL);
+
+	perf_evlist__alloc_stats(evlist, false);
+
 	runtime_stat__init(&st);
 	load_runtime_stat(&st, evlist, vals);
 
 	evsel = evlist__first(evlist);
 	ratio = compute_single(&metric_events, evsel, &st);
 
-	TEST_ASSERT_VAL("cache_miss_cycles failed, wrong ratio", ratio == 0.45);
+	TEST_ASSERT_VAL("cache_miss_cycles failed, wrong ratio", ratio == 1.25);
 
 	runtime_stat__exit(&st);
 	evlist__delete(evlist);

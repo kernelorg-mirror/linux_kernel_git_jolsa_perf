@@ -738,7 +738,7 @@ static int prepare_metric(struct evsel **metric_events,
 {
 	double scale;
 	char *n, *pn;
-	int i;
+	int i, j;
 
 	expr__ctx_init(pctx);
 	for (i = 0; metric_events[i]; i++) {
@@ -779,8 +779,11 @@ static int prepare_metric(struct evsel **metric_events,
 			expr__add_val(pctx, n, avg_stats(stats)*scale);
 	}
 
-	for (i = 0; metric_other[i].metric_name; i++) {
-		expr__add_other(pctx, &metric_other[i]);
+	if (!metric_other)
+		return i;
+
+	for (j = 0; metric_other[j].metric_name; j++) {
+		expr__add_other(pctx, &metric_other[j]);
 	}
 	return i;
 }
@@ -852,7 +855,7 @@ double test_generic_metric(struct metric_expr *mexp, int cpu, struct runtime_sta
 	struct expr_parse_ctx pctx;
 	double ratio;
 
-	if (prepare_metric(mexp->metric_events, NULL, &pctx, cpu, st) < 0)
+	if (prepare_metric(mexp->metric_events, mexp->metric_other, &pctx, cpu, st) < 0)
 		return 0.;
 
 	if (expr__parse(&ratio, &pctx, mexp->metric_expr, 1))

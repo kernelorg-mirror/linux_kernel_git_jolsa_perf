@@ -27,6 +27,7 @@ struct expr_parse_data {
 			const char *metric_expr;
 			bool counted;
 		} other;
+		bool used;
 	};
 };
 
