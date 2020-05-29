@@ -471,7 +471,7 @@ static int test_parsing(void)
 			 */
 			k = 1;
 			hashmap__for_each_entry((&ctx.ids), cur, bkt)
-				expr__add_id(&ctx, strdup(cur->key), k++);
+				expr__add_val(&ctx, strdup(cur->key), k++);
 
 			hashmap__for_each_entry((&ctx.ids), cur, bkt) {
 				if (check_parse_id(cur->key, map == cpus_map,
@@ -552,7 +552,7 @@ static int metric_parse_fake(const char *str)
 
 	i = 1;
 	hashmap__for_each_entry((&ctx.ids), cur, bkt)
-		expr__add_id(&ctx, strdup(cur->key), i++);
+		expr__add_val(&ctx, strdup(cur->key), i++);
 
 	hashmap__for_each_entry((&ctx.ids), cur, bkt) {
 		if (check_id(cur->key)) {
