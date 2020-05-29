@@ -32,30 +32,30 @@ static bool key_equal(const void *key1, const void *key2,
 /* Caller must make sure id is allocated */
 int expr__add_val(struct expr_parse_ctx *ctx, const char *name, double val)
 {
-	double *val_ptr = NULL, *old_val = NULL;
+	struct expr_parse_data *data_ptr = NULL, *old_data = NULL;
 	char *old_key = NULL;
 	int ret;
 
 	if (val != 0.0) {
-		val_ptr = malloc(sizeof(double));
-		if (!val_ptr)
+		data_ptr = malloc(sizeof(*data_ptr));
+		if (!data_ptr)
 			return -ENOMEM;
-		*val_ptr = val;
+		data_ptr->val = val;
 	}
-	ret = hashmap__set(&ctx->ids, name, val_ptr,
-			   (const void **)&old_key, (void **)&old_val);
+	ret = hashmap__set(&ctx->ids, name, data_ptr,
+			   (const void **)&old_key, (void **)&old_data);
 	free(old_key);
-	free(old_val);
+	free(old_data);
 	return ret;
 }
 
 int expr__get_id(struct expr_parse_ctx *ctx, const char *id, double *val_ptr)
 {
-	double *data;
+	struct expr_parse_data *data;
 
 	if (!hashmap__find(&ctx->ids, id, (void **)&data))
 		return -1;
-	*val_ptr = (data == NULL) ?  0.0 : *data;
+	*val_ptr = (data == NULL) ?  0.0 : data->val;
 	return 0;
 }
 
