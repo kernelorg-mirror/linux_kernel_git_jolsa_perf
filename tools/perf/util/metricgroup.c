@@ -255,6 +255,26 @@ static int metricgroup__setup_events(struct list_head *groups,
 			free(metric_events);
 			break;
 		}
+		if (eg->other_cnt) {
+			struct metric_other *other;
+			struct eother *eo;
+
+			other = zalloc(sizeof(struct metric_other) * (eg->other_cnt + 1));
+			if (!other) {
+				ret = -ENOMEM;
+				free(metric_events);
+				free(other);
+				break;
+			}
+
+			i = 0;
+			list_for_each_entry(eo, &eg->other, list) {
+				expr->metric_other[i].metric_name = eo->metric_name;
+				expr->metric_other[i].metric_expr = eo->metric_expr;
+				i++;
+			}
+		};
+
 		expr->metric_expr = eg->metric_expr;
 		expr->metric_name = eg->metric_name;
 		expr->metric_unit = eg->metric_unit;
