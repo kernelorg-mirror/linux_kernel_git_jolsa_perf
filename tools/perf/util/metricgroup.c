@@ -83,12 +83,20 @@ static void metricgroup__rblist_init(struct rblist *metric_events)
 	metric_events->node_new = metric_event_new;
 }
 
+struct eother {
+	const char *metric_name;
+	const char *metric_expr;
+	struct list_head list;
+};
+
 struct egroup {
 	struct list_head nd;
 	struct expr_parse_ctx pctx;
 	const char *metric_name;
 	const char *metric_expr;
 	const char *metric_unit;
+	struct list_head other;
+	int other_cnt;
 	int runtime;
 	bool has_constraint;
 };
@@ -273,6 +281,8 @@ static bool match_metric(const char *n, const char *list)
 
 	if (!list)
 		return false;
+	if (!strncmp("metric:", list, sizeof("metric:")))
+		list += sizeof("metric:");
 	if (!strcmp(list, "all"))
 		return true;
 	if (!n)
@@ -555,26 +565,47 @@ int __weak arch_get_runtimeparam(void)
 static int __metricgroup__add_metric(struct list_head *group_list,
 				     struct pmu_event *pe,
 				     bool metric_no_group,
-				     int runtime)
+				     int runtime,
+				     struct egroup **egp)
 {
+	struct eother *eo;
 	struct egroup *eg;
 
-	eg = malloc(sizeof(*eg));
-	if (!eg)
-		return -ENOMEM;
+	if (egp == NULL) {
+		eg = malloc(sizeof(*eg));
+		if (!eg)
+			return -ENOMEM;
 
-	expr__ctx_init(&eg->pctx);
-	eg->metric_name = pe->metric_name;
-	eg->metric_expr = pe->metric_expr;
-	eg->metric_unit = pe->unit;
-	eg->runtime = runtime;
-	eg->has_constraint = metric_no_group || metricgroup__has_constraint(pe);
+		expr__ctx_init(&eg->pctx);
+		eg->metric_name = pe->metric_name;
+		eg->metric_expr = pe->metric_expr;
+		eg->metric_unit = pe->unit;
+		eg->runtime = runtime;
+		eg->has_constraint = metric_no_group || metricgroup__has_constraint(pe);
+		INIT_LIST_HEAD(&eg->other);
+		eg->other_cnt = 0;
+	} else {
+		eg = *egp;
+
+		eo = malloc(sizeof(*eo));
+		if (!eo)
+			return -ENOMEM;
+
+		eo->metric_name = pe->metric_name;
+		eo->metric_expr = pe->metric_expr;
+		list_add(&eo->list, &eg->other);
+		eg->other_cnt++;
+		eg->has_constraint |= metricgroup__has_constraint(pe);
+	}
 
 	if (expr__find_other(pe->metric_expr, NULL, &eg->pctx, runtime) < 0) {
 		expr__ctx_clear(&eg->pctx);
 		free(eg);
 		return -EINVAL;
 	}
+
+	if (egp)
+		return 0;
 
 	if (list_empty(group_list))
 		list_add(&eg->nd, group_list);
@@ -598,7 +629,8 @@ static int __metricgroup__add_metric(struct list_head *group_list,
 static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct strbuf *events,
 				   struct list_head *group_list,
-				   struct pmu_events_map *map)
+				   struct pmu_events_map *map,
+				   struct egroup *egp)
 {
 	struct pmu_event *pe;
 	struct egroup *eg;
@@ -621,6 +653,9 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 			continue;
 		if (match_metric(pe->metric_group, metric) ||
 		    match_metric(pe->metric_name, metric)) {
+			struct hashmap_entry *cur;
+			size_t bkt;
+
 			has_match = true;
 			pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
 
@@ -628,7 +663,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				ret = __metricgroup__add_metric(group_list,
 								pe,
 								metric_no_group,
-								1);
+								1, &egp);
 				if (ret)
 					return ret;
 			} else {
@@ -644,13 +679,26 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				for (j = 0; j < count; j++) {
 					ret = __metricgroup__add_metric(
 						group_list, pe,
-						metric_no_group, j);
+						metric_no_group, j, &egp);
 					if (ret)
 						return ret;
 				}
 			}
+
+			hashmap__for_each_entry((&egp->pctx.ids), cur, bkt) {
+				if (strcmp(cur->key, "metric:"))
+					continue;
+				ret = metricgroup__add_metric(cur->key, metric_no_group, events,
+							      group_list, map, egp);
+				if (ret)
+					return ret;
+			}
 		}
 	}
+
+	if (egp)
+		return 0;
+
 	list_for_each_entry(eg, group_list, nd) {
 		if (events->len > 0)
 			strbuf_addf(events, ",");
@@ -684,7 +732,7 @@ static int metricgroup__add_metric_list(const char *list, bool metric_no_group,
 
 	while ((p = strsep(&llist, ",")) != NULL) {
 		ret = metricgroup__add_metric(p, metric_no_group, events,
-					      group_list, map);
+					      group_list, map, NULL);
 		if (ret == -EINVAL) {
 			fprintf(stderr, "Cannot find metric or group `%s'\n",
 					p);
