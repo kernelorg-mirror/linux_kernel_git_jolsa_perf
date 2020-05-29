@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <stdbool.h>
 #include <assert.h>
+#include "metricgroup.h"
 #include "expr.h"
 #include "expr-bison.h"
 #include "expr-flex.h"
@@ -60,6 +61,34 @@ int expr__add_val(struct expr_parse_ctx *ctx, const char *name, double val)
 			return -ENOMEM;
 		data_ptr->val = val;
 	}
+	ret = hashmap__set(&ctx->ids, name, data_ptr,
+			   (const void **)&old_key, (void **)&old_data);
+	free(old_key);
+	free(old_data);
+	return ret;
+}
+
+int expr__add_other(struct expr_parse_ctx *ctx, struct metric_other *other)
+{
+	struct expr_parse_data *data_ptr = NULL, *old_data = NULL;
+	char *old_key = NULL;
+	char *name;
+	int ret;
+
+	data_ptr = malloc(sizeof(*data_ptr));
+	if (!data_ptr)
+		return -ENOMEM;
+
+	name = strdup(other->metric_name);
+	if (!name) {
+		free(data_ptr);
+		return -ENOMEM;
+	}
+
+	data_ptr->other = true;
+	data_ptr->metric_name = other->metric_name;
+	data_ptr->metric_expr = other->metric_expr;
+
 	ret = hashmap__set(&ctx->ids, name, data_ptr,
 			   (const void **)&old_key, (void **)&old_data);
 	free(old_key);
