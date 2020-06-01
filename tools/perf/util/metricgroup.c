@@ -729,7 +729,7 @@ int metricgroup__parse_groups(const struct option *opt,
 		return ret;
 	pr_debug("adding %s\n", extra_events.buf);
 	bzero(&parse_error, sizeof(parse_error));
-	ret = parse_events(perf_evlist, extra_events.buf, &parse_error);
+	ret = parse_events(perf_evlist, extra_events.buf, &parse_error, false);
 	if (ret) {
 		parse_events_print_error(&parse_error, extra_events.buf);
 		goto out;

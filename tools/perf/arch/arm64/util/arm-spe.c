@@ -125,7 +125,7 @@ static int arm_spe_recording_options(struct auxtrace_record *itr,
 	evsel__set_sample_bit(arm_spe_evsel, TID);
 
 	/* Add dummy event to keep tracking */
-	err = parse_events(evlist, "dummy:u", NULL);
+	err = parse_events(evlist, "dummy:u", NULL, false);
 	if (err)
 		return err;
 

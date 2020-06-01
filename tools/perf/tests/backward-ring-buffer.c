@@ -120,7 +120,8 @@ int test__backward_ring_buffer(struct test *test __maybe_unused, int subtest __m
 	 * Set backward bit, ring buffer should be writing from end. Record
 	 * it in aux evlist
 	 */
-	err = parse_events(evlist, "syscalls:sys_enter_prctl/overwrite/", &parse_error);
+	err = parse_events(evlist, "syscalls:sys_enter_prctl/overwrite/",
+			   &parse_error, false);
 	if (err) {
 		pr_debug("Failed to parse tracepoint event, try use root\n");
 		ret = TEST_SKIP;

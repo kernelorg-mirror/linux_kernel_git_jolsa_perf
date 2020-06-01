@@ -80,7 +80,7 @@ int test__perf_time_to_tsc(struct test *test __maybe_unused, int subtest __maybe
 
 	perf_evlist__set_maps(&evlist->core, cpus, threads);
 
-	CHECK__(parse_events(evlist, "cycles:u", NULL));
+	CHECK__(parse_events(evlist, "cycles:u", NULL, false));
 
 	perf_evlist__config(evlist, &opts, NULL);
 

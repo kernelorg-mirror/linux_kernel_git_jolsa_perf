@@ -706,7 +706,7 @@ int test__hists_cumulate(struct test *test __maybe_unused, int subtest __maybe_u
 
 	TEST_ASSERT_VAL("No memory", evlist);
 
-	err = parse_events(evlist, "cpu-clock", NULL);
+	err = parse_events(evlist, "cpu-clock", NULL, false);
 	if (err)
 		goto out;
 	err = TEST_FAIL;

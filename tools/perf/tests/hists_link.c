@@ -276,10 +276,10 @@ int test__hists_link(struct test *test __maybe_unused, int subtest __maybe_unuse
 	if (evlist == NULL)
                 return -ENOMEM;
 
-	err = parse_events(evlist, "cpu-clock", NULL);
+	err = parse_events(evlist, "cpu-clock", NULL, false);
 	if (err)
 		goto out;
-	err = parse_events(evlist, "task-clock", NULL);
+	err = parse_events(evlist, "task-clock", NULL, false);
 	if (err)
 		goto out;
 

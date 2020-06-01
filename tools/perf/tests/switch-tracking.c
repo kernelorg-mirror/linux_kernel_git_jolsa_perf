@@ -362,7 +362,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 	perf_evlist__set_maps(&evlist->core, cpus, threads);
 
 	/* First event */
-	err = parse_events(evlist, "cpu-clock:u", NULL);
+	err = parse_events(evlist, "cpu-clock:u", NULL, false);
 	if (err) {
 		pr_debug("Failed to parse event dummy:u\n");
 		goto out_err;
@@ -371,7 +371,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 	cpu_clocks_evsel = evlist__last(evlist);
 
 	/* Second event */
-	err = parse_events(evlist, "cycles:u", NULL);
+	err = parse_events(evlist, "cycles:u", NULL, false);
 	if (err) {
 		pr_debug("Failed to parse event cycles:u\n");
 		goto out_err;
@@ -386,7 +386,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 		goto out;
 	}
 
-	err = parse_events(evlist, sched_switch, NULL);
+	err = parse_events(evlist, sched_switch, NULL, false);
 	if (err) {
 		pr_debug("Failed to parse event %s\n", sched_switch);
 		goto out_err;
@@ -416,7 +416,7 @@ int test__switch_tracking(struct test *test __maybe_unused, int subtest __maybe_
 	evsel__set_sample_bit(cycles_evsel, TIME);
 
 	/* Fourth event */
-	err = parse_events(evlist, "dummy:u", NULL);
+	err = parse_events(evlist, "dummy:u", NULL, false);
 	if (err) {
 		pr_debug("Failed to parse event dummy:u\n");
 		goto out_err;

@@ -210,7 +210,7 @@ bool perf_evlist__can_select_event(struct evlist *evlist, const char *str)
 	if (!temp_evlist)
 		return false;
 
-	err = parse_events(temp_evlist, str, NULL);
+	err = parse_events(temp_evlist, str, NULL, false);
 	if (err)
 		goto out_delete;
 

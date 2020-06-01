@@ -402,7 +402,7 @@ static int check_parse_id(const char *id, bool same_cpu, struct pmu_event *pe)
 
 	evlist = evlist__new();
 	memset(&error, 0, sizeof(error));
-	ret = parse_events(evlist, id, &error);
+	ret = parse_events(evlist, id, &error, false);
 	if (ret && same_cpu) {
 		pr_warning("Parse event failed metric '%s' id '%s' expr '%s'\n",
 			pe->metric_name, id, pe->metric_expr);

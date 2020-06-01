@@ -111,10 +111,10 @@ int test__hists_filter(struct test *test __maybe_unused, int subtest __maybe_unu
 
 	TEST_ASSERT_VAL("No memory", evlist);
 
-	err = parse_events(evlist, "cpu-clock", NULL);
+	err = parse_events(evlist, "cpu-clock", NULL, false);
 	if (err)
 		goto out;
-	err = parse_events(evlist, "task-clock", NULL);
+	err = parse_events(evlist, "task-clock", NULL, false);
 	if (err)
 		goto out;
 	err = TEST_FAIL;

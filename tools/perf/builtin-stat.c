@@ -1586,11 +1586,11 @@ static int add_default_attributes(void)
 		if (pmu_have_event("cpu", "cycles-ct") &&
 		    pmu_have_event("cpu", "el-start"))
 			err = parse_events(evsel_list, transaction_attrs,
-					   &errinfo);
+					   &errinfo, false);
 		else
 			err = parse_events(evsel_list,
 					   transaction_limited_attrs,
-					   &errinfo);
+					   &errinfo, false);
 		if (err) {
 			fprintf(stderr, "Cannot set up transaction events\n");
 			parse_events_print_error(&errinfo, transaction_attrs);
@@ -1619,7 +1619,7 @@ static int add_default_attributes(void)
 		    pmu_have_event("msr", "smi")) {
 			if (!force_metric_only)
 				stat_config.metric_only = true;
-			err = parse_events(evsel_list, smi_cost_attrs, &errinfo);
+			err = parse_events(evsel_list, smi_cost_attrs, &errinfo, false);
 		} else {
 			fprintf(stderr, "To measure SMI cost, it needs "
 				"msr/aperf/, msr/smi/ and cpu/cycles/ support\n");
@@ -1659,7 +1659,7 @@ static int add_default_attributes(void)
 		if (topdown_attrs[0] && str) {
 			if (warn)
 				arch_topdown_group_warn();
-			err = parse_events(evsel_list, str, &errinfo);
+			err = parse_events(evsel_list, str, &errinfo, false);
 			if (err) {
 				fprintf(stderr,
 					"Cannot set up top down events %s: %d\n",

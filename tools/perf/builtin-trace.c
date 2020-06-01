@@ -3044,7 +3044,7 @@ static bool evlist__add_vfs_getname(struct evlist *evlist)
 	int ret;
 
 	bzero(&err, sizeof(err));
-	ret = parse_events(evlist, "probe:vfs_getname*", &err);
+	ret = parse_events(evlist, "probe:vfs_getname*", &err, false);
 	if (ret) {
 		free(err.str);
 		free(err.help);
@@ -4879,7 +4879,7 @@ int cmd_trace(int argc, const char **argv)
 		struct parse_events_error parse_err;
 
 		bzero(&parse_err, sizeof(parse_err));
-		err = parse_events(trace.evlist, trace.perfconfig_events, &parse_err);
+		err = parse_events(trace.evlist, trace.perfconfig_events, &parse_err, false);
 		if (err) {
 			parse_events_print_error(&parse_err, trace.perfconfig_events);
 			goto out;

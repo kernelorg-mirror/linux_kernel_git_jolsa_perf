@@ -89,8 +89,8 @@ int test__keep_tracking(struct test *test __maybe_unused, int subtest __maybe_un
 
 	perf_evlist__set_maps(&evlist->core, cpus, threads);
 
-	CHECK__(parse_events(evlist, "dummy:u", NULL));
-	CHECK__(parse_events(evlist, "cycles:u", NULL));
+	CHECK__(parse_events(evlist, "dummy:u", NULL, false));
+	CHECK__(parse_events(evlist, "cycles:u", NULL, false));
 
 	perf_evlist__config(evlist, &opts, NULL);
 

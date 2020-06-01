@@ -2097,14 +2097,15 @@ int parse_events_terms(struct list_head *terms, const char *str)
 }
 
 int parse_events(struct evlist *evlist, const char *str,
-		 struct parse_events_error *err)
+		 struct parse_events_error *err, bool fake_pmu)
 {
 	struct parse_events_state parse_state = {
-		.list   = LIST_HEAD_INIT(parse_state.list),
-		.idx    = evlist->core.nr_entries,
-		.error  = err,
-		.evlist = evlist,
-		.stoken = PE_START_EVENTS,
+		.list     = LIST_HEAD_INIT(parse_state.list),
+		.idx      = evlist->core.nr_entries,
+		.error    = err,
+		.evlist   = evlist,
+		.stoken   = PE_START_EVENTS,
+		.fake_pmu = fake_pmu,
 	};
 	int ret;
 
@@ -2232,7 +2233,7 @@ int parse_events_option(const struct option *opt, const char *str,
 	int ret;
 
 	bzero(&err, sizeof(err));
-	ret = parse_events(evlist, str, &err);
+	ret = parse_events(evlist, str, &err, false);
 
 	if (ret) {
 		parse_events_print_error(&err, str);

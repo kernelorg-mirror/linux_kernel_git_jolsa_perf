@@ -419,7 +419,7 @@ static int intel_pt_track_switches(struct evlist *evlist)
 	if (!perf_evlist__can_select_event(evlist, sched_switch))
 		return -EPERM;
 
-	err = parse_events(evlist, sched_switch, NULL);
+	err = parse_events(evlist, sched_switch, NULL, false);
 	if (err) {
 		pr_debug2("%s: failed to parse %s, error %d\n",
 			  __func__, sched_switch, err);
@@ -796,7 +796,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 			if (!cpu_wide && perf_can_record_cpu_wide()) {
 				struct evsel *switch_evsel;
 
-				err = parse_events(evlist, "dummy:u", NULL);
+				err = parse_events(evlist, "dummy:u", NULL, false);
 				if (err)
 					return err;
 
@@ -854,7 +854,7 @@ static int intel_pt_recording_options(struct auxtrace_record *itr,
 	if (opts->full_auxtrace) {
 		struct evsel *tracking_evsel;
 
-		err = parse_events(evlist, "dummy:u", NULL);
+		err = parse_events(evlist, "dummy:u", NULL, false);
 		if (err)
 			return err;
 
