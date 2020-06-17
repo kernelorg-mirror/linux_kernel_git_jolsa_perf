@@ -2121,6 +2121,17 @@ static const struct clockid_map clockids[] = {
 	CLOCKID_END,
 };
 
+const char *clockid_name(clockid_t clk_id)
+{
+	const struct clockid_map *cm;
+
+	for (cm = clockids; cm->name; cm++) {
+		if (cm->clockid == clk_id)
+			return cm->name;
+	}
+	return "(not found)";
+}
+
 static int get_clockid_res(clockid_t clk_id, u64 *res_ns)
 {
 	struct timespec res;

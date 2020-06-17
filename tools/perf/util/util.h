@@ -62,4 +62,6 @@ char *perf_exe(char *buf, int len);
 #endif
 #endif
 
+const char *clockid_name(clockid_t clk_id);
+
 #endif /* GIT_COMPAT_UTIL_H */
