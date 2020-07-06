@@ -634,6 +634,39 @@ static struct pmu_event *find_metric(const char *metric, struct pmu_events_map *
 	return NULL;
 }
 
+static int add_metric(struct list_head *group_list,
+		      struct pmu_event *pe,
+		      bool metric_no_group)
+{
+	int ret = 0;
+
+	pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
+
+	if (!strstr(pe->metric_expr, "?")) {
+		ret = __metricgroup__add_metric(group_list,
+						pe,
+						metric_no_group,
+						1);
+	} else {
+		int j, count;
+
+		count = arch_get_runtimeparam();
+
+		/* This loop is added to create multiple
+		 * events depend on count value and add
+		 * those events to group_list.
+		 */
+
+		for (j = 0; j < count && !ret; j++) {
+			ret = __metricgroup__add_metric(
+				group_list, pe,
+				metric_no_group, j);
+		}
+	}
+
+	return ret;
+}
+
 static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct strbuf *events,
 				   struct list_head *group_list,
@@ -647,33 +680,10 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 	if (!pe)
 		return -EINVAL;
 
-	pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
+	ret = add_metric(group_list, pe, metric_no_group);
+	if (ret)
+		return ret;
 
-	if (!strstr(pe->metric_expr, "?")) {
-		ret = __metricgroup__add_metric(group_list,
-						pe,
-						metric_no_group,
-						1);
-		if (ret)
-			return ret;
-	} else {
-		int j, count;
-
-		count = arch_get_runtimeparam();
-
-		/* This loop is added to create multiple
-		 * events depend on count value and add
-		 * those events to group_list.
-		 */
-
-		for (j = 0; j < count; j++) {
-			ret = __metricgroup__add_metric(
-				group_list, pe,
-				metric_no_group, j);
-			if (ret)
-				return ret;
-		}
-	}
 	list_for_each_entry(eg, group_list, nd) {
 		if (events->len > 0)
 			strbuf_addf(events, ",");
