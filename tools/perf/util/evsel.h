@@ -119,6 +119,7 @@ struct perf_missing_features {
 	bool sample_id_all;
 	bool exclude_guest;
 	bool mmap2;
+	bool mmap3;
 	bool cloexec;
 	bool clockid;
 	bool clockid_wrong;

@@ -1065,6 +1065,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 	attr->task  = track;
 	attr->mmap  = track;
 	attr->mmap2 = track && !perf_missing_features.mmap2;
+	attr->mmap3 = track && !perf_missing_features.mmap3;
 	attr->comm  = track;
 	/*
 	 * ksymbol is tracked separately with text poke because it needs to be
@@ -1657,6 +1658,8 @@ fallback_missing_features:
 		evsel->core.attr.bpf_event = 0;
 	if (perf_missing_features.branch_hw_idx)
 		evsel->core.attr.branch_sample_type &= ~PERF_SAMPLE_BRANCH_HW_INDEX;
+	if (perf_missing_features.mmap3)
+		evsel->core.attr.mmap3 = 0;
 retry_sample_id:
 	if (perf_missing_features.sample_id_all)
 		evsel->core.attr.sample_id_all = 0;
@@ -1770,7 +1773,11 @@ try_fallback:
 	 * Must probe features in the order they were added to the
 	 * perf_event_attr interface.
 	 */
-        if (!perf_missing_features.cgroup && evsel->core.attr.cgroup) {
+	if (!perf_missing_features.mmap3 && evsel->core.attr.mmap3) {
+		perf_missing_features.mmap3 = true;
+		pr_debug2("switching off mmap3\n");
+		goto fallback_missing_features;
+        } else if (!perf_missing_features.cgroup && evsel->core.attr.cgroup) {
 		perf_missing_features.cgroup = true;
 		pr_debug2_peo("Kernel has no cgroup sampling support, bailing out\n");
 		goto out_close;
