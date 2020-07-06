@@ -614,6 +614,26 @@ static int __metricgroup__add_metric(struct list_head *group_list,
 	return 0;
 }
 
+static struct pmu_event *find_metric(const char *metric, struct pmu_events_map *map)
+{
+	struct pmu_event *pe;
+	int i;
+
+	for (i = 0; ; i++) {
+		pe = &map->table[i];
+		/* End of pmu events. */
+		if (!pe->name && !pe->metric_group && !pe->metric_name)
+			break;
+		if (!pe->metric_expr)
+			continue;
+		if (match_metric(pe->metric_group, metric) ||
+		    match_metric(pe->metric_name, metric))
+			return pe;
+	}
+
+	return NULL;
+}
+
 static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct strbuf *events,
 				   struct list_head *group_list,
@@ -621,50 +641,37 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 {
 	struct pmu_event *pe;
 	struct egroup *eg;
-	int i, ret;
-	bool has_match = false;
+	int ret;
 
-	for (i = 0; ; i++) {
-		pe = &map->table[i];
+	pe = find_metric(metric, map);
+	if (!pe)
+		return -EINVAL;
 
-		if (!pe->name && !pe->metric_group && !pe->metric_name) {
-			/* End of pmu events. */
-			if (!has_match)
-				return -EINVAL;
-			break;
-		}
-		if (!pe->metric_expr)
-			continue;
-		if (match_metric(pe->metric_group, metric) ||
-		    match_metric(pe->metric_name, metric)) {
-			has_match = true;
-			pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
+	pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
 
-			if (!strstr(pe->metric_expr, "?")) {
-				ret = __metricgroup__add_metric(group_list,
-								pe,
-								metric_no_group,
-								1);
-				if (ret)
-					return ret;
-			} else {
-				int j, count;
+	if (!strstr(pe->metric_expr, "?")) {
+		ret = __metricgroup__add_metric(group_list,
+						pe,
+						metric_no_group,
+						1);
+		if (ret)
+			return ret;
+	} else {
+		int j, count;
 
-				count = arch_get_runtimeparam();
+		count = arch_get_runtimeparam();
 
-				/* This loop is added to create multiple
-				 * events depend on count value and add
-				 * those events to group_list.
-				 */
+		/* This loop is added to create multiple
+		 * events depend on count value and add
+		 * those events to group_list.
+		 */
 
-				for (j = 0; j < count; j++) {
-					ret = __metricgroup__add_metric(
-						group_list, pe,
-						metric_no_group, j);
-					if (ret)
-						return ret;
-				}
-			}
+		for (j = 0; j < count; j++) {
+			ret = __metricgroup__add_metric(
+				group_list, pe,
+				metric_no_group, j);
+			if (ret)
+				return ret;
 		}
 	}
 	list_for_each_entry(eg, group_list, nd) {
