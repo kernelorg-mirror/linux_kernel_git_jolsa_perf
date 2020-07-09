@@ -811,6 +811,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct pmu_events_map *map)
 
 {
+	LIST_HEAD(list);
 	struct egroup *eg;
 	struct pmu_event *pe;
 	int i, ret;
@@ -820,7 +821,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 		has_match = true;
 		eg = NULL;
 
-		ret = add_metric(group_list, pe, metric_no_group, &eg);
+		ret = add_metric(&list, pe, metric_no_group, &eg);
 		if (ret)
 			return ret;
 
@@ -829,7 +830,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 		 * included in the expression.
 		 */
 		ret = resolve_metric(eg, metric_no_group,
-				     group_list, map);
+				     &list, map);
 		if (ret)
 			return ret;
 	}
@@ -838,7 +839,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 	if (!has_match)
 		return -EINVAL;
 
-	list_for_each_entry(eg, group_list, nd) {
+	list_for_each_entry(eg, &list, nd) {
 		if (events->len > 0)
 			strbuf_addf(events, ",");
 
@@ -850,6 +851,8 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 							   &eg->pctx);
 		}
 	}
+
+	list_splice(&list, group_list);
 	return 0;
 }
 
