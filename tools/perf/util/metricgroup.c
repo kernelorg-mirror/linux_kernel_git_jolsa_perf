@@ -811,17 +811,19 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 	if (ret)
 		return ret;
 
-	list_for_each_entry(eg, group_list, nd) {
-		if (events->len > 0)
-			strbuf_addf(events, ",");
+	if (events->len > 0)
+		strbuf_addf(events, ",");
 
-		if (eg->has_constraint) {
-			metricgroup__add_metric_non_group(events,
-							  &eg->pctx);
-		} else {
-			metricgroup__add_metric_weak_group(events,
-							   &eg->pctx);
-		}
+	/*
+	 * Even if we add multiple groups through the runtime
+	 * param, they share same events.
+	 */
+	if (eg->has_constraint) {
+		metricgroup__add_metric_non_group(events,
+						  &eg->pctx);
+	} else {
+		metricgroup__add_metric_weak_group(events,
+						   &eg->pctx);
 	}
 	return 0;
 }
