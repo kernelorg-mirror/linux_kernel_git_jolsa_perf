@@ -13,8 +13,14 @@
 
 struct metric_ref;
 
+struct expr_id {
+	char		*id;
+	struct expr_id	*parent;
+};
+
 struct expr_parse_ctx {
-	struct hashmap ids;
+	struct hashmap	 ids;
+	struct expr_id	*parent;
 };
 
 struct expr_id_data {
@@ -27,6 +33,7 @@ struct expr_id_data {
 			const char *metric_expr;
 			bool counted;
 		} ref;
+		struct expr_id	*parent;
 	};
 };
 
