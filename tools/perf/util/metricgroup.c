@@ -24,6 +24,7 @@
 #include <subcmd/parse-options.h>
 #include <api/fs/fs.h>
 #include "util.h"
+#include <asm/bug.h>
 
 struct metric_event *metricgroup__lookup(struct rblist *metric_events,
 					 struct evsel *evsel,
@@ -125,6 +126,28 @@ struct egroup {
 	int runtime;
 	bool has_constraint;
 };
+
+#define RECURSION_ID_MAX 100
+
+struct expr_ids {
+	struct expr_id	id[RECURSION_ID_MAX];
+	int		cnt;
+};
+
+static struct expr_id *expr_ids__alloc(struct expr_ids *ids)
+{
+	if (ids->cnt >= RECURSION_ID_MAX)
+		return NULL;
+	return &ids->id[ids->cnt++];
+}
+
+static void expr_ids__exit(struct expr_ids *ids)
+{
+	int i;
+
+	for (i = 0; i < ids->cnt; i++)
+		free(ids->id[i].id);
+}
 
 /**
  * Find a group of events in perf_evlist that correpond to those from a parsed
@@ -620,7 +643,9 @@ static int __add_metric(struct list_head *group_list,
 			struct pmu_event *pe,
 			bool metric_no_group,
 			int runtime,
-		        struct egroup **egp)
+			struct egroup **egp,
+			struct expr_id *parent,
+		        struct expr_ids *ids)
 {
 	struct metric_ref_node *ref;
 	struct egroup *eg;
@@ -630,7 +655,7 @@ static int __add_metric(struct list_head *group_list,
 		 * We got in here for the parent group,
 		 * allocate it and put it on the list.
 		 */
-		eg = malloc(sizeof(*eg));
+		eg = zalloc(sizeof(*eg));
 		if (!eg)
 			return -ENOMEM;
 
@@ -643,6 +668,18 @@ static int __add_metric(struct list_head *group_list,
 		INIT_LIST_HEAD(&eg->metric_refs);
 		eg->metric_refs_cnt = 0;
 		*egp = eg;
+
+		parent = expr_ids__alloc(ids);
+		if (!parent) {
+			free(eg);
+			return -EINVAL;
+		}
+
+		parent->id = strdup(pe->metric_name);
+		if (!parent->id) {
+			free(eg);
+			return -ENOMEM;
+		}
 	} else {
 		/*
 		 * We got here for the referenced metric, via the
@@ -667,6 +704,10 @@ static int __add_metric(struct list_head *group_list,
 		list_add(&ref->list, &eg->metric_refs);
 		eg->metric_refs_cnt++;
 	}
+
+	/* Force all found IDs in metric to have us as parent ID. */
+	WARN_ON_ONCE(!parent);
+	eg->pctx.parent = parent;
 
 	/*
 	 * For both the parent and referenced metrics, we parse
@@ -728,15 +769,62 @@ static struct pmu_event *find_metric(const char *metric, struct pmu_events_map *
 	return NULL;
 }
 
+static int recursion_check(struct egroup *eg, const char *id, struct expr_id **parent,
+			   struct expr_ids *ids)
+{
+	struct expr_id_data *data;
+	struct expr_id *p;
+	int ret;
+
+	/*
+	 * We get the parent referenced by 'id' argument and
+	 * traverse through all the parent object IDs to check
+	 * if we already processed 'id', if we did, it's recursion
+	 * and we fail.
+	 */
+	ret = expr__get_id(&eg->pctx, id, &data);
+	if (ret)
+		return ret;
+
+	p = data->parent;
+
+	while (p->parent) {
+		if (!strcmp(p->id, id)) {
+			pr_err("failed: recursion detected for %s\n", id);
+			return -1;
+		}
+		p = p->parent;
+	}
+
+	/*
+	 * If we are over the limit of static entris, the metric
+	 * is too difficult/nested to process, fail as well.
+	 */
+	p = expr_ids__alloc(ids);
+	if (!p) {
+		pr_err("failed: too many nested metrics\n");
+		return -EINVAL;
+	}
+
+	p->id     = strdup(id);
+	p->parent = data->parent;
+	*parent   = p;
+
+	return p->id ? 0 : -ENOMEM;
+}
+
 static int add_metric(struct list_head *group_list,
 		      struct pmu_event *pe,
 		      bool metric_no_group,
-		      struct egroup **egp);
+		      struct egroup **egp,
+		      struct expr_id *parent,
+		      struct expr_ids *ids);
 
 static int resolve_metric(struct egroup *eg,
 			  bool metric_no_group,
 			  struct list_head *group_list,
-			  struct pmu_events_map *map)
+			  struct pmu_events_map *map,
+			  struct expr_ids *ids)
 {
 	struct hashmap_entry *cur;
 	size_t bkt;
@@ -750,18 +838,23 @@ static int resolve_metric(struct egroup *eg,
 	do {
 		all = true;
 		hashmap__for_each_entry((&eg->pctx.ids), cur, bkt) {
+			struct expr_id *parent;
 			struct pmu_event *pe;
 
 			pe = find_metric(cur->key, map);
 			if (!pe)
 				continue;
 
+			ret = recursion_check(eg, cur->key, &parent, ids);
+			if (ret)
+				return ret;
+
 			all = false;
 			/* The metric key itself needs to go out.. */
 			expr__del_id(&eg->pctx, cur->key);
 
 			/* ... and it gets resolved to the parent context. */
-			ret = add_metric(group_list, pe, metric_no_group, &eg);
+			ret = add_metric(group_list, pe, metric_no_group, &eg, parent, ids);
 			if (ret)
 				return ret;
 
@@ -779,14 +872,16 @@ static int resolve_metric(struct egroup *eg,
 static int add_metric(struct list_head *group_list,
 		      struct pmu_event *pe,
 		      bool metric_no_group,
-		      struct egroup **egp)
+		      struct egroup **egp,
+		      struct expr_id *parent,
+		      struct expr_ids *ids)
 {
 	int ret = 0;
 
 	pr_debug("metric expr %s for %s\n", pe->metric_expr, pe->metric_name);
 
 	if (!strstr(pe->metric_expr, "?")) {
-		ret = __add_metric(group_list, pe, metric_no_group, 1, egp);
+		ret = __add_metric(group_list, pe, metric_no_group, 1, egp, parent, ids);
 	} else {
 		int j, count;
 
@@ -798,7 +893,7 @@ static int add_metric(struct list_head *group_list,
 		 */
 
 		for (j = 0; j < count && !ret; j++) {
-			ret = __add_metric(group_list, pe, metric_no_group, j, egp);
+			ret = __add_metric(group_list, pe, metric_no_group, j, egp, parent, ids);
 		}
 	}
 
@@ -811,6 +906,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 				   struct pmu_events_map *map)
 
 {
+	struct expr_ids ids = { 0 };
 	LIST_HEAD(list);
 	struct egroup *eg;
 	struct pmu_event *pe;
@@ -821,7 +917,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 		has_match = true;
 		eg = NULL;
 
-		ret = add_metric(&list, pe, metric_no_group, &eg);
+		ret = add_metric(&list, pe, metric_no_group, &eg, NULL, &ids);
 		if (ret)
 			return ret;
 
@@ -830,7 +926,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 		 * included in the expression.
 		 */
 		ret = resolve_metric(eg, metric_no_group,
-				     &list, map);
+				     &list, map, &ids);
 		if (ret)
 			return ret;
 	}
@@ -853,6 +949,7 @@ static int metricgroup__add_metric(const char *metric, bool metric_no_group,
 	}
 
 	list_splice(&list, group_list);
+	expr_ids__exit(&ids);
 	return 0;
 }
 
