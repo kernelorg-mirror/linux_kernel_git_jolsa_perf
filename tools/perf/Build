@@ -1,7 +1,6 @@
 perf-y += builtin-record.o
 perf-y += builtin-stat.o
 
-perf-$(CONFIG_TRACE) += builtin-trace.o
 perf-$(CONFIG_LIBELF) += builtin-probe.o
 
 perf-y += perf.o
