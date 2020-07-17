@@ -58,7 +58,6 @@ static struct cmd_struct commands[] = {
 	{ "buildid-cache", cmd_buildid_cache, 0 },
 	{ "buildid-list", cmd_buildid_list, 0 },
 	{ "c2c",	cmd_c2c,	0 },
-	{ "diff",	cmd_diff,	0 },
 	{ "evlist",	cmd_evlist,	0 },
 	{ "help",	cmd_help,	0 },
 	{ "kallsyms",	cmd_kallsyms,	0 },
@@ -76,7 +75,6 @@ static struct cmd_struct commands[] = {
 #endif
 	{ "kmem",	cmd_kmem,	0 },
 	{ "lock",	cmd_lock,	0 },
-	{ "kvm",	cmd_kvm,	0 },
 	{ "test",	cmd_test,	0 },
 #if defined(HAVE_LIBAUDIT_SUPPORT) || defined(HAVE_SYSCALL_TABLE_SUPPORT)
 	{ "trace",	cmd_trace,	0 },
