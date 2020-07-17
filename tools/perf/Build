@@ -1,6 +1,5 @@
 perf-y += builtin-record.o
 perf-y += builtin-stat.o
-perf-y += builtin-inject.o
 perf-y += builtin-data.o
 perf-y += builtin-version.o
 perf-y += builtin-c2c.o

@@ -66,7 +66,6 @@ static struct cmd_struct commands[] = {
 #if defined(HAVE_LIBAUDIT_SUPPORT) || defined(HAVE_SYSCALL_TABLE_SUPPORT)
 	{ "trace",	cmd_trace,	0 },
 #endif
-	{ "inject",	cmd_inject,	0 },
 	{ "data",	cmd_data,	0 },
 };
 
