@@ -57,9 +57,6 @@ struct cmd_struct {
 static struct cmd_struct commands[] = {
 	{ "record",	cmd_record,	0 },
 	{ "stat",	cmd_stat,	0 },
-#ifdef HAVE_LIBELF_SUPPORT
-	{ "probe",	cmd_probe,	0 },
-#endif
 };
 
 struct pager_config {
