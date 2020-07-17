@@ -71,7 +71,6 @@ perf-y += pmu-flex.o
 perf-y += pmu-bison.o
 perf-y += trace-event-read.o
 perf-y += trace-event-info.o
-perf-y += trace-event-scripting.o
 perf-y += trace-event.o
 perf-y += svghelper.o
 perf-y += sort.o
