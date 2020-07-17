@@ -1,4 +1,3 @@
-perf-y += builtin-bench.o
 perf-y += builtin-annotate.o
 perf-y += builtin-config.o
 perf-y += builtin-diff.o
@@ -28,7 +27,6 @@ perf-y += builtin-c2c.o
 perf-$(CONFIG_TRACE) += builtin-trace.o
 perf-$(CONFIG_LIBELF) += builtin-probe.o
 
-perf-y += bench/
 perf-y += tests/
 
 perf-y += perf.o
