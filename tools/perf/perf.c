@@ -57,10 +57,8 @@ struct cmd_struct {
 static struct cmd_struct commands[] = {
 	{ "c2c",	cmd_c2c,	0 },
 	{ "record",	cmd_record,	0 },
-	{ "report",	cmd_report,	0 },
 	{ "stat",	cmd_stat,	0 },
 	{ "timechart",	cmd_timechart,	0 },
-	{ "top",	cmd_top,	0 },
 	{ "version",	cmd_version,	0 },
 	{ "script",	cmd_script,	0 },
 #ifdef HAVE_LIBELF_SUPPORT
@@ -73,7 +71,6 @@ static struct cmd_struct commands[] = {
 	{ "trace",	cmd_trace,	0 },
 #endif
 	{ "inject",	cmd_inject,	0 },
-	{ "mem",	cmd_mem,	0 },
 	{ "data",	cmd_data,	0 },
 };
 
