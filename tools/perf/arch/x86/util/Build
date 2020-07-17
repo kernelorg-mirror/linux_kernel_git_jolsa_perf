@@ -1,5 +1,4 @@
 perf-y += header.o
-perf-y += tsc.o
 perf-y += pmu.o
 perf-y += perf_regs.o
 perf-y += group.o

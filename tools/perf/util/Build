@@ -6,7 +6,6 @@ perf-y += cacheline.o
 perf-y += config.o
 perf-y += copyfile.o
 perf-y += ctype.o
-perf-y += db-export.o
 perf-y += env.o
 perf-y += event.o
 perf-y += evlist.o
@@ -19,44 +18,32 @@ perf-y += find_bit.o
 perf-y += get_current_dir_name.o
 perf-y += kallsyms.o
 perf-y += levenshtein.o
-perf-y += llvm-utils.o
 perf-y += mmap.o
 perf-y += memswap.o
 perf-y += parse-events.o
 perf-y += perf_regs.o
 perf-y += path.o
-perf-y += print_binary.o
-perf-y += rlimit.o
-perf-y += argv_split.o
 perf-y += rbtree.o
 perf-y += libstring.o
 perf-y += bitmap.o
 perf-y += hweight.o
-perf-y += smt.o
 perf-y += strbuf.o
 perf-y += string.o
 perf-y += strlist.o
-perf-y += strfilter.o
-perf-y += top.o
 perf-y += usage.o
 perf-y += dso.o
 perf-y += dsos.o
 perf-y += symbol.o
 perf-y += symbol_fprintf.o
 perf-y += color.o
-perf-y += color_config.o
 perf-y += metricgroup.o
 perf-y += header.o
 perf-y += callchain.o
-perf-y += values.o
 perf-y += debug.o
 perf-y += fncache.o
 perf-y += machine.o
 perf-y += map.o
-perf-y += pstack.o
 perf-y += session.o
-perf-y += sample-raw.o
-perf-y += s390-sample-raw.o
 perf-$(CONFIG_TRACE) += syscalltbl.o
 perf-y += ordered-events.o
 perf-y += namespaces.o
@@ -72,7 +59,6 @@ perf-y += pmu-bison.o
 perf-y += trace-event-read.o
 perf-y += trace-event-info.o
 perf-y += trace-event.o
-perf-y += svghelper.o
 perf-y += sort.o
 perf-y += hist.o
 perf-y += util.o
@@ -91,15 +77,12 @@ perf-y += stat-display.o
 perf-y += perf_api_probe.o
 perf-y += record.o
 perf-y += srcline.o
-perf-y += srccode.o
 perf-y += synthetic-events.o
 perf-y += data.o
-perf-y += tsc.o
 perf-y += cloexec.o
 perf-y += call-path.o
 perf-y += rwsem.o
 perf-y += thread-stack.o
-perf-y += spark.o
 perf-$(CONFIG_AUXTRACE) += auxtrace.o
 perf-$(CONFIG_AUXTRACE) += intel-pt-decoder/
 perf-$(CONFIG_AUXTRACE) += intel-pt.o
@@ -114,11 +97,8 @@ perf-$(CONFIG_AUXTRACE) += cs-etm-decoder/
 endif
 
 perf-y += parse-branch-options.o
-perf-y += dump-insn.o
 perf-y += parse-regs-options.o
 perf-y += term.o
-perf-y += help-unknown-cmd.o
-perf-y += mem-events.o
 perf-y += vsprintf.o
 perf-y += units.o
 perf-y += time-utils.o
@@ -126,7 +106,6 @@ perf-y += expr-flex.o
 perf-y += expr-bison.o
 perf-y += expr.o
 perf-y += branch.o
-perf-y += mem2node.o
 
 perf-$(CONFIG_LIBBPF) += bpf-loader.o
 perf-$(CONFIG_LIBBPF) += bpf_map.o
@@ -256,10 +235,6 @@ CFLAGS_expr.o          += -Wno-redundant-decls
 CFLAGS_header.o        += -include $(OUTPUT)PERF-VERSION-FILE
 
 $(OUTPUT)util/kallsyms.o: ../lib/symbol/kallsyms.c FORCE
-	$(call rule_mkdir)
-	$(call if_changed_dep,cc_o_c)
-
-$(OUTPUT)util/argv_split.o: ../lib/argv_split.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)
 

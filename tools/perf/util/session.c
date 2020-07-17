@@ -221,7 +221,9 @@ struct perf_session *perf_session__new(struct perf_data *data,
 				perf_session__set_comm_exec(session);
 			}
 
+if (0) {
 			perf_evlist__init_trace_event_sample_raw(session->evlist);
+}
 
 			/* Open the directory data. */
 			if (data->is_dir) {

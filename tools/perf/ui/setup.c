@@ -70,7 +70,9 @@ static inline void exit_gtk_browser(bool wait_for_ok __maybe_unused) {}
 int stdio__config_color(const struct option *opt __maybe_unused,
 			const char *mode, int unset __maybe_unused)
 {
+if (0) {
 	perf_use_color_default = perf_config_colorbool("color.ui", mode, -1);
+}
 	return 0;
 }
 

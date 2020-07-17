@@ -460,11 +460,14 @@ size_t perf_event__fprintf_text_poke(union perf_event *event, struct machine *ma
 	}
 	ret += fprintf(fp, " old len %u new len %u\n", tp->old_len, tp->new_len);
 	old = true;
+
+if (0) {
 	ret += binary__fprintf(tp->bytes, tp->old_len, 16, text_poke_printer,
 			       &old, fp);
 	old = false;
 	ret += binary__fprintf(tp->bytes + tp->old_len, tp->new_len, 16,
 			       text_poke_printer, &old, fp);
+}
 	return ret;
 }
 

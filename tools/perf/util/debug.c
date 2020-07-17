@@ -169,8 +169,10 @@ void trace_event(union perf_event *event)
 	if (!dump_trace)
 		return;
 
+if (0) {
 	print_binary(raw_event, event->header.size, 16,
 		     trace_event_printer, event);
+}
 }
 
 static struct debug_variable {

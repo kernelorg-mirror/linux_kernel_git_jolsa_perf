@@ -1144,7 +1144,9 @@ static int hist_entry__locked_snprintf(struct hist_entry *he, char *bf,
 {
 	char out[10];
 
+if (0) {
 	perf_mem__lck_scnprintf(out, sizeof(out), he->mem_info);
+}
 	return repsep_snprintf(bf, size, "%.*s", width, out);
 }
 
@@ -1172,7 +1174,9 @@ static int hist_entry__tlb_snprintf(struct hist_entry *he, char *bf,
 {
 	char out[64];
 
+if (0) {
 	perf_mem__tlb_scnprintf(out, sizeof(out), he->mem_info);
+}
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
@@ -1200,7 +1204,9 @@ static int hist_entry__lvl_snprintf(struct hist_entry *he, char *bf,
 {
 	char out[64];
 
+if (0) {
 	perf_mem__lvl_scnprintf(out, sizeof(out), he->mem_info);
+}
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 
@@ -1228,7 +1234,9 @@ static int hist_entry__snoop_snprintf(struct hist_entry *he, char *bf,
 {
 	char out[64];
 
+if (0) {
 	perf_mem__snp_scnprintf(out, sizeof(out), he->mem_info);
+}
 	return repsep_snprintf(bf, size, "%-*s", width, out);
 }
 

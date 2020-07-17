@@ -506,7 +506,6 @@ int main(int argc, const char **argv)
 			break;
 
 		if (!done_help) {
-			cmd = argv[0] = help_unknown_cmd(cmd);
 			done_help = 1;
 		} else
 			break;

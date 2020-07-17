@@ -476,9 +476,6 @@ int perf_default_config(const char *var, const char *value,
 	if (strstarts(var, "call-graph."))
 		return perf_callchain_config(var, value);
 
-	if (strstarts(var, "llvm."))
-		return perf_llvm_config(var, value);
-
 	if (strstarts(var, "buildid."))
 		return perf_buildid_config(var, value);
 
