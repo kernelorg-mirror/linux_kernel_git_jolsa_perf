@@ -4,8 +4,6 @@ perf-y += builtin-stat.o
 perf-$(CONFIG_TRACE) += builtin-trace.o
 perf-$(CONFIG_LIBELF) += builtin-probe.o
 
-perf-y += tests/
-
 perf-y += perf.o
 
 paths += -DPERF_HTML_PATH="BUILD_STR($(htmldir_SQ))"

@@ -60,7 +60,6 @@ static struct cmd_struct commands[] = {
 #ifdef HAVE_LIBELF_SUPPORT
 	{ "probe",	cmd_probe,	0 },
 #endif
-	{ "test",	cmd_test,	0 },
 #if defined(HAVE_LIBAUDIT_SUPPORT) || defined(HAVE_SYSCALL_TABLE_SUPPORT)
 	{ "trace",	cmd_trace,	0 },
 #endif
@@ -487,8 +486,6 @@ int main(int argc, const char **argv)
 		goto out;
 	}
 	cmd = argv[0];
-
-	test_attr__init();
 
 	/*
 	 * We use PATH to find perf commands, but we prepend some higher
