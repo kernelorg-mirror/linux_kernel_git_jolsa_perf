@@ -1,4 +1,3 @@
-perf-y += builtin-kallsyms.o
 perf-y += builtin-list.o
 perf-y += builtin-record.o
 perf-y += builtin-report.o
