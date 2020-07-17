@@ -58,7 +58,6 @@ static struct cmd_struct commands[] = {
 	{ "buildid-cache", cmd_buildid_cache, 0 },
 	{ "buildid-list", cmd_buildid_list, 0 },
 	{ "c2c",	cmd_c2c,	0 },
-	{ "help",	cmd_help,	0 },
 	{ "kallsyms",	cmd_kallsyms,	0 },
 	{ "list",	cmd_list,	0 },
 	{ "record",	cmd_record,	0 },
@@ -501,7 +500,6 @@ int main(int argc, const char **argv)
 	} else {
 		/* The user didn't specify a command; give them help */
 		printf("\n usage: %s\n\n", perf_usage_string);
-		list_common_cmds_help();
 		printf("\n %s\n\n", perf_more_info_string);
 		goto out;
 	}
