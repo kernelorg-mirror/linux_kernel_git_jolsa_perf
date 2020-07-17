@@ -67,7 +67,6 @@ static struct cmd_struct commands[] = {
 	{ "top",	cmd_top,	0 },
 	{ "version",	cmd_version,	0 },
 	{ "script",	cmd_script,	0 },
-	{ "sched",	cmd_sched,	0 },
 #ifdef HAVE_LIBELF_SUPPORT
 	{ "probe",	cmd_probe,	0 },
 #endif

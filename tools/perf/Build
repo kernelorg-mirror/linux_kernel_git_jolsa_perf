@@ -1,4 +1,3 @@
-perf-y += builtin-sched.o
 perf-y += builtin-buildid-list.o
 perf-y += builtin-buildid-cache.o
 perf-y += builtin-kallsyms.o
