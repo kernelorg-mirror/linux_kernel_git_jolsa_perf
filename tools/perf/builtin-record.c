@@ -1709,9 +1709,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		goto out_child;
 	}
 
+if (0) {
 	err = record__setup_sb_evlist(rec);
 	if (err)
 		goto out_child;
+}
 
 	err = record__synthesize(rec, false);
 	if (err < 0)
