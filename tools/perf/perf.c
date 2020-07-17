@@ -58,7 +58,6 @@ static struct cmd_struct commands[] = {
 	{ "c2c",	cmd_c2c,	0 },
 	{ "record",	cmd_record,	0 },
 	{ "stat",	cmd_stat,	0 },
-	{ "version",	cmd_version,	0 },
 #ifdef HAVE_LIBELF_SUPPORT
 	{ "probe",	cmd_probe,	0 },
 #endif
@@ -178,7 +177,6 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 
 		if (!strcmp(cmd, "-vv")) {
 			(*argv)[0] = "version";
-			version_verbose = 1;
 			break;
 		}
 
