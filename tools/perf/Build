@@ -1,6 +1,5 @@
 perf-y += builtin-record.o
 perf-y += builtin-stat.o
-perf-y += builtin-timechart.o
 perf-y += builtin-script.o
 perf-y += builtin-kmem.o
 perf-y += builtin-lock.o
