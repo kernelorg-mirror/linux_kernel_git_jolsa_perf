@@ -56,7 +56,6 @@ struct cmd_struct {
 
 static struct cmd_struct commands[] = {
 	{ "c2c",	cmd_c2c,	0 },
-	{ "list",	cmd_list,	0 },
 	{ "record",	cmd_record,	0 },
 	{ "report",	cmd_report,	0 },
 	{ "stat",	cmd_stat,	0 },
