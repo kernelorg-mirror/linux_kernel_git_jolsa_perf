@@ -363,7 +363,7 @@ jvmti_write_code(void *agent, char const *sym,
 	struct jr_code_load rec;
 	size_t sym_len;
 	FILE *fp = agent;
-	int ret = -1;
+	int ret;
 
 	/* don't care about 0 length function, no samples */
 	if (size == 0)
@@ -401,16 +401,23 @@ jvmti_write_code(void *agent, char const *sym,
 	rec.code_index = code_generation++;
 
 	ret = fwrite_unlocked(&rec, sizeof(rec), 1, fp);
-	fwrite_unlocked(sym, sym_len, 1, fp);
+	if (ret)
+		goto out_error;
+	ret = fwrite_unlocked(sym, sym_len, 1, fp);
+	if (ret)
+		goto out_error;
 
-	if (code)
-		fwrite_unlocked(code, size, 1, fp);
+	if (code) {
+		ret = fwrite_unlocked(code, size, 1, fp);
+		if (ret)
+			goto out_error;
+	}
 
 	funlockfile(fp);
-
-	ret = 0;
-
-	return ret;
+	return 0;
+out_error:
+	funlockfile(fp);
+	return -1;
 }
 
 int
