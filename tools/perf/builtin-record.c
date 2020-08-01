@@ -1188,7 +1188,7 @@ static void record__init_features(struct record *rec)
 	for (feat = HEADER_FIRST_FEATURE; feat < HEADER_LAST_FEATURE; feat++)
 		perf_header__set_feat(&session->header, feat);
 
-	if (rec->no_buildid)
+	if (perf_can_record_mmap3() || rec->no_buildid)
 		perf_header__clear_feat(&session->header, HEADER_BUILD_ID);
 
 	if (!have_tracepoints(&rec->evlist->core.entries))

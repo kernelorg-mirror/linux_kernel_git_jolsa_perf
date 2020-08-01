@@ -44,6 +44,7 @@ struct perf_tool {
 			read;
 	event_op	mmap,
 			mmap2,
+			mmap3,
 			comm,
 			namespaces,
 			cgroup,

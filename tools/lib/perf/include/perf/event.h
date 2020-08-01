@@ -8,6 +8,8 @@
 #include <linux/bpf.h>
 #include <sys/types.h> /* pid_t */
 
+#define BUILD_ID_SIZE 20
+
 struct perf_record_mmap {
 	struct perf_event_header header;
 	__u32			 pid, tid;
@@ -29,6 +31,22 @@ struct perf_record_mmap2 {
 	__u64			 ino_generation;
 	__u32			 prot;
 	__u32			 flags;
+	char			 filename[PATH_MAX];
+};
+
+struct perf_record_mmap3 {
+	struct perf_event_header header;
+	__u32			 pid, tid;
+	__u64			 start;
+	__u64			 len;
+	__u64			 pgoff;
+	__u32			 maj;
+	__u32			 min;
+	__u64			 ino;
+	__u64			 ino_generation;
+	__u32			 prot;
+	__u32			 flags;
+	__u8			 buildid[BUILD_ID_SIZE];
 	char			 filename[PATH_MAX];
 };
 
@@ -364,6 +382,7 @@ union perf_event {
 	struct perf_event_header		header;
 	struct perf_record_mmap			mmap;
 	struct perf_record_mmap2		mmap2;
+	struct perf_record_mmap3		mmap3;
 	struct perf_record_comm			comm;
 	struct perf_record_namespaces		namespaces;
 	struct perf_record_cgroup		cgroup;

@@ -301,6 +301,25 @@ size_t perf_event__fprintf_mmap2(union perf_event *event, FILE *fp)
 		       event->mmap2.filename);
 }
 
+size_t perf_event__fprintf_mmap3(union perf_event *event, FILE *fp)
+{
+	char sbuild_id[SBUILD_ID_SIZE];
+
+	build_id__sprintf(event->mmap3.buildid, BUILD_ID_SIZE, sbuild_id);
+
+	return fprintf(fp, " %d/%d: [%#" PRI_lx64 "(%#" PRI_lx64 ") @ %#" PRI_lx64
+			   " %02x:%02x %"PRI_lu64" %"PRI_lu64"]: %c%c%c%c %s %s\n",
+		       event->mmap3.pid, event->mmap3.tid, event->mmap3.start,
+		       event->mmap3.len, event->mmap3.pgoff, event->mmap3.maj,
+		       event->mmap3.min, event->mmap3.ino,
+		       event->mmap3.ino_generation,
+		       (event->mmap3.prot & PROT_READ) ? 'r' : '-',
+		       (event->mmap3.prot & PROT_WRITE) ? 'w' : '-',
+		       (event->mmap3.prot & PROT_EXEC) ? 'x' : '-',
+		       (event->mmap3.flags & MAP_SHARED) ? 's' : 'p',
+		       sbuild_id, event->mmap3.filename);
+}
+
 size_t perf_event__fprintf_thread_map(union perf_event *event, FILE *fp)
 {
 	struct perf_thread_map *threads = thread_map__new_event(&event->thread_map);
@@ -347,6 +366,14 @@ int perf_event__process_mmap2(struct perf_tool *tool __maybe_unused,
 			     struct machine *machine)
 {
 	return machine__process_mmap2_event(machine, event, sample);
+}
+
+int perf_event__process_mmap3(struct perf_tool *tool __maybe_unused,
+			     union perf_event *event,
+			     struct perf_sample *sample,
+			     struct machine *machine)
+{
+	return machine__process_mmap3_event(machine, event, sample);
 }
 
 size_t perf_event__fprintf_task(union perf_event *event, FILE *fp)
@@ -492,6 +519,9 @@ size_t perf_event__fprintf(union perf_event *event, struct machine *machine, FIL
 		break;
 	case PERF_RECORD_MMAP2:
 		ret += perf_event__fprintf_mmap2(event, fp);
+		break;
+	case PERF_RECORD_MMAP3:
+		ret += perf_event__fprintf_mmap3(event, fp);
 		break;
 	case PERF_RECORD_AUX:
 		ret += perf_event__fprintf_aux(event, fp);
