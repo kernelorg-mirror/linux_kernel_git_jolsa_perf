@@ -1697,6 +1697,75 @@ out_problem:
 	return -1;
 }
 
+int machine__process_mmap3_event(struct machine *machine,
+				 union perf_event *event,
+				 struct perf_sample *sample)
+{
+	struct thread *thread;
+	struct map *map;
+	struct dso_id dso_id = {
+		.maj = event->mmap3.maj,
+		.min = event->mmap3.min,
+		.ino = event->mmap3.ino,
+		.ino_generation = event->mmap3.ino_generation,
+	};
+	static u8 zero[BUILD_ID_SIZE] = {};
+	u8 *buildid = NULL;
+	int ret = 0;
+
+	if (dump_trace)
+		perf_event__fprintf_mmap3(event, stdout);
+
+	if (sample->cpumode == PERF_RECORD_MISC_GUEST_KERNEL ||
+	    sample->cpumode == PERF_RECORD_MISC_KERNEL) {
+		struct extra_kernel_map xm = {
+			.start = event->mmap3.start,
+			.end   = event->mmap3.start + event->mmap3.len,
+			.pgoff = event->mmap3.pgoff,
+		};
+
+		strlcpy(xm.name, event->mmap3.filename, KMAP_NAME_LEN);
+		ret = machine__process_kernel_mmap_event(machine, &xm);
+		if (ret < 0)
+			goto out_problem;
+		return 0;
+	}
+
+	thread = machine__findnew_thread(machine, event->mmap3.pid,
+					event->mmap3.tid);
+	if (thread == NULL)
+		goto out_problem;
+
+	/* If we got empty build id, do not set it. */
+	if (memcmp(&zero, event->mmap3.buildid, BUILD_ID_SIZE))
+		buildid = event->mmap3.buildid;
+
+	map = map__new(machine, event->mmap3.start,
+			event->mmap3.len, event->mmap3.pgoff,
+			&dso_id, event->mmap3.prot,
+			event->mmap3.flags, buildid,
+			event->mmap3.filename, thread);
+
+	if (map == NULL)
+		goto out_problem_map;
+
+	ret = thread__insert_map(thread, map);
+	if (ret)
+		goto out_problem_insert;
+
+	thread__put(thread);
+	map__put(map);
+	return 0;
+
+out_problem_insert:
+	map__put(map);
+out_problem_map:
+	thread__put(thread);
+out_problem:
+	dump_printf("problem processing PERF_RECORD_MMAP2, skipping event.\n");
+	return 0;
+}
+
 int machine__process_mmap2_event(struct machine *machine,
 				 union perf_event *event,
 				 struct perf_sample *sample)
@@ -1737,7 +1806,7 @@ int machine__process_mmap2_event(struct machine *machine,
 	map = map__new(machine, event->mmap2.start,
 			event->mmap2.len, event->mmap2.pgoff,
 			&dso_id, event->mmap2.prot,
-			event->mmap2.flags,
+			event->mmap2.flags, NULL,
 			event->mmap2.filename, thread);
 
 	if (map == NULL)
@@ -1796,7 +1865,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 
 	map = map__new(machine, event->mmap.start,
 			event->mmap.len, event->mmap.pgoff,
-			NULL, prot, 0, event->mmap.filename, thread);
+			NULL, prot, 0, NULL, event->mmap.filename, thread);
 
 	if (map == NULL)
 		goto out_problem_map;
@@ -1956,6 +2025,8 @@ int machine__process_event(struct machine *machine, union perf_event *event,
 		ret = machine__process_cgroup_event(machine, event, sample); break;
 	case PERF_RECORD_MMAP2:
 		ret = machine__process_mmap2_event(machine, event, sample); break;
+	case PERF_RECORD_MMAP3:
+		ret = machine__process_mmap3_event(machine, event, sample); break;
 	case PERF_RECORD_FORK:
 		ret = machine__process_fork_event(machine, event, sample); break;
 	case PERF_RECORD_EXIT:
