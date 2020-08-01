@@ -466,6 +466,8 @@ void perf_tool__fill_defaults(struct perf_tool *tool)
 		tool->mmap = process_event_stub;
 	if (tool->mmap2 == NULL)
 		tool->mmap2 = process_event_stub;
+	if (tool->mmap3 == NULL)
+		tool->mmap3 = process_event_stub;
 	if (tool->comm == NULL)
 		tool->comm = process_event_stub;
 	if (tool->namespaces == NULL)
@@ -603,6 +605,27 @@ static void perf_event__mmap2_swap(union perf_event *event,
 		swap_sample_id_all(event, data);
 	}
 }
+
+static void perf_event__mmap3_swap(union perf_event *event,
+				  bool sample_id_all)
+{
+	event->mmap3.pid   = bswap_32(event->mmap3.pid);
+	event->mmap3.tid   = bswap_32(event->mmap3.tid);
+	event->mmap3.start = bswap_64(event->mmap3.start);
+	event->mmap3.len   = bswap_64(event->mmap3.len);
+	event->mmap3.pgoff = bswap_64(event->mmap3.pgoff);
+	event->mmap3.maj   = bswap_32(event->mmap3.maj);
+	event->mmap3.min   = bswap_32(event->mmap3.min);
+	event->mmap3.ino   = bswap_64(event->mmap3.ino);
+
+	if (sample_id_all) {
+		void *data = &event->mmap3.filename;
+
+		data += PERF_ALIGN(strlen(data) + 1, sizeof(u64));
+		swap_sample_id_all(event, data);
+	}
+}
+
 static void perf_event__task_swap(union perf_event *event, bool sample_id_all)
 {
 	event->fork.pid	 = bswap_32(event->fork.pid);
@@ -938,6 +961,7 @@ typedef void (*perf_event__swap_op)(union perf_event *event,
 static perf_event__swap_op perf_event__swap_ops[] = {
 	[PERF_RECORD_MMAP]		  = perf_event__mmap_swap,
 	[PERF_RECORD_MMAP2]		  = perf_event__mmap2_swap,
+	[PERF_RECORD_MMAP3]		  = perf_event__mmap3_swap,
 	[PERF_RECORD_COMM]		  = perf_event__comm_swap,
 	[PERF_RECORD_FORK]		  = perf_event__task_swap,
 	[PERF_RECORD_EXIT]		  = perf_event__task_swap,
@@ -1453,6 +1477,10 @@ static int machines__deliver_event(struct machines *machines,
 		if (event->header.misc & PERF_RECORD_MISC_PROC_MAP_PARSE_TIMEOUT)
 			++evlist->stats.nr_proc_map_timeout;
 		return tool->mmap2(tool, event, sample, machine);
+	case PERF_RECORD_MMAP3:
+		if (event->header.misc & PERF_RECORD_MISC_PROC_MAP_PARSE_TIMEOUT)
+			++evlist->stats.nr_proc_map_timeout;
+		return tool->mmap3(tool, event, sample, machine);
 	case PERF_RECORD_COMM:
 		return tool->comm(tool, event, sample, machine);
 	case PERF_RECORD_NAMESPACES:

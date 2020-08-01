@@ -57,6 +57,7 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_BPF_EVENT]			= "BPF_EVENT",
 	[PERF_RECORD_CGROUP]			= "CGROUP",
 	[PERF_RECORD_TEXT_POKE]			= "TEXT_POKE",
+	[PERF_RECORD_MMAP3]			= "MMAP3",
 	[PERF_RECORD_HEADER_ATTR]		= "ATTR",
 	[PERF_RECORD_HEADER_EVENT_TYPE]		= "EVENT_TYPE",
 	[PERF_RECORD_HEADER_TRACING_DATA]	= "TRACING_DATA",
@@ -301,6 +302,26 @@ size_t perf_event__fprintf_mmap2(union perf_event *event, FILE *fp)
 		       event->mmap2.filename);
 }
 
+size_t perf_event__fprintf_mmap3(union perf_event *event, FILE *fp)
+{
+	char sbuild_id[SBUILD_ID_SIZE];
+
+	build_id__sprintf(event->mmap3.buildid, BUILD_ID_SIZE, sbuild_id);
+
+	return fprintf(fp, " %d/%d: <%s> [%#" PRI_lx64 "(%#" PRI_lx64 ") @ %#" PRI_lx64
+			   " %02x:%02x %"PRI_lu64" %"PRI_lu64"]: %c%c%c%c %s\n",
+		       event->mmap3.pid, event->mmap3.tid,
+		       sbuild_id, event->mmap3.start,
+		       event->mmap3.len, event->mmap3.pgoff, event->mmap3.maj,
+		       event->mmap3.min, event->mmap3.ino,
+		       event->mmap3.ino_generation,
+		       (event->mmap3.prot & PROT_READ) ? 'r' : '-',
+		       (event->mmap3.prot & PROT_WRITE) ? 'w' : '-',
+		       (event->mmap3.prot & PROT_EXEC) ? 'x' : '-',
+		       (event->mmap3.flags & MAP_SHARED) ? 's' : 'p',
+		       event->mmap3.filename);
+}
+
 size_t perf_event__fprintf_thread_map(union perf_event *event, FILE *fp)
 {
 	struct perf_thread_map *threads = thread_map__new_event(&event->thread_map);
@@ -347,6 +368,14 @@ int perf_event__process_mmap2(struct perf_tool *tool __maybe_unused,
 			     struct machine *machine)
 {
 	return machine__process_mmap2_event(machine, event, sample);
+}
+
+int perf_event__process_mmap3(struct perf_tool *tool __maybe_unused,
+			     union perf_event *event,
+			     struct perf_sample *sample,
+			     struct machine *machine)
+{
+	return machine__process_mmap3_event(machine, event, sample);
 }
 
 size_t perf_event__fprintf_task(union perf_event *event, FILE *fp)
@@ -492,6 +521,9 @@ size_t perf_event__fprintf(union perf_event *event, struct machine *machine, FIL
 		break;
 	case PERF_RECORD_MMAP2:
 		ret += perf_event__fprintf_mmap2(event, fp);
+		break;
+	case PERF_RECORD_MMAP3:
+		ret += perf_event__fprintf_mmap3(event, fp);
 		break;
 	case PERF_RECORD_AUX:
 		ret += perf_event__fprintf_aux(event, fp);

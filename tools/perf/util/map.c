@@ -145,8 +145,8 @@ void map__init(struct map *map, u64 start, u64 end, u64 pgoff, struct dso *dso)
 
 struct map *map__new(struct machine *machine, u64 start, u64 len,
 		     u64 pgoff, struct dso_id *id,
-		     u32 prot, u32 flags, char *filename,
-		     struct thread *thread)
+		     u32 prot, u32 flags, u8 *buildid,
+		     char *filename, struct thread *thread)
 {
 	struct map *map = malloc(sizeof(*map));
 	struct nsinfo *nsi = NULL;
@@ -209,6 +209,10 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 				dso__set_loaded(dso);
 		}
 		dso->nsinfo = nsi;
+
+		if (build_id__is_defined(buildid))
+			dso__set_build_id(dso, buildid);
+
 		dso__put(dso);
 	}
 	return map;
