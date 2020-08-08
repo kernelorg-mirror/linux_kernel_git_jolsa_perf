@@ -690,8 +690,14 @@ static int map__process_kallsym_symbol(void *arg, const char *name,
 	struct symbol *sym;
 	struct dso *dso = arg;
 	struct rb_root_cached *root = &dso->symbols;
+	char *module;
 
 	if (!symbol_type__filter(type))
+		return 0;
+
+	/* Skip [bpf] symbols, they are handled separately. */
+	module = strchr(name, '\t');
+	if (module && !strcmp(++module, "[bpf]"))
 		return 0;
 
 	/*
