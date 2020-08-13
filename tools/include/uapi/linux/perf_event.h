@@ -384,7 +384,8 @@ struct perf_event_attr {
 				aux_output     :  1, /* generate AUX records instead of events */
 				cgroup         :  1, /* include cgroup events */
 				text_poke      :  1, /* include text poke events */
-				__reserved_1   : 30;
+				mmap3          :  1, /* include bpf events */
+				__reserved_1   : 29;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
@@ -1059,6 +1060,30 @@ enum perf_event_type {
 	 * };
 	 */
 	PERF_RECORD_TEXT_POKE			= 20,
+
+	/*
+	 * The MMAP3 records are an augmented version of MMAP2, they add
+	 * build id value to identify the exact binary behind map
+	 *
+	 * struct {
+	 *	struct perf_event_header	header;
+	 *
+	 *	u32				pid, tid;
+	 *	u64				addr;
+	 *	u64				len;
+	 *	u64				pgoff;
+	 *	u32				maj;
+	 *	u32				min;
+	 *	u64				ino;
+	 *	u64				ino_generation;
+	 *	u32				prot, flags;
+	 *	u32				reserved;
+	 *	u8				buildid[20];
+	 *	char				filename[];
+	 * 	struct sample_id		sample_id;
+	 * };
+	 */
+	PERF_RECORD_MMAP3			= 21,
 
 	PERF_RECORD_MAX,			/* non-ABI */
 };
