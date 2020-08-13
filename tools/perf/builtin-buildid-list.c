@@ -57,6 +57,7 @@ static int perf_session__list_build_ids(bool force, bool with_hits)
 		.mode  = PERF_DATA_MODE_READ,
 		.force = force,
 	};
+	bool has_build_id;
 
 	symbol__elf_init();
 	/*
@@ -76,6 +77,15 @@ static int perf_session__list_build_ids(bool force, bool with_hits)
 	if (!perf_data__is_pipe(&data) &&
 	    perf_header__has_feat(&session->header, HEADER_AUXTRACE))
 		with_hits = false;
+
+	has_build_id = perf_header__has_feat(&session->header, HEADER_BUILD_ID);
+
+	/*
+	 * We don't really show non hit dsos, keep that also for mmap3
+	 * buildid data, we don't care about non hit dsos anyway.
+	 */
+	if (!has_build_id)
+		with_hits = true;
 
 	/*
 	 * in pipe-mode, the only way to get the buildids is to parse
