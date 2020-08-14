@@ -379,7 +379,7 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 	}
 	io__init(&io, io.fd, bf, sizeof(bf));
 
-	event->header.type = PERF_RECORD_MMAP2;
+	event->header.type = PERF_RECORD_MMAP3;
 	t = rdclock();
 
 	while (!io.eof) {
@@ -387,20 +387,20 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 		size_t size;
 
 		/* ensure null termination since stack will be reused. */
-		event->mmap2.filename[0] = '\0';
+		event->mmap3.filename[0] = '\0';
 
 		/* 00400000-0040c000 r-xp 00000000 fd:01 41038  /bin/cat */
 		if (!read_proc_maps_line(&io,
-					&event->mmap2.start,
-					&event->mmap2.len,
-					&event->mmap2.prot,
-					&event->mmap2.flags,
-					&event->mmap2.pgoff,
-					&event->mmap2.maj,
-					&event->mmap2.min,
-					&event->mmap2.ino,
-					sizeof(event->mmap2.filename),
-					event->mmap2.filename))
+					&event->mmap3.start,
+					&event->mmap3.len,
+					&event->mmap3.prot,
+					&event->mmap3.flags,
+					&event->mmap3.pgoff,
+					&event->mmap3.maj,
+					&event->mmap3.min,
+					&event->mmap3.ino,
+					sizeof(event->mmap3.filename),
+					event->mmap3.filename))
 			continue;
 
 		if ((rdclock() - t) > timeout) {
@@ -412,7 +412,7 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 			goto out;
 		}
 
-		event->mmap2.ino_generation = 0;
+		event->mmap3.ino_generation = 0;
 
 		/*
 		 * Just like the kernel, see __perf_event_mmap in kernel/perf_event.c
@@ -422,8 +422,8 @@ int perf_event__synthesize_mmap_events(struct perf_tool *tool,
 		else
 			event->header.misc = PERF_RECORD_MISC_GUEST_USER;
 
-		if ((event->mmap2.prot & PROT_EXEC) == 0) {
-			if (!mmap_data || (event->mmap2.prot & PROT_READ) == 0)
+		if ((event->mmap3.prot & PROT_EXEC) == 0) {
+			if (!mmap_data || (event->mmap3.prot & PROT_READ) == 0)
 				continue;
 
 			event->header.misc |= PERF_RECORD_MISC_MMAP_DATA;
@@ -433,25 +433,37 @@ out:
 		if (truncation)
 			event->header.misc |= PERF_RECORD_MISC_PROC_MAP_PARSE_TIMEOUT;
 
-		if (!strcmp(event->mmap2.filename, ""))
-			strcpy(event->mmap2.filename, anonstr);
+		if (!strcmp(event->mmap3.filename, ""))
+			strcpy(event->mmap3.filename, anonstr);
 
 		if (hugetlbfs_mnt_len &&
-		    !strncmp(event->mmap2.filename, hugetlbfs_mnt,
+		    !strncmp(event->mmap3.filename, hugetlbfs_mnt,
 			     hugetlbfs_mnt_len)) {
-			strcpy(event->mmap2.filename, anonstr);
-			event->mmap2.flags |= MAP_HUGETLB;
+			strcpy(event->mmap3.filename, anonstr);
+			event->mmap3.flags |= MAP_HUGETLB;
 		}
 
-		size = strlen(event->mmap2.filename) + 1;
+		size = strlen(event->mmap3.filename) + 1;
 		size = PERF_ALIGN(size, sizeof(u64));
-		event->mmap2.len -= event->mmap.start;
-		event->mmap2.header.size = (sizeof(event->mmap2) -
-					(sizeof(event->mmap2.filename) - size));
-		memset(event->mmap2.filename + size, 0, machine->id_hdr_size);
-		event->mmap2.header.size += machine->id_hdr_size;
-		event->mmap2.pid = tgid;
-		event->mmap2.tid = pid;
+		event->mmap3.len -= event->mmap.start;
+		event->mmap3.header.size = (sizeof(event->mmap3) -
+					(sizeof(event->mmap3.filename) - size));
+		memset(event->mmap3.filename + size, 0, machine->id_hdr_size);
+		event->mmap3.header.size += machine->id_hdr_size;
+		event->mmap3.pid = tgid;
+		event->mmap3.tid = pid;
+
+		rc = filename__read_build_id(event->mmap3.filename, event->mmap3.buildid,
+					     BUILD_ID_SIZE);
+		if (rc != BUILD_ID_SIZE) {
+			if (event->mmap3.filename[0] == '/') {
+				pr_debug2("Failed to read build ID for %s\n",
+					  event->mmap3.filename);
+			}
+			memset(event->mmap3.buildid, 0x0, sizeof(event->mmap3.buildid));
+		}
+
+		rc = 0;
 
 		if (perf_tool__process_synth_event(tool, event, machine, process) != 0) {
 			rc = -1;
@@ -744,7 +756,7 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 	if (comm_event == NULL)
 		goto out;
 
-	mmap_event = malloc(sizeof(mmap_event->mmap2) + machine->id_hdr_size);
+	mmap_event = malloc(sizeof(mmap_event->mmap3) + machine->id_hdr_size);
 	if (mmap_event == NULL)
 		goto out_free_comm;
 
@@ -826,7 +838,7 @@ static int __perf_event__synthesize_threads(struct perf_tool *tool,
 	if (comm_event == NULL)
 		goto out;
 
-	mmap_event = malloc(sizeof(mmap_event->mmap2) + machine->id_hdr_size);
+	mmap_event = malloc(sizeof(mmap_event->mmap3) + machine->id_hdr_size);
 	if (mmap_event == NULL)
 		goto out_free_comm;
 
