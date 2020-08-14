@@ -1029,7 +1029,7 @@ static int __perf_event__synthesize_kernel_mmap(struct perf_tool *tool,
 	 * available use this, and after it is use this as a fallback for older
 	 * kernels.
 	 */
-	event = zalloc((sizeof(event->mmap) + machine->id_hdr_size));
+	event = zalloc((sizeof(event->mmap3) + machine->id_hdr_size));
 	if (event == NULL) {
 		pr_debug("Not enough memory synthesizing mmap event "
 			 "for kernel modules\n");
@@ -1046,16 +1046,21 @@ static int __perf_event__synthesize_kernel_mmap(struct perf_tool *tool,
 		event->header.misc = PERF_RECORD_MISC_GUEST_KERNEL;
 	}
 
-	size = snprintf(event->mmap.filename, sizeof(event->mmap.filename),
+	size = snprintf(event->mmap3.filename, sizeof(event->mmap3.filename),
 			"%s%s", machine->mmap_name, kmap->ref_reloc_sym->name) + 1;
 	size = PERF_ALIGN(size, sizeof(u64));
-	event->mmap.header.type = PERF_RECORD_MMAP;
-	event->mmap.header.size = (sizeof(event->mmap) -
-			(sizeof(event->mmap.filename) - size) + machine->id_hdr_size);
-	event->mmap.pgoff = kmap->ref_reloc_sym->addr;
-	event->mmap.start = map->start;
-	event->mmap.len   = map->end - event->mmap.start;
-	event->mmap.pid   = machine->pid;
+	event->mmap3.header.type = PERF_RECORD_MMAP3;
+	event->mmap3.header.size = (sizeof(event->mmap3) -
+			(sizeof(event->mmap3.filename) - size) + machine->id_hdr_size);
+	event->mmap3.pgoff = kmap->ref_reloc_sym->addr;
+	event->mmap3.start = map->start;
+	event->mmap3.len   = map->end - event->mmap3.start;
+	event->mmap3.pid   = machine->pid;
+
+	err = sysfs__read_build_id("/sys/kernel/notes", event->mmap3.buildid,
+				   BUILD_ID_SIZE);
+	if (err)
+		pr_err("Failed to read kernel build ID\n");
 
 	err = perf_tool__process_synth_event(tool, event, machine, process);
 	free(event);
