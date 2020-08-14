@@ -605,15 +605,13 @@ int perf_event__synthesize_modules(struct perf_tool *tool, perf_event__handler_t
 	int rc = 0;
 	struct map *pos;
 	struct maps *maps = machine__kernel_maps(machine);
-	union perf_event *event = zalloc((sizeof(event->mmap) +
+	union perf_event *event = zalloc((sizeof(event->mmap3) +
 					  machine->id_hdr_size));
 	if (event == NULL) {
 		pr_debug("Not enough memory synthesizing mmap event "
 			 "for kernel modules\n");
 		return -1;
 	}
-
-	event->header.type = PERF_RECORD_MMAP;
 
 	/*
 	 * kernel uses 0 for user space maps, see kernel/perf_event.c
@@ -631,17 +629,30 @@ int perf_event__synthesize_modules(struct perf_tool *tool, perf_event__handler_t
 			continue;
 
 		size = PERF_ALIGN(pos->dso->long_name_len + 1, sizeof(u64));
-		event->mmap.header.type = PERF_RECORD_MMAP;
-		event->mmap.header.size = (sizeof(event->mmap) -
-				        (sizeof(event->mmap.filename) - size));
-		memset(event->mmap.filename + size, 0, machine->id_hdr_size);
-		event->mmap.header.size += machine->id_hdr_size;
-		event->mmap.start = pos->start;
-		event->mmap.len   = pos->end - pos->start;
-		event->mmap.pid   = machine->pid;
+		event->mmap3.header.type = PERF_RECORD_MMAP3;
+		event->mmap3.header.size = (sizeof(event->mmap3) -
+					   (sizeof(event->mmap3.filename) - size));
+		memset(event->mmap3.filename + size, 0, machine->id_hdr_size);
+		event->mmap3.header.size += machine->id_hdr_size;
+		event->mmap3.start = pos->start;
+		event->mmap3.len   = pos->end - pos->start;
+		event->mmap3.pid   = machine->pid;
 
-		memcpy(event->mmap.filename, pos->dso->long_name,
+		memcpy(event->mmap3.filename, pos->dso->long_name,
 		       pos->dso->long_name_len + 1);
+
+		rc = filename__read_build_id(event->mmap3.filename, event->mmap3.buildid,
+					     BUILD_ID_SIZE);
+		if (rc != BUILD_ID_SIZE) {
+			if (event->mmap3.filename[0] == '/') {
+				pr_debug2("Failed to read build ID for %s\n",
+					  event->mmap3.filename);
+			}
+			memset(event->mmap3.buildid, 0x0, sizeof(event->mmap3.buildid));
+		}
+
+		rc = 0;
+
 		if (perf_tool__process_synth_event(tool, event, machine, process) != 0) {
 			rc = -1;
 			break;
