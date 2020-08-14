@@ -33,7 +33,7 @@ void mmap_cpu_mask__scnprintf(struct mmap_cpu_mask *mask, const char *tag)
 
 	len = bitmap_scnprintf(mask->bits, mask->nbits, buf, MASK_SIZE);
 	buf[len] = '\0';
-	pr_debug("%p: %s mask[%zd]: %s\n", mask, tag, mask->nbits, buf);
+	pr_debug2("%p: %s mask[%zd]: %s\n", mask, tag, mask->nbits, buf);
 }
 
 size_t mmap__mmap_len(struct mmap *map)
