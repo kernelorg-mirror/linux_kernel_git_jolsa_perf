@@ -1590,7 +1590,8 @@ static int machine__process_extra_kernel_map(struct machine *machine,
 }
 
 static int machine__process_kernel_mmap_event(struct machine *machine,
-					      struct extra_kernel_map *xm)
+					      struct extra_kernel_map *xm,
+					      __u8 *buildid)
 {
 	struct map *map;
 	enum dso_space_type dso_space;
@@ -1615,6 +1616,9 @@ static int machine__process_kernel_mmap_event(struct machine *machine,
 			goto out_problem;
 
 		map->end = map->start + xm->end - xm->start;
+
+		if (build_id__is_defined(buildid))
+			dso__set_build_id(map->dso, buildid);
 	} else if (is_kernel_mmap) {
 		const char *symbol_name = (xm->name + strlen(machine->mmap_name));
 		/*
@@ -1672,6 +1676,9 @@ static int machine__process_kernel_mmap_event(struct machine *machine,
 
 		machine__update_kernel_mmap(machine, xm->start, xm->end);
 
+		if (build_id__is_defined(buildid))
+			dso__set_build_id(kernel, buildid);
+
 		/*
 		 * Avoid using a zero address (kptr_restrict) for the ref reloc
 		 * symbol. Effectively having zero here means that at record
@@ -1724,7 +1731,7 @@ int machine__process_mmap3_event(struct machine *machine,
 		};
 
 		strlcpy(xm.name, event->mmap3.filename, KMAP_NAME_LEN);
-		ret = machine__process_kernel_mmap_event(machine, &xm);
+		ret = machine__process_kernel_mmap_event(machine, &xm, event->mmap3.buildid);
 		if (ret < 0)
 			goto out_problem;
 		return 0;
@@ -1791,7 +1798,7 @@ int machine__process_mmap2_event(struct machine *machine,
 		};
 
 		strlcpy(xm.name, event->mmap2.filename, KMAP_NAME_LEN);
-		ret = machine__process_kernel_mmap_event(machine, &xm);
+		ret = machine__process_kernel_mmap_event(machine, &xm, NULL);
 		if (ret < 0)
 			goto out_problem;
 		return 0;
@@ -1848,7 +1855,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 		};
 
 		strlcpy(xm.name, event->mmap.filename, KMAP_NAME_LEN);
-		ret = machine__process_kernel_mmap_event(machine, &xm);
+		ret = machine__process_kernel_mmap_event(machine, &xm, NULL);
 		if (ret < 0)
 			goto out_problem;
 		return 0;
