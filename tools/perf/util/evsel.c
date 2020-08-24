@@ -1680,6 +1680,9 @@ retry_open:
 
 			FD(evsel, cpu, thread) = fd;
 
+			if (unlikely(test_attr__enabled))
+				test_attr__open(&evsel->core.attr, pid, cpus->map[cpu], fd, group_fd, flags);
+
 			if (fd < 0) {
 				err = -errno;
 
