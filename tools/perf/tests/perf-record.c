@@ -224,6 +224,7 @@ int test__PERF_RECORD(struct test *test __maybe_unused, int subtest __maybe_unus
 				if ((type == PERF_RECORD_COMM ||
 				     type == PERF_RECORD_MMAP ||
 				     type == PERF_RECORD_MMAP2 ||
+				     type == PERF_RECORD_MMAP3 ||
 				     type == PERF_RECORD_FORK ||
 				     type == PERF_RECORD_EXIT) &&
 				     (pid_t)event->comm.pid != evlist->workload.pid) {
@@ -233,7 +234,8 @@ int test__PERF_RECORD(struct test *test __maybe_unused, int subtest __maybe_unus
 
 				if ((type == PERF_RECORD_COMM ||
 				     type == PERF_RECORD_MMAP ||
-				     type == PERF_RECORD_MMAP2) &&
+				     type == PERF_RECORD_MMAP2 ||
+				     type == PERF_RECORD_MMAP3) &&
 				     event->comm.pid != event->comm.tid) {
 					pr_debug("%s with different pid/tid!\n", name);
 					++errs;
@@ -253,6 +255,9 @@ int test__PERF_RECORD(struct test *test __maybe_unused, int subtest __maybe_unus
 					goto check_bname;
 				case PERF_RECORD_MMAP2:
 					mmap_filename = event->mmap2.filename;
+					goto check_bname;
+				case PERF_RECORD_MMAP3:
+					mmap_filename = event->mmap3.filename;
 				check_bname:
 					bname = strrchr(mmap_filename, '/');
 					if (bname != NULL) {
