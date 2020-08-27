@@ -2342,6 +2342,38 @@ static int process_mmap2_event(struct perf_tool *tool,
 			   event->mmap2.tid);
 }
 
+static int process_mmap3_event(struct perf_tool *tool,
+			      union perf_event *event,
+			      struct perf_sample *sample,
+			      struct machine *machine)
+{
+	struct thread *thread;
+	struct perf_script *script = container_of(tool, struct perf_script, tool);
+	struct perf_session *session = script->session;
+	struct evsel *evsel = perf_evlist__id2evsel(session->evlist, sample->id);
+
+	if (perf_event__process_mmap3(tool, event, sample, machine) < 0)
+		return -1;
+
+	thread = machine__findnew_thread(machine, event->mmap3.pid, event->mmap3.tid);
+	if (thread == NULL) {
+		pr_debug("problem processing MMAP2 event, skipping it.\n");
+		return -1;
+	}
+
+	if (!evsel->core.attr.sample_id_all) {
+		sample->cpu = 0;
+		sample->time = 0;
+		sample->tid = event->mmap3.tid;
+		sample->pid = event->mmap3.pid;
+	}
+	perf_sample__fprintf_start(script, sample, thread, evsel,
+				   PERF_RECORD_MMAP3, stdout);
+	perf_event__fprintf(event, machine, stdout);
+	thread__put(thread);
+	return 0;
+}
+
 static int process_switch_event(struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
@@ -2498,6 +2530,7 @@ static int __cmd_script(struct perf_script *script)
 	if (script->show_mmap_events) {
 		script->tool.mmap = process_mmap_event;
 		script->tool.mmap2 = process_mmap2_event;
+		script->tool.mmap3 = process_mmap3_event;
 	}
 	if (script->show_switch_events || (scripting_ops && scripting_ops->process_switch))
 		script->tool.context_switch = process_switch_event;
