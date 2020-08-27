@@ -17,8 +17,15 @@
 #include "util/session.h"
 #include "util/symbol.h"
 #include "util/data.h"
+#include "util/namespaces.h"
 #include <errno.h>
 #include <linux/err.h>
+#include <linux/zalloc.h>
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+#include <elfutils/debuginfod.h>
+#endif
+#include <unistd.h>
+#include <sys/stat.h>
 
 static int sysfs__fprintf_build_id(FILE *fp)
 {
@@ -49,7 +56,155 @@ static bool dso__skip_buildid(struct dso *dso, int with_hits)
 	return with_hits && !dso->hit;
 }
 
-static int perf_session__list_build_ids(bool force, bool with_hits)
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+static int get_executable(const char *sbuild_id, char **path)
+{
+	debuginfod_client *c;
+	int fd;
+
+	c = debuginfod_begin();
+	if (c == NULL)
+		return -1;
+
+	pr_debug("trying debuginfod for executable <%s> ... ", sbuild_id);
+
+	fd = debuginfod_find_executable(c, (const unsigned char *) sbuild_id,
+					0, path);
+	if (fd >= 0)
+		close(fd); /* retaining reference by realname */
+
+	debuginfod_end(c);
+	pr_debug("%s%s\n", *path ? "OK " : "FAILED", *path ? *path : "");
+	return *path ? 0 : -1;
+}
+#else
+static int get_executable(const char *sbuild_id __maybe_unused,
+			  char **path __maybe_unused)
+{
+	return -1;
+}
+#endif
+
+struct dso_store_data {
+	bool with_hits;
+};
+
+static int dso__store(struct dso *dso, struct machine *machine __maybe_unused, void *priv)
+{
+	struct dso_store_data *data = priv;
+	char sbuild_id[SBUILD_ID_SIZE];
+	u8 bid[BUILD_ID_SIZE];
+	char *path = NULL;
+	bool is_kallsyms;
+	int err = -1;
+
+	if (!dso->has_build_id ||
+	    !build_id__is_defined(dso->build_id))
+		return 0;
+
+	if (data->with_hits && !dso->hit)
+		return 0;
+
+	/*
+	 * The storing process is:
+	 *   - get build id of the dso
+	 *   - check if it matches provided build id from mmap3 event
+	 *   - if not, try debuginfod to download the binary
+	 *   - store binary to build id database
+	 */
+	is_kallsyms = !strcmp(machine->mmap_name, dso->short_name);
+	build_id__sprintf(dso->build_id, sizeof(dso->build_id), sbuild_id);
+
+	if (is_kallsyms) {
+		/*
+		 * Find out if we are on the same kernel as perf.data
+		 * and keel kallsyms in that case.
+		 */
+		path = strdup(dso->long_name);
+		if (!path)
+			goto out_err;
+
+		err = sysfs__read_build_id("/sys/kernel/notes", &bid, sizeof(bid));
+		if (err < 0)
+			goto out_err;
+	} else {
+		struct stat st;
+
+		/*
+		 * Does the file exists in the first place, if it does,
+		 * resolve path and read the build id.
+		 */
+		if (stat(dso->long_name, &st)) {
+			zfree(&path);
+			goto try_download;
+		}
+
+		path = nsinfo__realpath(dso->long_name, dso->nsinfo);
+		if (!path)
+			goto out_err;
+
+		err = filename__read_build_id(path, &bid, sizeof(bid));
+		if (err != sizeof(bid))
+			goto out_err;
+	}
+
+	/*
+	 * If we match then we want in mmap3 event,
+	 * is what we got in the binary, so we're happy.
+	 */
+	if (memcmp(&bid, dso->build_id, BUILD_ID_SIZE)) {
+		char sbid[SBUILD_ID_SIZE];
+
+		build_id__sprintf(bid, sizeof(bid), sbid);
+		pr_debug("mmap build id <%s> does not match for %s <%s>\n",
+			 sbuild_id, path, sbid);
+		zfree(&path);
+	}
+
+try_download:
+	/*
+	 * We did not match build id or did not find the
+	 * binary - try debuginfod as last resort.
+	 */
+	if (!path) {
+		char *tmp = NULL;
+
+		/*
+		 * The debuginfo retrieval is handled within
+		 * build_id_cache__add function.
+		 */
+		if (get_executable(sbuild_id, &tmp)) {
+			err = -1;
+			goto out_err;
+		}
+
+		path = tmp;
+
+		/*
+		 * The kernel dso is now elf binary, so disable is_kallsyms
+		 * so build_id_cache__add can prepare proper file names.
+		 */
+		is_kallsyms = false;
+	}
+
+	pr_debug("linking %s %s <%s>\n", dso->short_name, path, sbuild_id);
+
+	err = build_id_cache__add(sbuild_id, path, path,
+				  dso->nsinfo, is_kallsyms, false);
+out_err:
+	free(path);
+	fprintf(stderr, "%s %s %s\n", err ? "FAIL" : "OK  ", sbuild_id, dso->long_name);
+	return 0;
+}
+
+static int perf_session__store(struct perf_session *session, bool with_hits)
+{
+	struct dso_store_data data = { .with_hits = with_hits, };
+
+	return __perf_session__cache_build_ids(session, dso__store, &data);
+}
+
+static int perf_session__list_build_ids(bool force, bool with_hits, bool store)
 {
 	struct perf_session *session;
 	struct perf_data data = {
@@ -94,7 +249,13 @@ static int perf_session__list_build_ids(bool force, bool with_hits)
 	if (with_hits || perf_data__is_pipe(&data))
 		perf_session__process_events(session);
 
-	perf_session__fprintf_dsos_buildid(session, stdout, dso__skip_buildid, with_hits);
+	if (store) {
+		perf_session__store(session, with_hits);
+	} else {
+		perf_session__fprintf_dsos_buildid(session, stdout, dso__skip_buildid,
+						   with_hits);
+	}
+
 	perf_session__delete(session);
 out:
 	return 0;
@@ -105,11 +266,13 @@ int cmd_buildid_list(int argc, const char **argv)
 	bool show_kernel = false;
 	bool with_hits = false;
 	bool force = false;
+	bool store = false;
 	const struct option options[] = {
 	OPT_BOOLEAN('H', "with-hits", &with_hits, "Show only DSOs with hits"),
 	OPT_STRING('i', "input", &input_name, "file", "input file name"),
 	OPT_BOOLEAN('f', "force", &force, "don't complain, do it"),
 	OPT_BOOLEAN('k', "kernel", &show_kernel, "Show current kernel build id"),
+	OPT_BOOLEAN(0, "store", &store, "Store build id dsos in .debug cache"),
 	OPT_INCR('v', "verbose", &verbose, "be more verbose"),
 	OPT_END()
 	};
@@ -124,5 +287,5 @@ int cmd_buildid_list(int argc, const char **argv)
 	if (show_kernel)
 		return !(sysfs__fprintf_build_id(stdout) > 0);
 
-	return perf_session__list_build_ids(force, with_hits);
+	return perf_session__list_build_ids(force, with_hits, store);
 }

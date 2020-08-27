@@ -33,6 +33,18 @@ OPTIONS
 -k::
 --kernel::
 	Show running kernel build id.
+
+--store::
+	Store DSOs into .debug cache.
+
+	The option goes through all build ids and try to locate related binary,
+	if found, it's stored in the build id database (~/.debug).
+
+	It's possible to query debuginfod daemon for binaries by defining
+	DEBUGINFOD_URLS variable with server URL, like:
+
+	  $ DEBUGINFOD_URLS=http://192.168.122.174:8002 perf buildid-list --store
+
 -v::
 --verbose::
 	Be more verbose.
