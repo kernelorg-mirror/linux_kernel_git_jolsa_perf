@@ -33,6 +33,10 @@ OPTIONS
 -k::
 --kernel::
 	Show running kernel build id.
+
+--store::
+	Store DSOs into .debug cache.
+
 -v::
 --verbose::
 	Be more verbose.
