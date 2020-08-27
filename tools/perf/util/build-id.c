@@ -859,24 +859,28 @@ static int dso__cache_build_id(struct dso *dso, struct machine *machine)
 }
 
 static int __dsos__cache_build_ids(struct list_head *head,
-				   struct machine *machine)
+				   struct machine *machine,
+				   bool with_hits)
 {
 	struct dso *pos;
 	int err = 0;
 
-	dsos__for_each_with_build_id(pos, head)
+	dsos__for_each_with_build_id(pos, head) {
+		if (with_hits && !pos->hit)
+			continue;
 		if (dso__cache_build_id(pos, machine))
 			err = -1;
+	}
 
 	return err;
 }
 
-static int machine__cache_build_ids(struct machine *machine)
+static int machine__cache_build_ids(struct machine *machine, bool with_hits)
 {
-	return __dsos__cache_build_ids(&machine->dsos.head, machine);
+	return __dsos__cache_build_ids(&machine->dsos.head, machine, with_hits);
 }
 
-int perf_session__cache_build_ids(struct perf_session *session)
+int perf_session__cache_build_ids(struct perf_session *session, bool with_hits)
 {
 	struct rb_node *nd;
 	int ret;
@@ -887,12 +891,12 @@ int perf_session__cache_build_ids(struct perf_session *session)
 	if (mkdir(buildid_dir, 0755) != 0 && errno != EEXIST)
 		return -1;
 
-	ret = machine__cache_build_ids(&session->machines.host);
+	ret = machine__cache_build_ids(&session->machines.host, with_hits);
 
 	for (nd = rb_first_cached(&session->machines.guests); nd;
 	     nd = rb_next(nd)) {
 		struct machine *pos = rb_entry(nd, struct machine, rb_node);
-		ret |= machine__cache_build_ids(pos);
+		ret |= machine__cache_build_ids(pos, with_hits);
 	}
 	return ret ? -1 : 0;
 }

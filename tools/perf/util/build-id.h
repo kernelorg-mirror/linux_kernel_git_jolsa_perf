@@ -35,7 +35,7 @@ int dsos__hit_all(struct perf_session *session);
 bool perf_session__read_build_ids(struct perf_session *session, bool with_hits);
 int perf_session__write_buildid_table(struct perf_session *session,
 				      struct feat_fd *fd);
-int perf_session__cache_build_ids(struct perf_session *session);
+int perf_session__cache_build_ids(struct perf_session *session, bool with_hits);
 
 char *build_id_cache__origname(const char *sbuild_id);
 char *build_id_cache__linkname(const char *sbuild_id, char *bf, size_t size);
