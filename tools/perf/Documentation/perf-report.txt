@@ -548,6 +548,9 @@ include::itrace.txt[]
 	Configure time quantum for time sort key. Default 100ms.
 	Accepts s, us, ms, ns units.
 
+--store::
+	Store build id DSOs in .debug cache. See `--store` option n perf-buildid-list.
+
 --total-cycles::
 	When --total-cycles is specified, it supports sorting for all blocks by
 	'Sampled Cycles%'. This is useful to concentrate on the globally hottest

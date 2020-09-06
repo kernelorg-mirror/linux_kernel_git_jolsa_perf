@@ -1098,6 +1098,18 @@ static int process_attr(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int build_id_store(const char *file)
+{
+	const char *argv[4];
+
+	argv[0] = "buildid-list";
+	argv[1] = "-i";
+	argv[2] = file;
+	argv[3] = "--store";
+
+	return cmd_buildid_list(4, argv);
+}
+
 int cmd_report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -1107,6 +1119,7 @@ int cmd_report(int argc, const char **argv)
 	int branch_mode = -1;
 	int last_key = 0;
 	bool branch_call_mode = false;
+	bool store = false;
 #define CALLCHAIN_DEFAULT_OPT  "graph,0.5,caller,function,percent"
 	static const char report_callchain_help[] = "Display call graph (stack chain/backtrace):\n\n"
 						    CALLCHAIN_REPORT_HELP
@@ -1301,6 +1314,7 @@ int cmd_report(int argc, const char **argv)
 	OPTS_EVSWITCH(&report.evswitch),
 	OPT_BOOLEAN(0, "total-cycles", &report.total_cycles_mode,
 		    "Sort all blocks by 'Sampled Cycles%'"),
+	OPT_BOOLEAN(0, "store", &store, "Store build id dsos in .debug cache"),
 	OPT_END()
 	};
 	struct perf_data data = {
@@ -1366,6 +1380,9 @@ int cmd_report(int argc, const char **argv)
 		else
 			input_name = "perf.data";
 	}
+
+	if (store)
+		return build_id_store(input_name);
 
 	data.path  = input_name;
 	data.force = symbol_conf.force;
