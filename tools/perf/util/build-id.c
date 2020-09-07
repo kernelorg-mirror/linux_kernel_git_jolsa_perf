@@ -902,3 +902,14 @@ bool perf_session__read_build_ids(struct perf_session *session, bool with_hits)
 
 	return ret;
 }
+
+bool build_id__is_defined(const u8 *build_id)
+{
+	static u8 zero[BUILD_ID_SIZE];
+	int err = 0;
+
+	if (build_id)
+		err = memcmp(build_id, &zero, BUILD_ID_SIZE);
+
+	return err ? true : false;
+}

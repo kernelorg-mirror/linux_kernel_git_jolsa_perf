@@ -14,6 +14,7 @@ extern struct perf_tool build_id__mark_dso_hit_ops;
 struct dso;
 struct feat_fd;
 
+bool build_id__is_defined(const u8 *build_id);
 int build_id__sprintf(const u8 *build_id, int len, char *bf);
 int sysfs__sprintf_build_id(const char *root_dir, char *sbuild_id);
 int filename__sprintf_build_id(const char *pathname, char *sbuild_id);
