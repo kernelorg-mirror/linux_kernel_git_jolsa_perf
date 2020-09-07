@@ -912,3 +912,10 @@ void build_id__init(struct build_id *bid, const u8 *data, size_t size)
 	memcpy(bid->data, data, size);
 	bid->size = size;
 }
+
+bool build_id__is_defined(const struct build_id *bid)
+{
+	static u8 zero[BUILD_ID_SIZE];
+
+	return bid && bid->size ? memcmp(bid->data, &zero, bid->size) : false;
+}
