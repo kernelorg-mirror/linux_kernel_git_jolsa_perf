@@ -895,19 +895,25 @@ machines__for_each_dso(struct machines *machines, machine__dso_t fn, void *priv)
 	return ret ? -1 : 0;
 }
 
-int perf_session__cache_build_ids(struct perf_session *session, bool with_hits)
+int __perf_session__cache_build_ids(struct perf_session *session,
+				    machine__dso_t fn, void *priv)
 {
-	struct cache_build_ids_data data = {
-		.with_hits = with_hits,
-	};
-
 	if (no_buildid_cache)
 		return 0;
 
 	if (mkdir(buildid_dir, 0755) != 0 && errno != EEXIST)
 		return -1;
 
-	return machines__for_each_dso(&session->machines, dso__cache_build_id, &data) ?  -1 : 0;
+	return machines__for_each_dso(&session->machines, fn, priv) ?  -1 : 0;
+}
+
+int perf_session__cache_build_ids(struct perf_session *session, bool with_hits)
+{
+	struct cache_build_ids_data data = {
+		.with_hits = with_hits,
+	};
+
+	return __perf_session__cache_build_ids(session, dso__cache_build_id, &data);
 }
 
 static bool machine__read_build_ids(struct machine *machine, bool with_hits)
