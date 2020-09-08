@@ -751,8 +751,13 @@ int build_id_cache__add_s(const char *sbuild_id, const char *name,
 	tmp = dir_name + strlen(buildid_dir) - 5;
 	memcpy(tmp, "../..", 5);
 
-	if (symlink(tmp, linkname) == 0)
+	if (symlink(tmp, linkname) == 0) {
 		err = 0;
+	} else if (errno == EEXIST) {
+		unlink(linkname);
+		if (symlink(tmp, linkname) == 0)
+			err = 0;
+	}
 
 	/* Update SDT cache : error is just warned */
 	if (realname &&
