@@ -626,6 +626,35 @@ static int build_id_cache__add_sdt_cache(const char *sbuild_id,
 #define build_id_cache__add_sdt_cache(sbuild_id, realname, nsi) (0)
 #endif
 
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+static int get_debuginfo(const char *sbuild_id, char **path)
+{
+	debuginfod_client *c;
+	int fd;
+
+	c = debuginfod_begin();
+	if (c == NULL)
+		return -1;
+
+	pr_debug("trying debuginfod for debuginfo <%s> ... ", sbuild_id);
+
+	fd = debuginfod_find_debuginfo(c, (const unsigned char *) sbuild_id,
+				       0, path);
+	if (fd >= 0)
+		close(fd); /* retaining reference by realname */
+
+	debuginfod_end(c);
+	pr_debug("%s%s\n", *path ? "OK " : "FAILED", *path ? *path : "");
+	return *path ? 0 : -1;
+}
+#else
+static int get_debuginfo(const char *sbuild_id __maybe_unused,
+			  char **path __maybe_unused)
+{
+	return -1;
+}
+#endif
+
 static char *build_id_cache__find_debug(const char *sbuild_id,
 					struct nsinfo *nsi)
 {
@@ -649,20 +678,8 @@ static char *build_id_cache__find_debug(const char *sbuild_id,
 		zfree(&realname);
 	nsinfo__mountns_exit(&nsc);
 
-#ifdef HAVE_DEBUGINFOD_SUPPORT
-        if (realname == NULL) {
-                debuginfod_client* c = debuginfod_begin();
-                if (c != NULL) {
-                        int fd = debuginfod_find_debuginfo(c,
-                                                           (const unsigned char*)sbuild_id, 0,
-                                                           &realname);
-                        if (fd >= 0)
-                                close(fd); /* retaining reference by realname */
-                        debuginfod_end(c);
-                }
-        }
-#endif
-
+	if (realname == NULL)
+		get_debuginfo(sbuild_id, &realname);
 out:
 	free(debugfile);
 	return realname;
