@@ -23,7 +23,17 @@ OPTIONS
 -------
 -a::
 --add=::
-        Add specified file to the cache.
+        Add specified file or perf.data binaries to the cache.
+
+        If the file is detected to be perf data file, it is processed
+        and all dso objects with sample hit are stored to the cache.
+
+        It's possible to specify 'all' to store all dso objects, like:
+            -a perf.data,all
+
+        Once perf data is specified, no other file can be specified in
+        the option, otherwise it causes syntax error.
+
 -f::
 --force::
 	Don't complain, do it.

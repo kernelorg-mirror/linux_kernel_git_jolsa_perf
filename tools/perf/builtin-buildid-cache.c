@@ -29,6 +29,11 @@
 #include "util/probe-file.h"
 #include <linux/string.h>
 #include <linux/err.h>
+#include <linux/zalloc.h>
+#include <sys/stat.h>
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+#include <elfutils/debuginfod.h>
+#endif
 
 static int build_id_cache__kcore_buildid(const char *proc_dir, char *sbuildid)
 {
@@ -348,6 +353,198 @@ static int build_id_cache__show_all(void)
 	return 0;
 }
 
+#ifdef HAVE_DEBUGINFOD_SUPPORT
+static int call_debuginfod(const char *sbuild_id, char **path, bool debuginfo)
+{
+	debuginfod_client *c;
+	int fd;
+
+	c = debuginfod_begin();
+	if (c == NULL)
+		return -1;
+
+	pr_debug("trying debuginfod for executable <%s> ... ", sbuild_id);
+
+	if (debuginfo) {
+		fd = debuginfod_find_debuginfo(c, (const unsigned char *) sbuild_id,
+					       0, path);
+	} else {
+		fd = debuginfod_find_executable(c, (const unsigned char *) sbuild_id,
+						0, path);
+	}
+	if (fd >= 0)
+		close(fd); /* retaining reference by realname */
+
+	debuginfod_end(c);
+	pr_debug("%s%s\n", *path ? "OK " : "FAILED", *path ? *path : "");
+	return *path ? 0 : -1;
+}
+#else
+static int call_debuginfod(const char *sbuild_id __maybe_unused,
+			   char **path __maybe_unused,
+			   bool debuginfo __maybe_unsed)
+{
+	return -1;
+}
+#endif
+
+struct dso_store_data {
+	bool	 hits;
+	bool	 force_download;
+};
+
+static int dso_store(struct dso *dso, struct machine *machine, void *priv)
+{
+	struct dso_store_data *data = priv;
+	char sbuild_id[SBUILD_ID_SIZE];
+	struct build_id bid;
+	char *path = NULL, *link = NULL;
+	bool is_kallsyms;
+	int err = -1;
+
+	/*
+	 * There's no build id in dso, nothing to do..
+	 */
+	if (!dso->has_build_id || !build_id__is_defined(&dso->bid))
+		return 0;
+
+	if (data->hits && !dso->hit)
+		return 0;
+
+	/*
+	 * The storing process is:
+	 *   - get build id of the dso
+	 *   - check if it is already in cache
+	 *   - check if it matches provided build id from mmap2 event
+	 *   - if not, try debuginfod to download the binary
+	 *   - store binary to build id database
+	 */
+	is_kallsyms = !strcmp(machine->mmap_name, dso->short_name);
+	build_id__sprintf(&dso->bid, sbuild_id);
+
+	link = build_id_cache__linkname(sbuild_id, NULL, 0);
+	if (!link)
+		return -ENOMEM;
+
+	if (!data->force_download && !access(link, X_OK)) {
+		pr_debug("already in cache - %s <%s>\n", dso->long_name, sbuild_id);
+		err = 0;
+		goto out;
+	}
+
+	path = strdup(dso->long_name);
+	if (!path)
+		goto out;
+
+	if (is_kallsyms) {
+		/*
+		 * Find out if we are on the same kernel as perf.data
+		 * and store kallsyms in that case.
+		 */
+		err = sysfs__read_build_id("/sys/kernel/notes", &bid);
+		if (err < 0)
+			goto out;
+	} else {
+		struct nscookie nsc;
+		struct stat st;
+
+		nsinfo__mountns_enter(dso->nsinfo, &nsc);
+
+		/*
+		 * Does the file exists in the first place, if it does,
+		 * resolve path and read the build id.
+		 */
+		if (stat(dso->long_name, &st)) {
+			nsinfo__mountns_exit(&nsc);
+			zfree(&path);
+			goto try_download;
+		}
+
+		err = filename__read_build_id(dso->long_name, &bid);
+		nsinfo__mountns_exit(&nsc);
+
+		if (err <= 0)
+			goto out;
+	}
+
+	/*
+	 * If we match, then what we want in mmap2 event
+	 * is what we got in the binary,
+	 */
+	if (bid.size != dso->bid.size || memcmp(&bid, &dso->bid, bid.size)) {
+		char sbid[SBUILD_ID_SIZE];
+
+		build_id__sprintf(&bid, sbid);
+		pr_debug("mmap build id <%s> does not match for %s <%s>\n",
+			 sbuild_id, path, sbid);
+		zfree(&path);
+	}
+
+try_download:
+	/*
+	 * We did not match build id or did not find the
+	 * binary - try debuginfod as last resort.
+	 */
+	if (!path) {
+		char *tmp = NULL;
+
+		/*
+		 * The debuginfo retrieval is handled within
+		 * build_id_cache__add function.
+		 */
+		if (call_debuginfod(sbuild_id, &tmp, false) &&
+		    call_debuginfod(sbuild_id, &tmp, true)) {
+			err = -1;
+			goto out;
+		}
+
+		path = tmp;
+
+		/*
+		 * The kernel dso is now elf binary, so disable is_kallsyms
+		 * so build_id_cache__add can prepare proper file names.
+		 */
+		is_kallsyms = false;
+	}
+
+	pr_debug("linking %s %s <%s>\n", dso->short_name, path, sbuild_id);
+
+	err = build_id_cache__add(sbuild_id, path, path,
+				  dso->nsinfo, is_kallsyms, false);
+out:
+	free(path);
+	fprintf(stderr, "%s %s %s\n", err ? "FAIL" : "OK  ", sbuild_id, dso->long_name);
+	return 0;
+}
+
+static int
+build_id_cache__add_perf_data(const char *path, bool all)
+{
+	struct perf_session *session;
+	struct dso_store_data priv = {
+		.hits = !all,
+		.force_download = false,
+	};
+	struct perf_data data = {
+		.path  = path,
+		.mode  = PERF_DATA_MODE_READ,
+	};
+	int err;
+
+	session = perf_session__new(&data, false, &build_id__mark_dso_hit_ops);
+	if (IS_ERR(session))
+		return PTR_ERR(session);
+
+	err = perf_session__process_events(session);
+	if (err)
+		goto out;
+
+	err = __perf_session__cache_build_ids(session, dso_store, &priv);
+out:
+	perf_session__delete(session);
+	return err;
+}
+
 int cmd_buildid_cache(int argc, const char **argv)
 {
 	struct strlist *list;
@@ -440,7 +637,15 @@ int cmd_buildid_cache(int argc, const char **argv)
 		list = strlist__new(add_name_list_str, NULL);
 		if (list) {
 			strlist__for_each_entry(pos, list)
-				if (build_id_cache__add_file(pos->s, nsi)) {
+				if (is_perf_data(pos->s)) {
+					struct str_node *all_pos = strlist__next(pos);
+					bool all = !strcmp("all", all_pos ? all_pos->s : "");
+
+					if (build_id_cache__add_perf_data(pos->s, all))
+						pr_warning("Couldn't add build ids from %s\n", pos->s);
+					if (all)
+						pos = all_pos;
+				} else if (build_id_cache__add_file(pos->s, nsi)) {
 					if (errno == EEXIST) {
 						pr_debug("%s already in the cache\n",
 							 pos->s);
@@ -449,7 +654,6 @@ int cmd_buildid_cache(int argc, const char **argv)
 					pr_warning("Couldn't add %s: %s\n",
 						   pos->s, str_error_r(errno, sbuf, sizeof(sbuf)));
 				}
-
 			strlist__delete(list);
 		}
 	}

@@ -1616,9 +1616,9 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 		return -EINVAL;
 	}
 
-	pr_debug("symbol:%s file:%s line:%d offset:%lu return:%d lazy:%s\n",
-		 pp->function, pp->file, pp->line, pp->offset, pp->retprobe,
-		 pp->lazy_line);
+	pr_debug2("symbol:%s file:%s line:%d offset:%lu return:%d lazy:%s\n",
+		  pp->function, pp->file, pp->line, pp->offset, pp->retprobe,
+		  pp->lazy_line);
 	return 0;
 }
 
