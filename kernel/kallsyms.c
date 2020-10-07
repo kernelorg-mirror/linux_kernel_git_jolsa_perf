@@ -50,6 +50,37 @@ extern const u16 kallsyms_token_index[] __weak;
 
 extern const unsigned int kallsyms_markers[] __weak;
 
+static struct kmem_cache *symbol_cachep;
+
+struct symbol {
+	char		name[KSYM_NAME_LEN];
+	unsigned long	addr;
+	struct rb_node	rb_node;
+};
+
+static struct rb_root symbols_root = RB_ROOT;
+
+static struct symbol* find_symbol(const char *name)
+{
+	struct symbol *sym;
+	struct rb_node *n;
+	int err;
+
+	n = symbols_root.rb_node;
+	while (n) {
+		sym = rb_entry(n, struct symbol, rb_node);
+		err = strcmp(name, sym->name);
+		if (err < 0)
+			n = n->rb_left;
+		else if (err > 0)
+			n = n->rb_right;
+		else
+			return sym;
+	}
+
+	return NULL;
+}
+
 /*
  * Expand a compressed symbol data into the resulting uncompressed string,
  * if uncompressed string is too long (>= maxlen), it will be truncated,
@@ -164,9 +195,14 @@ static unsigned long kallsyms_sym_address(int idx)
 /* Lookup the address for this symbol. Returns 0 if not found. */
 unsigned long kallsyms_lookup_name(const char *name)
 {
+	struct symbol *sym;
 	char namebuf[KSYM_NAME_LEN];
 	unsigned long i;
 	unsigned int off;
+
+	sym = find_symbol(name);
+	if (sym)
+		return sym->addr;
 
 	for (i = 0, off = 0; i < kallsyms_num_syms; i++) {
 		off = kallsyms_expand_symbol(off, namebuf, ARRAY_SIZE(namebuf));
@@ -743,9 +779,62 @@ static const struct proc_ops kallsyms_proc_ops = {
 	.proc_release	= seq_release_private,
 };
 
+static int __init add_symbol(struct symbol *new)
+{
+	struct rb_node *parent = NULL;
+	struct rb_node **p;
+	struct symbol *sym;
+	int err;
+
+	p = &symbols_root.rb_node;
+
+	while (*p != NULL) {
+		parent = *p;
+		sym = rb_entry(parent, struct symbol, rb_node);
+		err = strcmp(new->name, sym->name);
+		if (err < 0) {
+			p = &(*p)->rb_left;
+		} else if (err > 0) {
+			p = &(*p)->rb_right;
+		} else {
+//			printk("duplicated symbol %s [0x%lx]\n",
+//			       new->name, new->addr);
+			return -1;
+		}
+	}
+
+	rb_link_node(&new->rb_node, parent, p);
+	rb_insert_color(&new->rb_node, &symbols_root);
+	return 0;
+}
+
+static int __init kallsyms_name_search_init(void)
+{
+	struct symbol *sym;
+	unsigned long i;
+	unsigned int off;
+	int err = 0;
+
+	symbol_cachep = KMEM_CACHE(symbol, SLAB_PANIC|SLAB_ACCOUNT);
+
+	for (i = 0, off = 0; i < kallsyms_num_syms; i++) {
+		if (!err) {
+			sym = kmem_cache_alloc(symbol_cachep, GFP_KERNEL);
+			if (!sym)
+				return -ENOMEM;
+		}
+		off = kallsyms_expand_symbol(off, sym->name, ARRAY_SIZE(sym->name));
+		sym->addr = kallsyms_sym_address(i);
+		err = add_symbol(sym);
+	}
+
+	printk("kallsyms_name_search_init ok\n");
+	return err;
+}
+
 static int __init kallsyms_init(void)
 {
 	proc_create("kallsyms", 0444, NULL, &kallsyms_proc_ops);
-	return 0;
+	return kallsyms_name_search_init();
 }
 device_initcall(kallsyms_init);
