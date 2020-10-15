@@ -421,6 +421,7 @@ struct bpf_object {
 
 	bool loaded;
 	bool has_subcalls;
+	bool all_trampolines;
 
 	/*
 	 * Information when doing elf related work. Only valid if fd
@@ -6865,6 +6866,13 @@ bpf_object__load_progs(struct bpf_object *obj, int log_level)
 
 static const struct bpf_sec_def *find_sec_def(const char *sec_name);
 
+static bool is_trampoline(const struct bpf_sec_def *sec_def)
+{
+	return sec_def->prog_type == BPF_PROG_TYPE_TRACING &&
+	      (sec_def->expected_attach_type == BPF_TRACE_FENTRY ||
+	       sec_def->expected_attach_type == BPF_TRACE_FEXIT);
+}
+
 static struct bpf_object *
 __bpf_object__open(const char *path, const void *obj_buf, size_t obj_buf_sz,
 		   const struct bpf_object_open_opts *opts)
@@ -6918,6 +6926,8 @@ __bpf_object__open(const char *path, const void *obj_buf, size_t obj_buf_sz,
 		goto out;
 	bpf_object__elf_finish(obj);
 
+	obj->all_trampolines = true;
+
 	bpf_object__for_each_program(prog, obj) {
 		prog->sec_def = find_sec_def(prog->sec_name);
 		if (!prog->sec_def)
@@ -6933,6 +6943,8 @@ __bpf_object__open(const char *path, const void *obj_buf, size_t obj_buf_sz,
 		if (prog->sec_def->prog_type == BPF_PROG_TYPE_TRACING ||
 		    prog->sec_def->prog_type == BPF_PROG_TYPE_EXT)
 			prog->attach_prog_fd = OPTS_GET(opts, attach_prog_fd, 0);
+
+		obj->all_trampolines &= is_trampoline(prog->sec_def);
 	}
 
 	return obj;
@@ -10811,9 +10823,58 @@ int bpf_object__load_skeleton(struct bpf_object_skeleton *s)
 	return 0;
 }
 
+static int attach_trace_batch(struct bpf_object_skeleton *s)
+{
+	int i, prog_fd, ret = -ENOMEM;
+	int *in_fds, *out_fds;
+
+	in_fds = calloc(s->prog_cnt, sizeof(in_fds[0]));
+	out_fds = calloc(s->prog_cnt, sizeof(out_fds[0]));
+	if (!in_fds || !out_fds)
+		goto out_clean;
+
+	ret = -EINVAL;
+	for (i = 0; i < s->prog_cnt; i++) {
+		struct bpf_program *prog = *s->progs[i].prog;
+
+		prog_fd = bpf_program__fd(prog);
+		if (prog_fd < 0) {
+			pr_warn("prog '%s': can't attach before loaded\n", prog->name);
+			goto out_clean;
+		}
+		in_fds[i] = prog_fd;
+	}
+
+	ret = bpf_trampoline_batch_attach(in_fds, out_fds, s->prog_cnt);
+	if (ret)
+		goto out_clean;
+
+	for (i = 0; i < s->prog_cnt; i++) {
+		struct bpf_link **linkp = s->progs[i].link;
+		struct bpf_link *link;
+
+		link = calloc(1, sizeof(*link));
+		if (!link)
+			goto out_clean;
+
+		link->detach = &bpf_link__detach_fd;
+		link->fd = out_fds[i];
+		*linkp = link;
+	}
+
+out_clean:
+	free(in_fds);
+	free(out_fds);
+	return ret;
+}
+
 int bpf_object__attach_skeleton(struct bpf_object_skeleton *s)
 {
+	struct bpf_object *obj = *s->obj;
 	int i;
+
+	if (obj->all_trampolines)
+		return attach_trace_batch(s);
 
 	for (i = 0; i < s->prog_cnt; i++) {
 		struct bpf_program *prog = *s->progs[i].prog;
