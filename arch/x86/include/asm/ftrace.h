@@ -49,6 +49,21 @@ struct dyn_arch_ftrace {
 
 #define FTRACE_GRAPH_TRAMP_ADDR FTRACE_GRAPH_ADDR
 
+#ifdef CONFIG_HAVE_DYNAMIC_FTRACE_WITH_ARGS
+struct ftrace_regs {
+	struct pt_regs		regs;
+};
+
+static __always_inline struct pt_regs *
+arch_ftrace_get_regs(struct ftrace_regs *fregs)
+{
+	/* Only when FL_SAVE_REGS is set, cs will be non zero */
+	if (!fregs->regs.cs)
+		return NULL;
+	return &fregs->regs;
+}
+#endif
+
 #endif /*  CONFIG_DYNAMIC_FTRACE */
 #endif /* __ASSEMBLY__ */
 #endif /* CONFIG_FUNCTION_TRACER */
