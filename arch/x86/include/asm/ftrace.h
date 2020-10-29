@@ -62,6 +62,9 @@ arch_ftrace_get_regs(struct ftrace_regs *fregs)
 		return NULL;
 	return &fregs->regs;
 }
+
+#define ftrace_regs_set_ip(fregs, _ip)		\
+	do { (fregs)->regs.ip = (_ip); } while (0)
 #endif
 
 #endif /*  CONFIG_DYNAMIC_FTRACE */
