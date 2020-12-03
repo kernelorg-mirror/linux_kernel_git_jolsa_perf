@@ -16,7 +16,8 @@ DESCRIPTION
 This command allows to run simple daemon process that starts and
 monitors configured record sessions.
 
-Each session represents one perf record process.
+Each session represents one perf record process started with
+control setup (with perf record --control.. options).
 
 These sessions are configured through config file, see CONFIG FILE
 section with EXAMPLES.
@@ -95,14 +96,19 @@ Check sessions with more info:
   [623844:1] perf record -m 1M -e cycles --overwrite --switch-output -a
     base:    /opt/perfdata/1
     output:  /opt/perfdata/1/output
+    control: /opt/perfdata/1/control
+    ack:     /opt/perfdata/1/ack
   [623829:2] perf record -m 1M -e sched:* --overwrite --switch-output -a
     base:    /opt/perfdata/2
     output:  /opt/perfdata/2/output
+    control: /opt/perfdata/2/control
+    ack:     /opt/perfdata/2/ack
 
 The 'base' path is daemon/session base.
 The 'lock' file is daemon's lock file guarding that no other
 daemon is running on top of the base.
 The 'output' file is perf record output for specific session.
+The 'control' and 'ack' files are perf control files.
 
 
 Stop daemon:
