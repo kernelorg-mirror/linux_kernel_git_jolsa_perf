@@ -9,6 +9,7 @@
 #include "expr.h"
 #include "metricgroup.h"
 #include <linux/zalloc.h>
+#include "iiostat.h"
 
 /*
  * AGGR_GLOBAL: Use CPU 0
@@ -919,6 +920,12 @@ out:
 	return ratio;
 }
 
+__weak void iiostat_print_metric(struct perf_stat_config *config __maybe_unused,
+				  struct evsel *evsel __maybe_unused,
+				  struct perf_stat_output_ctx *out __maybe_unused)
+{
+}
+
 void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 				   struct evsel *evsel,
 				   double avg, int cpu,
@@ -934,7 +941,9 @@ void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 	struct metric_event *me;
 	int num = 1;
 
-	if (evsel__match(evsel, HARDWARE, HW_INSTRUCTIONS)) {
+	if (config->iiostat_run) {
+		iiostat_print_metric(config, evsel, out);
+	} else if (evsel__match(evsel, HARDWARE, HW_INSTRUCTIONS)) {
 		total = runtime_stat_avg(st, STAT_CYCLES, ctx, cpu);
 
 		if (total) {

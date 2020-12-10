@@ -118,6 +118,7 @@ struct perf_stat_config {
 	bool			 walltime_run_table;
 	bool			 all_kernel;
 	bool			 all_user;
+	bool			 iiostat_run;
 	bool			 percore_show_thread;
 	bool			 summary;
 	bool			 metric_no_group;

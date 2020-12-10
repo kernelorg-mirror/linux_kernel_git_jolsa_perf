@@ -67,6 +67,7 @@
 #include "util/top.h"
 #include "util/affinity.h"
 #include "util/pfm.h"
+#include "util/iiostat.h"
 #include "asm/bug.h"
 
 #include <linux/time64.h>
@@ -198,7 +199,8 @@ static struct perf_stat_config stat_config = {
 	.walltime_nsecs_stats	= &walltime_nsecs_stats,
 	.big_num		= true,
 	.ctl_fd			= -1,
-	.ctl_fd_ack		= -1
+	.ctl_fd_ack		= -1,
+	.iiostat_run		= false,
 };
 
 static bool cpus_map_matched(struct evsel *a, struct evsel *b)
@@ -1073,6 +1075,14 @@ static int parse_stat_cgroups(const struct option *opt,
 	return parse_cgroups(opt, str, unset);
 }
 
+__weak int iiostat_parse(const struct option *opt __maybe_unused,
+			 const char *str __maybe_unused,
+			 int unset __maybe_unused)
+{
+	pr_err("--iiostat mode is not supported\n");
+	return -1;
+}
+
 static struct option stat_options[] = {
 	OPT_BOOLEAN('T', "transaction", &transaction_run,
 		    "hardware transaction statistics"),
@@ -1185,6 +1195,8 @@ static struct option stat_options[] = {
 		     "\t\t\t  Optionally send control command completion ('ack\\n') to ack-fd descriptor.\n"
 		     "\t\t\t  Alternatively, ctl-fifo / ack-fifo will be opened and used as ctl-fd / ack-fd.",
 		      parse_control_option),
+	OPT_CALLBACK_OPTARG(0, "iiostat", &evsel_list, &stat_config, "root port",
+			    "measure PCIe metrics per IIO stack", iiostat_parse),
 	OPT_END()
 };
 
@@ -1506,6 +1518,12 @@ static int perf_stat_init_aggr_mode_file(struct perf_stat *st)
 		break;
 	}
 
+	return 0;
+}
+
+__weak int iiostat_show_root_ports(struct evlist *evlist __maybe_unused,
+				   struct perf_stat_config *config __maybe_unused)
+{
 	return 0;
 }
 
@@ -2054,6 +2072,10 @@ static void setup_system_wide(int forks)
 	}
 }
 
+__weak void iiostat_delete_root_ports(struct evlist *evlist __maybe_unused)
+{
+}
+
 int cmd_stat(int argc, const char **argv)
 {
 	const char * const stat_usage[] = {
@@ -2228,6 +2250,12 @@ int cmd_stat(int argc, const char **argv)
 		parse_options_usage(NULL, stat_options, "A", 1);
 		parse_options_usage(NULL, stat_options, "a", 1);
 		goto out;
+	}
+
+	if (stat_config.iiostat_run) {
+		status = iiostat_show_root_ports(evsel_list, &stat_config);
+		if (status || !stat_config.iiostat_run)
+			goto out;
 	}
 
 	if (add_default_attributes())
@@ -2406,6 +2434,9 @@ int cmd_stat(int argc, const char **argv)
 	perf_stat__exit_aggr_mode();
 	perf_evlist__free_stats(evsel_list);
 out:
+	if (stat_config.iiostat_run)
+		iiostat_delete_root_ports(evsel_list);
+
 	zfree(&stat_config.walltime_run);
 
 	if (smi_cost && smi_reset)

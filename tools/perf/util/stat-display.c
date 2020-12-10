@@ -17,6 +17,7 @@
 #include "cgroup.h"
 #include <api/fs/fs.h>
 #include "util.h"
+#include "iiostat.h"
 
 #define CNTR_NOT_SUPPORTED	"<not supported>"
 #define CNTR_NOT_COUNTED	"<not counted>"
@@ -309,6 +310,12 @@ static void print_metric_header(struct perf_stat_config *config,
 {
 	struct outstate *os = ctx;
 	char tbuf[1024];
+
+	/* In case of iiostat, print metric header for first perf_device only */
+	if (os->evsel->perf_device && os->evsel->evlist->selected->perf_device &&
+	    config->iiostat_run &&
+	    os->evsel->perf_device != os->evsel->evlist->selected->perf_device)
+		return;
 
 	if (!valid_only_metric(unit))
 		return;
@@ -942,6 +949,8 @@ static void print_metric_headers(struct perf_stat_config *config,
 			fputs("time,", config->output);
 		fputs(aggr_header_csv[config->aggr_mode], config->output);
 	}
+	if (config->iiostat_run && !config->interval && !config->csv_output)
+		fprintf(config->output, "   port         ");
 
 	/* Print metrics headers only */
 	evlist__for_each_entry(evlist, counter) {
@@ -959,6 +968,13 @@ static void print_metric_headers(struct perf_stat_config *config,
 	fputc('\n', config->output);
 }
 
+__weak void iiostat_prefix(struct perf_stat_config *config __maybe_unused,
+			    struct evlist *evlist __maybe_unused,
+			    char *prefix __maybe_unused,
+			    struct timespec *ts __maybe_unused)
+{
+}
+
 static void print_interval(struct perf_stat_config *config,
 			   struct evlist *evlist,
 			   char *prefix, struct timespec *ts)
@@ -971,7 +987,8 @@ static void print_interval(struct perf_stat_config *config,
 	if (config->interval_clear)
 		puts(CONSOLE_CLEAR);
 
-	sprintf(prefix, "%6lu.%09lu%s", ts->tv_sec, ts->tv_nsec, config->csv_sep);
+	if (!config->iiostat_run)
+		sprintf(prefix, "%6lu.%09lu%s", ts->tv_sec, ts->tv_nsec, config->csv_sep);
 
 	if ((num_print_interval == 0 && !config->csv_output) || config->interval_clear) {
 		switch (config->aggr_mode) {
@@ -1205,6 +1222,10 @@ perf_evlist__print_counters(struct evlist *evlist,
 	int interval = config->interval;
 	struct evsel *counter;
 	char buf[64], *prefix = NULL;
+	void *device = NULL;
+
+	if (config->iiostat_run)
+		evlist->selected = evlist__first(evlist);
 
 	if (interval)
 		print_interval(config, evlist, prefix = buf, ts);
@@ -1254,6 +1275,21 @@ perf_evlist__print_counters(struct evlist *evlist,
 		}
 		break;
 	case AGGR_IIO_STACK:
+		counter = evlist__first(evlist);
+		perf_evlist__set_selected(evlist, counter);
+		iiostat_prefix(config, evlist, prefix = buf, ts);
+		fprintf(config->output, "%s", prefix);
+		evlist__for_each_entry(evlist, counter) {
+			device = evlist->selected->perf_device;
+			if (device && device != counter->perf_device) {
+				perf_evlist__set_selected(evlist, counter);
+				iiostat_prefix(config, evlist, prefix, ts);
+				fprintf(config->output, "\n%s", prefix);
+			}
+			print_counter_aggr(config, counter, prefix);
+			if ((counter->idx + 1) == evlist->core.nr_entries)
+				fputc('\n', config->output);
+		}
 		break;
 	case AGGR_UNSET:
 	default:
