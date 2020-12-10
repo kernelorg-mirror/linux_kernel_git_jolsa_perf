@@ -50,6 +50,7 @@ enum aggr_mode {
 	AGGR_DIE,
 	AGGR_CORE,
 	AGGR_THREAD,
+	AGGR_IIO_STACK,
 	AGGR_UNSET,
 	AGGR_NODE,
 };

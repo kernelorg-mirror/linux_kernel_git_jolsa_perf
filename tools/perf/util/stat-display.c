@@ -133,6 +133,7 @@ static void aggr_printout(struct perf_stat_config *config,
 			config->csv_sep);
 		break;
 	case AGGR_GLOBAL:
+	case AGGR_IIO_STACK:
 	case AGGR_UNSET:
 	default:
 		break;
@@ -330,7 +331,7 @@ static int first_shadow_cpu(struct perf_stat_config *config,
 	if (config->aggr_mode == AGGR_NONE)
 		return id;
 
-	if (config->aggr_mode == AGGR_GLOBAL)
+	if (config->aggr_mode == AGGR_GLOBAL || config->aggr_mode == AGGR_IIO_STACK)
 		return 0;
 
 	for (i = 0; i < evsel__nr_cpus(evsel); i++) {
@@ -424,6 +425,7 @@ static void printout(struct perf_stat_config *config, int id, int nr,
 	if (config->csv_output && !config->metric_only) {
 		static int aggr_fields[] = {
 			[AGGR_GLOBAL] = 0,
+			[AGGR_IIO_STACK] = 0,
 			[AGGR_THREAD] = 1,
 			[AGGR_NONE] = 1,
 			[AGGR_SOCKET] = 2,
@@ -906,6 +908,7 @@ static int aggr_header_lens[] = {
 	[AGGR_NONE] = 6,
 	[AGGR_THREAD] = 24,
 	[AGGR_GLOBAL] = 0,
+	[AGGR_IIO_STACK] = 0,
 };
 
 static const char *aggr_header_csv[] = {
@@ -914,7 +917,8 @@ static const char *aggr_header_csv[] = {
 	[AGGR_SOCKET] 	= 	"socket,cpus",
 	[AGGR_NONE] 	= 	"cpu,",
 	[AGGR_THREAD] 	= 	"comm-pid,",
-	[AGGR_GLOBAL] 	=	""
+	[AGGR_GLOBAL]	=	"",
+	[AGGR_IIO_STACK] =	"port,"
 };
 
 static void print_metric_headers(struct perf_stat_config *config,
@@ -1000,6 +1004,9 @@ static void print_interval(struct perf_stat_config *config,
 			fprintf(output, "#           time             comm-pid");
 			if (!metric_only)
 				fprintf(output, "                  counts %*s events\n", unit_width, "unit");
+			break;
+		case AGGR_IIO_STACK:
+			fprintf(output, "#           time    port        ");
 			break;
 		case AGGR_GLOBAL:
 		default:
@@ -1245,6 +1252,8 @@ perf_evlist__print_counters(struct evlist *evlist,
 					print_counter(config, counter, prefix);
 			}
 		}
+		break;
+	case AGGR_IIO_STACK:
 		break;
 	case AGGR_UNSET:
 	default:
