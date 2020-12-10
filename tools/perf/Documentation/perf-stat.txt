@@ -121,6 +121,37 @@ to activate system-wide monitoring. Default is to count on all CPUs.
 -A::
 --no-aggr::
 Do not aggregate counts across all monitored CPUs.
+--iiostat::
+Mode is intended to provide four I/O performance metrics per each IIO
+stack (PCIe root port):
+    --Inbound Read(MB)   - I/O devices below IIO stack read from the host memory, in MB
+    --Inbound Write(MB)  - I/O devices below IIO stack write to the host memory, in MB
+    --Outbound Read(MB)  - CPU reads from I/O devices below IIO stack, in MB
+    --Outbound Write(MB) - CPU writes to I/O devices below IIO stack, in MB
+
+Sample output:
+
+Show all IIO stacks on 2-S platform:
+  $ perf stat --iiostat=show
+    S0-uncore_iio_0<0000:00>
+    S1-uncore_iio_0<0000:80>
+    S0-uncore_iio_1<0000:17>
+    S1-uncore_iio_1<0000:85>
+    S0-uncore_iio_2<0000:3a>
+    S1-uncore_iio_2<0000:ae>
+    S0-uncore_iio_3<0000:5d>
+    S1-uncore_iio_3<0000:d7>
+
+Print metrics for requested IIO stacks, multiple comma-separated list supported.
+  $ perf stat --iiostat=0000:17 -- dd if=/dev/zero of=/dev/nvme0n1 bs=1M oflag=direct
+		357708+0 records in
+		357707+0 records out
+		375083606016 bytes (375 GB, 349 GiB) copied, 213.997 s, 1.8 GB/s
+
+   Performance counter stats for 'system wide':
+
+     port             Inbound Read(MB)    Inbound Write(MB)    Outbound Read(MB)   Outbound Write(MB)
+  0000:17               358559                   44                    0                   22
 
 -n::
 --null::
