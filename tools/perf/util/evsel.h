@@ -127,6 +127,7 @@ struct evsel {
 	 * See also evsel__has_callchain().
 	 */
 	__u64			synth_sample_type;
+	void			*perf_device;
 };
 
 struct perf_missing_features {
