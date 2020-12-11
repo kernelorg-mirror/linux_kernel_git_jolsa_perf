@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/file.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <time.h>
@@ -468,6 +469,8 @@ static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
 	if (!simple) {
 		fprintf(out, "  output:  %s/" SESSION_OUTPUT "\n",
 			daemon->base);
+		fprintf(out, "  lock:    %s/lock\n",
+			daemon->base);
 	}
 
 	list_for_each_entry(session, &daemon->sessions, list) {
@@ -647,6 +650,42 @@ static int handle_config_changes(struct daemon *daemon, int conf_fd,
 	return 0;
 }
 
+static int check_lock(struct daemon *daemon)
+{
+	char path[PATH_MAX];
+	char buf[20];
+	int fd, pid;
+	ssize_t len;
+
+	scnprintf(path, sizeof(path), "%s/lock", daemon->base);
+
+	fd = open(path, O_RDWR|O_CREAT, 0640);
+	if (fd < 0)
+		return -1;
+
+	if (lockf(fd, F_TLOCK, 0) < 0) {
+		filename__read_int(path, &pid);
+		fprintf(stderr, "failed: another perf daemon (pid %d) owns %s\n",
+			pid, daemon->base);
+		return -1;
+	}
+
+	scnprintf(buf, sizeof(buf), "%d", getpid());
+	len = strlen(buf);
+
+	if (write(fd, buf, len) != len) {
+		perror("write failed");
+		return -1;
+	}
+
+	if (ftruncate(fd, len)) {
+		perror("ftruncate failed");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int go_background(struct daemon *daemon)
 {
 	int pid, fd;
@@ -659,6 +698,9 @@ static int go_background(struct daemon *daemon)
 		return 1;
 
 	if (setsid() < 0)
+		return -1;
+
+	if (check_lock(daemon))
 		return -1;
 
 	umask(0);
@@ -710,6 +752,9 @@ static int __cmd_daemon(struct daemon *daemon, bool foreground, const char *conf
 		return -1;
 
 	if (setup_server_config(daemon))
+		return -1;
+
+	if (foreground && check_lock(daemon))
 		return -1;
 
 	if (!foreground && go_background(daemon))
