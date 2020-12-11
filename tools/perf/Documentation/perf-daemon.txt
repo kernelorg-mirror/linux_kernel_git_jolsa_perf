@@ -30,6 +30,11 @@ OPTIONS
 --foreground::
 	Do not put the process in background.
 
+-s::
+--signal[=session]::
+	Send SIGUSR2 to specific session, if session is not specified,
+	send SIGUSR2 to all sessions.
+
 -v::
 --verbose::
 	Be more verbose.
@@ -100,6 +105,25 @@ Check sessions with more info:
 
 The 'base' path is daemon/session base.
 The 'output' file is perf record output for specific session.
+
+
+Send SIGUSR2 signal to all sessions:
+
+  # perf daemon -s
+  signal 12 sent to session '1 [92187]'
+  signal 12 sent to session '2 [92188]'
+
+Send SIGUSR2 signal to session '1':
+
+  # perf daemon --signal=1
+  signal 12 sent to session '1 [364758]'
+
+And check that the perf data dump was trigered:
+
+  # cat /opt/perfdata/2/output
+  rounding mmap pages size to 32M (8192 pages)
+  [ perf record: dump data: Woken up 1 times ]
+  [ perf record: Dump /opt/perfdata/2/perf.data.2020120715220385 ]
 
 
 SEE ALSO

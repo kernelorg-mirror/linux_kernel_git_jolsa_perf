@@ -450,7 +450,13 @@ static int setup_server_socket(struct daemon *daemon)
 enum cmd {
 	CMD_LIST         = 0,
 	CMD_LIST_VERBOSE = 1,
+	CMD_SIGNAL       = 2,
 	CMD_MAX,
+};
+
+struct cmd_signal {
+	int	sig;
+	char	name[16];
 };
 
 static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
@@ -472,6 +478,28 @@ static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
 			daemon->base, session->name);
 		fprintf(out, "  output:  %s/%s/" SESSION_OUTPUT "\n",
 			daemon->base, session->name);
+	}
+
+	return 0;
+}
+
+static int cmd_session_kill(struct daemon *daemon, FILE *out, int fd)
+{
+	struct session *session;
+	struct cmd_signal data;
+	bool all = false;
+
+	if (sizeof(data) != read(fd, &data, sizeof(data)))
+		return -1;
+
+	all = !strcmp(data.name, "all");
+
+	list_for_each_entry(session, &daemon->sessions, list) {
+		if (all || !strcmp(data.name, session->name)) {
+			session__signal(session, data.sig);
+			fprintf(out, "signal %d sent to session '%s [%d]'\n",
+				data.sig, session->name, session->pid);
+		}
 	}
 
 	return 0;
@@ -504,6 +532,9 @@ static int handle_server_socket(struct daemon *daemon, int sock_fd)
 	case CMD_LIST:
 	case CMD_LIST_VERBOSE:
 		ret = cmd_session_list(daemon, out, cmd == CMD_LIST);
+		break;
+	case CMD_SIGNAL:
+		ret = cmd_session_kill(daemon, out, fd);
 		break;
 	default:
 		break;
@@ -738,8 +769,9 @@ static int __cmd_daemon(struct daemon *daemon, bool foreground, const char *conf
 	return err;
 }
 
-static int send_cmd(struct daemon *daemon, u64 cmd)
+static int send_cmd(struct daemon *daemon, u64 cmd, const char *str)
 {
+	struct cmd_signal data;
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t nread;
@@ -754,6 +786,14 @@ static int send_cmd(struct daemon *daemon, u64 cmd)
 
 	if (sizeof(cmd) != write(fd, &cmd, sizeof(cmd)))
 		return -1;
+
+	if (cmd == CMD_SIGNAL) {
+		data.sig = SIGUSR2;
+		strncpy(data.name, str, sizeof(data.name) - 1);
+
+		if (sizeof(data) != write(fd, &data, sizeof(data)))
+			return -1;
+	}
 
 	in = fdopen(fd, "r");
 	if (!in) {
@@ -778,7 +818,9 @@ static const char * const daemon_usage[] = {
 int cmd_daemon(int argc, const char **argv)
 {
 	bool foreground = false;
+	bool signal = false;
 	const char *config = NULL;
+	const char *signal_str = NULL;
 	struct daemon daemon = {
 		.sessions = LIST_HEAD_INIT(daemon.sessions),
 		.out	  = stdout,
@@ -788,6 +830,8 @@ int cmd_daemon(int argc, const char **argv)
 		OPT_STRING(0, "config", &config,
 			   "config file", "config file path"),
 		OPT_BOOLEAN('f', "foreground", &foreground, "stay on console"),
+		OPT_STRING_OPTARG_SET('s', "signal", &signal_str, &signal,
+				      "signal", "send signal to session", "all"),
 		OPT_END()
 	};
 
@@ -798,5 +842,8 @@ int cmd_daemon(int argc, const char **argv)
 	if (config)
 		return __cmd_daemon(&daemon, foreground, config);
 
-	return send_cmd(&daemon, verbose ? CMD_LIST_VERBOSE : CMD_LIST);
+	if (signal)
+		return send_cmd(&daemon, CMD_SIGNAL, signal_str);
+
+	return send_cmd(&daemon, verbose ? CMD_LIST_VERBOSE : CMD_LIST, NULL);
 }
