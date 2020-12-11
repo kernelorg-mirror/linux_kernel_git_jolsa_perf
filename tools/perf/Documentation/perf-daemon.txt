@@ -35,6 +35,9 @@ OPTIONS
 	Send SIGUSR2 to specific session, if session is not specified,
 	send SIGUSR2 to all sessions.
 
+--stop::
+	Stop daemon.
+
 -v::
 --verbose::
 	Be more verbose.
@@ -125,6 +128,11 @@ And check that the perf data dump was trigered:
   [ perf record: dump data: Woken up 1 times ]
   [ perf record: Dump /opt/perfdata/2/perf.data.2020120715220385 ]
 
+
+Stop daemon:
+
+  # perf daemon --stop
+  perf daemon is exciting
 
 SEE ALSO
 --------

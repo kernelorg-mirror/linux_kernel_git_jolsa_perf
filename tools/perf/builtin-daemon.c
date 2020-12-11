@@ -451,6 +451,7 @@ enum cmd {
 	CMD_LIST         = 0,
 	CMD_LIST_VERBOSE = 1,
 	CMD_SIGNAL       = 2,
+	CMD_STOP         = 3,
 	CMD_MAX,
 };
 
@@ -535,6 +536,10 @@ static int handle_server_socket(struct daemon *daemon, int sock_fd)
 		break;
 	case CMD_SIGNAL:
 		ret = cmd_session_kill(daemon, out, fd);
+		break;
+	case CMD_STOP:
+		done = 1;
+		pr_debug("perf daemon is exciting\n");
 		break;
 	default:
 		break;
@@ -819,6 +824,7 @@ int cmd_daemon(int argc, const char **argv)
 {
 	bool foreground = false;
 	bool signal = false;
+	bool stop = false;
 	const char *config = NULL;
 	const char *signal_str = NULL;
 	struct daemon daemon = {
@@ -829,6 +835,7 @@ int cmd_daemon(int argc, const char **argv)
 		OPT_INCR('v', "verbose", &verbose, "be more verbose"),
 		OPT_STRING(0, "config", &config,
 			   "config file", "config file path"),
+		OPT_BOOLEAN(0, "stop", &stop, "stop daemon"),
 		OPT_BOOLEAN('f', "foreground", &foreground, "stay on console"),
 		OPT_STRING_OPTARG_SET('s', "signal", &signal_str, &signal,
 				      "signal", "send signal to session", "all"),
@@ -844,6 +851,9 @@ int cmd_daemon(int argc, const char **argv)
 
 	if (signal)
 		return send_cmd(&daemon, CMD_SIGNAL, signal_str);
+
+	if (stop)
+		return send_cmd(&daemon, CMD_STOP, NULL);
 
 	return send_cmd(&daemon, verbose ? CMD_LIST_VERBOSE : CMD_LIST, NULL);
 }
