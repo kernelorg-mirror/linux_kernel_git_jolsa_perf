@@ -91,6 +91,7 @@ Check sessions with more info:
   # perf daemon -v
   [623827:daemon] base: /opt/perfdata
     output:  /opt/perfdata/output
+    lock:    /opt/perfdata/lock
   [623844:1] perf record -m 1M -e cycles --overwrite --switch-output -a
     base:    /opt/perfdata/1
     output:  /opt/perfdata/1/output
@@ -99,6 +100,8 @@ Check sessions with more info:
     output:  /opt/perfdata/2/output
 
 The 'base' path is daemon/session base.
+The 'lock' file is daemon's lock file guarding that no other
+daemon is running on top of the base.
 The 'output' file is perf record output for specific session.
 
 
