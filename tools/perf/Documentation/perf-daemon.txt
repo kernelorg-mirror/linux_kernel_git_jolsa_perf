@@ -102,6 +102,11 @@ The 'base' path is daemon/session base.
 The 'output' file is perf record output for specific session.
 
 
+Stop daemon:
+
+  # perf daemon --stop
+  perf daemon is exciting
+
 SEE ALSO
 --------
 linkperf:perf-record[1], linkperf:perf-config[1]
