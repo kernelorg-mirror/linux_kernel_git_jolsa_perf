@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <sys/stat.h>
+#include <time.h>
 #include "builtin.h"
 #include "perf.h"
 #include "debug.h"
@@ -46,6 +47,7 @@ struct session {
 	int			 pid;
 	struct list_head	 list;
 	enum session_state	 state;
+	time_t			 start;
 };
 
 struct daemon {
@@ -58,6 +60,7 @@ struct daemon {
 	FILE			*out;
 	char			 perf[PATH_MAX];
 	int			 signal_fd;
+	time_t			 start;
 };
 
 static struct daemon __daemon = {
@@ -241,6 +244,8 @@ static int session__run(struct session *session, struct daemon *daemon)
 		perror("failed: mkdir");
 		return -1;
 	}
+
+	session->start = time(NULL);
 
 	session->pid = fork();
 	if (session->pid < 0)
@@ -549,6 +554,7 @@ static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
 {
 	char csv_sep = cmd->list.csv_sep;
 	struct session *session;
+	time_t curr = time(NULL);
 
 	if (csv_sep) {
 		fprintf(out, "%d%c%s%c%s%c%s/%s",
@@ -563,6 +569,10 @@ static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
 			/* lock */
 			csv_sep, daemon->base, "lock");
 
+		fprintf(out, "%c%lu",
+			/* session up time */
+			csv_sep, (curr - daemon->start) / 60);
+
 		fprintf(out, "\n");
 	} else {
 		fprintf(out, "[%d:daemon] base: %s\n", getpid(), daemon->base);
@@ -571,6 +581,8 @@ static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
 				daemon->base, SESSION_OUTPUT);
 			fprintf(out, "  lock:    %s/lock\n",
 				daemon->base);
+			fprintf(out, "  up:      %lu minutes\n",
+				(curr - daemon->start) / 60);
 		}
 	}
 
@@ -596,6 +608,10 @@ static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
 				/* session ack */
 				csv_sep, session->base, SESSION_ACK);
 
+			fprintf(out, "%c%lu",
+				/* session up time */
+				csv_sep, (curr - session->start) / 60);
+
 			fprintf(out, "\n");
 		} else {
 			fprintf(out, "[%d:%s] perf record %s\n",
@@ -610,6 +626,8 @@ static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
 				session->base, SESSION_CONTROL);
 			fprintf(out, "  ack:     %s/%s\n",
 				session->base, SESSION_ACK);
+			fprintf(out, "  up:      %lu minutes\n",
+				(curr - session->start) / 60);
 		}
 	}
 
@@ -1078,6 +1096,8 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 	argc = parse_options(argc, argv, start_options, daemon_usage, 0);
 	if (argc)
 		usage_with_options(daemon_usage, start_options);
+
+	daemon->start = time(NULL);
 
 	if (setup_config(daemon)) {
 		pr_err("failed: config not found\n");
