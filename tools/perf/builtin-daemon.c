@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <sys/inotify.h>
 #include <libgen.h>
+#include <time.h>
 #include "builtin.h"
 #include "perf.h"
 #include "debug.h"
@@ -49,6 +50,7 @@ struct session {
 	int			 pid;
 	struct list_head	 list;
 	enum session_state	 state;
+	time_t			 start;
 };
 
 struct daemon {
@@ -57,6 +59,7 @@ struct daemon {
 	char			*base;
 	struct list_head	 sessions;
 	FILE			*out;
+	time_t			 start;
 };
 
 static bool done;
@@ -269,6 +272,8 @@ static int session__run(struct session *session, struct daemon *daemon)
 		return -1;
 	}
 
+	session->start = time(NULL);
+
 	session->pid = fork();
 	if (session->pid < 0)
 		return -1;
@@ -478,6 +483,7 @@ struct cmd_signal {
 static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
 {
 	struct session *session;
+	time_t curr = time(NULL);
 
 	fprintf(out, "[%d:daemon] base: %s\n", getpid(), daemon->base);
 	if (!simple) {
@@ -485,6 +491,8 @@ static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
 			daemon->base);
 		fprintf(out, "  lock:    %s/lock\n",
 			daemon->base);
+		fprintf(out, "  up:      %lu minutes\n",
+			(curr - daemon->start) / 60);
 	}
 
 	list_for_each_entry(session, &daemon->sessions, list) {
@@ -500,6 +508,8 @@ static int cmd_session_list(struct daemon *daemon, FILE *out, bool simple)
 			daemon->base, session->name);
 		fprintf(out, "  ack:     %s/%s/" SESSION_ACK "\n",
 			daemon->base, session->name);
+		fprintf(out, "  up:      %lu minutes\n",
+			(curr - session->start) / 60);
 	}
 
 	return 0;
@@ -765,6 +775,8 @@ static int __cmd_daemon(struct daemon *daemon, bool foreground, const char *conf
 	bool reconfig = true;
 	struct fdarray fda;
 	int err = 0;
+
+	daemon->start = time(NULL);
 
 	if (set_daemon_config(daemon, config))
 		return -1;

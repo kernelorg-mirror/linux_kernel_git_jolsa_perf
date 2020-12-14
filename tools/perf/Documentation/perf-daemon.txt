@@ -101,22 +101,26 @@ Check sessions with more info:
   [623827:daemon] base: /opt/perfdata
     output:  /opt/perfdata/output
     lock:    /opt/perfdata/lock
+    up:      87 minutes
   [623844:1] perf record -m 1M -e cycles --overwrite --switch-output -a
     base:    /opt/perfdata/1
     output:  /opt/perfdata/1/output
     control: /opt/perfdata/1/control
     ack:     /opt/perfdata/1/ack
+    up:      20 minutes
   [623829:2] perf record -m 1M -e sched:* --overwrite --switch-output -a
     base:    /opt/perfdata/2
     output:  /opt/perfdata/2/output
     control: /opt/perfdata/2/control
     ack:     /opt/perfdata/2/ack
+    up:      45 minutes
 
 The 'base' path is daemon/session base.
 The 'lock' file is daemon's lock file guarding that no other
 daemon is running on top of the base.
 The 'output' file is perf record output for specific session.
 The 'control' and 'ack' files are perf control files.
+The 'up' number shows mintues daemon/session is running.
 
 
 Send SIGUSR2 signal to all sessions:
