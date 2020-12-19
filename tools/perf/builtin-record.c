@@ -1941,6 +1941,9 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 				hit_auxtrace_snapshot_trigger(rec);
 				evlist__ctlfd_ack(rec->evlist);
 				break;
+			case EVLIST_CTL_CMD_STOP:
+				done = 1;
+				break;
 			case EVLIST_CTL_CMD_ACK:
 			case EVLIST_CTL_CMD_UNSUPPORTED:
 			case EVLIST_CTL_CMD_ENABLE:
