@@ -540,6 +540,77 @@ static int setup_client_socket(struct daemon *daemon)
 	return fd;
 }
 
+static int setup_config_changes(struct daemon *daemon)
+{
+	char *basen = strdup(daemon->config_real);
+	char *dirn  = strdup(daemon->config_real);
+	char *base, *dir;
+	int fd, wd;
+
+	if (!dirn || !basen)
+		return -ENOMEM;
+
+	fd = inotify_init1(IN_NONBLOCK|O_CLOEXEC);
+	if (fd < 0) {
+		perror("inotify_init failed");
+		return -1;
+	}
+
+	dir = dirname(dirn);
+	base = basename(basen);
+	pr_debug("config file: %s, dir: %s\n", base, dir);
+
+	wd = inotify_add_watch(fd, dir, IN_CLOSE_WRITE);
+	if (wd < 0)
+		perror("inotify_add_watch failed");
+	else
+		daemon->config_base = base;
+
+	free(dirn);
+	return wd < 0 ? -1 : fd;
+}
+
+static bool process_inotify_event(struct daemon *daemon, char *buf, ssize_t len)
+{
+	char *p = buf;
+
+	while (p < (buf + len)) {
+		struct inotify_event *event = (struct inotify_event *) p;
+
+		/*
+		 * We monitor config directory, check if our
+		 * config file was changes.
+		 */
+		if ((event->mask & IN_CLOSE_WRITE) &&
+		    !(event->mask & IN_ISDIR)) {
+			if (!strcmp(event->name, daemon->config_base))
+				return true;
+		}
+		p += sizeof(*event) + event->len;
+	}
+	return false;
+}
+
+static int handle_config_changes(struct daemon *daemon, int conf_fd,
+				 bool *config_changed)
+{
+	char buf[4096];
+	ssize_t len;
+
+	while (!(*config_changed)) {
+		len = read(conf_fd, buf, sizeof(buf));
+		if (len == -1) {
+			if (errno != EAGAIN) {
+				perror("read failed");
+				return -1;
+			}
+			return 0;
+		}
+		*config_changed = process_inotify_event(daemon, buf, len);
+	}
+	return 0;
+}
+
 static int go_background(struct daemon *daemon)
 {
 	int pid, fd;
@@ -610,7 +681,7 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 		OPT_PARENT(parent_options),
 		OPT_END()
 	};
-	int sock_pos, sock_fd;
+	int sock_pos, file_pos, sock_fd, conf_fd;
 	struct fdarray fda;
 	int err = 0;
 
@@ -638,11 +709,19 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 	if (sock_fd < 0)
 		return -1;
 
+	conf_fd = setup_config_changes(daemon);
+	if (conf_fd < 0)
+		return -1;
+
 	/* socket, inotify */
 	fdarray__init(&fda, 2);
 
 	sock_pos = fdarray__add(&fda, sock_fd, POLLIN | POLLERR | POLLHUP, 0);
 	if (sock_pos < 0)
+		return -1;
+
+	file_pos = fdarray__add(&fda, conf_fd, POLLIN | POLLERR | POLLHUP, 0);
+	if (file_pos < 0)
 		return -1;
 
 	signal(SIGINT, sig_handler);
@@ -656,6 +735,8 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 
 			if (fda.entries[sock_pos].revents & POLLIN)
 				err = handle_server_socket(daemon, sock_fd);
+			if (fda.entries[file_pos].revents & POLLIN)
+				err = handle_config_changes(daemon, conf_fd, &reconfig);
 
 			if (reconfig)
 				err = setup_server_config(daemon);
@@ -666,6 +747,7 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 	daemon__exit(daemon);
 
 	close(sock_fd);
+	close(conf_fd);
 	return err;
 }
 
