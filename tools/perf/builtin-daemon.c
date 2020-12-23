@@ -487,11 +487,33 @@ fail:
 
 static void session__kill(struct session *session, struct daemon *daemon)
 {
-	session__signal(session, SIGTERM);
-	if (session__wait(session, daemon, 10)) {
-		session__signal(session, SIGKILL);
-		session__wait(session, daemon, 10);
-	}
+	int how = 0;
+
+	do {
+		switch (how) {
+		case 0:
+			session__control(daemon, session, "stop");
+			break;
+		case 1:
+			session__signal(session, SIGTERM);
+			break;
+		case 2:
+			session__signal(session, SIGTERM);
+			break;
+		default:
+			break;
+		}
+		how++;
+
+	} while (session__wait(session, daemon, 10));
+}
+
+static void daemon__stop(struct daemon *daemon)
+{
+	struct session *session;
+
+	list_for_each_entry(session, &daemon->sessions, list)
+		session__control(daemon, session, "stop");
 }
 
 static int daemon__reconfig(struct daemon *daemon)
@@ -530,11 +552,25 @@ static int daemon__reconfig(struct daemon *daemon)
 
 static void daemon__kill(struct daemon *daemon)
 {
-	daemon__signal(daemon, SIGTERM);
-	if (daemon__wait(daemon, 10)) {
-		daemon__signal(daemon, SIGKILL);
-		daemon__wait(daemon, 10);
-	}
+	int how = 0;
+
+	do {
+		switch (how) {
+		case 0:
+			daemon__stop(daemon);
+			break;
+		case 1:
+			daemon__signal(daemon, SIGTERM);
+			break;
+		case 2:
+			daemon__signal(daemon, SIGTERM);
+			break;
+		default:
+			break;
+		}
+		how++;
+
+	} while (daemon__wait(daemon, 10));
 }
 
 static void daemon__free(struct daemon *daemon)
