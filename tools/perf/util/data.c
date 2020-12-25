@@ -159,7 +159,7 @@ int perf_data__update_dir(struct perf_data *data)
 	return 0;
 }
 
-static bool check_pipe(struct perf_data *data)
+static int check_pipe(struct perf_data *data)
 {
 	struct stat st;
 	bool is_pipe = false;
@@ -172,6 +172,15 @@ static bool check_pipe(struct perf_data *data)
 	} else {
 		if (!strcmp(data->path, "-"))
 			is_pipe = true;
+		else if (!stat(data->path, &st) && S_ISFIFO(st.st_mode)) {
+			int flags = perf_data__is_read(data) ?
+				    O_RDONLY : O_WRONLY|O_CREAT|O_TRUNC;
+
+			fd = open(data->path, flags);
+			if (fd < 0)
+				return -EINVAL;
+			is_pipe = true;
+		}
 	}
 
 	if (is_pipe) {
@@ -190,7 +199,8 @@ static bool check_pipe(struct perf_data *data)
 		}
 	}
 
-	return data->is_pipe = is_pipe;
+	data->is_pipe = is_pipe;
+	return 0;
 }
 
 static int check_backup(struct perf_data *data)
@@ -344,8 +354,11 @@ static int open_dir(struct perf_data *data)
 
 int perf_data__open(struct perf_data *data)
 {
-	if (check_pipe(data))
-		return 0;
+	int err;
+
+	err = check_pipe(data);
+	if (err || data->is_pipe)
+		return err;
 
 	/* currently it allows stdio for pipe only */
 	data->use_stdio = false;
@@ -410,8 +423,10 @@ int perf_data__switch(struct perf_data *data,
 {
 	int ret;
 
-	if (check_pipe(data))
-		return -EINVAL;
+	ret = check_pipe(data);
+	if (ret || data->is_pipe)
+		return ret;
+
 	if (perf_data__is_read(data))
 		return -EINVAL;
 
