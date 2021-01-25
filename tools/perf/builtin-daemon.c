@@ -47,6 +47,7 @@ struct daemon {
 	const char		*config;
 	char			*config_real;
 	char			*config_base;
+	const char		*csv_sep;
 	char			*base;
 	struct list_head	 sessions;
 	FILE			*out;
@@ -414,11 +415,78 @@ static int setup_server_socket(struct daemon *daemon)
 	return fd;
 }
 
-union cmd {
-	int cmd;
+enum {
+	CMD_LIST   = 0,
+	CMD_MAX,
 };
 
-static int handle_server_socket(struct daemon *daemon __maybe_unused, int sock_fd)
+union cmd {
+	int cmd;
+
+	/* CMD_LIST */
+	struct {
+		int	cmd;
+		int	verbose;
+		char	csv_sep;
+	} list;
+};
+
+static int cmd_session_list(struct daemon *daemon, union cmd *cmd, FILE *out)
+{
+	char csv_sep = cmd->list.csv_sep;
+	struct session *session;
+
+	if (csv_sep) {
+		fprintf(out, "%d%c%s%c%s%c%s/%s",
+			/* pid daemon  */
+			getpid(), csv_sep, "daemon",
+			/* base */
+			csv_sep, daemon->base,
+			/* output */
+			csv_sep, daemon->base, SESSION_OUTPUT);
+
+		fprintf(out, "\n");
+	} else {
+		fprintf(out, "[%d:daemon] base: %s\n", getpid(), daemon->base);
+		if (cmd->list.verbose) {
+			fprintf(out, "  output:  %s/%s\n",
+				daemon->base, SESSION_OUTPUT);
+		}
+	}
+
+	list_for_each_entry(session, &daemon->sessions, list) {
+		if (csv_sep) {
+			fprintf(out, "%d%c%s%c%s",
+				/* pid */
+				session->pid,
+				/* name */
+				csv_sep, session->name,
+				/* base */
+				csv_sep, session->run);
+
+			fprintf(out, "%c%s%c%s/%s",
+				/* session dir */
+				csv_sep, session->base,
+				/* session output */
+				csv_sep, session->base, SESSION_OUTPUT);
+
+			fprintf(out, "\n");
+		} else {
+			fprintf(out, "[%d:%s] perf record %s\n",
+				session->pid, session->name, session->run);
+			if (!cmd->list.verbose)
+				continue;
+			fprintf(out, "  base:    %s\n",
+				session->base);
+			fprintf(out, "  output:  %s/%s\n",
+				session->base, SESSION_OUTPUT);
+		}
+	}
+
+	return 0;
+}
+
+static int handle_server_socket(struct daemon *daemon, int sock_fd)
 {
 	int ret = -EINVAL, fd;
 	union cmd cmd;
@@ -442,6 +510,9 @@ static int handle_server_socket(struct daemon *daemon __maybe_unused, int sock_f
 	}
 
 	switch (cmd.cmd) {
+	case CMD_LIST:
+		ret = cmd_session_list(daemon, &cmd, out);
+		break;
 	default:
 		break;
 	}
@@ -826,7 +897,6 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 	return err;
 }
 
-__maybe_unused
 static int send_cmd(struct daemon *daemon, union cmd *cmd)
 {
 	char *line = NULL;
@@ -859,12 +929,25 @@ static int send_cmd(struct daemon *daemon, union cmd *cmd)
 	return 0;
 }
 
+static int send_cmd_list(struct daemon *daemon)
+{
+	union cmd cmd = {
+		.list.cmd	= CMD_LIST,
+		.list.verbose	= verbose,
+	};
+
+	cmd.list.csv_sep = daemon->csv_sep ? *daemon->csv_sep : 0;
+	return send_cmd(daemon, &cmd);
+}
+
 int cmd_daemon(int argc, const char **argv)
 {
 	struct option daemon_options[] = {
 		OPT_INCR('v', "verbose", &verbose, "be more verbose"),
 		OPT_STRING(0, "config", &__daemon.config,
 			"config file", "config file path"),
+		OPT_STRING_OPTARG('x', "field-separator", &__daemon.csv_sep,
+			"field separator", "print counts with custom separator", ","),
 		OPT_END()
 	};
 
@@ -887,5 +970,5 @@ int cmd_daemon(int argc, const char **argv)
 		return -1;
 	}
 
-	return -1;
+	return send_cmd_list(&__daemon);
 }
