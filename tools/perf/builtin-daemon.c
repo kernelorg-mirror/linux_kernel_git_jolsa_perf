@@ -41,6 +41,30 @@ static void sig_handler(int sig __maybe_unused)
 	done = true;
 }
 
+static int client_config(const char *var, const char *value, void *cb)
+{
+	struct daemon *daemon = cb;
+
+	if (!strcmp(var, "daemon.base"))
+		daemon->base = strdup(value);
+
+	return 0;
+}
+
+static int setup_client_config(struct daemon *daemon)
+{
+	struct perf_config_set *set;
+	int err = -ENOMEM;
+
+	set = perf_config_set__load_file(daemon->config_real);
+	if (set) {
+		err = perf_config_set(set, client_config, daemon);
+		perf_config_set__delete(set);
+	}
+
+	return err;
+}
+
 static int setup_server_socket(struct daemon *daemon)
 {
 	struct sockaddr_un addr;
@@ -111,6 +135,32 @@ static int handle_server_socket(struct daemon *daemon __maybe_unused, int sock_f
 	fclose(out);
 	close(fd);
 	return ret;
+}
+
+static int setup_client_socket(struct daemon *daemon)
+{
+	struct sockaddr_un addr;
+	char path[100];
+	int fd;
+
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd == -1) {
+		perror("failed: socket");
+		return -1;
+	}
+
+	scnprintf(path, PATH_MAX, "%s/control", daemon->base);
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+	if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
+		perror("failed: connect");
+		return -1;
+	}
+
+	return fd;
 }
 
 static void daemon__free(struct daemon *daemon)
@@ -198,6 +248,39 @@ static int __cmd_start(struct daemon *daemon, struct option parent_options[],
 	pr_info("daemon exited\n");
 	fclose(daemon->out);
 	return err;
+}
+
+__maybe_unused
+static int send_cmd(struct daemon *daemon, union cmd *cmd)
+{
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	FILE *in;
+	int fd;
+
+	setup_client_config(daemon);
+
+	fd = setup_client_socket(daemon);
+	if (fd < 0)
+		return -1;
+
+	if (sizeof(*cmd) != write(fd, cmd, sizeof(*cmd)))
+		return -1;
+
+	in = fdopen(fd, "r");
+	if (!in) {
+		perror("failed: fdopen");
+		return -1;
+	}
+
+	while ((nread = getline(&line, &len, in)) != -1) {
+		fwrite(line, nread, 1, stdout);
+		fflush(stdout);
+	}
+
+	close(fd);
+	return 0;
 }
 
 int cmd_daemon(int argc, const char **argv)
