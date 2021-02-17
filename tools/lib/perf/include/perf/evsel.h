@@ -12,12 +12,21 @@ struct perf_thread_map;
 
 struct perf_counts_values {
 	union {
+		/* Struct for specific perf interfaces. */
 		struct {
 			uint64_t val;
 			uint64_t ena;
 			uint64_t run;
 		};
-		uint64_t values[3];
+		/*
+		 * Values to store all non-group data:
+		 *   PERF_FORMAT_TOTAL_TIME_ENABLED
+		 *   PERF_FORMAT_TOTAL_TIME_RUNNING
+		 *   PERF_FORMAT_ID
+		 *   PERF_FORMAT_BUILD_ID_FAULTS
+		 *   PERF_FORMAT_LOST
+		 */
+		uint64_t values[6];
 	};
 };
 

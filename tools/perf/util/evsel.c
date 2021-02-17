@@ -1240,6 +1240,18 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 	}
 
 	/*
+	 * We skip post processing for build_id, so we need
+	 * to read stats via read syscall:
+	 *   - faults for mmap events
+	 *   - lost for each event
+	 */
+	if (attr->build_id)
+		attr->read_format |= PERF_FORMAT_BUILD_ID_FAULTS;
+
+	if (opts->build_id)
+		attr->read_format |= PERF_FORMAT_LOST;
+
+	/*
 	 * XXX see the function comment above
 	 *
 	 * Disabling only independent events or group leaders,

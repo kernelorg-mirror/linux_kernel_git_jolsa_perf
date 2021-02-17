@@ -49,6 +49,8 @@
 #include "util/clockid.h"
 #include "util/pmu-hybrid.h"
 #include "util/evlist-hybrid.h"
+#include "util/counts.h"
+#include "util/stat.h"
 #include "asm/bug.h"
 #include "perf.h"
 
@@ -1226,6 +1228,90 @@ static void record__init_features(struct record *rec)
 	perf_header__clear_feat(&session->header, HEADER_STAT);
 }
 
+struct session_stats {
+	u64	build_id_faults;
+	u64	lost;
+};
+
+static int
+evsel__read_session_stats(struct evsel *evsel, struct session_stats *st,
+			  int nr_cpus, int nr_threads)
+{
+	u64 read_format = evsel->core.attr.read_format;
+	int idx = 1, idx_faults = 0, idx_lost = 0;
+	int cpu, thread;
+
+	if (read_format & PERF_FORMAT_GROUP)
+		return 0;
+
+	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
+		idx++;
+	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+		idx++;
+	if (read_format & PERF_FORMAT_ID)
+		idx++;
+	if (read_format & PERF_FORMAT_BUILD_ID_FAULTS)
+		idx_faults = idx++;
+	if (read_format & PERF_FORMAT_LOST)
+		idx_lost = idx;
+
+	if (!idx_faults && !idx_lost)
+		return 0;
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		for (thread = 0; thread < nr_threads; thread++) {
+			struct perf_counts_values count;
+
+			if (perf_evsel__read(&evsel->core, cpu, thread, &count))
+				return -1;
+
+			if (idx_faults)
+				st->build_id_faults += count.values[idx_faults];
+			if (idx_lost)
+				st->lost += count.values[idx_lost];
+		}
+	}
+
+	return 0;
+}
+
+static int
+evlist__read_session_stats(struct evlist *evlist, struct session_stats *st)
+{
+	int nr_threads = perf_thread_map__nr(evlist->core.threads);
+	int nr_cpus = perf_cpu_map__nr(evlist->core.cpus);
+	struct evsel *evsel;
+
+	memset(st, 0, sizeof(*st));
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (evsel__read_session_stats(evsel, st, nr_cpus, nr_threads)) {
+			pr_err("FAILED to read event stats\n");
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static void read_session_stats(struct record *rec)
+{
+	struct session_stats st;
+
+	if (evlist__read_session_stats(rec->evlist, &st))
+		return;
+
+	if (st.build_id_faults) {
+		fprintf(stderr,	"[ perf record: Failed to parse %lu build ids]\n",
+			st.build_id_faults);
+	}
+
+	if (st.lost) {
+		fprintf(stderr,	"[ perf record: Lost %lu chunks]\n",
+			st.lost);
+	}
+}
+
 static void
 record__finish_output(struct record *rec)
 {
@@ -1244,6 +1330,10 @@ record__finish_output(struct record *rec)
 		if (rec->buildid_all)
 			dsos__hit_all(rec->session);
 	}
+
+	if (rec->buildid_mmap)
+		read_session_stats(rec);
+
 	perf_session__write_header(rec->session, rec->evlist, fd, true);
 
 	return;
