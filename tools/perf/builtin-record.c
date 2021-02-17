@@ -47,6 +47,8 @@
 #include "util/util.h"
 #include "util/pfm.h"
 #include "util/clockid.h"
+#include "util/counts.h"
+#include "util/stat.h"
 #include "asm/bug.h"
 #include "perf.h"
 
@@ -1603,6 +1605,88 @@ static void hit_auxtrace_snapshot_trigger(struct record *rec)
 	}
 }
 
+struct evsel_stats {
+	u64	build_id_faults;
+	u64	lost;
+};
+
+static int evsel__read_stats(struct evsel *evsel, struct evsel_stats *st,
+			     int nr_cpus, int nr_threads)
+{
+	u64 read_format = evsel->core.attr.read_format;
+	int idx = 1, idx_faults = 0, idx_lost = 0;
+	int cpu, thread;
+
+	if (read_format & PERF_FORMAT_GROUP)
+		return 0;
+
+	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
+		idx++;
+	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
+		idx++;
+	if (read_format & PERF_FORMAT_ID)
+		idx++;
+	if (read_format & PERF_FORMAT_BUILD_ID_FAULTS)
+		idx_faults = idx++;
+	if (read_format & PERF_FORMAT_LOST)
+		idx_lost = idx;
+
+	if (!idx_faults && !idx_lost)
+		return 0;
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		for (thread = 0; thread < nr_threads; thread++) {
+			struct perf_counts_values count;
+
+			if (perf_evsel__read(&evsel->core, cpu, thread, &count))
+				return -1;
+
+			if (idx_faults)
+				st->build_id_faults += count.values[idx_faults];
+			if (idx_lost)
+				st->lost += count.values[idx_lost];
+		}
+	}
+
+	return 0;
+}
+
+static int evlist__read_stats(struct evlist *evlist, struct evsel_stats *st)
+{
+	int nr_threads = perf_thread_map__nr(evlist->core.threads);
+	int nr_cpus = perf_cpu_map__nr(evlist->core.cpus);
+	struct evsel *evsel;
+
+	memset(st, 0, sizeof(*st));
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (evsel__read_stats(evsel, st, nr_cpus, nr_threads)) {
+			pr_err("FAILED to read event stats\n");
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static void evlist__display_stats(struct evlist *evlist)
+{
+	struct evsel_stats st;
+
+	if (evlist__read_stats(evlist, &st))
+		return;
+
+	if (st.build_id_faults) {
+		fprintf(stderr,	"[ perf record: Failed to parse %lu build ids]\n",
+			st.build_id_faults);
+	}
+
+	if (st.lost) {
+		fprintf(stderr,	"[ perf record: Lost %lu chunks]\n",
+			st.lost);
+	}
+}
+
 static int __cmd_record(struct record *rec, int argc, const char **argv)
 {
 	int err;
@@ -2016,6 +2100,10 @@ out_child:
 			signr = WTERMSIG(exit_status);
 	} else
 		status = err;
+
+
+	if (rec->buildid_mmap)
+		evlist__display_stats(rec->evlist);
 
 	record__synthesize(rec, true);
 	/* this will be recalculated during process_buildids() */

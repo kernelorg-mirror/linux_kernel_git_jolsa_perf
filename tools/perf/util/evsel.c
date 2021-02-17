@@ -1215,6 +1215,11 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 			PERF_FORMAT_TOTAL_TIME_RUNNING;
 	}
 
+	if (attr->build_id)
+		attr->read_format |= PERF_FORMAT_BUILD_ID_FAULTS;
+
+	attr->read_format |= PERF_FORMAT_LOST;
+
 	/*
 	 * XXX see the function comment above
 	 *
