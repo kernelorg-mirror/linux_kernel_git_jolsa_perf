@@ -260,7 +260,11 @@ int perf_evsel__read_size(struct perf_evsel *evsel)
 int perf_evsel__read(struct perf_evsel *evsel, int cpu, int thread,
 		     struct perf_counts_values *count)
 {
+	u64 read_format = evsel->attr.read_format;
 	size_t size = perf_evsel__read_size(evsel);
+
+	if (read_format & PERF_FORMAT_GROUP)
+		return -EINVAL;
 
 	memset(count, 0, sizeof(*count));
 
