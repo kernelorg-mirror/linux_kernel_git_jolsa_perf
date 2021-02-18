@@ -8052,6 +8052,7 @@ struct perf_mmap_event {
 	u32			prot, flags;
 	u8			build_id[BUILD_ID_SIZE_MAX];
 	u32			build_id_size;
+	bool			build_id_fault;
 
 	struct {
 		struct perf_event_header	header;
@@ -8114,6 +8115,9 @@ static void perf_event_mmap_output(struct perf_event *event,
 		mmap_event->event_id.header.misc |= PERF_RECORD_MISC_MMAP_BUILD_ID;
 
 	perf_output_put(&handle, mmap_event->event_id);
+
+	if (mmap_event->build_id_fault)
+		local64_inc(&event->build_id_faults);
 
 	if (event->attr.mmap2) {
 		if (use_build_id) {
@@ -8201,6 +8205,12 @@ static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
 		maj = MAJOR(dev);
 		min = MINOR(dev);
 
+		if (atomic_read(&nr_build_id_events) && *name == '/') {
+			int err = build_id_parse(vma, mmap_event->build_id,
+						 &mmap_event->build_id_size);
+			mmap_event->build_id_fault = err == -EFAULT;
+		}
+
 		goto got_name;
 	} else {
 		if (vma->vm_ops && vma->vm_ops->name) {
@@ -8254,9 +8264,6 @@ got_name:
 		mmap_event->event_id.header.misc |= PERF_RECORD_MISC_MMAP_DATA;
 
 	mmap_event->event_id.header.size = sizeof(mmap_event->event_id) + size;
-
-	if (atomic_read(&nr_build_id_events))
-		build_id_parse(vma, mmap_event->build_id, &mmap_event->build_id_size);
 
 	perf_iterate_sb(perf_event_mmap_output,
 		       mmap_event,
