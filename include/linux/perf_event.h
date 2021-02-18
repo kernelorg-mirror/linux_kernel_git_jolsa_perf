@@ -670,6 +670,7 @@ struct perf_event {
 	local64_t			count;
 	atomic64_t			child_count;
 	local64_t			build_id_faults;
+	local64_t			lost;
 
 	/*
 	 * These are the total time in nanoseconds that the event

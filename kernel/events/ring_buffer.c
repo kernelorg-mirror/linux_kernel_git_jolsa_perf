@@ -248,6 +248,9 @@ __perf_output_begin(struct perf_output_handle *handle,
 		perf_event_header__init_id(&lost_event.header, data, event);
 		perf_output_put(handle, lost_event);
 		perf_event__output_id_sample(event, handle, data);
+
+		/* Keep track of lost events in event for PERF_FORMAT_LOST */
+		local64_add(lost_event.lost, &event->lost);
 	}
 
 	return 0;
