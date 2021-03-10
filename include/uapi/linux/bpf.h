@@ -1122,6 +1122,13 @@ enum bpf_link_type {
  */
 #define BPF_F_XDP_HAS_FRAGS	(1U << 5)
 
+/* If BPF_F_MULTI_FUNC is used in BPF_PROG_LOAD command, the verifier does
+ * not expect BTF ID for the program, instead it assumes it's function
+ * with 6 u64 arguments. No trampoline is created for the program. Such
+ * program can be attached to multiple functions.
+ */
+#define BPF_F_MULTI_FUNC	(1U << 6)
+
 /* link_create.kprobe_multi.flags used in LINK_CREATE command for
  * BPF_TRACE_KPROBE_MULTI attach type to create return probe.
  */
