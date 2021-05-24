@@ -348,7 +348,8 @@ SKEL_BLACKLIST := btf__% test_pinning_invalid.c test_sk_assign.c
 LINKED_SKELS := test_static_linked.skel.h linked_funcs.skel.h		\
 		linked_vars.skel.h linked_maps.skel.h 			\
 		test_subskeleton.skel.h test_subskeleton_lib.skel.h	\
-		test_usdt.skel.h multi_fentry_test.skel.h
+		test_usdt.skel.h multi_fentry_test.skel.h		\
+		multi_fexit_test.skel.h
 
 LSKELS := kfunc_call_test.c fentry_test.c fexit_test.c fexit_sleep.c \
 	test_ringbuf.c atomics.c trace_printk.c trace_vprintk.c \
@@ -367,6 +368,7 @@ test_subskeleton.skel.h-deps := test_subskeleton_lib2.o test_subskeleton_lib.o t
 test_subskeleton_lib.skel.h-deps := test_subskeleton_lib2.o test_subskeleton_lib.o
 test_usdt.skel.h-deps := test_usdt.o test_usdt_multispec.o
 multi_fentry_test.skel.h-deps := multi_fentry.o multi_check.o
+multi_fexit_test.skel.h-deps := multi_fexit.o multi_check.o
 
 LINKED_BPF_SRCS := $(patsubst %.o,%.c,$(foreach skel,$(LINKED_SKELS),$($(skel)-deps)))
 
