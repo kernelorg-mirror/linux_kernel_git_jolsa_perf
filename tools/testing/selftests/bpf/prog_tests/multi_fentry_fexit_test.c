@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-2.0
+#include <test_progs.h>
+#include "multi_fentry_fexit_test.skel.h"
+
+void test_multi_fentry_fexit_test(void)
+{
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	struct multi_fentry_fexit_test *skel = NULL;
+	int err, prog_fd;
+
+	skel = multi_fentry_fexit_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	err = multi_fentry_fexit_test__attach(skel);
+	if (!ASSERT_OK(err, "fentry_fexit_attach"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.test2);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test1_arg_result, 8, "test1_arg_result");
+	ASSERT_EQ(skel->bss->test2_arg_result, 8, "test2_arg_result");
+	ASSERT_EQ(skel->bss->test2_ret_result, 8, "test2_ret_result");
+
+cleanup:
+	multi_fentry_fexit_test__destroy(skel);
+}
