@@ -40,6 +40,7 @@ struct perf_inject {
 	struct perf_session	*session;
 	bool			build_ids;
 	bool			build_id_all;
+	bool			build_id_mmap2;
 	bool			sched_stat;
 	bool			have_auxtrace;
 	bool			strip;
@@ -389,12 +390,42 @@ static int perf_event__repipe_buildid_mmap(struct perf_tool *tool,
 	return perf_event__repipe(tool, event, sample, machine);
 }
 
+static bool mmap2_fix_buildid(union perf_event *event, struct build_id *bid)
+{
+	struct perf_record_mmap2 *mmap2 = &event->mmap2;
+
+	/*
+	 * Filter maps that should have build id, but do not carry one.
+	 */
+	if (!is_buildid_memory(mmap2->filename) ||
+	    mmap2->header.misc & PERF_RECORD_MISC_MMAP_BUILD_ID)
+		return false;
+
+	return filename__read_build_id(mmap2->filename, bid) > 0 ? true : false;
+}
+
 static int perf_event__repipe_mmap2(struct perf_tool *tool,
 				   union perf_event *event,
 				   struct perf_sample *sample,
 				   struct machine *machine)
 {
+	struct perf_inject *inject = container_of(tool, struct perf_inject, tool);
+	union perf_event *tmp = NULL;
+	struct build_id bid;
 	int err;
+
+	if (inject->build_id_mmap2 && mmap2_fix_buildid(event, &bid)) {
+		tmp = memdup(event, event->header.size);
+		if (!tmp)
+			return -ENOMEM;
+		memcpy(tmp->mmap2.build_id, bid.data, sizeof(bid.data));
+		tmp->header.misc |= PERF_RECORD_MISC_MMAP_BUILD_ID;
+		tmp->mmap2.build_id_size = (u8) bid.size;
+		tmp->mmap2.__reserved_1 = 0;
+		tmp->mmap2.__reserved_2 = 0;
+		event = tmp;
+		inject->session->header.env.build_id_mmap.fixed++;
+	}
 
 	err = perf_event__process_mmap2(tool, event, sample, machine);
 	perf_event__repipe(tool, event, sample, machine);
@@ -411,6 +442,7 @@ static int perf_event__repipe_mmap2(struct perf_tool *tool,
 		dso__put(dso);
 	}
 
+	free(tmp);
 	return err;
 }
 
@@ -764,7 +796,8 @@ static int __cmd_inject(struct perf_inject *inject)
 	signal(SIGINT, sig_handler);
 
 	if (inject->build_ids || inject->sched_stat ||
-	    inject->itrace_synth_opts.set || inject->build_id_all) {
+	    inject->itrace_synth_opts.set || inject->build_id_all ||
+	    inject->build_id_mmap2) {
 		inject->tool.mmap	  = perf_event__repipe_mmap;
 		inject->tool.mmap2	  = perf_event__repipe_mmap2;
 		inject->tool.fork	  = perf_event__repipe_fork;
@@ -916,13 +949,15 @@ int cmd_inject(int argc, const char **argv)
 		.mode = PERF_DATA_MODE_READ,
 		.use_stdio = true,
 	};
-	int ret;
+	int ret = -1;
 
 	struct option options[] = {
 		OPT_BOOLEAN('b', "build-ids", &inject.build_ids,
 			    "Inject build-ids into the output stream"),
 		OPT_BOOLEAN(0, "buildid-all", &inject.build_id_all,
 			    "Inject build-ids of all DSOs into the output stream"),
+		OPT_BOOLEAN(0, "buildid-mmap2", &inject.build_id_mmap2,
+			    "Resolve failed buildids in MMAP2 events"),
 		OPT_STRING('i', "input", &inject.input_name, "file",
 			   "input file name"),
 		OPT_STRING('o', "output", &inject.output.path, "file",
@@ -994,6 +1029,12 @@ int cmd_inject(int argc, const char **argv)
 	inject.session = perf_session__new(&data, inject.output.is_pipe, &inject.tool);
 	if (IS_ERR(inject.session))
 		return PTR_ERR(inject.session);
+
+	if (inject.build_id_mmap2 &&
+	    !perf_header__has_feat(&inject.session->header, HEADER_BUILD_ID_MMAP)) {
+		pr_err("The data does not have HEADER_BUILD_ID_MMAP, exiting..\n");
+		goto out_delete;
+	}
 
 	if (zstd_init(&(inject.session->zstd_data), 0) < 0)
 		pr_warning("Decompression initialization failed.\n");

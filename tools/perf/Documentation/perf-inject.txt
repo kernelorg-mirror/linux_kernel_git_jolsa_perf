@@ -30,6 +30,9 @@ OPTIONS
 --buildid-all:
 	Inject build-ids of all DSOs into the output stream
 
+--buildid-mmap2:
+	Resolve failed buildids in MMAP2 events.
+
 -v::
 --verbose::
 	Be more verbose.
