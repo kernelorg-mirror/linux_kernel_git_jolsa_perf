@@ -8336,6 +8336,12 @@ static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
 		maj = MAJOR(dev);
 		min = MINOR(dev);
 
+		if (atomic_read(&nr_build_id_events) && *name == '/') {
+			int err = build_id_parse(vma, mmap_event->build_id,
+						 &mmap_event->build_id_size);
+			mmap_event->build_id_fault = err == -EFAULT;
+		}
+
 		goto got_name;
 	} else {
 		if (vma->vm_ops && vma->vm_ops->name) {
@@ -8389,12 +8395,6 @@ got_name:
 		mmap_event->event_id.header.misc |= PERF_RECORD_MISC_MMAP_DATA;
 
 	mmap_event->event_id.header.size = sizeof(mmap_event->event_id) + size;
-
-	if (atomic_read(&nr_build_id_events)) {
-		int err = build_id_parse(vma, mmap_event->build_id,
-					 &mmap_event->build_id_size);
-		mmap_event->build_id_fault = err == -EFAULT;
-	}
 
 	perf_iterate_sb(perf_event_mmap_output,
 		       mmap_event,
