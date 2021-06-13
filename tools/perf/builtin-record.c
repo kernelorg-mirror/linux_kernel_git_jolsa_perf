@@ -1221,6 +1221,9 @@ static void record__init_features(struct record *rec)
 	if (!rec->opts.use_clockid)
 		perf_header__clear_feat(&session->header, HEADER_CLOCK_DATA);
 
+	if (!rec->buildid_mmap)
+		perf_header__clear_feat(&session->header, HEADER_BUILD_ID_MMAP);
+
 	perf_header__clear_feat(&session->header, HEADER_DIR_FORMAT);
 	if (!record__comp_enabled(rec))
 		perf_header__clear_feat(&session->header, HEADER_COMPRESSED);
@@ -1296,6 +1299,7 @@ evlist__read_session_stats(struct evlist *evlist, struct session_stats *st)
 
 static void read_session_stats(struct record *rec)
 {
+	struct perf_session *session = rec->session;
 	struct session_stats st;
 
 	if (evlist__read_session_stats(rec->evlist, &st))
@@ -1310,6 +1314,9 @@ static void read_session_stats(struct record *rec)
 		fprintf(stderr,	"[ perf record: Lost %lu chunks]\n",
 			st.lost);
 	}
+
+	session->header.env.build_id_mmap.faults = st.build_id_faults;
+	session->header.env.build_id_mmap.lost = st.lost;
 }
 
 static void

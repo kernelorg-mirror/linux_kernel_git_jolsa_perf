@@ -438,6 +438,25 @@ struct {
 	other bits are reserved and should ignored for now
 	HEADER_FEAT_BITS	= 256,
 
+	HEADER_BUILD_ID_MMAP = 32,
+
+	It contains stats values for session with --buildid-mmap option.
+
+struct {
+	u32 version;
+	u64 faults;
+	u64 lost;
+	u64 fixed;
+};
+
+	The version is set to 1.
+	The faults has the value of faulted build id retrievals for the session.
+	The lost has the value of faulted lost events for the session.
+	The fixed has the value of fixed build ids by post-processing.
+
+	other bits are reserved and should ignored for now
+	HEADER_FEAT_BITS	= 256,
+
 Attributes
 
 This is an array of perf_event_attrs, each attr_size bytes long, which defines

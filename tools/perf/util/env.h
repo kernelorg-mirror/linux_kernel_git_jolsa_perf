@@ -128,6 +128,12 @@ struct perf_env {
 		 */
 		bool	enabled;
 	} clock;
+
+	struct {
+		u64	faults;
+		u64	lost;
+		u64	fixed;
+	} build_id_mmap;
 };
 
 enum perf_compress_type {

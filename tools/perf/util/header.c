@@ -1528,6 +1528,39 @@ static int write_hybrid_cpu_pmu_caps(struct feat_fd *ff,
 	return 0;
 }
 
+static int write_build_id_mmap(struct feat_fd *ff,
+			       struct evlist *evlist __maybe_unused)
+{
+	u64 data64;
+	u32 data32;
+	int ret;
+
+	/* version */
+	data32 = 1;
+
+	ret = do_write(ff, &data32, sizeof(data32));
+	if (ret < 0)
+		return ret;
+
+	/* faults */
+	data64 = ff->ph->env.build_id_mmap.faults;
+
+	ret = do_write(ff, &data64, sizeof(data64));
+	if (ret < 0)
+		return ret;
+
+	/* lost */
+	data64 = ff->ph->env.build_id_mmap.lost;
+
+	ret = do_write(ff, &data64, sizeof(data64));
+	if (ret < 0)
+		return ret;
+
+	/* fixed */
+	data64 = ff->ph->env.build_id_mmap.fixed;
+	return do_write(ff, &data64, sizeof(data64));
+}
+
 static void print_hostname(struct feat_fd *ff, FILE *fp)
 {
 	fprintf(fp, "# hostname : %s\n", ff->ph->env.hostname);
@@ -2046,6 +2079,19 @@ static void print_hybrid_cpu_pmu_caps(struct feat_fd *ff, FILE *fp)
 				       n->cpu_pmu_caps,
 				       n->pmu_name);
 	}
+}
+
+static void print_build_id_mmap(struct feat_fd *ff, FILE *fp)
+{
+	fprintf(fp, "# build id mmap stats: FAULTS %" PRIu64 ", LOST %" PRIu64 ",%s FIXED",
+		ff->ph->env.build_id_mmap.faults,
+		ff->ph->env.build_id_mmap.lost,
+		ff->ph->env.build_id_mmap.fixed ? "" : " NOT");
+
+	if (ff->ph->env.build_id_mmap.fixed)
+		fprintf(fp, "(%" PRIu64 ")", ff->ph->env.build_id_mmap.fixed);
+
+	fprintf(fp, "\n");
 }
 
 static void print_pmu_mappings(struct feat_fd *ff, FILE *fp)
@@ -3265,6 +3311,39 @@ err:
 	return ret;
 }
 
+static int process_build_id_mmap(struct feat_fd *ff,
+				 void *data __maybe_unused)
+{
+	u32 data32;
+	u64 data64;
+
+	/* version */
+	if (do_read_u32(ff, &data32))
+		return -1;
+
+	if (data32 != 1)
+		return -1;
+
+	/* faults */
+	if (do_read_u64(ff, &data64))
+		return -1;
+
+	ff->ph->env.build_id_mmap.faults = data64;
+
+	/* lost */
+	if (do_read_u64(ff, &data64))
+		return -1;
+
+	ff->ph->env.build_id_mmap.lost = data64;
+
+	/* fixed */
+	if (do_read_u64(ff, &data64))
+		return -1;
+
+	ff->ph->env.build_id_mmap.fixed = data64;
+	return 0;
+}
+
 #define FEAT_OPR(n, func, __full_only) \
 	[HEADER_##n] = {					\
 		.name	    = __stringify(n),			\
@@ -3328,6 +3407,7 @@ const struct perf_header_feature_ops feat_ops[HEADER_LAST_FEATURE] = {
 	FEAT_OPR(CLOCK_DATA,	clock_data,	false),
 	FEAT_OPN(HYBRID_TOPOLOGY,	hybrid_topology,	true),
 	FEAT_OPR(HYBRID_CPU_PMU_CAPS,	hybrid_cpu_pmu_caps,	false),
+	FEAT_OPR(BUILD_ID_MMAP,		build_id_mmap,		false),
 };
 
 struct header_print_data {
