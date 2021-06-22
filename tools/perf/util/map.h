@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <linux/types.h>
+#include "vdso.h"
 
 struct dso;
 struct maps;
@@ -186,4 +187,18 @@ static inline int is_no_dso_memory(const char *filename)
 	       !strncmp(filename, "/SYSV", 5)  ||
 	       !strcmp(filename, "[heap]");
 }
+
+static inline int is_vsyscall_memory(const char *filename)
+{
+	return !strcmp(filename, "[vsyscall]");
+}
+
+static inline int is_buildid_memory(const char *filename)
+{
+	return !is_anon_memory(filename) &&
+	       !is_vdso_map(filename) &&
+	       !is_no_dso_memory(filename) &&
+	       !is_vsyscall_memory(filename);
+}
+
 #endif /* __PERF_MAP_H */

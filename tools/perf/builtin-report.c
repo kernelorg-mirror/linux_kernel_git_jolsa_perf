@@ -13,6 +13,7 @@
 #include "util/annotate.h"
 #include "util/color.h"
 #include "util/dso.h"
+#include "util/vdso.h"
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/err.h>
@@ -100,6 +101,8 @@ struct report {
 	u64			nr_entries;
 	u64			queue_size;
 	u64			total_cycles;
+	u64			buildid_fails;
+	u64			buildid_total;
 	int			socket_filter;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
 	struct branch_type_stat	brtype_stat;
@@ -729,10 +732,36 @@ static int count_sample_event(struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+static int count_buildid_fails(struct perf_tool *tool,
+			       union perf_event *event,
+			       struct perf_sample *sample __maybe_unused,
+			       struct machine *machine __maybe_unused)
+{
+	struct report *rep = container_of(tool, struct report, tool);
+	struct perf_record_mmap2 *mmap2 = &event->mmap2;
+
+	/* No build id should be generated */
+	if (!is_buildid_memory(mmap2->filename))
+		return 0;
+
+	rep->buildid_total++;
+
+	/* The build id should be generated, but wasn't - fault. */
+	if (!(mmap2->header.misc & PERF_RECORD_MISC_MMAP_BUILD_ID))
+		rep->buildid_fails++;
+
+	return 0;
+}
+
 static void stats_setup(struct report *rep)
 {
 	memset(&rep->tool, 0, sizeof(rep->tool));
 	rep->tool.sample = count_sample_event;
+
+	if (perf_header__has_feat(&rep->session->header,
+				  HEADER_BUILD_ID_MMAP))
+		rep->tool.mmap2 = count_buildid_fails;
+
 	rep->tool.no_warn = true;
 }
 
@@ -742,6 +771,12 @@ static int stats_print(struct report *rep)
 
 	perf_session__fprintf_nr_events(session, stdout, rep->skip_empty);
 	evlist__fprintf_nr_events(session->evlist, stdout, rep->skip_empty);
+
+	if (rep->buildid_fails) {
+		fprintf(stdout, "%23s: %10" PRIu64 "  (%4.1f%%)\n", "BUILD_ID fails",
+			rep->buildid_fails,
+			100.0 * rep->buildid_fails / rep->buildid_total);
+	}
 	return 0;
 }
 
