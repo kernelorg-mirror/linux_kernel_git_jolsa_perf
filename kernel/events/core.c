@@ -6507,14 +6507,18 @@ static inline struct fasync_struct **perf_event_fasync(struct perf_event *event)
 	return &event->fasync;
 }
 
+static void perf_signal_queue(struct perf_event *event)
+{
+	if (!event->pending_task_work.next)
+		task_work_add(current, &event->pending_task_work, TWA_RESUME);
+}
+
 void perf_event_wakeup(struct perf_event *event)
 {
 	ring_buffer_wakeup(event);
 
-	if (event->pending_kill) {
-		kill_fasync(perf_event_fasync(event), SIGIO, event->pending_kill);
-		event->pending_kill = 0;
-	}
+	if (event->pending_kill)
+		perf_signal_queue(event);
 }
 
 static void perf_sigtrap(struct perf_event *event)
@@ -6533,8 +6537,23 @@ static void perf_sigtrap(struct perf_event *event)
 	if (current->flags & PF_EXITING)
 		return;
 
-	force_sig_perf((void __user *)event->pending_addr,
-		       event->attr.type, event->attr.sig_data);
+	perf_signal_queue(event);
+}
+
+static void pending_task_work(struct callback_head *cb)
+{
+	struct perf_event *event = container_of(cb, struct perf_event, pending_task_work);
+
+	if (event->pending_kill) {
+		kill_fasync(perf_event_fasync(event), SIGIO, event->pending_kill);
+		event->pending_kill = 0;
+	}
+
+	if (event->attr.sigtrap) {
+		force_sig_perf((void __user *)event->pending_addr,
+			       event->attr.type, event->attr.sig_data);
+		atomic_set_release(&event->event_limit, 1); /* rearm event */
+	}
 }
 
 static void perf_pending_event_disable(struct perf_event *event)
@@ -6549,7 +6568,6 @@ static void perf_pending_event_disable(struct perf_event *event)
 
 		if (event->attr.sigtrap) {
 			perf_sigtrap(event);
-			atomic_set_release(&event->event_limit, 1); /* rearm event */
 			return;
 		}
 
@@ -11618,7 +11636,8 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 
 	init_waitqueue_head(&event->waitq);
 	event->pending_disable = -1;
-	init_irq_work(&event->pending, perf_pending_event);
+	event->pending = IRQ_WORK_INIT_HARD(perf_pending_event);
+	init_task_work(&event->pending_task_work, pending_task_work);
 
 	mutex_init(&event->mmap_mutex);
 	raw_spin_lock_init(&event->addr_filters.lock);
