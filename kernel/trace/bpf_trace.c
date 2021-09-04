@@ -2902,3 +2902,112 @@ static u64 bpf_kprobe_multi_entry_ip(struct bpf_run_ctx *ctx)
 	return 0;
 }
 #endif
+
+struct bpf_tracing_multi_link {
+	struct bpf_link link;
+	enum bpf_attach_type attach_type;
+	struct bpf_tramp_prog tp;
+	struct btf_bitmap *bmap;
+};
+
+static void bpf_tracing_multi_link_release(struct bpf_link *link)
+{
+	struct bpf_tracing_multi_link *tr_link =
+		container_of(link, struct bpf_tracing_multi_link, link);
+
+	WARN_ON_ONCE(bpf_trampoline_multi_detach(&tr_link->tp, tr_link->bmap));
+}
+
+static void bpf_tracing_multi_link_dealloc(struct bpf_link *link)
+{
+	struct bpf_tracing_multi_link *tr_link =
+		container_of(link, struct bpf_tracing_multi_link, link);
+
+	btf_bitmap_free(tr_link->bmap);
+	kfree(tr_link);
+}
+
+static void bpf_tracing_multi_link_show_fdinfo(const struct bpf_link *link,
+					       struct seq_file *seq)
+{
+	struct bpf_tracing_multi_link *tr_link =
+		container_of(link, struct bpf_tracing_multi_link, link);
+
+	seq_printf(seq, "attach_type:\t%d\n", tr_link->attach_type);
+}
+
+static int bpf_tracing_multi_link_fill_link_info(const struct bpf_link *link,
+						 struct bpf_link_info *info)
+{
+	struct bpf_tracing_multi_link *tr_link =
+		container_of(link, struct bpf_tracing_multi_link, link);
+
+	info->tracing.attach_type = tr_link->attach_type;
+	return 0;
+}
+
+static const struct bpf_link_ops bpf_tracing_multi_link_lops = {
+	.release = bpf_tracing_multi_link_release,
+	.dealloc = bpf_tracing_multi_link_dealloc,
+	.show_fdinfo = bpf_tracing_multi_link_show_fdinfo,
+	.fill_link_info = bpf_tracing_multi_link_fill_link_info,
+};
+
+static int check_multi_prog_type(struct bpf_prog *prog)
+{
+	if (prog->expected_attach_type != BPF_TRACE_FENTRY_MULTI &&
+	    prog->expected_attach_type != BPF_TRACE_FEXIT_MULTI)
+		return -EINVAL;
+	return 0;
+}
+
+int bpf_tracing_multi_attach(struct bpf_prog *prog,
+			     const union bpf_attr *attr)
+{
+	void __user *uids = u64_to_user_ptr(attr->link_create.tracing_multi.btf_ids);
+	u32 cnt = attr->link_create.tracing_multi.btf_ids_cnt;
+	struct bpf_tracing_multi_link *link = NULL;
+	struct bpf_link_primer link_primer;
+	struct btf_bitmap *bmap;
+	int err = -EINVAL;
+
+	if (check_multi_prog_type(prog))
+		return -EINVAL;
+	if (!cnt || !uids)
+		return -EINVAL;
+
+	bmap = btf_bitmap_funcs_read(uids, cnt);
+	if (IS_ERR(bmap))
+		return PTR_ERR(bmap);
+
+	link = kzalloc(sizeof(*link), GFP_KERNEL);
+	if (!link) {
+		err = -ENOMEM;
+		goto error;
+	}
+
+	bpf_link_init(&link->link, BPF_LINK_TYPE_TRACING_MULTI,
+		      &bpf_tracing_multi_link_lops, prog);
+	link->attach_type = prog->expected_attach_type;
+
+	err = bpf_link_prime(&link->link, &link_primer);
+	if (err) {
+		kfree(link);
+		goto error;
+	}
+
+	link->tp.cookie = 0;
+	link->tp.prog = prog;
+	link->bmap = bmap;
+
+	err = bpf_trampoline_multi_attach(&link->tp, bmap);
+	if (err) {
+		bpf_link_cleanup(&link_primer);
+		goto error;
+	}
+	return bpf_link_settle(&link_primer);
+
+error:
+	btf_bitmap_free(bmap);
+	return err;
+}
