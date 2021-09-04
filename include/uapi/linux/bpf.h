@@ -1015,6 +1015,7 @@ enum bpf_link_type {
 	BPF_LINK_TYPE_PERF_EVENT = 7,
 	BPF_LINK_TYPE_KPROBE_MULTI = 8,
 	BPF_LINK_TYPE_STRUCT_OPS = 9,
+	BPF_LINK_TYPE_TRACING_MULTI = 10,
 
 	MAX_BPF_LINK_TYPE,
 };
@@ -1508,6 +1509,10 @@ union bpf_attr {
 				 */
 				__u64		cookie;
 			} tracing;
+			struct {
+				__aligned_u64	btf_ids;	/* addresses to attach */
+				__u32		btf_ids_cnt;	/* addresses count */
+			} tracing_multi;
 		};
 	} link_create;
 
