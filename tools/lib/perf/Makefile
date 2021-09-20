@@ -7,6 +7,12 @@ LIBPERF_EXTRAVERSION = 1
 
 MAKEFLAGS += --no-print-directory
 
+# Do not use make's built-in rules
+# (this improves performance and avoids hard-to-debug behaviour);
+MAKEFLAGS += -r
+
+.SUFFIXES:
+
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(CURDIR)))
 srctree := $(patsubst %/,%,$(dir $(srctree)))
@@ -80,6 +86,8 @@ all:
 
 export srctree OUTPUT CC LD CFLAGS V
 export DESTDIR DESTDIR_SQ
+export HOSTCC HOSTLD HOSTAR
+export SRCARCH
 
 include $(srctree)/tools/build/Makefile.include
 
@@ -111,6 +119,22 @@ endif
 LIBAPI = $(API_PATH)libapi.a
 export LIBAPI
 
+JEVENTS    := $(OUTPUT)pmu-events/jevents
+JEVENTS_IN := $(OUTPUT)pmu-events/jevents-in.o
+
+export JEVENTS
+
+PMU_EVENTS_IN := $(OUTPUT)pmu-events/pmu-events-in.o
+
+$(JEVENTS_IN): FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=pmu-events obj=jevents
+
+$(JEVENTS): $(JEVENTS_IN)
+	$(QUIET_LINK)$(HOSTCC) $(JEVENTS_IN) -o $@
+
+$(PMU_EVENTS_IN): $(JEVENTS) FORCE
+	$(Q)$(MAKE) -f $(srctree)/tools/build/Makefile.build dir=pmu-events obj=pmu-events
+
 $(LIBAPI): FORCE
 	$(Q)$(MAKE) -C $(LIB_DIR) O=$(OUTPUT) $(OUTPUT)libapi.a
 
@@ -121,10 +145,10 @@ $(LIBAPI)-clean:
 $(LIBPERF_IN): FORCE
 	$(Q)$(MAKE) $(build)=libperf
 
-$(LIBPERF_A): $(LIBPERF_IN)
-	$(QUIET_AR)$(RM) $@ && $(AR) rcs $@ $(LIBPERF_IN)
+$(LIBPERF_A): $(LIBPERF_IN) $(PMU_EVENTS_IN)
+	$(QUIET_AR)$(RM) $@ && $(AR) rcs $@ $^
 
-$(LIBPERF_SO): $(LIBPERF_IN) $(LIBAPI)
+$(LIBPERF_SO): $(LIBPERF_IN) $(LIBAPI) $(PMU_EVENTS_IN)
 	$(QUIET_LINK)$(CC) --shared -Wl,-soname,libperf.so \
                                     -Wl,--version-script=$(VERSION_SCRIPT) $^ -o $@
 	@ln -sf $(@F) $(OUTPUT)libperf.so
@@ -139,7 +163,8 @@ all: fixdep
 clean: $(LIBAPI)-clean
 	$(call QUIET_CLEAN, libperf) $(RM) $(LIBPERF_A) \
                 *.o *~ *.a *.so *.so.$(VERSION) *.so.$(LIBPERF_VERSION) .*.d .*.cmd tests/*.o LIBPERF-CFLAGS $(LIBPERF_PC) \
-                $(TESTS_STATIC) $(TESTS_SHARED)
+                $(TESTS_STATIC) $(TESTS_SHARED) \
+                $(OUTPUT)pmu-events/pmu-events.c $(OUTPUT)pmu-events/jevents
 
 TESTS_IN = tests-in.o
 
