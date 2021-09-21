@@ -5,7 +5,7 @@
 #include <perf/evlist.h>
 #include "metricgroup.h"
 #include "tests.h"
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 #include "evlist.h"
 #include "rblist.h"
 #include "debug.h"

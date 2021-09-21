@@ -8,7 +8,7 @@
 #include <linux/list.h>
 #include <stdbool.h>
 #include "parse-events.h"
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 
 struct evsel_config_term;
 struct perf_cpu_map;

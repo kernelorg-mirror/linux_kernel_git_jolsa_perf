@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef PMU_EVENTS_H
-#define PMU_EVENTS_H
+#ifndef __LIBPERF_PMU_EVENTS_H
+#define __LIBPERF_PMU_EVENTS_H
 
 enum aggr_mode_class {
 	PerChip = 1,
@@ -56,4 +56,4 @@ struct pmu_sys_events {
 extern struct pmu_events_map pmu_events_map[];
 extern struct pmu_sys_events pmu_sys_event_tables[];
 
-#endif
+#endif /* __LIBPERF_PMU_EVENTS_H */

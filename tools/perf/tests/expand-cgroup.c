@@ -6,7 +6,7 @@
 #include "rblist.h"
 #include "metricgroup.h"
 #include "parse-events.h"
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 #include "pfm.h"
 #include <subcmd/parse-options.h>
 #include <stdio.h>

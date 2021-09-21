@@ -5,7 +5,7 @@
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <stdbool.h>
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 
 struct evlist;
 struct evsel;

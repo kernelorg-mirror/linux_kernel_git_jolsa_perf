@@ -48,7 +48,7 @@
 #include <linux/list.h>
 #include "jsmn.h"
 #include "json.h"
-#include "pmu-events.h"
+#include <perf/pmu-events.h>
 
 int verbose;
 char *prog;
@@ -948,7 +948,7 @@ static void create_empty_mapping(const char *output_file)
 		_Exit(1);
 	}
 
-	fprintf(outfp, "#include \"pmu-events/pmu-events.h\"\n");
+	fprintf(outfp, "#include <perf/pmu-events.h>\n");
 	print_mapping_table_prefix(outfp);
 	print_mapping_table_suffix(outfp);
 	print_system_event_mapping_table_prefix(outfp);
@@ -1229,7 +1229,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Include pmu-events.h first */
-	fprintf(eventsfp, "#include \"pmu-events/pmu-events.h\"\n");
+	fprintf(eventsfp, "#include <perf/pmu-events.h>\n");
 
 	/*
 	 * The mapfile allows multiple CPUids to point to the same JSON file,
