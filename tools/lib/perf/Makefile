@@ -22,6 +22,11 @@ endif
 
 INSTALL = install
 
+FLEX    ?= flex
+BISON   ?= bison
+
+export FLEX BISON
+
 # Use DESTDIR for installing into a different root directory.
 # This is useful for building a package. The program will be
 # installed in this directory as if it was the root directory.
@@ -164,7 +169,8 @@ clean: $(LIBAPI)-clean
 	$(call QUIET_CLEAN, libperf) $(RM) $(LIBPERF_A) \
                 *.o *~ *.a *.so *.so.$(VERSION) *.so.$(LIBPERF_VERSION) .*.d .*.cmd tests/*.o LIBPERF-CFLAGS $(LIBPERF_PC) \
                 $(TESTS_STATIC) $(TESTS_SHARED) \
-                $(OUTPUT)pmu-events/pmu-events.c $(OUTPUT)pmu-events/jevents
+                $(OUTPUT)pmu-events/pmu-events.c $(OUTPUT)pmu-events/jevents \
+                $(OUTPUT)*-bison* $(OUTPUT)*-flex*
 
 TESTS_IN = tests-in.o
 

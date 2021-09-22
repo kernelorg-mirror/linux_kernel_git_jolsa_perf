@@ -3,7 +3,8 @@
 %{
 #include <stdlib.h>
 #include <linux/bitops.h>
-#include "pmu.h"
+#include <linux/bitmap.h>
+#include <internal/pmu.h>
 #include "pmu-bison.h"
 
 static int value(int base)
