@@ -7,9 +7,39 @@ libperf-y += mmap.o
 libperf-y += zalloc.o
 libperf-y += xyarray.o
 libperf-y += lib.o
+libperf-y += pmu-flex.o
+libperf-y += pmu-bison.o
+libperf-y += pmu.o
 
 $(OUTPUT)zalloc.o: ../../lib/zalloc.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)
 
 tests-y += tests/
+
+
+$(OUTPUT)pmu-flex.c $(OUTPUT)pmu-flex.h: pmu.l $(OUTPUT)pmu-bison.c
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,flex)$(FLEX) -o $(OUTPUT)pmu-flex.c \
+                --header-file=$(OUTPUT)pmu-flex.h $(PARSER_DEBUG_FLEX) $<
+
+$(OUTPUT)pmu-bison.c $(OUTPUT)pmu-bison.h: pmu.y
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,bison)$(BISON) -v $< -d $(PARSER_DEBUG_BISON) $(BISON_FILE_PREFIX_MAP) \
+                -o $(OUTPUT)pmu-bison.c -p perf_pmu_
+
+FLEX_GE_26 := $(shell expr $(shell $(FLEX) --version | sed -e  's/flex \([0-9]\+\).\([0-9]\+\)/\1\2/g') \>\= 26)
+ifeq ($(FLEX_GE_26),1)
+  flex_flags := -Wno-switch-enum -Wno-switch-default -Wno-unused-function -Wno-redundant-decls -Wno-sign-compare -Wno-unused-parameter -Wno-missing-prototypes -Wno-missing-declarations
+  CC_HASNT_MISLEADING_INDENTATION := $(shell echo "int main(void) { return 0 }" | $(CC) -Werror -Wno-misleading-indentation -o /dev/null -xc - 2>&1 | grep -q -- -Wno-misleading-indentation ; echo $$?)
+  ifeq ($(CC_HASNT_MISLEADING_INDENTATION), 1)
+    flex_flags += -Wno-misleading-indentation
+  endif
+else
+  flex_flags := -w
+endif
+
+CFLAGS_pmu-flex.o  += $(flex_flags)
+CFLAGS_pmu-bison.o += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
+
+$(OUTPUT)pmu.o: $(OUTPUT)pmu-flex.c $(OUTPUT)pmu-bison.c

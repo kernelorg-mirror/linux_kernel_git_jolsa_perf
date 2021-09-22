@@ -9,15 +9,10 @@
 #include <stdbool.h>
 #include "parse-events.h"
 #include <perf/pmu-events.h>
+#include <internal/pmu.h>
 
 struct evsel_config_term;
 struct perf_cpu_map;
-
-enum {
-	PERF_PMU_FORMAT_VALUE_CONFIG,
-	PERF_PMU_FORMAT_VALUE_CONFIG1,
-	PERF_PMU_FORMAT_VALUE_CONFIG2,
-};
 
 #define PERF_PMU_FORMAT_BITS 64
 #define EVENT_SOURCE_DEVICE_PATH "/bus/event_source/devices/"
@@ -98,12 +93,7 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct list_head *head_terms,
 			  struct perf_pmu_info *info);
 struct list_head *perf_pmu__alias(struct perf_pmu *pmu,
 				  struct list_head *head_terms);
-void perf_pmu_error(struct list_head *list, char *name, char const *msg);
 
-int perf_pmu__new_format(struct list_head *list, char *name,
-			 int config, unsigned long *bits);
-void perf_pmu__set_format(unsigned long *bits, long from, long to);
-int perf_pmu__format_parse(char *dir, struct list_head *head);
 void perf_pmu__del_formats(struct list_head *formats);
 
 struct perf_pmu *perf_pmu__scan(struct perf_pmu *pmu);
