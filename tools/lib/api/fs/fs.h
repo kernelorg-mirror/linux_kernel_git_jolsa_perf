@@ -59,4 +59,6 @@ int sysfs__read_str(const char *entry, char **buf, size_t *sizep);
 int sysfs__read_bool(const char *entry, bool *value);
 
 int sysfs__write_int(const char *entry, int value);
+
+bool file_available(const char *name);
 #endif /* __API_FS__ */

@@ -16,7 +16,7 @@
 #include "srccode.h"
 #include "debug.h"
 #include <internal/lib.h> // page_size
-#include "fncache.h"
+#include <api/fs/fs.h>
 
 #define MAXSRCCACHE (32*1024*1024)
 #define MAXSRCFILES     64
@@ -84,6 +84,14 @@ static void free_srcfile(struct srcfile *sf)
 	zfree(&sf->fn);
 	free(sf);
 	num_srcfiles--;
+}
+
+static unsigned shash(const unsigned char *s)
+{
+	unsigned h = 0;
+	while (*s)
+		h = 65599 * h + *s++;
+	return h ^ (h >> 16);
 }
 
 static struct srcfile *find_srcfile(char *fn)

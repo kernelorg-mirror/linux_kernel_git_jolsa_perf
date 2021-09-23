@@ -9,7 +9,6 @@
 #include "pmu-hybrid.h"
 #include <dirent.h>
 #include <errno.h>
-#include "fncache.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
