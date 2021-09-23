@@ -47,11 +47,11 @@
 #include "memswap.h"
 #include "util.h"
 #include "hashmap.h"
-#include "pmu-hybrid.h"
 #include "../perf-sys.h"
 #include "util/parse-branch-options.h"
 #include <internal/xyarray.h>
 #include <internal/lib.h>
+#include <internal/pmu-hybrid.h>
 
 #include <linux/ctype.h>
 

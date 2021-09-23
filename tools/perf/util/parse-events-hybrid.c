@@ -12,7 +12,7 @@
 #include "parse-events-hybrid.h"
 #include "debug.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "perf.h"
 
 static void config_hybrid_attr(struct perf_event_attr *attr,

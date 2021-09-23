@@ -47,7 +47,7 @@
 #include "util/util.h"
 #include "util/pfm.h"
 #include "util/clockid.h"
-#include "util/pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "util/evlist-hybrid.h"
 #include "asm/bug.h"
 #include "perf.h"

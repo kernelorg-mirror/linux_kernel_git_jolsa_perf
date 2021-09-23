@@ -5,9 +5,10 @@
 #include "evlist.h"
 #include "evsel.h"
 #include "../perf.h"
-#include "util/pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "util/evlist-hybrid.h"
 #include "debug.h"
+#include "pmu.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <linux/err.h>

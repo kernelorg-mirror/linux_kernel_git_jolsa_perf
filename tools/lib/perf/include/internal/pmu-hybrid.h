@@ -6,7 +6,7 @@
 #include <linux/compiler.h>
 #include <linux/list.h>
 #include <stdbool.h>
-#include "pmu.h"
+#include <internal/pmu.h>
 
 extern struct list_head perf_pmu__hybrid_pmus;
 

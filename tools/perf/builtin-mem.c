@@ -19,7 +19,7 @@
 #include "util/map.h"
 #include "util/symbol.h"
 #include "util/pmu.h"
-#include "util/pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include <linux/err.h>
 
 #define MEM_OPERATION_LOAD	0x1

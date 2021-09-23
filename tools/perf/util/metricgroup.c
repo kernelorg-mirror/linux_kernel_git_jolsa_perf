@@ -11,7 +11,7 @@
 #include "evsel.h"
 #include "strbuf.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "expr.h"
 #include "rblist.h"
 #include <string.h>

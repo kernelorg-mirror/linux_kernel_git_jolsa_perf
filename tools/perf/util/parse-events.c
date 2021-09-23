@@ -36,7 +36,7 @@
 #include "util/event.h"
 #include "util/pfm.h"
 #include "util/parse-events-hybrid.h"
-#include "util/pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "perf.h"
 
 #define MAX_NAME_LEN 100

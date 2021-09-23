@@ -43,7 +43,7 @@
 #include "ui/progress.h"
 #include "../perf.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 
 struct c2c_hists {
 	struct hists		hists;
