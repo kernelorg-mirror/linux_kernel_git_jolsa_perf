@@ -5,7 +5,7 @@
 #include "tests.h"
 #include "debug.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include <errno.h>
 #include <linux/kernel.h>
 

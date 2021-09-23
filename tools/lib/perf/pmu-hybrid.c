@@ -13,7 +13,7 @@
 #include <stdarg.h>
 #include <locale.h>
 #include <api/fs/fs.h>
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 
 LIST_HEAD(perf_pmu__hybrid_pmus);
 

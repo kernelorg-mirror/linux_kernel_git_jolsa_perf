@@ -13,7 +13,7 @@
 #include "debug.h"
 #include "symbol.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 
 unsigned int perf_mem_events__loads_ldlat = 30;
 

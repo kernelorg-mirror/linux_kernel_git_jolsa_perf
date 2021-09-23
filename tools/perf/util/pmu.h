@@ -19,33 +19,6 @@ struct perf_cpu_map;
 #define CPUS_TEMPLATE_CPU	"%s/bus/event_source/devices/%s/cpus"
 #define MAX_PMU_NAME_LEN 128
 
-struct perf_event_attr;
-
-struct perf_pmu_caps {
-	char *name;
-	char *value;
-	struct list_head list;
-};
-
-struct perf_pmu {
-	char *name;
-	char *alias_name;
-	char *id;
-	__u32 type;
-	bool selectable;
-	bool is_uncore;
-	bool is_hybrid;
-	bool auxtrace;
-	int max_precise;
-	struct perf_event_attr *default_config;
-	struct perf_cpu_map *cpus;
-	struct list_head format;  /* HEAD struct perf_pmu_format -> list */
-	struct list_head aliases; /* HEAD struct perf_pmu_alias -> list */
-	struct list_head caps;    /* HEAD struct perf_pmu_caps -> list */
-	struct list_head list;    /* ELEM */
-	struct list_head hybrid_list;
-};
-
 extern struct perf_pmu perf_pmu__fake;
 
 struct perf_pmu_info {

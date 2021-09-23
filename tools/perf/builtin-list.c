@@ -12,7 +12,7 @@
 
 #include "util/parse-events.h"
 #include "util/pmu.h"
-#include "util/pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 #include "util/debug.h"
 #include "util/metricgroup.h"
 #include <subcmd/pager.h>

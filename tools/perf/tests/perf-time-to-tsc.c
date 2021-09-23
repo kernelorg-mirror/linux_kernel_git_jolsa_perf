@@ -21,7 +21,7 @@
 #include "mmap.h"
 #include "tests.h"
 #include "pmu.h"
-#include "pmu-hybrid.h"
+#include <internal/pmu-hybrid.h>
 
 #define CHECK__(x) {				\
 	while ((x) < 0) {			\

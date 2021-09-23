@@ -49,10 +49,10 @@
 #include "cputopo.h"
 #include "bpf-event.h"
 #include "clockid.h"
-#include "pmu-hybrid.h"
 
 #include <linux/ctype.h>
 #include <internal/lib.h>
+#include <internal/pmu-hybrid.h>
 
 /*
  * magic2 = "PERFILE2"
