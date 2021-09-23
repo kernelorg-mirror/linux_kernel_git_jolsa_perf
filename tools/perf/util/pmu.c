@@ -26,7 +26,6 @@
 #include "header.h"
 #include "string2.h"
 #include "strbuf.h"
-#include "fncache.h"
 #include "pmu-hybrid.h"
 
 struct perf_pmu perf_pmu__fake;

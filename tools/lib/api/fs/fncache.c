@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <linux/list.h>
-#include "fncache.h"
+#include "fs.h"
 
 struct fncache {
 	struct hlist_node nd;
@@ -16,7 +16,7 @@ struct fncache {
 
 static struct hlist_head fncache_hash[FNHSIZE];
 
-unsigned shash(const unsigned char *s)
+static unsigned shash(const unsigned char *s)
 {
 	unsigned h = 0;
 	while (*s)

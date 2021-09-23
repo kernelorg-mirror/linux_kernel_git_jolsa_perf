@@ -13,7 +13,6 @@
 #include "../../../util/intel-pt.h"
 #include "../../../util/intel-bts.h"
 #include "../../../util/pmu.h"
-#include "../../../util/fncache.h"
 
 #define TEMPLATE_ALIAS	"%s/bus/event_source/devices/%s/alias"
 
