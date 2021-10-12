@@ -847,8 +847,10 @@ struct bpf_tramp_image {
 };
 
 struct bpf_tramp_id {
+	u32 max;
+	u32 cnt;
 	u32 obj_id;
-	u32 btf_id;
+	u32 *id;
 };
 
 struct bpf_shim_tramp_link;
@@ -922,7 +924,7 @@ int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline 
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
-struct bpf_tramp_id *bpf_tramp_id_alloc(void);
+struct bpf_tramp_id *bpf_tramp_id_alloc(u32 cnt);
 void bpf_tramp_id_free(struct bpf_tramp_id *id);
 bool bpf_tramp_id_is_empty(struct bpf_tramp_id *id);
 int bpf_tramp_id_is_equal(struct bpf_tramp_id *a, struct bpf_tramp_id *b);

@@ -151,20 +151,30 @@ void bpf_image_ksym_del(struct bpf_ksym *ksym)
 
 bool bpf_tramp_id_is_empty(struct bpf_tramp_id *id)
 {
-	return !id || (!id->obj_id && !id->btf_id);
+	return !id || id->cnt == 0;
 }
 
 int bpf_tramp_id_is_equal(struct bpf_tramp_id *a,
 			  struct bpf_tramp_id *b)
 {
-	return a && b && !memcmp(a, b, sizeof(*a));
+	return a && b && a->obj_id == b->obj_id && a->cnt == b->cnt &&
+	       !memcmp(a->id, b->id, a->cnt * sizeof(*a->id));
 }
 
-struct bpf_tramp_id *bpf_tramp_id_alloc(void)
+struct bpf_tramp_id *bpf_tramp_id_alloc(u32 max)
 {
 	struct bpf_tramp_id *id;
 
-	return kzalloc(sizeof(*id), GFP_KERNEL);
+	id = kzalloc(sizeof(*id), GFP_KERNEL);
+	if (id) {
+		id->id = kzalloc(sizeof(u32) * max, GFP_KERNEL);
+		if (!id->id) {
+			kfree(id);
+			return NULL;
+		}
+		id->max = max;
+	}
+	return id;
 }
 
 void bpf_tramp_id_init(struct bpf_tramp_id *id,
@@ -175,11 +185,15 @@ void bpf_tramp_id_init(struct bpf_tramp_id *id,
 		id->obj_id = tgt_prog->aux->id;
 	else
 		id->obj_id = btf_obj_id(btf);
-	id->btf_id = btf_id;
+	id->id[0] = btf_id;
+	id->cnt = 1;
 }
 
 void bpf_tramp_id_free(struct bpf_tramp_id *id)
 {
+	if (!id)
+		return;
+	kfree(id->id);
 	kfree(id);
 }
 
