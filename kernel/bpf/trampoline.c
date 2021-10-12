@@ -176,6 +176,7 @@ struct bpf_tramp_id *bpf_tramp_id_alloc(u32 max)
 			return NULL;
 		}
 		id->max = max;
+		refcount_set(&id->refcnt, 1);
 	}
 	return id;
 }
@@ -192,9 +193,18 @@ void bpf_tramp_id_init(struct bpf_tramp_id *id,
 	id->cnt = 1;
 }
 
-void bpf_tramp_id_free(struct bpf_tramp_id *id)
+__maybe_unused
+static struct bpf_tramp_id *bpf_tramp_id_get(struct bpf_tramp_id *id)
+{
+	refcount_inc(&id->refcnt);
+	return id;
+}
+
+void bpf_tramp_id_put(struct bpf_tramp_id *id)
 {
 	if (!id)
+		return;
+	if (!refcount_dec_and_test(&id->refcnt))
 		return;
 	kfree(id->addr);
 	kfree(id->id);
