@@ -848,7 +848,7 @@ struct bpf_tramp_id {
 	u32 cnt;
 	u32 obj_id;
 	u32 *id;
-	void *addr;
+	void **addr;
 };
 
 struct bpf_trampoline {
