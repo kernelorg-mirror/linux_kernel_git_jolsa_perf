@@ -157,7 +157,7 @@ static int bpf_trampoline_module_get(struct bpf_trampoline *tr)
 	int err = 0;
 
 	preempt_disable();
-	mod = __module_text_address((unsigned long) tr->func.addr);
+	mod = __module_text_address((unsigned long) tr->id->addr);
 	if (mod && !try_module_get(mod))
 		err = -ENOENT;
 	preempt_enable();
@@ -174,7 +174,7 @@ static void bpf_trampoline_module_put(struct bpf_trampoline *tr)
 static int unregister_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
 	void *old_addr = im->image;
-	void *ip = tr->func.addr;
+	void *ip = tr->id->addr;
 	int ret;
 
 	if (tr->func.ftrace_managed)
@@ -191,7 +191,7 @@ static int modify_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
 	void *old_addr = tr->cur_image->image;
 	void *new_addr = im->image;
-	void *ip = tr->func.addr;
+	void *ip = tr->id->addr;
 	int ret;
 
 	if (tr->func.ftrace_managed)
@@ -205,7 +205,7 @@ static int modify_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
 	void *new_addr = im->image;
-	void *ip = tr->func.addr;
+	void *ip = tr->id->addr;
 	unsigned long faddr;
 	int ret;
 
@@ -427,7 +427,7 @@ static int bpf_trampoline_prepare(struct bpf_trampoline *tr)
 
 	err = arch_prepare_bpf_trampoline(im, im->image, im->image + PAGE_SIZE,
 					  &tr->func.model, flags, tprogs,
-					  tr->func.addr);
+					  tr->id->addr);
 	if (err < 0)
 		goto out;
 
@@ -540,7 +540,7 @@ static int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
 			goto out;
 		}
 		tr->extension_prog = tp->prog;
-		err = bpf_arch_text_poke(tr->func.addr, BPF_MOD_JUMP, NULL,
+		err = bpf_arch_text_poke(tr->id->addr, BPF_MOD_JUMP, NULL,
 					 tp->prog->bpf_func);
 		tr->update.action = BPF_TRAMP_UPDATE_NONE;
 		goto out;
@@ -594,7 +594,7 @@ static int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
 	kind = bpf_attach_type_to_tramp(tp->prog);
 	if (kind == BPF_TRAMP_REPLACE) {
 		WARN_ON_ONCE(!tr->extension_prog);
-		err = bpf_arch_text_poke(tr->func.addr, BPF_MOD_JUMP,
+		err = bpf_arch_text_poke(tr->id->addr, BPF_MOD_JUMP,
 					 tr->extension_prog->bpf_func, NULL);
 		tr->extension_prog = NULL;
 		return err;
@@ -622,11 +622,11 @@ bpf_trampoline_get(struct bpf_tramp_id *id, struct bpf_attach_target_info *tgt_i
 		return NULL;
 
 	mutex_lock(&tr->mutex);
-	if (tr->func.addr)
+	if (tr->id->addr)
 		goto out;
 
 	memcpy(&tr->func.model, &tgt_info->fmodel, sizeof(tgt_info->fmodel));
-	tr->func.addr = (void *)tgt_info->tgt_addr;
+	tr->id->addr = (void *)tgt_info->tgt_addr;
 out:
 	mutex_unlock(&tr->mutex);
 	return tr;
