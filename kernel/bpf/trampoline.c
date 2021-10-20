@@ -91,7 +91,10 @@ struct bpf_tramp_id *bpf_tramp_id_alloc(u32 max)
 	id = kzalloc(sizeof(*id), GFP_KERNEL);
 	if (id) {
 		id->id = kzalloc(sizeof(u32) * max, GFP_KERNEL);
-		if (!id->id) {
+		id->addr = kzalloc(sizeof(*id->addr) * max, GFP_KERNEL);
+		if (!id->id || !id->addr) {
+			kfree(id->id);
+			kfree(id->addr);
 			kfree(id);
 			return NULL;
 		}
@@ -116,6 +119,7 @@ void bpf_tramp_id_free(struct bpf_tramp_id *id)
 {
 	if (!id)
 		return;
+	kfree(id->addr);
 	kfree(id->id);
 	kfree(id);
 }
