@@ -230,8 +230,8 @@ bool evsel__is_function_event(struct evsel *evsel)
 {
 #define FUNCTION_EVENT "ftrace:function"
 
-	return evsel->name &&
-	       !strncmp(FUNCTION_EVENT, evsel->name, sizeof(FUNCTION_EVENT));
+	return evsel->core.name &&
+	       !strncmp(FUNCTION_EVENT, evsel->core.name, sizeof(FUNCTION_EVENT));
 
 #undef FUNCTION_EVENT
 }
@@ -320,7 +320,7 @@ new_event:
 	evsel->precise_max = true;
 
 	/* use asprintf() because free(evsel) assumes name is allocated */
-	if (asprintf(&evsel->name, "cycles%s%s%.*s",
+	if (asprintf(&evsel->core.name, "cycles%s%s%.*s",
 		     (attr.precise_ip || attr.exclude_kernel) ? ":" : "",
 		     attr.exclude_kernel ? "u" : "",
 		     attr.precise_ip ? attr.precise_ip + 1 : 0, "ppp") < 0)
@@ -390,9 +390,9 @@ struct evsel *evsel__clone(struct evsel *orig)
 	evsel->core.nr_members = orig->core.nr_members;
 	evsel->core.system_wide = orig->core.system_wide;
 
-	if (orig->name) {
-		evsel->name = strdup(orig->name);
-		if (evsel->name == NULL)
+	if (orig->core.name) {
+		evsel->core.name = strdup(orig->core.name);
+		if (evsel->core.name == NULL)
 			goto out_err;
 	}
 	if (orig->group_name) {
@@ -465,7 +465,7 @@ struct evsel *evsel__newtp_idx(const char *sys, const char *name, int idx)
 					  PERF_SAMPLE_CPU | PERF_SAMPLE_PERIOD),
 		};
 
-		if (asprintf(&evsel->name, "%s:%s", sys, name) < 0)
+		if (asprintf(&evsel->core.name, "%s:%s", sys, name) < 0)
 			goto out_free;
 
 		evsel->tp_format = trace_event__tp_format(sys, name);
@@ -483,7 +483,7 @@ struct evsel *evsel__newtp_idx(const char *sys, const char *name, int idx)
 	return evsel;
 
 out_free:
-	zfree(&evsel->name);
+	zfree(&evsel->core.name);
 	free(evsel);
 out_err:
 	return ERR_PTR(err);
@@ -739,8 +739,8 @@ const char *evsel__name(struct evsel *evsel)
 	if (!evsel)
 		goto out_unknown;
 
-	if (evsel->name)
-		return evsel->name;
+	if (evsel->core.name)
+		return evsel->core.name;
 
 	switch (evsel->core.attr.type) {
 	case PERF_TYPE_RAW:
@@ -776,10 +776,10 @@ const char *evsel__name(struct evsel *evsel)
 		break;
 	}
 
-	evsel->name = strdup(bf);
+	evsel->core.name = strdup(bf);
 
-	if (evsel->name)
-		return evsel->name;
+	if (evsel->core.name)
+		return evsel->core.name;
 out_unknown:
 	return "unknown";
 }
@@ -1018,7 +1018,7 @@ static void evsel__apply_config_terms(struct evsel *evsel,
 				if (parse_callchain_record(callgraph_buf, &param)) {
 					pr_err("per-event callgraph setting for %s failed. "
 					       "Apply callgraph global setting for it\n",
-					       evsel->name);
+					       evsel->core.name);
 					return;
 				}
 				if (param.record_mode == CALLCHAIN_DWARF)
@@ -1437,7 +1437,7 @@ void evsel__exit(struct evsel *evsel)
 	perf_cpu_map__put(evsel->core.own_cpus);
 	perf_thread_map__put(evsel->core.threads);
 	zfree(&evsel->group_name);
-	zfree(&evsel->name);
+	zfree(&evsel->core.name);
 	zfree(&evsel->pmu_name);
 	zfree(&evsel->metric_id);
 	evsel__zero_per_pkg(evsel);
@@ -2762,7 +2762,7 @@ bool evsel__fallback(struct evsel *evsel, int err, char *msg, size_t msgsize)
 		evsel->core.attr.type   = PERF_TYPE_SOFTWARE;
 		evsel->core.attr.config = PERF_COUNT_SW_CPU_CLOCK;
 
-		zfree(&evsel->name);
+		zfree(&evsel->core.name);
 		return true;
 	} else if (err == EACCES && !evsel->core.attr.exclude_kernel &&
 		   (paranoid = perf_event_paranoid()) > 1) {
@@ -2782,9 +2782,9 @@ bool evsel__fallback(struct evsel *evsel, int err, char *msg, size_t msgsize)
 		if (asprintf(&new_name, "%s%su", name, sep) < 0)
 			return false;
 
-		if (evsel->name)
-			free(evsel->name);
-		evsel->name = new_name;
+		if (evsel->core.name)
+			free(evsel->core.name);
+		evsel->core.name = new_name;
 		scnprintf(msg, msgsize, "kernel.perf_event_paranoid=%d, trying "
 			  "to fall back to excluding kernel and hypervisor "
 			  " samples", paranoid);

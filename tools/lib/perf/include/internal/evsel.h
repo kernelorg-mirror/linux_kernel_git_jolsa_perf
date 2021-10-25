@@ -51,6 +51,15 @@ struct perf_evsel {
 	int			 nr_members;
 	bool			 system_wide;
 	int			 idx;
+
+	/*
+	 * These fields can be set in the parse-events code or similar.
+	 * Please check evsel__clone() to copy them properly so that
+	 * they can be released properly.
+	 */
+        struct {
+                char			*name;
+	};
 };
 
 void perf_evsel__init(struct perf_evsel *evsel, struct perf_event_attr *attr,

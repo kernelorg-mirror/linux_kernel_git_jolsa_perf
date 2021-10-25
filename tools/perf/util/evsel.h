@@ -59,7 +59,6 @@ struct evsel {
 	 * they can be released properly.
 	 */
 	struct {
-		char			*name;
 		char			*group_name;
 		const char		*pmu_name;
 		struct tep_event	*tp_format;

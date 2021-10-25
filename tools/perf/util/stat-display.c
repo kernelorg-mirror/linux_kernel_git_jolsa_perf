@@ -546,29 +546,29 @@ static void uniquify_event_name(struct evsel *counter)
 	int ret = 0;
 
 	if (counter->uniquified_name || counter->use_config_name ||
-	    !counter->pmu_name || !strncmp(counter->name, counter->pmu_name,
+	    !counter->pmu_name || !strncmp(counter->core.name, counter->pmu_name,
 					   strlen(counter->pmu_name)))
 		return;
 
-	config = strchr(counter->name, '/');
+	config = strchr(counter->core.name, '/');
 	if (config) {
 		if (asprintf(&new_name,
 			     "%s%s", counter->pmu_name, config) > 0) {
-			free(counter->name);
-			counter->name = new_name;
+			free(counter->core.name);
+			counter->core.name = new_name;
 		}
 	} else {
 		if (perf_pmu__has_hybrid()) {
 			ret = asprintf(&new_name, "%s/%s/",
-				       counter->pmu_name, counter->name);
+				       counter->pmu_name, counter->core.name);
 		} else {
 			ret = asprintf(&new_name, "%s [%s]",
-				       counter->name, counter->pmu_name);
+				       counter->core.name, counter->pmu_name);
 		}
 
 		if (ret) {
-			free(counter->name);
-			counter->name = new_name;
+			free(counter->core.name);
+			counter->core.name = new_name;
 		}
 	}
 

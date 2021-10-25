@@ -2543,13 +2543,13 @@ static struct evsel *find_evsel(struct evlist *evlist, char *event_name)
 	full_name = !!strchr(event_name, ':');
 	evlist__for_each_entry(evlist, pos) {
 		/* case 2 */
-		if (full_name && !strcmp(pos->name, event_name))
+		if (full_name && !strcmp(pos->core.name, event_name))
 			return pos;
 		/* case 3 */
-		if (!full_name && strstr(pos->name, event_name)) {
+		if (!full_name && strstr(pos->core.name, event_name)) {
 			if (evsel) {
 				pr_debug("'%s' event is ambiguous: it can be %s or %s\n",
-					 event_name, evsel->name, pos->name);
+					 event_name, evsel->core.name, pos->core.name);
 				return NULL;
 			}
 			evsel = pos;

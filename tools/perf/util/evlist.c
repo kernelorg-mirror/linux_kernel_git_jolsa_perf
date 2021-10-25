@@ -315,7 +315,7 @@ struct evsel *evlist__find_tracepoint_by_name(struct evlist *evlist, const char 
 
 	evlist__for_each_entry(evlist, evsel) {
 		if ((evsel->core.attr.type == PERF_TYPE_TRACEPOINT) &&
-		    (strcmp(evsel->name, name) == 0))
+		    (strcmp(evsel->core.name, name) == 0))
 			return evsel;
 	}
 
@@ -380,7 +380,7 @@ static int evsel__strcmp(struct evsel *pos, char *evsel_name)
 		return 0;
 	if (evsel__is_dummy_event(pos))
 		return 1;
-	return strcmp(pos->name, evsel_name);
+	return strcmp(pos->core.name, evsel_name);
 }
 
 static int evlist__is_enabled(struct evlist *evlist)
@@ -1647,9 +1647,9 @@ struct evsel *evlist__find_evsel_by_str(struct evlist *evlist, const char *str)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (!evsel->name)
+		if (!evsel->core.name)
 			continue;
-		if (strcmp(str, evsel->name) == 0)
+		if (strcmp(str, evsel->core.name) == 0)
 			return evsel;
 	}
 
@@ -1748,7 +1748,7 @@ struct evsel *evlist__reset_weak_group(struct evlist *evsel_list, struct evsel *
 	leader = evsel__leader(evsel);
 
 	pr_debug("Weak group for %s/%d failed\n",
-			leader->name, leader->core.nr_members);
+			leader->core.name, leader->core.nr_members);
 
 	/*
 	 * for_each_group_member doesn't work here because it doesn't
@@ -2016,7 +2016,7 @@ static int evlist__ctlfd_enable(struct evlist *evlist, char *cmd_data, bool enab
 				evlist__enable_evsel(evlist, name);
 			else
 				evlist__disable_evsel(evlist, name);
-			pr_info("Event %s %s\n", evsel->name,
+			pr_info("Event %s %s\n", evsel->core.name,
 				enable ? "enabled" : "disabled");
 		} else {
 			pr_info("failed: can't find '%s' event\n", name);
@@ -2161,7 +2161,7 @@ void evlist__check_mem_load_aux(struct evlist *evlist)
 		if (leader == evsel)
 			continue;
 
-		if (leader->name && strstr(leader->name, "mem-loads-aux")) {
+		if (leader->core.name && strstr(leader->core.name, "mem-loads-aux")) {
 			for_each_group_evsel(pos, leader) {
 				evsel__set_leader(pos, pos);
 				pos->core.nr_members = 0;

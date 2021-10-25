@@ -47,7 +47,7 @@ static bool mmio_event_begin(struct evsel *evsel,
 		return true;
 
 	/* MMIO write begin event in kernel. */
-	if (!strcmp(evsel->name, "kvm:kvm_mmio") &&
+	if (!strcmp(evsel->core.name, "kvm:kvm_mmio") &&
 	    evsel__intval(evsel, sample, "type") == KVM_TRACE_MMIO_WRITE) {
 		mmio_event_get_key(evsel, sample, key);
 		return true;
@@ -64,7 +64,7 @@ static bool mmio_event_end(struct evsel *evsel, struct perf_sample *sample,
 		return true;
 
 	/* MMIO read end event in kernel.*/
-	if (!strcmp(evsel->name, "kvm:kvm_mmio") &&
+	if (!strcmp(evsel->core.name, "kvm:kvm_mmio") &&
 	    evsel__intval(evsel, sample, "type") == KVM_TRACE_MMIO_READ) {
 		mmio_event_get_key(evsel, sample, key);
 		return true;
@@ -102,7 +102,7 @@ static bool ioport_event_begin(struct evsel *evsel,
 			       struct perf_sample *sample,
 			       struct event_key *key)
 {
-	if (!strcmp(evsel->name, "kvm:kvm_pio")) {
+	if (!strcmp(evsel->core.name, "kvm:kvm_pio")) {
 		ioport_event_get_key(evsel, sample, key);
 		return true;
 	}
@@ -146,7 +146,7 @@ static bool msr_event_begin(struct evsel *evsel,
 			       struct perf_sample *sample,
 			       struct event_key *key)
 {
-	if (!strcmp(evsel->name, "kvm:kvm_msr")) {
+	if (!strcmp(evsel->core.name, "kvm:kvm_msr")) {
 		msr_event_get_key(evsel, sample, key);
 		return true;
 	}

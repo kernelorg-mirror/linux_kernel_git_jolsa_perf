@@ -412,12 +412,12 @@ get_tracepoints_path(struct list_head *pattrs)
 			continue;
 		++nr_tracepoints;
 
-		if (pos->name) {
-			ppath->next = tracepoint_name_to_path(pos->name);
+		if (pos->core.name) {
+			ppath->next = tracepoint_name_to_path(pos->core.name);
 			if (ppath->next)
 				goto next;
 
-			if (strchr(pos->name, ':') == NULL)
+			if (strchr(pos->core.name, ':') == NULL)
 				goto try_id;
 
 			goto error;

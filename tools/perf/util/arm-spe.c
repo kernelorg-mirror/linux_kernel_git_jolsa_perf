@@ -879,9 +879,9 @@ static void arm_spe_set_event_name(struct evlist *evlist, u64 id,
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel->core.id && evsel->core.id[0] == id) {
-			if (evsel->name)
-				zfree(&evsel->name);
-			evsel->name = strdup(name);
+			if (evsel->core.name)
+				zfree(&evsel->core.name);
+			evsel->core.name = strdup(name);
 			break;
 		}
 	}

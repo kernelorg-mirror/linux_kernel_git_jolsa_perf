@@ -36,7 +36,7 @@ static int test_expand_events(struct evlist *evlist,
 	}
 	i = 0;
 	evlist__for_each_entry(evlist, evsel) {
-		ev_name[i] = strdup(evsel->name);
+		ev_name[i] = strdup(evsel->core.name);
 		if (ev_name[i] == NULL) {
 			pr_debug("memory allocation failure\n");
 			goto out;
@@ -61,10 +61,10 @@ static int test_expand_events(struct evlist *evlist,
 
 	i = 0;
 	evlist__for_each_entry(evlist, evsel) {
-		if (strcmp(evsel->name, ev_name[i % nr_events])) {
+		if (strcmp(evsel->core.name, ev_name[i % nr_events])) {
 			pr_debug("event name doesn't match:\n");
 			pr_debug("  evsel[%d]: %s\n  expected: %s\n",
-				 i, evsel->name, ev_name[i % nr_events]);
+				 i, evsel->core.name, ev_name[i % nr_events]);
 			goto out;
 		}
 		if (strcmp(evsel->cgrp->name, cgrp_name[i / nr_events])) {

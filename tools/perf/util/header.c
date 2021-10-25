@@ -1773,7 +1773,7 @@ static void free_event_desc(struct evsel *events)
 		return;
 
 	for (evsel = events; evsel->core.attr.size; evsel++) {
-		zfree(&evsel->name);
+		zfree(&evsel->core.name);
 		zfree(&evsel->core.id);
 	}
 
@@ -1867,8 +1867,8 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 		if (ff->ph->needs_swap)
 			evsel->needs_swap = true;
 
-		evsel->name = do_read_string(ff);
-		if (!evsel->name)
+		evsel->core.name = do_read_string(ff);
+		if (!evsel->core.name)
 			goto error;
 
 		if (!nr)
@@ -1918,7 +1918,7 @@ static void print_event_desc(struct feat_fd *ff, FILE *fp)
 	}
 
 	for (evsel = events; evsel->core.attr.size; evsel++) {
-		fprintf(fp, "# event : name = %s, ", evsel->name);
+		fprintf(fp, "# event : name = %s, ", evsel->core.name);
 
 		if (evsel->core.ids) {
 			fprintf(fp, ", id = {");
@@ -2390,17 +2390,17 @@ static void evlist__set_event_name(struct evlist *evlist, struct evsel *event)
 {
 	struct evsel *evsel;
 
-	if (!event->name)
+	if (!event->core.name)
 		return;
 
 	evsel = evlist__find_by_index(evlist, event->core.idx);
 	if (!evsel)
 		return;
 
-	if (evsel->name)
+	if (evsel->core.name)
 		return;
 
-	evsel->name = strdup(event->name);
+	evsel->core.name = strdup(event->core.name);
 }
 
 static int
@@ -3971,10 +3971,10 @@ static int evsel__prepare_tracepoint_event(struct evsel *evsel, struct tep_handl
 		return -1;
 	}
 
-	if (!evsel->name) {
+	if (!evsel->core.name) {
 		snprintf(bf, sizeof(bf), "%s:%s", event->system, event->name);
-		evsel->name = strdup(bf);
-		if (evsel->name == NULL)
+		evsel->core.name = strdup(bf);
+		if (evsel->core.name == NULL)
 			return -1;
 	}
 
@@ -4259,7 +4259,7 @@ int perf_event__process_event_update(struct perf_tool *tool __maybe_unused,
 		evsel->unit = strdup(ev->data);
 		break;
 	case PERF_EVENT_UPDATE__NAME:
-		evsel->name = strdup(ev->data);
+		evsel->core.name = strdup(ev->data);
 		break;
 	case PERF_EVENT_UPDATE__SCALE:
 		ev_scale = (struct perf_record_event_update_scale *)ev->data;

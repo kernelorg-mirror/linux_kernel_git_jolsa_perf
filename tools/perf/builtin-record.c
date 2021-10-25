@@ -1606,14 +1606,14 @@ static void record__uniquify_name(struct record *rec)
 		if (!evsel__is_hybrid(pos))
 			continue;
 
-		if (strchr(pos->name, '/'))
+		if (strchr(pos->core.name, '/'))
 			continue;
 
 		ret = asprintf(&new_name, "%s/%s/",
-			       pos->pmu_name, pos->name);
+			       pos->pmu_name, pos->core.name);
 		if (ret) {
-			free(pos->name);
-			pos->name = new_name;
+			free(pos->core.name);
+			pos->core.name = new_name;
 		}
 	}
 }

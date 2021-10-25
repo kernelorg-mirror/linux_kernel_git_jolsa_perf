@@ -12,20 +12,20 @@ static int evsel__test_field(struct evsel *evsel, const char *name, int size, bo
 	int ret = 0;
 
 	if (field == NULL) {
-		pr_debug("%s: \"%s\" field not found!\n", evsel->name, name);
+		pr_debug("%s: \"%s\" field not found!\n", evsel->core.name, name);
 		return -1;
 	}
 
 	is_signed = !!(field->flags & TEP_FIELD_IS_SIGNED);
 	if (should_be_signed && !is_signed) {
 		pr_debug("%s: \"%s\" signedness(%d) is wrong, should be %d\n",
-			 evsel->name, name, is_signed, should_be_signed);
+			 evsel->core.name, name, is_signed, should_be_signed);
 		ret = -1;
 	}
 
 	if (field->size != size) {
 		pr_debug("%s: \"%s\" size (%d) should be %d!\n",
-			 evsel->name, name, field->size, size);
+			 evsel->core.name, name, field->size, size);
 		ret = -1;
 	}
 
