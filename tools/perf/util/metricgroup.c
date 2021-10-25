@@ -690,10 +690,10 @@ static int decode_all_metric_ids(struct evlist *perf_evlist, const char *modifie
 		 * If the name is just the parsed event, use the metric-id to
 		 * give a more friendly display version.
 		 */
-		if (strstr(ev->name, "metric-id=")) {
+		if (strstr(ev->core.name, "metric-id=")) {
 			bool has_slash = false;
 
-			free(ev->name);
+			free(ev->core.name);
 			for (cur = strchr(sb.buf, '@') ; cur; cur = strchr(++cur, '@')) {
 				*cur = '/';
 				has_slash = true;
@@ -709,8 +709,8 @@ static int decode_all_metric_ids(struct evlist *perf_evlist, const char *modifie
 				if (ret)
 					break;
 			}
-			ev->name = strdup(sb.buf);
-			if (!ev->name) {
+			ev->core.name = strdup(sb.buf);
+			if (!ev->core.name) {
 				ret = -ENOMEM;
 				break;
 			}
@@ -1565,7 +1565,7 @@ int metricgroup__copy_metric_events(struct evlist *evlist, struct cgroup *cgrp,
 			return -ENOMEM;
 
 		pr_debug("copying metric event for cgroup '%s': %s (idx=%d)\n",
-			 cgrp ? cgrp->name : "root", evsel->name, evsel->core.idx);
+			 cgrp ? cgrp->name : "root", evsel->core.name, evsel->core.idx);
 
 		list_for_each_entry(old_expr, &old_me->head, nd) {
 			new_expr = malloc(sizeof(*new_expr));

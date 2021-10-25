@@ -361,7 +361,7 @@ static struct evsel *perf_stat__find_event(struct evlist *evsel_list,
 	struct evsel *c2;
 
 	evlist__for_each_entry (evsel_list, c2) {
-		if (!strcasecmp(c2->name, name) && !c2->collect_stat)
+		if (!strcasecmp(c2->core.name, name) && !c2->collect_stat)
 			return c2;
 	}
 	return NULL;
@@ -393,7 +393,7 @@ void perf_stat__collect_metric_expr(struct evlist *evsel_list)
 		metric_events = counter->metric_events;
 		if (!metric_events) {
 			if (expr__find_ids(counter->metric_expr,
-					   counter->name,
+					   counter->core.name,
 					   ctx) < 0)
 				continue;
 
@@ -414,7 +414,7 @@ void perf_stat__collect_metric_expr(struct evlist *evsel_list)
 			if (leader) {
 				/* Search in group */
 				for_each_group_member (oc, leader) {
-					if (!strcasecmp(oc->name,
+					if (!strcasecmp(oc->core.name,
 							metric_name) &&
 						!oc->collect_stat) {
 						found = true;
@@ -443,7 +443,7 @@ void perf_stat__collect_metric_expr(struct evlist *evsel_list)
 					fprintf(stderr,
 						"Add %s event to groups to get metric expression for %s\n",
 						metric_name,
-						counter->name);
+						counter->core.name);
 					printed = strdup(metric_name);
 				}
 				invalid = true;
@@ -829,7 +829,7 @@ static int prepare_metric(struct evsel **metric_events,
 		struct stats *stats;
 		u64 metric_total = 0;
 
-		if (!strcmp(metric_events[i]->name, "duration_time")) {
+		if (!strcmp(metric_events[i]->core.name, "duration_time")) {
 			stats = &walltime_nsecs_stats;
 			scale = 1e-9;
 		} else {
@@ -1275,7 +1275,7 @@ void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 				core_bound * 100.);
 	} else if (evsel->metric_expr) {
 		generic_metric(config, evsel->metric_expr, evsel->metric_events, NULL,
-				evsel->name, evsel->metric_name, NULL, 1, cpu, out, st);
+				evsel->core.name, evsel->metric_name, NULL, 1, cpu, out, st);
 	} else if (runtime_stat_n(st, STAT_NSECS, cpu, &rsd) != 0) {
 		char unit = ' ';
 		char unit_buf[10] = "/sec";
@@ -1300,7 +1300,7 @@ void perf_stat__print_shadow_stats(struct perf_stat_config *config,
 			if (num++ > 0)
 				out->new_line(config, ctxp);
 			generic_metric(config, mexp->metric_expr, mexp->metric_events,
-					mexp->metric_refs, evsel->name, mexp->metric_name,
+					mexp->metric_refs, evsel->core.name, mexp->metric_name,
 					mexp->metric_unit, mexp->runtime, cpu, out, st);
 		}
 	}

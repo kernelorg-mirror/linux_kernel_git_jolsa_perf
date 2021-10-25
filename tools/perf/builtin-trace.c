@@ -2647,7 +2647,7 @@ out_put:
 
 out_dump:
 	fprintf(trace->output, "%s: comm=%s,pid=%u,runtime=%" PRIu64 ",vruntime=%" PRIu64 ")\n",
-	       evsel->name,
+	       evsel->core.name,
 	       evsel__strval(evsel, sample, "comm"),
 	       (pid_t)evsel__intval(evsel, sample, "pid"),
 	       runtime,
@@ -2814,7 +2814,7 @@ static int trace__event_handler(struct trace *trace, struct evsel *evsel,
 		 */
 	}
 
-	fprintf(trace->output, "%s(", evsel->name);
+	fprintf(trace->output, "%s(", evsel->core.name);
 
 	if (evsel__is_bpf_output(evsel)) {
 		bpf_output__fprintf(trace, sample);
@@ -3842,7 +3842,7 @@ static int trace__expand_filter(struct trace *trace __maybe_unused, struct evsel
 			fmt = evsel__find_syscall_arg_fmt_by_name(evsel, arg);
 			if (fmt == NULL) {
 				pr_err("\"%s\" not found in \"%s\", can't set filter \"%s\"\n",
-				       arg, evsel->name, evsel->filter);
+				       arg, evsel->core.name, evsel->filter);
 				return -1;
 			}
 
@@ -3873,12 +3873,12 @@ static int trace__expand_filter(struct trace *trace __maybe_unused, struct evsel
 					new_filter = n;
 				} else {
 					pr_err("\"%.*s\" not found for \"%s\" in \"%s\", can't set filter \"%s\"\n",
-					       right_size, right, arg, evsel->name, evsel->filter);
+					       right_size, right, arg, evsel->core.name, evsel->filter);
 					return -1;
 				}
 			} else {
 				pr_err("No resolver (strtoul) for \"%s\" in \"%s\", can't set filter \"%s\"\n",
-				       arg, evsel->name, evsel->filter);
+				       arg, evsel->core.name, evsel->filter);
 				return -1;
 			}
 
@@ -3889,7 +3889,7 @@ static int trace__expand_filter(struct trace *trace __maybe_unused, struct evsel
 	}
 
 	if (new_filter != evsel->filter) {
-		pr_debug("New filter for %s: %s\n", evsel->name, new_filter);
+		pr_debug("New filter for %s: %s\n", evsel->core.name, new_filter);
 		evsel__set_filter(evsel, new_filter);
 		free(new_filter);
 	}

@@ -110,9 +110,9 @@ static void load_runtime_stat(struct runtime_stat *st, struct evlist *evlist,
 	u64 count;
 
 	evlist__for_each_entry(evlist, evsel) {
-		count = find_value(evsel->name, vals);
+		count = find_value(evsel->core.name, vals);
 		perf_stat__update_shadow_stats(evsel, count, 0, st);
-		if (!strcmp(evsel->name, "duration_time"))
+		if (!strcmp(evsel->core.name, "duration_time"))
 			update_stats(&walltime_nsecs_stats, count);
 	}
 }

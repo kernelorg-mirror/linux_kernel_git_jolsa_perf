@@ -1380,7 +1380,7 @@ static int test__checkevent_config_symbol(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->name, "insn") == 0);
+	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->core.name, "insn") == 0);
 	return 0;
 }
 
@@ -1388,7 +1388,7 @@ static int test__checkevent_config_raw(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->name, "rawpmu") == 0);
+	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->core.name, "rawpmu") == 0);
 	return 0;
 }
 
@@ -1396,7 +1396,7 @@ static int test__checkevent_config_num(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->name, "numpmu") == 0);
+	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->core.name, "numpmu") == 0);
 	return 0;
 }
 
@@ -1404,7 +1404,7 @@ static int test__checkevent_config_cache(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->name, "cachepmu") == 0);
+	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->core.name, "cachepmu") == 0);
 	return 0;
 }
 
@@ -1417,7 +1417,7 @@ static int test__intel_pt(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->name, "intel_pt//u") == 0);
+	TEST_ASSERT_VAL("wrong name setting", strcmp(evsel->core.name, "intel_pt//u") == 0);
 	return 0;
 }
 
@@ -1425,7 +1425,7 @@ static int test__checkevent_complex_name(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
 
-	TEST_ASSERT_VAL("wrong complex name parsing", strcmp(evsel->name, "COMPLEX_CYCLES_NAME:orig=cycles,desc=chip-clock-ticks") == 0);
+	TEST_ASSERT_VAL("wrong complex name parsing", strcmp(evsel->core.name, "COMPLEX_CYCLES_NAME:orig=cycles,desc=chip-clock-ticks") == 0);
 	return 0;
 }
 

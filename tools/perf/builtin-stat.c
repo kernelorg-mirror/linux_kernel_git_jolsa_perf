@@ -265,9 +265,9 @@ static void evlist__check_cpu_maps(struct evlist *evlist)
 
 		if (verbose) {
 			cpu_map__snprint(leader->core.cpus, buf, sizeof(buf));
-			pr_warning("     %s: %s\n", leader->name, buf);
+			pr_warning("     %s: %s\n", leader->core.name, buf);
 			cpu_map__snprint(evsel->core.cpus, buf, sizeof(buf));
-			pr_warning("     %s: %s\n", evsel->name, buf);
+			pr_warning("     %s: %s\n", evsel->core.name, buf);
 		}
 
 		for_each_group_evsel(pos, leader) {
@@ -466,9 +466,9 @@ static void read_counters(struct timespec *rs)
 
 	evlist__for_each_entry(evsel_list, counter) {
 		if (counter->err)
-			pr_debug("failed to read counter %s\n", counter->name);
+			pr_debug("failed to read counter %s\n", counter->core.name);
 		if (counter->err == 0 && perf_stat_process_counter(&stat_config, counter))
-			pr_warning("failed to process counter %s\n", counter->name);
+			pr_warning("failed to process counter %s\n", counter->core.name);
 		counter->err = 0;
 	}
 }
@@ -2205,7 +2205,7 @@ static void setup_system_wide(int forks)
 
 		evlist__for_each_entry(evsel_list, counter) {
 			if (!counter->core.system_wide &&
-			    strcmp(counter->name, "duration_time")) {
+			    strcmp(counter->core.name, "duration_time")) {
 				return;
 			}
 		}

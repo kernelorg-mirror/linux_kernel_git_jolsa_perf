@@ -136,7 +136,7 @@ int evlist__fix_hybrid_cpus(struct evlist *evlist, const char *cpu_list)
 			if (unmatched_cpus->nr > 0) {
 				cpu_map__snprint(matched_cpus, buf1, sizeof(buf1));
 				pr_warning("WARNING: use %s in '%s' for '%s', skip other cpus in list.\n",
-					   buf1, pmu->name, evsel->name);
+					   buf1, pmu->name, evsel->core.name);
 			}
 		}
 

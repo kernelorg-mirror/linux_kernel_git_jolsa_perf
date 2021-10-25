@@ -387,7 +387,7 @@ __add_event(struct list_head *list, int *idx,
 	evsel->auto_merge_stats = auto_merge_stats;
 
 	if (name)
-		evsel->name = strdup(name);
+		evsel->core.name = strdup(name);
 
 	if (metric_id)
 		evsel->metric_id = strdup(metric_id);
@@ -1653,7 +1653,7 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 	if (!evsel)
 		return -ENOMEM;
 
-	if (evsel->name)
+	if (evsel->core.name)
 		evsel->use_config_name = true;
 
 	evsel->pmu_name = name ? strdup(name) : NULL;
@@ -2069,8 +2069,8 @@ int parse_events_name(struct list_head *list, const char *name)
 	struct evsel *evsel;
 
 	__evlist__for_each_entry(list, evsel) {
-		if (!evsel->name)
-			evsel->name = strdup(name);
+		if (!evsel->core.name)
+			evsel->core.name = strdup(name);
 	}
 
 	return 0;
