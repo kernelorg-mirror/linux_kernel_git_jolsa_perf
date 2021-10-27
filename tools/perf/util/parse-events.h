@@ -186,12 +186,13 @@ int parse_events_add_numeric(struct parse_events_state *parse_state,
 int parse_events_add_tool(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  int tool_event);
-int parse_events_add_cache(struct list_head *list, int *idx,
+int parse_events_add_cache(struct parse_events_state *parse_state,
+			   struct list_head *list,
 			   char *type, char *op_result1, char *op_result2,
 			   struct parse_events_error *error,
-			   struct list_head *head_config,
-			   struct parse_events_state *parse_state);
-int parse_events_add_breakpoint(struct list_head *list, int *idx,
+			   struct list_head *head_config);
+int parse_events_add_breakpoint(struct parse_events_state *parse_state,
+				struct list_head *list,
 				u64 addr, char *type, u64 len);
 int parse_events_add_pmu(struct parse_events_state *parse_state,
 			 struct list_head *list, char *name,
@@ -199,7 +200,8 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 			 bool auto_merge_stats,
 			 bool use_alias);
 
-struct evsel *parse_events__add_event(int idx, struct perf_event_attr *attr,
+struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
+				      struct perf_event_attr *attr,
 				      const char *name, const char *metric_id,
 				      struct perf_pmu *pmu);
 
@@ -268,7 +270,8 @@ static inline bool is_sdt_event(char *str __maybe_unused)
 
 int perf_pmu__test_parse_init(void);
 
-struct evsel *parse_events__add_event_hybrid(struct list_head *list, int *idx,
+struct evsel *parse_events__add_event_hybrid(struct parse_events_state *parse_state,
+					     struct list_head *list,
 					     struct perf_event_attr *attr,
 					     const char *name,
 					     const char *metric_id,
