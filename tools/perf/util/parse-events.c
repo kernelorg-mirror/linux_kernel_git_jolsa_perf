@@ -357,7 +357,8 @@ static char *get_config_name(struct list_head *head_terms)
 }
 
 static struct evsel *
-__add_event(struct list_head *list, int *idx,
+__add_event(struct parse_events_state *parse_state,
+	    struct list_head *list,
 	    struct perf_event_attr *attr,
 	    bool init_attr,
 	    const char *name, const char *metric_id, struct perf_pmu *pmu,
@@ -367,6 +368,7 @@ __add_event(struct list_head *list, int *idx,
 	struct evsel *evsel;
 	struct perf_cpu_map *cpus = pmu ? perf_cpu_map__get(pmu->cpus) :
 			       cpu_list ? perf_cpu_map__new(cpu_list) : NULL;
+	int *idx = &parse_state->idx;
 
 	if (pmu && attr->type == PERF_TYPE_RAW)
 		perf_pmu__warn_invalid_config(pmu, attr->config, name);
@@ -401,25 +403,28 @@ __add_event(struct list_head *list, int *idx,
 	return evsel;
 }
 
-struct evsel *parse_events__add_event(int idx, struct perf_event_attr *attr,
+struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
+				      struct perf_event_attr *attr,
 				      const char *name, const char *metric_id,
 				      struct perf_pmu *pmu)
 {
-	return __add_event(/*list=*/NULL, &idx, attr, /*init_attr=*/false, name,
+	return __add_event(parse_state, /*list=*/NULL, attr, /*init_attr=*/false, name,
 			   metric_id, pmu, /*config_terms=*/NULL,
 			   /*auto_merge_stats=*/false, /*cpu_list=*/NULL);
 }
 
-static int add_event(struct list_head *list, int *idx,
+static int add_event(struct parse_events_state *parse_state,
+		     struct list_head *list,
 		     struct perf_event_attr *attr, const char *name,
 		     const char *metric_id, struct list_head *config_terms)
 {
-	return __add_event(list, idx, attr, /*init_attr*/true, name, metric_id,
+	return __add_event(parse_state, list, attr, /*init_attr*/true, name, metric_id,
 			   /*pmu=*/NULL, config_terms,
 			   /*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOMEM;
 }
 
-static int add_event_tool(struct list_head *list, int *idx,
+static int add_event_tool(struct parse_events_state *parse_state,
+			  struct list_head *list,
 			  enum perf_tool_event tool_event)
 {
 	struct evsel *evsel;
@@ -428,7 +433,7 @@ static int add_event_tool(struct list_head *list, int *idx,
 		.config = PERF_COUNT_SW_DUMMY,
 	};
 
-	evsel = __add_event(list, idx, &attr, /*init_attr=*/true, /*name=*/NULL,
+	evsel = __add_event(parse_state, list, &attr, /*init_attr=*/true, /*name=*/NULL,
 			    /*metric_id=*/NULL, /*pmu=*/NULL,
 			    /*config_terms=*/NULL, /*auto_merge_stats=*/false,
 			    /*cpu_list=*/"0");
@@ -469,11 +474,11 @@ static int config_attr(struct perf_event_attr *attr,
 		       struct parse_events_error *err,
 		       config_term_func_t config_term);
 
-int parse_events_add_cache(struct list_head *list, int *idx,
+int parse_events_add_cache(struct parse_events_state *parse_state,
+			   struct list_head *list,
 			   char *type, char *op_result1, char *op_result2,
 			   struct parse_events_error *err,
-			   struct list_head *head_config,
-			   struct parse_events_state *parse_state)
+			   struct list_head *head_config)
 {
 	struct perf_event_attr attr;
 	LIST_HEAD(config_terms);
@@ -544,15 +549,15 @@ int parse_events_add_cache(struct list_head *list, int *idx,
 	}
 
 	metric_id = get_config_metric_id(head_config);
-	ret = parse_events__add_cache_hybrid(list, idx, &attr,
+	ret = parse_events__add_cache_hybrid(parse_state, list, &attr,
 					     config_name ? : name,
 					     metric_id,
 					     &config_terms,
-					     &hybrid, parse_state);
+					     &hybrid);
 	if (hybrid)
 		goto out_free_terms;
 
-	ret = add_event(list, idx, &attr, config_name ? : name, metric_id,
+	ret = add_event(parse_state, list, &attr, config_name ? : name, metric_id,
 			&config_terms);
 out_free_terms:
 	free_config_terms(&config_terms);
@@ -1006,7 +1011,8 @@ do {					\
 	return 0;
 }
 
-int parse_events_add_breakpoint(struct list_head *list, int *idx,
+int parse_events_add_breakpoint(struct parse_events_state *parse_state,
+				struct list_head *list,
 				u64 addr, char *type, u64 len)
 {
 	struct perf_event_attr attr;
@@ -1030,7 +1036,7 @@ int parse_events_add_breakpoint(struct list_head *list, int *idx,
 	attr.type = PERF_TYPE_BREAKPOINT;
 	attr.sample_period = 1;
 
-	return add_event(list, idx, &attr, /*name=*/NULL, /*mertic_id=*/NULL,
+	return add_event(parse_state, list, &attr, /*name=*/NULL, /*mertic_id=*/NULL,
 			 /*config_terms=*/NULL);
 }
 
@@ -1487,7 +1493,7 @@ int parse_events_add_numeric(struct parse_events_state *parse_state,
 	if (hybrid)
 		goto out_free_terms;
 
-	ret = add_event(list, &parse_state->idx, &attr, name, metric_id,
+	ret = add_event(parse_state, list, &attr, name, metric_id,
 			&config_terms);
 out_free_terms:
 	free_config_terms(&config_terms);
@@ -1498,7 +1504,7 @@ int parse_events_add_tool(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  int tool_event)
 {
-	return add_event_tool(list, &parse_state->idx, tool_event);
+	return add_event_tool(parse_state, list, tool_event);
 }
 
 static bool config_term_percore(struct list_head *config_terms)
@@ -1589,7 +1595,7 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 
 	if (!head_config) {
 		attr.type = pmu->type;
-		evsel = __add_event(list, &parse_state->idx, &attr,
+		evsel = __add_event(parse_state, list, &attr,
 				    /*init_attr=*/true, /*name=*/NULL,
 				    /*metric_id=*/NULL, pmu,
 				    /*config_terms=*/NULL, auto_merge_stats,
@@ -1646,7 +1652,7 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 		return -EINVAL;
 	}
 
-	evsel = __add_event(list, &parse_state->idx, &attr, /*init_attr=*/true,
+	evsel = __add_event(parse_state, list, &attr, /*init_attr=*/true,
 			    get_config_name(head_config),
 			    get_config_metric_id(head_config), pmu,
 			    &config_terms, auto_merge_stats, /*cpu_list=*/NULL);
@@ -3380,14 +3386,15 @@ fail:
 	return NULL;
 }
 
-struct evsel *parse_events__add_event_hybrid(struct list_head *list, int *idx,
+struct evsel *parse_events__add_event_hybrid(struct parse_events_state *parse_state,
+					     struct list_head *list,
 					     struct perf_event_attr *attr,
 					     const char *name,
 					     const char *metric_id,
 					     struct perf_pmu *pmu,
 					     struct list_head *config_terms)
 {
-	return __add_event(list, idx, attr, /*init_attr=*/true, name, metric_id,
+	return __add_event(parse_state, list, attr, /*init_attr=*/true, name, metric_id,
 			   pmu, config_terms, /*auto_merge_stats=*/false,
 			   /*cpu_list=*/NULL);
 }
