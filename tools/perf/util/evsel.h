@@ -78,7 +78,6 @@ struct evsel {
 		bool			precise_max;
 		bool			use_uncore_alias;
 		bool			is_libpfm_event;
-		bool			auto_merge_stats;
 		bool			collect_stat;
 		bool			weak_group;
 		bool			bpf_counter;
