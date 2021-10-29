@@ -393,7 +393,7 @@ __add_event(struct list_head *list, int *idx,
 		evsel->metric_id = strdup(metric_id);
 
 	if (config_terms)
-		list_splice_init(config_terms, &evsel->config_terms);
+		list_splice_init(config_terms, &evsel->core.config_terms);
 
 	if (list)
 		list_add_tail(&evsel->core.node, list);
@@ -607,7 +607,7 @@ static int add_tracepoint(struct list_head *list, int *idx,
 
 		if (get_config_terms(head_config, &config_terms))
 			return -ENOMEM;
-		list_splice(&config_terms, &evsel->config_terms);
+		list_splice(&config_terms, &evsel->core.config_terms);
 	}
 
 	list_add_tail(&evsel->core.node, list);
@@ -1658,7 +1658,7 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 
 	evsel->pmu_name = name ? strdup(name) : NULL;
 	evsel->use_uncore_alias = use_uncore_alias;
-	evsel->percore = config_term_percore(&evsel->config_terms);
+	evsel->percore = config_term_percore(&evsel->core.config_terms);
 
 	if (parse_state->fake_pmu)
 		return 0;

@@ -247,7 +247,7 @@ void evsel__init(struct evsel *evsel,
 	evsel->evlist	   = NULL;
 	evsel->bpf_obj	   = NULL;
 	evsel->bpf_fd	   = -1;
-	INIT_LIST_HEAD(&evsel->config_terms);
+	INIT_LIST_HEAD(&evsel->core.config_terms);
 	INIT_LIST_HEAD(&evsel->bpf_counter_list);
 	perf_evsel__object.init(evsel);
 	evsel->sample_size = __evsel__sample_size(attr->sample_type);
@@ -357,7 +357,7 @@ int copy_config_terms(struct list_head *dst, struct list_head *src)
 
 static int evsel__copy_config_terms(struct evsel *dst, struct evsel *src)
 {
-	return copy_config_terms(&dst->config_terms, &src->config_terms);
+	return copy_config_terms(&dst->core.config_terms, &src->core.config_terms);
 }
 
 /**
@@ -917,7 +917,7 @@ static void evsel__apply_config_terms(struct evsel *evsel,
 				      struct record_opts *opts, bool track)
 {
 	struct evsel_config_term *term;
-	struct list_head *config_terms = &evsel->config_terms;
+	struct list_head *config_terms = &evsel->core.config_terms;
 	struct perf_event_attr *attr = &evsel->core.attr;
 	/* callgraph default */
 	struct callchain_param param = {
@@ -1050,7 +1050,7 @@ struct evsel_config_term *__evsel__get_config_term(struct evsel *evsel, enum evs
 {
 	struct evsel_config_term *term, *found_term = NULL;
 
-	list_for_each_entry(term, &evsel->config_terms, list) {
+	list_for_each_entry(term, &evsel->core.config_terms, list) {
 		if (term->type == type)
 			found_term = term;
 	}
@@ -1420,7 +1420,7 @@ void free_config_terms(struct list_head *config_terms)
 
 static void evsel__free_config_terms(struct evsel *evsel)
 {
-	free_config_terms(&evsel->config_terms);
+	free_config_terms(&evsel->core.config_terms);
 }
 
 void evsel__exit(struct evsel *evsel)
