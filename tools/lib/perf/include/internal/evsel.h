@@ -11,6 +11,11 @@ struct perf_cpu_map;
 struct perf_thread_map;
 struct xyarray;
 
+enum perf_tool_event {
+	PERF_TOOL_NONE		= 0,
+	PERF_TOOL_DURATION_TIME	= 1,
+};
+
 /*
  * Per fd, to map back from PERF_SAMPLE_ID to evsel, only used when there are
  * more than one entry in the evlist.
@@ -62,6 +67,7 @@ struct perf_evsel {
 		bool			auto_merge_stats;
 		struct list_head	config_terms;
 		const char		*metric_id;
+		enum perf_tool_event	tool_event;
 	};
 };
 

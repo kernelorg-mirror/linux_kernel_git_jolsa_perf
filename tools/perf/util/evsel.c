@@ -421,7 +421,7 @@ struct evsel *evsel__clone(struct evsel *orig)
 	evsel->core.leader = orig->core.leader;
 
 	evsel->max_events = orig->max_events;
-	evsel->tool_event = orig->tool_event;
+	evsel->core.tool_event = orig->core.tool_event;
 	evsel->unit = orig->unit;
 	evsel->scale = orig->scale;
 	evsel->snapshot = orig->snapshot;
@@ -756,7 +756,7 @@ const char *evsel__name(struct evsel *evsel)
 		break;
 
 	case PERF_TYPE_SOFTWARE:
-		if (evsel->tool_event)
+		if (evsel->core.tool_event)
 			evsel__tool_name(bf, sizeof(bf));
 		else
 			evsel__sw_name(evsel, bf, sizeof(bf));
@@ -789,7 +789,7 @@ const char *evsel__metric_id(const struct evsel *evsel)
 	if (evsel->core.metric_id)
 		return evsel->core.metric_id;
 
-	if (evsel->core.attr.type == PERF_TYPE_SOFTWARE && evsel->tool_event)
+	if (evsel->core.attr.type == PERF_TYPE_SOFTWARE && evsel->core.tool_event)
 		return "duration_time";
 
 	return "unknown";
