@@ -372,10 +372,10 @@ static void abs_printout(struct perf_stat_config *config,
 
 	fprintf(output, fmt, avg, config->csv_sep);
 
-	if (evsel->unit)
+	if (evsel->core.unit)
 		fprintf(output, "%-*s%s",
 			config->csv_output ? 0 : config->unit_width,
-			evsel->unit, config->csv_sep);
+			evsel->core.unit, config->csv_sep);
 
 	fprintf(output, "%-*s", config->csv_output ? 0 : 25, evsel__name(evsel));
 
@@ -476,7 +476,7 @@ static void printout(struct perf_stat_config *config, struct aggr_cpu_id id, int
 
 		fprintf(config->output, "%-*s%s",
 			config->csv_output ? 0 : config->unit_width,
-			counter->unit, config->csv_sep);
+			counter->core.unit, config->csv_sep);
 
 		fprintf(config->output, "%*s",
 			config->csv_output ? 0 : -25, evsel__name(counter));
@@ -588,7 +588,7 @@ static void collect_all_aliases(struct perf_stat_config *config, struct evsel *c
 		if (strcmp(evsel__name(alias), evsel__name(counter)) ||
 		    alias->scale != counter->scale ||
 		    alias->cgrp != counter->cgrp ||
-		    strcmp(alias->unit, counter->unit) ||
+		    strcmp(alias->core.unit, counter->core.unit) ||
 		    evsel__is_clock(alias) != evsel__is_clock(counter) ||
 		    !strcmp(alias->pmu_name, counter->pmu_name))
 			break;

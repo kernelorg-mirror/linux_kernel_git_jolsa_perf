@@ -1824,7 +1824,7 @@ static struct perf_record_event_update *event_update_event__new(size_t size, u64
 int perf_event__synthesize_event_update_unit(struct perf_tool *tool, struct evsel *evsel,
 					     perf_event__handler_t process)
 {
-	size_t size = strlen(evsel->unit);
+	size_t size = strlen(evsel->core.unit);
 	struct perf_record_event_update *ev;
 	int err;
 
@@ -1832,7 +1832,7 @@ int perf_event__synthesize_event_update_unit(struct perf_tool *tool, struct evse
 	if (ev == NULL)
 		return -ENOMEM;
 
-	strlcpy(ev->data, evsel->unit, size + 1);
+	strlcpy(ev->data, evsel->core.unit, size + 1);
 	err = process(tool, (union perf_event *)ev, NULL, NULL);
 	free(ev);
 	return err;
@@ -1921,7 +1921,7 @@ int perf_event__synthesize_attrs(struct perf_tool *tool, struct evlist *evlist,
 
 static bool has_unit(struct evsel *evsel)
 {
-	return evsel->unit && *evsel->unit;
+	return evsel->core.unit && *evsel->core.unit;
 }
 
 static bool has_scale(struct evsel *evsel)

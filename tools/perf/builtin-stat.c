@@ -917,7 +917,7 @@ try_again_reset:
 			continue;
 		}
 
-		l = strlen(counter->unit);
+		l = strlen(counter->core.unit);
 		if (l > stat_config.unit_width)
 			stat_config.unit_width = l;
 
