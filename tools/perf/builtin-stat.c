@@ -339,7 +339,7 @@ static int evsel__write_stat_event(struct evsel *counter, u32 cpu, u32 thread,
 static int read_single_counter(struct evsel *counter, int cpu,
 			       int thread, struct timespec *rs)
 {
-	if (counter->tool_event == PERF_TOOL_DURATION_TIME) {
+	if (counter->core.tool_event == PERF_TOOL_DURATION_TIME) {
 		u64 val = rs->tv_nsec + rs->tv_sec*1000000000ULL;
 		struct perf_counts_values *count =
 			perf_counts(counter->counts, cpu, thread);

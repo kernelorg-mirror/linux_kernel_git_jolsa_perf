@@ -434,7 +434,7 @@ static int add_event_tool(struct list_head *list, int *idx,
 			    /*cpu_list=*/"0");
 	if (!evsel)
 		return -ENOMEM;
-	evsel->tool_event = tool_event;
+	evsel->core.tool_event = tool_event;
 	if (tool_event == PERF_TOOL_DURATION_TIME)
 		evsel->unit = "ns";
 	return 0;

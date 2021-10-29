@@ -25,11 +25,6 @@ struct bperf_follower_bpf;
 
 typedef int (evsel__sb_cb_t)(union perf_event *event, void *data);
 
-enum perf_tool_event {
-	PERF_TOOL_NONE		= 0,
-	PERF_TOOL_DURATION_TIME = 1,
-};
-
 /** struct evsel - event selector
  *
  * @evlist - evlist this evsel is in, if it is in one.
@@ -67,7 +62,6 @@ struct evsel {
 		double			scale;
 		const char		*unit;
 		struct cgroup		*cgrp;
-		enum perf_tool_event	tool_event;
 		/* parse modifier helper */
 		int			exclude_GH;
 		int			sample_read;
