@@ -130,6 +130,10 @@ struct parse_events_error {
 	char *first_help;
 };
 
+struct parse_events_ops {
+	struct evsel* (*evsel__new)(struct perf_event_attr *attr, int idx);
+};
+
 struct parse_events_state {
 	struct list_head	   list;
 	int			   idx;
@@ -140,6 +144,7 @@ struct parse_events_state {
 	int			   stoken;
 	struct perf_pmu		  *fake_pmu;
 	char			  *hybrid_pmu_name;
+	struct parse_events_ops	  *ops;
 };
 
 void parse_events__handle_error(struct parse_events_error *err, int idx,
