@@ -384,7 +384,7 @@ __add_event(struct list_head *list, int *idx,
 	evsel->core.cpus = cpus;
 	evsel->core.own_cpus = perf_cpu_map__get(cpus);
 	evsel->core.system_wide = pmu ? pmu->is_uncore : false;
-	evsel->auto_merge_stats = auto_merge_stats;
+	evsel->core.auto_merge_stats = auto_merge_stats;
 
 	if (name)
 		evsel->core.name = strdup(name);
