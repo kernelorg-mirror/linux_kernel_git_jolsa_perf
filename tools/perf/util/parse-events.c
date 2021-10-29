@@ -155,7 +155,8 @@ struct event_symbol event_symbols_sw[PERF_COUNT_SW_MAX] = {
 };
 
 static struct parse_events_ops parse_state_ops = {
-	.evsel__new = evsel__new_idx,
+	.evsel__new    = evsel__new_idx,
+	.evsel__new_tp = evsel__newtp_idx,
 };
 
 #define __PERF_EVENT_FIELD(config, name) \
@@ -606,7 +607,7 @@ static int add_tracepoint(struct parse_events_state *parse_state,
 			  struct list_head *head_config)
 {
 	int *idx = &parse_state->idx;
-	struct evsel *evsel = evsel__newtp_idx(sys_name, evt_name, (*idx)++);
+	struct evsel *evsel = parse_state->ops->evsel__new_tp(sys_name, evt_name, (*idx)++);
 
 	if (IS_ERR(evsel)) {
 		tracepoint_error(err, PTR_ERR(evsel), sys_name, evt_name);
