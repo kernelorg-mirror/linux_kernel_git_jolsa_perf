@@ -60,7 +60,6 @@ struct evsel {
 		char			*filter;
 		unsigned long		max_events;
 		double			scale;
-		const char		*unit;
 		struct cgroup		*cgrp;
 		/* parse modifier helper */
 		int			exclude_GH;

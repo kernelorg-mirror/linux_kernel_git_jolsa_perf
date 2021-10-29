@@ -68,6 +68,7 @@ struct perf_evsel {
 		struct list_head	config_terms;
 		const char		*metric_id;
 		enum perf_tool_event	tool_event;
+		const char		*unit;
 	};
 };
 

@@ -241,7 +241,7 @@ void evsel__init(struct evsel *evsel,
 {
 	perf_evsel__init(&evsel->core, attr, idx);
 	evsel->tracking	   = !idx;
-	evsel->unit	   = "";
+	evsel->core.unit   = "";
 	evsel->scale	   = 1.0;
 	evsel->max_events  = ULONG_MAX;
 	evsel->evlist	   = NULL;
@@ -282,7 +282,7 @@ struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx)
 		 */
 		static const char *unit = "msec";
 
-		evsel->unit = unit;
+		evsel->core.unit = unit;
 		evsel->scale = 1e-6;
 	}
 
@@ -422,7 +422,7 @@ struct evsel *evsel__clone(struct evsel *orig)
 
 	evsel->max_events = orig->max_events;
 	evsel->core.tool_event = orig->core.tool_event;
-	evsel->unit = orig->unit;
+	evsel->core.unit = orig->core.unit;
 	evsel->scale = orig->scale;
 	evsel->snapshot = orig->snapshot;
 	evsel->per_pkg = orig->per_pkg;
@@ -1300,7 +1300,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 		attr->exclude_user   = 1;
 	}
 
-	if (evsel->core.own_cpus || evsel->unit)
+	if (evsel->core.own_cpus || evsel->core.unit)
 		evsel->core.attr.read_format |= PERF_FORMAT_ID;
 
 	/*

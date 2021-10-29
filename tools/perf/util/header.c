@@ -4256,7 +4256,7 @@ int perf_event__process_event_update(struct perf_tool *tool __maybe_unused,
 
 	switch (ev->type) {
 	case PERF_EVENT_UPDATE__UNIT:
-		evsel->unit = strdup(ev->data);
+		evsel->core.unit = strdup(ev->data);
 		break;
 	case PERF_EVENT_UPDATE__NAME:
 		evsel->core.name = strdup(ev->data);
