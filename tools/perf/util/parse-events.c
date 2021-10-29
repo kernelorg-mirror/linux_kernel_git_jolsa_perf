@@ -390,7 +390,7 @@ __add_event(struct list_head *list, int *idx,
 		evsel->core.name = strdup(name);
 
 	if (metric_id)
-		evsel->metric_id = strdup(metric_id);
+		evsel->core.metric_id = strdup(metric_id);
 
 	if (config_terms)
 		list_splice_init(config_terms, &evsel->core.config_terms);

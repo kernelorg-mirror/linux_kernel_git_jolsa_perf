@@ -61,6 +61,7 @@ struct perf_evsel {
                 char			*name;
 		bool			auto_merge_stats;
 		struct list_head	config_terms;
+		const char		*metric_id;
 	};
 };
 

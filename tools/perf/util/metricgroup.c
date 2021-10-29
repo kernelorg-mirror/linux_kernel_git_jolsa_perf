@@ -669,20 +669,20 @@ static int decode_all_metric_ids(struct evlist *perf_evlist, const char *modifie
 	int ret = 0;
 
 	evlist__for_each_entry(perf_evlist, ev) {
-		if (!ev->metric_id)
+		if (!ev->core.metric_id)
 			continue;
 
 		ret = strbuf_setlen(&sb, 0);
 		if (ret)
 			break;
 
-		ret = decode_metric_id(&sb, ev->metric_id);
+		ret = decode_metric_id(&sb, ev->core.metric_id);
 		if (ret)
 			break;
 
-		free((char *)ev->metric_id);
-		ev->metric_id = strdup(sb.buf);
-		if (!ev->metric_id) {
+		free((char *)ev->core.metric_id);
+		ev->core.metric_id = strdup(sb.buf);
+		if (!ev->core.metric_id) {
 			ret = -ENOMEM;
 			break;
 		}

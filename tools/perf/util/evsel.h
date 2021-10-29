@@ -67,7 +67,6 @@ struct evsel {
 		double			scale;
 		const char		*unit;
 		struct cgroup		*cgrp;
-		const char		*metric_id;
 		enum perf_tool_event	tool_event;
 		/* parse modifier helper */
 		int			exclude_GH;
