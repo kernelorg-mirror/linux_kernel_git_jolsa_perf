@@ -154,6 +154,10 @@ struct event_symbol event_symbols_sw[PERF_COUNT_SW_MAX] = {
 	},
 };
 
+static struct parse_events_ops parse_state_ops = {
+	.evsel__new = evsel__new_idx,
+};
+
 #define __PERF_EVENT_FIELD(config, name) \
 	((config & PERF_EVENT_##name##_MASK) >> PERF_EVENT_##name##_SHIFT)
 
@@ -376,7 +380,7 @@ __add_event(struct parse_events_state *parse_state,
 	if (init_attr)
 		event_attr_init(attr);
 
-	evsel = evsel__new_idx(attr, *idx);
+	evsel = parse_state->ops->evsel__new(attr, *idx);
 	if (!evsel) {
 		perf_cpu_map__put(cpus);
 		return NULL;
@@ -2256,8 +2260,9 @@ static int parse_events__scanner(const char *str,
 int parse_events_terms(struct list_head *terms, const char *str)
 {
 	struct parse_events_state parse_state = {
-		.terms  = NULL,
-		.stoken = PE_START_TERMS,
+		.ops     = &parse_state_ops,
+		.terms   = NULL,
+		.stoken  = PE_START_TERMS,
 	};
 	int ret;
 
@@ -2283,6 +2288,7 @@ static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 		.stoken          = PE_START_EVENTS,
 		.hybrid_pmu_name = pmu_name,
 		.idx             = parse_state->idx,
+		.ops             = &parse_state_ops,
 	};
 	int ret;
 
@@ -2311,6 +2317,7 @@ int __parse_events(struct evlist *evlist, const char *str,
 		.evlist	  = evlist,
 		.stoken	  = PE_START_EVENTS,
 		.fake_pmu = fake_pmu,
+		.ops	  = &parse_state_ops,
 	};
 	int ret;
 
