@@ -951,7 +951,7 @@ static int perf_top__overwrite_check(struct perf_top *top)
 
 	evlist__for_each_entry(evlist, evsel) {
 		set = -1;
-		config_terms = &evsel->config_terms;
+		config_terms = &evsel->core.config_terms;
 		list_for_each_entry(term, config_terms, list) {
 			if (term->type == EVSEL__CONFIG_TERM_OVERWRITE)
 				set = term->val.overwrite ? 1 : 0;

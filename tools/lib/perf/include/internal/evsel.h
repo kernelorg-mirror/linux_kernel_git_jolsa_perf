@@ -60,6 +60,7 @@ struct perf_evsel {
         struct {
                 char			*name;
 		bool			auto_merge_stats;
+		struct list_head	config_terms;
 	};
 };
 

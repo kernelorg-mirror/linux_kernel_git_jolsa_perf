@@ -41,7 +41,7 @@ static struct evsel *evsel__read_sampler(struct evsel *evsel, struct evlist *evl
 static u64 evsel__config_term_mask(struct evsel *evsel)
 {
 	struct evsel_config_term *term;
-	struct list_head *config_terms = &evsel->config_terms;
+	struct list_head *config_terms = &evsel->core.config_terms;
 	u64 term_types = 0;
 
 	list_for_each_entry(term, config_terms, list) {

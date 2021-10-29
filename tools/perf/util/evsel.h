@@ -84,7 +84,6 @@ struct evsel {
 		bool			use_config_name;
 		int			bpf_fd;
 		struct bpf_object	*bpf_obj;
-		struct list_head	config_terms;
 	};
 
 	/*
