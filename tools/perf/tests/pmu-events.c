@@ -8,7 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/zalloc.h>
 #include "debug.h"
-#include "../pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 #include "util/evlist.h"
 #include "util/expr.h"
 #include "util/parse-events.h"

@@ -27,7 +27,7 @@
 #include "color.h"
 #include "sample-raw.h"
 #include "s390-cpumcf-kernel.h"
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 
 static size_t ctrset_size(struct cf_ctrset_entry *set)
 {

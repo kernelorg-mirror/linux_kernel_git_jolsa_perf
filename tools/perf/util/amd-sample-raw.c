@@ -15,7 +15,7 @@
 #include "session.h"
 #include "evlist.h"
 #include "sample-raw.h"
-#include "pmu-events/pmu-events.h"
+#include <perf/pmu-events.h>
 
 static u32 cpu_family, cpu_model, ibs_fetch_type, ibs_op_type;
 
