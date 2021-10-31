@@ -11,6 +11,7 @@ libperf-y += pmu-flex.o
 libperf-y += pmu-bison.o
 libperf-y += pmu.o
 libperf-y += pmu-hybrid.o
+libperf-y += parse-events.o
 
 $(OUTPUT)zalloc.o: ../../lib/zalloc.c FORCE
 	$(call rule_mkdir)
