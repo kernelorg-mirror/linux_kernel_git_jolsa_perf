@@ -233,12 +233,6 @@ void print_events(const char *event_glob, bool name_only, bool quiet,
 		  bool long_desc, bool details_flag, bool deprecated,
 		  const char *pmu_name);
 
-struct event_symbol {
-	const char	*symbol;
-	const char	*alias;
-};
-extern struct event_symbol event_symbols_hw[];
-extern struct event_symbol event_symbols_sw[];
 void print_symbol_events(const char *event_glob, unsigned type,
 				struct event_symbol *syms, unsigned max,
 				bool name_only);
