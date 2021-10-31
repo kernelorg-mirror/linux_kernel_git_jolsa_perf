@@ -57,6 +57,20 @@ static void inc_group_count(struct list_head *list,
 		parse_state->nr_groups++;
 }
 
+static int loc_term(void *loc_term_)
+{
+	YYLTYPE *loc_term = loc_term_;
+
+	return loc_term ? loc_term->first_column : 0;
+}
+
+static int loc_val(void *loc_val_)
+{
+	YYLTYPE *loc_val = loc_val_;
+
+	return loc_val ? loc_val->first_column  : 0;
+}
+
 %}
 
 %token PE_START_EVENTS PE_START_TERMS
@@ -782,7 +796,7 @@ PE_NAME '=' PE_NAME
 	struct parse_events_term *term;
 
 	if (parse_events_term__str(&term, PARSE_EVENTS__TERM_TYPE_USER,
-					$1, $3, &@1, &@3)) {
+					$1, $3, loc_term(&@1), loc_val(&@3))) {
 		free($1);
 		free($3);
 		YYABORT;
@@ -839,7 +853,8 @@ PE_TERM '=' PE_NAME
 {
 	struct parse_events_term *term;
 
-	if (parse_events_term__str(&term, (int)$1, NULL, $3, &@1, &@3)) {
+	if (parse_events_term__str(&term, (int)$1, NULL, $3,
+				   loc_term(&@1), loc_val(&@3))) {
 		free($3);
 		YYABORT;
 	}
@@ -867,7 +882,7 @@ PE_NAME array '=' PE_NAME
 	struct parse_events_term *term;
 
 	if (parse_events_term__str(&term, PARSE_EVENTS__TERM_TYPE_USER,
-					$1, $4, &@1, &@4)) {
+					$1, $4, loc_term(&@1), loc_val(&@4))) {
 		free($1);
 		free($4);
 		free($2.ranges);
@@ -898,7 +913,7 @@ PE_DRV_CFG_TERM
 
 	ABORT_ON(!config);
 	if (parse_events_term__str(&term, PARSE_EVENTS__TERM_TYPE_DRV_CFG,
-					config, $1, &@1, NULL)) {
+					config, $1, loc_term(&@1), 0)) {
 		free($1);
 		free(config);
 		YYABORT;

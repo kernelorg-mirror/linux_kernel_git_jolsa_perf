@@ -158,7 +158,7 @@ int parse_events_term__num(struct parse_events_term **term,
 			   void *loc_term, void *loc_val);
 int parse_events_term__str(struct parse_events_term **term,
 			   int type_term, char *config, char *str,
-			   void *loc_term, void *loc_val);
+			   int loc_term, int loc_val);
 int parse_events_term__sym_hw(struct parse_events_term **term,
 			      char *config, unsigned idx);
 int parse_events_term__clone(struct parse_events_term **new,

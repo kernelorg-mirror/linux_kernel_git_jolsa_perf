@@ -3210,17 +3210,14 @@ int parse_events_term__num(struct parse_events_term **term,
 
 int parse_events_term__str(struct parse_events_term **term,
 			   int type_term, char *config, char *str,
-			   void *loc_term_, void *loc_val_)
+			   int loc_term, int loc_val)
 {
-	YYLTYPE *loc_term = loc_term_;
-	YYLTYPE *loc_val = loc_val_;
-
 	struct parse_events_term temp = {
 		.type_val  = PARSE_EVENTS__TERM_TYPE_STR,
 		.type_term = type_term,
 		.config    = config,
-		.err_term  = loc_term ? loc_term->first_column : 0,
-		.err_val   = loc_val  ? loc_val->first_column  : 0,
+		.err_term  = loc_term,
+		.err_val   = loc_val,
 	};
 
 	return new_term(term, &temp, str, 0);
