@@ -155,7 +155,7 @@ int parse_events__is_hardcoded_term(struct parse_events_term *term);
 int parse_events_term__num(struct parse_events_term **term,
 			   int type_term, char *config, u64 num,
 			   bool novalue,
-			   void *loc_term, void *loc_val);
+			   int loc_term, int loc_val);
 int parse_events_term__str(struct parse_events_term **term,
 			   int type_term, char *config, char *str,
 			   int loc_term, int loc_val);

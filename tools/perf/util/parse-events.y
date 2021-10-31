@@ -787,7 +787,7 @@ PE_RAW
 	struct parse_events_term *term;
 
 	ABORT_ON(parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_CONFIG,
-					NULL, $1, false, &@1, NULL));
+					NULL, $1, false, loc_term(&@1), 0));
 	$$ = term;
 }
 |
@@ -809,7 +809,7 @@ PE_NAME '=' PE_VALUE
 	struct parse_events_term *term;
 
 	if (parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_USER,
-					$1, $3, false, &@1, &@3)) {
+					$1, $3, false, loc_term(&@1), loc_val(&@3))) {
 		free($1);
 		YYABORT;
 	}
@@ -833,7 +833,7 @@ PE_NAME
 	struct parse_events_term *term;
 
 	if (parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_USER,
-					$1, 1, true, &@1, NULL)) {
+					$1, 1, true, loc_term(&@1), 0)) {
 		free($1);
 		YYABORT;
 	}
@@ -865,7 +865,8 @@ PE_TERM '=' PE_VALUE
 {
 	struct parse_events_term *term;
 
-	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, $3, false, &@1, &@3));
+	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, $3, false,
+					loc_term(&@1), loc_val(&@3)));
 	$$ = term;
 }
 |
@@ -873,7 +874,7 @@ PE_TERM
 {
 	struct parse_events_term *term;
 
-	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1, true, &@1, NULL));
+	ABORT_ON(parse_events_term__num(&term, (int)$1, NULL, 1, true, loc_term(&@1), 0));
 	$$ = term;
 }
 |
@@ -897,7 +898,7 @@ PE_NAME array '=' PE_VALUE
 	struct parse_events_term *term;
 
 	if (parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_USER,
-					$1, $4, false, &@1, &@4)) {
+					$1, $4, false, loc_term(&@1), loc_val(&@4))) {
 		free($1);
 		free($2.ranges);
 		YYABORT;
