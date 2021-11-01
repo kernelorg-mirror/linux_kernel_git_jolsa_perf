@@ -72,8 +72,8 @@ struct parse_events_error {
 };
 
 struct parse_events_ops {
-	struct evsel* (*evsel__new)(struct perf_event_attr *attr, int idx);
-	struct evsel* (*evsel__new_tp)(const char *sys, const char *name, int idx);
+	struct perf_evsel* (*perf_evsel__new)(struct perf_event_attr *attr, int idx);
+	struct perf_evsel* (*perf_evsel__new_tp)(const char *sys, const char *name, int idx);
 };
 
 struct parse_events_state {
