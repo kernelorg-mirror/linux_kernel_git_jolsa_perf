@@ -96,9 +96,6 @@ int perf_pmu__convert_scale(const char *scale, char **end, double *sval);
 
 int perf_pmu__caps_parse(struct perf_pmu *pmu);
 
-void perf_pmu__warn_invalid_config(struct perf_pmu *pmu, __u64 config,
-				   const char *name);
-
 bool perf_pmu__has_hybrid(void);
 int perf_pmu__match(char *pattern, char *name, char *tok);
 

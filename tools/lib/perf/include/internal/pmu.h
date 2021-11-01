@@ -54,4 +54,6 @@ void perf_pmu__set_format(unsigned long *bits, long from, long to);
 void perf_pmu_error(struct list_head *list, char *name, char const *msg);
 int perf_pmu__format_parse(char *dir, struct list_head *head);
 
+void perf_pmu__warn_invalid_config(struct perf_pmu *pmu, __u64 config,
+				   const char *name);
 #endif /* __LIBPERF_INTERNAL_PMU_H */
