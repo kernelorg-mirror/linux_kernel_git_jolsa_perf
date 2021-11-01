@@ -61,34 +61,6 @@ struct perf_pmu_event_symbol {
 	enum perf_pmu_event_symbol_type	type;
 };
 
-struct parse_events_error {
-	int   num_errors;       /* number of errors encountered */
-	int   idx;	/* index in the parsed string */
-	char *str;      /* string to display at the index */
-	char *help;	/* optional help string */
-	int   first_idx;/* as above, but for the first encountered error */
-	char *first_str;
-	char *first_help;
-};
-
-struct parse_events_ops {
-	struct perf_evsel* (*perf_evsel__new)(struct perf_event_attr *attr, int idx);
-	struct perf_evsel* (*perf_evsel__new_tp)(const char *sys, const char *name, int idx);
-};
-
-struct parse_events_state {
-	struct list_head	   list;
-	int			   idx;
-	int			   nr_groups;
-	struct parse_events_error *error;
-	struct perf_evlist	  *evlist;
-	struct list_head	  *terms;
-	int			   stoken;
-	struct perf_pmu		  *fake_pmu;
-	char			  *hybrid_pmu_name;
-	struct parse_events_ops	  *ops;
-};
-
 void parse_events__handle_error(struct parse_events_error *err, int idx,
 				char *str, char *help);
 void parse_events__shrink_config_terms(void);

@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/list.h>
 #include <unistd.h>
+#include <linux/perf_event.h>
 
 struct event_symbol {
 	const char	*symbol;
@@ -72,6 +73,34 @@ struct parse_events_term {
 
 	/* Coming from implicit alias */
 	bool weak;
+};
+
+struct parse_events_error {
+	int   num_errors;       /* number of errors encountered */
+	int   idx;	/* index in the parsed string */
+	char *str;      /* string to display at the index */
+	char *help;	/* optional help string */
+	int   first_idx;/* as above, but for the first encountered error */
+	char *first_str;
+	char *first_help;
+};
+
+struct parse_events_ops {
+	struct perf_evsel* (*perf_evsel__new)(struct perf_event_attr *attr, int idx);
+	struct perf_evsel* (*perf_evsel__new_tp)(const char *sys, const char *name, int idx);
+};
+
+struct parse_events_state {
+	struct list_head	   list;
+	int			   idx;
+	int			   nr_groups;
+	struct parse_events_error *error;
+	struct perf_evlist	  *evlist;
+	struct list_head	  *terms;
+	int			   stoken;
+	struct perf_pmu		  *fake_pmu;
+	char			  *hybrid_pmu_name;
+	struct parse_events_ops	  *ops;
 };
 
 int parse_events_term__num(struct parse_events_term **term,
