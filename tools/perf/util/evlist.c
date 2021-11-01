@@ -249,7 +249,7 @@ int evlist__add_dummy(struct evlist *evlist)
 		.config = PERF_COUNT_SW_DUMMY,
 		.size	= sizeof(attr), /* to capture ABI version */
 	};
-	struct evsel *evsel = evsel__new_idx(&attr, evlist->core.nr_entries);
+	struct evsel *evsel = evsel__new_idx(&attr, evlist->core.nr_entries, false);
 
 	if (evsel == NULL)
 		return -ENOMEM;
@@ -265,7 +265,7 @@ static int evlist__add_attrs(struct evlist *evlist, struct perf_event_attr *attr
 	size_t i;
 
 	for (i = 0; i < nr_attrs; i++) {
-		evsel = evsel__new_idx(attrs + i, evlist->core.nr_entries + i);
+		evsel = evsel__new_idx(attrs + i, evlist->core.nr_entries + i, false);
 		if (evsel == NULL)
 			goto out_delete_partial_list;
 		list_add_tail(&evsel->core.node, &head);

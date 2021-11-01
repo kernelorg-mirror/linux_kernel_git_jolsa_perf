@@ -261,12 +261,15 @@ void evsel__init(struct evsel *evsel,
 	evsel->pmu_name      = NULL;
 }
 
-struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx)
+struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx, bool init_attr)
 {
 	struct evsel *evsel = zalloc(perf_evsel__object.size);
 
 	if (!evsel)
 		return NULL;
+	if (init_attr)
+		event_attr_init(attr);
+
 	evsel__init(evsel, attr, idx);
 
 	if (evsel__is_bpf_output(evsel)) {
