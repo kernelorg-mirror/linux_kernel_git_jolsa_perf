@@ -774,6 +774,7 @@ parse_events_config_bpf(struct parse_events_state *parse_state,
 			struct list_head *head_config)
 {
 	struct parse_events_term *term;
+	struct evlist *evlist;
 	int error_pos;
 
 	if (!head_config || list_empty(head_config))
@@ -789,12 +790,13 @@ parse_events_config_bpf(struct parse_events_state *parse_state,
 			return -EINVAL;
 		}
 
-		err = bpf__config_obj(obj, term, parse_state->evlist, &error_pos);
+		evlist = container_of(parse_state->evlist, struct evlist, core);
+		err = bpf__config_obj(obj, term, evlist, &error_pos);
 		if (err) {
 			char errbuf[BUFSIZ];
 			int idx;
 
-			bpf__strerror_config_obj(obj, term, parse_state->evlist,
+			bpf__strerror_config_obj(obj, term, evlist,
 						 &error_pos, err, errbuf,
 						 sizeof(errbuf));
 
@@ -2224,7 +2226,7 @@ int __parse_events(struct evlist *evlist, const char *str,
 		.list	  = LIST_HEAD_INIT(parse_state.list),
 		.idx	  = evlist->core.nr_entries,
 		.error	  = err,
-		.evlist	  = evlist,
+		.evlist	  = &evlist->core,
 		.stoken	  = PE_START_EVENTS,
 		.fake_pmu = fake_pmu,
 		.ops	  = &parse_state_ops,
