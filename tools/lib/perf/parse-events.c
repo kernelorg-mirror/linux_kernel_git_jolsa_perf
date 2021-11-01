@@ -5,6 +5,9 @@
 #include <linux/zalloc.h>
 #include <string.h>
 #include <internal/parse-events.h>
+#include <internal/pmu.h>
+#include <internal/evsel.h>
+#include <perf/cpumap.h>
 #include <stdlib.h>
 #include <errno.h>
 
@@ -301,4 +304,48 @@ void parse_events_terms__delete(struct list_head *terms)
 		return;
 	parse_events_terms__purge(terms);
 	free(terms);
+}
+
+struct perf_evsel *
+perf_evsel__add_event(struct parse_events_state *parse_state,
+		      struct list_head *list,
+		      struct perf_event_attr *attr,
+		      bool init_attr,
+		      const char *name, const char *metric_id, struct perf_pmu *pmu,
+		      struct list_head *config_terms, bool auto_merge_stats,
+		      const char *cpu_list)
+{
+	struct perf_evsel *evsel;
+	struct perf_cpu_map *cpus = pmu ? perf_cpu_map__get(pmu->cpus) :
+			       cpu_list ? perf_cpu_map__new(cpu_list) : NULL;
+	int *idx = &parse_state->idx;
+
+	if (pmu && attr->type == PERF_TYPE_RAW)
+		perf_pmu__warn_invalid_config(pmu, attr->config, name);
+
+	evsel = parse_state->ops->perf_evsel__new(attr, *idx, init_attr);
+	if (!evsel) {
+		perf_cpu_map__put(cpus);
+		return NULL;
+	}
+
+	(*idx)++;
+	evsel->cpus = cpus;
+	evsel->own_cpus = perf_cpu_map__get(cpus);
+	evsel->system_wide = pmu ? pmu->is_uncore : false;
+	evsel->auto_merge_stats = auto_merge_stats;
+
+	if (name)
+		evsel->name = strdup(name);
+
+	if (metric_id)
+		evsel->metric_id = strdup(metric_id);
+
+	if (config_terms)
+		list_splice_init(config_terms, &evsel->config_terms);
+
+	if (list)
+		list_add_tail(&evsel->node, list);
+
+	return evsel;
 }
