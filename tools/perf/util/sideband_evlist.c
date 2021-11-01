@@ -22,7 +22,7 @@ int evlist__add_sb_event(struct evlist *evlist, struct perf_event_attr *attr,
 		attr->sample_id_all = 1;
 	}
 
-	evsel = evsel__new_idx(attr, evlist->core.nr_entries);
+	evsel = evsel__new_idx(attr, evlist->core.nr_entries, false);
 	if (!evsel)
 		return -1;
 

@@ -188,11 +188,11 @@ int evsel__object_config(size_t object_size,
 struct perf_pmu *evsel__find_pmu(struct evsel *evsel);
 bool evsel__is_aux_event(struct evsel *evsel);
 
-struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx);
+struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx, bool init_attr);
 
 static inline struct evsel *evsel__new(struct perf_event_attr *attr)
 {
-	return evsel__new_idx(attr, 0);
+	return evsel__new_idx(attr, 0, false);
 }
 
 struct evsel *evsel__clone(struct evsel *orig);

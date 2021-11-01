@@ -60,9 +60,9 @@ static struct perf_pmu_event_symbol *perf_pmu_events_list;
  */
 static int perf_pmu_events_list_num;
 
-static struct perf_evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
+static struct perf_evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx, bool init_attr)
 {
-	struct evsel *evsel = evsel__new_idx(attr, idx);
+	struct evsel *evsel = evsel__new_idx(attr, idx, init_attr);
 
 	return evsel ? &evsel->core : NULL;
 }
@@ -298,10 +298,7 @@ perf_evsel__add_event(struct parse_events_state *parse_state,
 	if (pmu && attr->type == PERF_TYPE_RAW)
 		perf_pmu__warn_invalid_config(pmu, attr->config, name);
 
-	if (init_attr)
-		event_attr_init(attr);
-
-	evsel = parse_state->ops->perf_evsel__new(attr, *idx);
+	evsel = parse_state->ops->perf_evsel__new(attr, *idx, init_attr);
 	if (!evsel) {
 		perf_cpu_map__put(cpus);
 		return NULL;
