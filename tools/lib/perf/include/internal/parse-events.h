@@ -120,4 +120,13 @@ void parse_events_terms__delete(struct list_head *terms);
 void parse_events_terms__purge(struct list_head *terms);
 int parse_events_copy_term_list(struct list_head *old,
 				 struct list_head **new);
+
+struct perf_evsel *
+perf_evsel__add_event(struct parse_events_state *parse_state,
+		      struct list_head *list,
+		      struct perf_event_attr *attr,
+		      bool init_attr,
+		      const char *name, const char *metric_id, struct perf_pmu *pmu,
+		      struct list_head *config_terms, bool auto_merge_stats,
+		      const char *cpu_list);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
