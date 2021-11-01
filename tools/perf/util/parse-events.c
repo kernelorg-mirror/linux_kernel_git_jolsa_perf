@@ -60,9 +60,23 @@ static struct perf_pmu_event_symbol *perf_pmu_events_list;
  */
 static int perf_pmu_events_list_num;
 
+static struct perf_evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
+{
+	struct evsel *evsel = evsel__new_idx(attr, idx);
+
+	return evsel ? &evsel->core : NULL;
+}
+
+static struct perf_evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
+{
+	struct evsel *evsel = evsel__newtp_idx(sys, name, idx);
+
+	return IS_ERR(evsel) ? (void*) evsel : &evsel->core;
+}
+
 static struct parse_events_ops parse_state_ops = {
-	.evsel__new    = evsel__new_idx,
-	.evsel__new_tp = evsel__newtp_idx,
+	.perf_evsel__new    = perf_evsel__new_idx,
+	.perf_evsel__new_tp = perf_evsel__newtp_idx,
 };
 
 #define __PERF_EVENT_FIELD(config, name) \
@@ -267,16 +281,16 @@ static char *get_config_name(struct list_head *head_terms)
 	return get_config_str(head_terms, PARSE_EVENTS__TERM_TYPE_NAME);
 }
 
-static struct evsel *
-__add_event(struct parse_events_state *parse_state,
-	    struct list_head *list,
-	    struct perf_event_attr *attr,
-	    bool init_attr,
-	    const char *name, const char *metric_id, struct perf_pmu *pmu,
-	    struct list_head *config_terms, bool auto_merge_stats,
-	    const char *cpu_list)
+static struct perf_evsel *
+perf_evsel__add_event(struct parse_events_state *parse_state,
+		      struct list_head *list,
+		      struct perf_event_attr *attr,
+		      bool init_attr,
+		      const char *name, const char *metric_id, struct perf_pmu *pmu,
+		      struct list_head *config_terms, bool auto_merge_stats,
+		      const char *cpu_list)
 {
-	struct evsel *evsel;
+	struct perf_evsel *evsel;
 	struct perf_cpu_map *cpus = pmu ? perf_cpu_map__get(pmu->cpus) :
 			       cpu_list ? perf_cpu_map__new(cpu_list) : NULL;
 	int *idx = &parse_state->idx;
@@ -287,31 +301,48 @@ __add_event(struct parse_events_state *parse_state,
 	if (init_attr)
 		event_attr_init(attr);
 
-	evsel = parse_state->ops->evsel__new(attr, *idx);
+	evsel = parse_state->ops->perf_evsel__new(attr, *idx);
 	if (!evsel) {
 		perf_cpu_map__put(cpus);
 		return NULL;
 	}
 
 	(*idx)++;
-	evsel->core.cpus = cpus;
-	evsel->core.own_cpus = perf_cpu_map__get(cpus);
-	evsel->core.system_wide = pmu ? pmu->is_uncore : false;
-	evsel->core.auto_merge_stats = auto_merge_stats;
+	evsel->cpus = cpus;
+	evsel->own_cpus = perf_cpu_map__get(cpus);
+	evsel->system_wide = pmu ? pmu->is_uncore : false;
+	evsel->auto_merge_stats = auto_merge_stats;
 
 	if (name)
-		evsel->core.name = strdup(name);
+		evsel->name = strdup(name);
 
 	if (metric_id)
-		evsel->core.metric_id = strdup(metric_id);
+		evsel->metric_id = strdup(metric_id);
 
 	if (config_terms)
-		list_splice_init(config_terms, &evsel->core.config_terms);
+		list_splice_init(config_terms, &evsel->config_terms);
 
 	if (list)
-		list_add_tail(&evsel->core.node, list);
+		list_add_tail(&evsel->node, list);
 
 	return evsel;
+}
+
+static struct evsel *
+evsel__add_event(struct parse_events_state *parse_state,
+		 struct list_head *list,
+		 struct perf_event_attr *attr,
+		 bool init_attr,
+		 const char *name, const char *metric_id, struct perf_pmu *pmu,
+		 struct list_head *config_terms, bool auto_merge_stats,
+		 const char *cpu_list)
+{
+	struct perf_evsel *evsel;
+
+	evsel = perf_evsel__add_event(parse_state, list, attr, init_attr,
+				      name, metric_id, pmu, config_terms,
+				      auto_merge_stats, cpu_list);
+	return container_of(evsel, struct evsel, core);
 }
 
 struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
@@ -319,9 +350,9 @@ struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
 				      const char *name, const char *metric_id,
 				      struct perf_pmu *pmu)
 {
-	return __add_event(parse_state, /*list=*/NULL, attr, /*init_attr=*/false, name,
-			   metric_id, pmu, /*config_terms=*/NULL,
-			   /*auto_merge_stats=*/false, /*cpu_list=*/NULL);
+	return evsel__add_event(parse_state, /*list=*/NULL, attr, /*init_attr=*/false, name,
+				metric_id, pmu, /*config_terms=*/NULL,
+				/*auto_merge_stats=*/false, /*cpu_list=*/NULL);
 }
 
 static int add_event(struct parse_events_state *parse_state,
@@ -329,9 +360,9 @@ static int add_event(struct parse_events_state *parse_state,
 		     struct perf_event_attr *attr, const char *name,
 		     const char *metric_id, struct list_head *config_terms)
 {
-	return __add_event(parse_state, list, attr, /*init_attr*/true, name, metric_id,
-			   /*pmu=*/NULL, config_terms,
-			   /*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOMEM;
+	return evsel__add_event(parse_state, list, attr, /*init_attr*/true, name, metric_id,
+				/*pmu=*/NULL, config_terms,
+				/*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOMEM;
 }
 
 static int add_event_tool(struct parse_events_state *parse_state,
@@ -344,10 +375,10 @@ static int add_event_tool(struct parse_events_state *parse_state,
 		.config = PERF_COUNT_SW_DUMMY,
 	};
 
-	evsel = __add_event(parse_state, list, &attr, /*init_attr=*/true, /*name=*/NULL,
-			    /*metric_id=*/NULL, /*pmu=*/NULL,
-			    /*config_terms=*/NULL, /*auto_merge_stats=*/false,
-			    /*cpu_list=*/"0");
+	evsel = evsel__add_event(parse_state, list, &attr, /*init_attr=*/true, /*name=*/NULL,
+				 /*metric_id=*/NULL, /*pmu=*/NULL,
+				 /*config_terms=*/NULL, /*auto_merge_stats=*/false,
+				 /*cpu_list=*/"0");
 	if (!evsel)
 		return -ENOMEM;
 	evsel->core.tool_event = tool_event;
@@ -513,7 +544,7 @@ static int add_tracepoint(struct parse_events_state *parse_state,
 			  struct list_head *head_config)
 {
 	int *idx = &parse_state->idx;
-	struct evsel *evsel = parse_state->ops->evsel__new_tp(sys_name, evt_name, (*idx)++);
+	struct perf_evsel *evsel = parse_state->ops->perf_evsel__new_tp(sys_name, evt_name, (*idx)++);
 
 	if (IS_ERR(evsel)) {
 		tracepoint_error(err, PTR_ERR(evsel), sys_name, evt_name);
@@ -525,10 +556,10 @@ static int add_tracepoint(struct parse_events_state *parse_state,
 
 		if (get_config_terms(head_config, &config_terms))
 			return -ENOMEM;
-		list_splice(&config_terms, &evsel->core.config_terms);
+		list_splice(&config_terms, &evsel->config_terms);
 	}
 
-	list_add_tail(&evsel->core.node, list);
+	list_add_tail(&evsel->node, list);
 	return 0;
 }
 
@@ -1484,11 +1515,11 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 
 	if (!head_config) {
 		attr.type = pmu->type;
-		evsel = __add_event(parse_state, list, &attr,
-				    /*init_attr=*/true, /*name=*/NULL,
-				    /*metric_id=*/NULL, pmu,
-				    /*config_terms=*/NULL, auto_merge_stats,
-				    /*cpu_list=*/NULL);
+		evsel = evsel__add_event(parse_state, list, &attr,
+					 /*init_attr=*/true, /*name=*/NULL,
+					 /*metric_id=*/NULL, pmu,
+					 /*config_terms=*/NULL, auto_merge_stats,
+					 /*cpu_list=*/NULL);
 		if (evsel) {
 			evsel->pmu_name = name ? strdup(name) : NULL;
 			evsel->use_uncore_alias = use_uncore_alias;
@@ -1541,10 +1572,10 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 		return -EINVAL;
 	}
 
-	evsel = __add_event(parse_state, list, &attr, /*init_attr=*/true,
-			    get_config_name(head_config),
-			    get_config_metric_id(head_config), pmu,
-			    &config_terms, auto_merge_stats, /*cpu_list=*/NULL);
+	evsel = evsel__add_event(parse_state, list, &attr, /*init_attr=*/true,
+				 get_config_name(head_config),
+				 get_config_metric_id(head_config), pmu,
+				 &config_terms, auto_merge_stats, /*cpu_list=*/NULL);
 	if (!evsel)
 		return -ENOMEM;
 
@@ -3107,7 +3138,7 @@ struct evsel *parse_events__add_event_hybrid(struct parse_events_state *parse_st
 					     struct perf_pmu *pmu,
 					     struct list_head *config_terms)
 {
-	return __add_event(parse_state, list, attr, /*init_attr=*/true, name, metric_id,
-			   pmu, config_terms, /*auto_merge_stats=*/false,
-			   /*cpu_list=*/NULL);
+	return evsel__add_event(parse_state, list, attr, /*init_attr=*/true, name, metric_id,
+				pmu, config_terms, /*auto_merge_stats=*/false,
+				/*cpu_list=*/NULL);
 }
