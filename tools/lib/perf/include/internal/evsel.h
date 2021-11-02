@@ -89,4 +89,9 @@ int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter);
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
 void perf_evsel__free_id(struct perf_evsel *evsel);
 
+static inline bool perf_evsel__is_group_leader(const struct perf_evsel *evsel)
+{
+        return evsel->leader == evsel;
+}
+
 #endif /* __LIBPERF_INTERNAL_EVSEL_H */
