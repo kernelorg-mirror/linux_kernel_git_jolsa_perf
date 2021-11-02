@@ -1770,22 +1770,22 @@ struct event_modifier {
 };
 
 static int get_event_modifier(struct event_modifier *mod, char *str,
-			       struct evsel *evsel)
+			       struct perf_evsel *evsel)
 {
-	int eu = evsel ? evsel->core.attr.exclude_user : 0;
-	int ek = evsel ? evsel->core.attr.exclude_kernel : 0;
-	int eh = evsel ? evsel->core.attr.exclude_hv : 0;
-	int eH = evsel ? evsel->core.attr.exclude_host : 0;
-	int eG = evsel ? evsel->core.attr.exclude_guest : 0;
-	int eI = evsel ? evsel->core.attr.exclude_idle : 0;
-	int precise = evsel ? evsel->core.attr.precise_ip : 0;
+	int eu = evsel ? evsel->attr.exclude_user : 0;
+	int ek = evsel ? evsel->attr.exclude_kernel : 0;
+	int eh = evsel ? evsel->attr.exclude_hv : 0;
+	int eH = evsel ? evsel->attr.exclude_host : 0;
+	int eG = evsel ? evsel->attr.exclude_guest : 0;
+	int eI = evsel ? evsel->attr.exclude_idle : 0;
+	int precise = evsel ? evsel->attr.precise_ip : 0;
 	int precise_max = 0;
 	int sample_read = 0;
-	int pinned = evsel ? evsel->core.attr.pinned : 0;
-	int exclusive = evsel ? evsel->core.attr.exclusive : 0;
+	int pinned = evsel ? evsel->attr.pinned : 0;
+	int exclusive = evsel ? evsel->attr.exclusive : 0;
 
 	int exclude = eu | ek | eh;
-	int exclude_GH = evsel ? evsel->core.exclude_GH : 0;
+	int exclude_GH = evsel ? evsel->exclude_GH : 0;
 	int weak = 0;
 	int bpf_counter = 0;
 
@@ -1893,7 +1893,7 @@ static int check_modifier(char *str)
 
 int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 {
-	struct evsel *evsel;
+	struct perf_evsel *evsel;
 	struct event_modifier mod;
 
 	if (str == NULL)
@@ -1905,26 +1905,26 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 	if (!add && get_event_modifier(&mod, str, NULL))
 		return -EINVAL;
 
-	__evlist__for_each_entry(list, evsel) {
+	__perf_evlist__for_each_entry(list, evsel) {
 		if (add && get_event_modifier(&mod, str, evsel))
 			return -EINVAL;
 
-		evsel->core.attr.exclude_user   = mod.eu;
-		evsel->core.attr.exclude_kernel = mod.ek;
-		evsel->core.attr.exclude_hv     = mod.eh;
-		evsel->core.attr.precise_ip     = mod.precise;
-		evsel->core.attr.exclude_host   = mod.eH;
-		evsel->core.attr.exclude_guest  = mod.eG;
-		evsel->core.attr.exclude_idle   = mod.eI;
-		evsel->core.exclude_GH          = mod.exclude_GH;
-		evsel->core.sample_read         = mod.sample_read;
-		evsel->core.precise_max         = mod.precise_max;
-		evsel->core.weak_group          = mod.weak;
-		evsel->core.bpf_counter	        = mod.bpf_counter;
+		evsel->attr.exclude_user   = mod.eu;
+		evsel->attr.exclude_kernel = mod.ek;
+		evsel->attr.exclude_hv     = mod.eh;
+		evsel->attr.precise_ip     = mod.precise;
+		evsel->attr.exclude_host   = mod.eH;
+		evsel->attr.exclude_guest  = mod.eG;
+		evsel->attr.exclude_idle   = mod.eI;
+		evsel->exclude_GH          = mod.exclude_GH;
+		evsel->sample_read         = mod.sample_read;
+		evsel->precise_max         = mod.precise_max;
+		evsel->weak_group          = mod.weak;
+		evsel->bpf_counter         = mod.bpf_counter;
 
-		if (evsel__is_group_leader(evsel)) {
-			evsel->core.attr.pinned = mod.pinned;
-			evsel->core.attr.exclusive = mod.exclusive;
+		if (perf_evsel__is_group_leader(evsel)) {
+			evsel->attr.pinned = mod.pinned;
+			evsel->attr.exclusive = mod.exclusive;
 		}
 	}
 
