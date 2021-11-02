@@ -49,6 +49,19 @@ static void free_list_evsel(struct list_head* list_evsel)
 	free(list_evsel);
 }
 
+/* list_event is assumed to point to malloc'ed memory */
+static void update_lists(struct list_head *list_event,
+			 struct list_head *list_all)
+{
+	/*
+	 * Called for single event definition. Update the
+	 * 'all event' list, and reinit the 'single event'
+	 * list, for next event definition.
+	 */
+	list_splice_tail(list_event, list_all);
+	free(list_event);
+}
+
 static void inc_group_count(struct list_head *list,
 		       struct parse_events_state *parse_state)
 {
@@ -160,7 +173,7 @@ start_events: groups
 	struct parse_events_state *parse_state = _parse_state;
 
 	/* frees $1 */
-	parse_events_update_lists($1, &parse_state->list);
+	update_lists($1, &parse_state->list);
 }
 
 groups:
@@ -170,7 +183,7 @@ groups ',' group
 	struct list_head *group = $3;
 
 	/* frees $3 */
-	parse_events_update_lists(group, list);
+	update_lists(group, list);
 	$$ = list;
 }
 |
@@ -180,7 +193,7 @@ groups ',' event
 	struct list_head *event = $3;
 
 	/* frees $3 */
-	parse_events_update_lists(event, list);
+	update_lists(event, list);
 	$$ = list;
 }
 |
@@ -237,7 +250,7 @@ events ',' event
 	struct list_head *list  = $1;
 
 	/* frees $3 */
-	parse_events_update_lists(event, list);
+	update_lists(event, list);
 	$$ = list;
 }
 |
