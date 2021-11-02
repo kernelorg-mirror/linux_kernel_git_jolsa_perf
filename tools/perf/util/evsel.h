@@ -68,7 +68,6 @@ struct evsel {
 		bool			use_uncore_alias;
 		bool			is_libpfm_event;
 		bool			collect_stat;
-		bool			bpf_counter;
 		bool			use_config_name;
 		int			bpf_fd;
 		struct bpf_object	*bpf_obj;
