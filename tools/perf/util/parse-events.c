@@ -1721,18 +1721,6 @@ void parse_events__set_leader(char *name, struct list_head *list,
 	leader->group_name = name ? strdup(name) : NULL;
 }
 
-int parse_events_name(struct list_head *list, const char *name)
-{
-	struct evsel *evsel;
-
-	__evlist__for_each_entry(list, evsel) {
-		if (!evsel->core.name)
-			evsel->core.name = strdup(name);
-	}
-
-	return 0;
-}
-
 static int
 comp_pmu(const void *p1, const void *p2)
 {

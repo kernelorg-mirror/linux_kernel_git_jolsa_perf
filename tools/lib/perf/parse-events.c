@@ -580,3 +580,15 @@ void parse_events_evlist_error(struct parse_events_state *parse_state,
 
 	parse_events__handle_error(parse_state->error, idx, strdup(str), NULL);
 }
+
+int parse_events_name(struct list_head *list, const char *name)
+{
+	struct perf_evsel *evsel;
+
+	__perf_evlist__for_each_entry(list, evsel) {
+		if (!evsel->name)
+			evsel->name = strdup(name);
+	}
+
+	return 0;
+}
