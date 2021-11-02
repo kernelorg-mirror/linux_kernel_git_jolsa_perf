@@ -38,13 +38,14 @@ static struct list_head* alloc_list(void)
 	return list;
 }
 
-static void free_list_evsel(struct list_head* list_evsel)
+static void free_list_evsel(struct parse_events_state *parse_state,
+			    struct list_head* list_evsel)
 {
-	struct evsel *evsel, *tmp;
+	struct perf_evsel *evsel, *tmp;
 
-	list_for_each_entry_safe(evsel, tmp, list_evsel, core.node) {
-		list_del_init(&evsel->core.node);
-		evsel__delete(evsel);
+	list_for_each_entry_safe(evsel, tmp, list_evsel, node) {
+		list_del_init(&evsel->node);
+		parse_state->ops->perf_evsel__delete(evsel);
 	}
 	free(list_evsel);
 }
@@ -140,7 +141,7 @@ static int loc_val(void *loc_val_)
 %type <list_evsel> group_def
 %type <list_evsel> group
 %type <list_evsel> groups
-%destructor { free_list_evsel ($$); } <list_evsel>
+%destructor { free_list_evsel (_parse_state, $$); } <list_evsel>
 %type <tracepoint_name> tracepoint_name
 %destructor { free ($$.sys); free ($$.event); } <tracepoint_name>
 %type <array> array
@@ -215,7 +216,7 @@ group_def ':' PE_MODIFIER_EVENT
 
 		parse_events__handle_error(error, @3.first_column,
 					   strdup("Bad modifier"), NULL);
-		free_list_evsel(list);
+		free_list_evsel(parse_state, list);
 		YYABORT;
 	}
 	$$ = list;
@@ -277,7 +278,7 @@ event_name PE_MODIFIER_EVENT
 
 		parse_events__handle_error(error, @2.first_column,
 					   strdup("Bad modifier"), NULL);
-		free_list_evsel(list);
+		free_list_evsel(parse_state, list);
 		YYABORT;
 	}
 	$$ = list;
@@ -293,7 +294,7 @@ PE_EVENT_NAME event_def
 	err = parse_events_name($2, $1);
 	free($1);
 	if (err) {
-		free_list_evsel($2);
+		free_list_evsel(_parse_state, $2);
 		YYABORT;
 	}
 	$$ = $2;
@@ -467,7 +468,7 @@ value_sym '/' event_config '/'
 	err = parse_events_add_numeric(_parse_state, list, type, config, $3);
 	parse_events_terms__delete($3);
 	if (err) {
-		free_list_evsel(list);
+		free_list_evsel(_parse_state, list);
 		YYABORT;
 	}
 	$$ = list;
@@ -511,7 +512,7 @@ PE_NAME_CACHE_TYPE '-' PE_NAME_CACHE_OP_RESULT '-' PE_NAME_CACHE_OP_RESULT opt_e
 	free($3);
 	free($5);
 	if (err) {
-		free_list_evsel(list);
+		free_list_evsel(parse_state, list);
 		YYABORT;
 	}
 	$$ = list;
@@ -531,7 +532,7 @@ PE_NAME_CACHE_TYPE '-' PE_NAME_CACHE_OP_RESULT opt_event_config
 	free($1);
 	free($3);
 	if (err) {
-		free_list_evsel(list);
+		free_list_evsel(parse_state, list);
 		YYABORT;
 	}
 	$$ = list;
@@ -550,7 +551,7 @@ PE_NAME_CACHE_TYPE opt_event_config
 	parse_events_terms__delete($2);
 	free($1);
 	if (err) {
-		free_list_evsel(list);
+		free_list_evsel(parse_state, list);
 		YYABORT;
 	}
 	$$ = list;

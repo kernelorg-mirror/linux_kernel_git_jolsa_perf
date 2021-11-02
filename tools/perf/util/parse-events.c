@@ -74,9 +74,17 @@ static struct perf_evsel *perf_evsel__newtp_idx(const char *sys, const char *nam
 	return IS_ERR(evsel) ? (void*) evsel : &evsel->core;
 }
 
+static void perf_evsel__delete_helper(struct perf_evsel *evsel)
+{
+	struct evsel *tmp = container_of(evsel, struct evsel, core);
+
+	free(tmp);
+}
+
 static struct parse_events_ops parse_state_ops = {
 	.perf_evsel__new    = perf_evsel__new_idx,
 	.perf_evsel__new_tp = perf_evsel__newtp_idx,
+	.perf_evsel__delete = perf_evsel__delete_helper,
 };
 
 #define __PERF_EVENT_FIELD(config, name) \
