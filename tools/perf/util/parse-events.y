@@ -204,13 +204,13 @@ event
 group:
 group_def ':' PE_MODIFIER_EVENT
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list = $1;
 	int err;
 
-	err = parse_events__modifier_group(list, $3);
+	err = parse_events__modifier_group(list, $3, parse_state->guest);
 	free($3);
 	if (err) {
-		struct parse_events_state *parse_state = _parse_state;
 		struct parse_events_error *error = parse_state->error;
 
 		parse_events__handle_error(error, @3.first_column,
@@ -261,6 +261,7 @@ event: event_mod
 event_mod:
 event_name PE_MODIFIER_EVENT
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list = $1;
 	int err;
 
@@ -269,10 +270,9 @@ event_name PE_MODIFIER_EVENT
 	 * (there could be more events added for multiple tracepoint
 	 * definitions via '*?'.
 	 */
-	err = parse_events__modifier_event(list, $2, false);
+	err = parse_events__modifier_event(list, $2, false, parse_state->guest);
 	free($2);
 	if (err) {
-		struct parse_events_state *parse_state = _parse_state;
 		struct parse_events_error *error = parse_state->error;
 
 		parse_events__handle_error(error, @2.first_column,

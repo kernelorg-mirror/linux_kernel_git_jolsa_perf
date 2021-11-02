@@ -65,8 +65,8 @@ void parse_events__handle_error(struct parse_events_error *err, int idx,
 				char *str, char *help);
 void parse_events__shrink_config_terms(void);
 void parse_events__clear_array(struct parse_events_array *a);
-int parse_events__modifier_event(struct list_head *list, char *str, bool add);
-int parse_events__modifier_group(struct list_head *list, char *event_mod);
+int parse_events__modifier_event(struct list_head *list, char *str, bool add, bool guest);
+int parse_events__modifier_group(struct list_head *list, char *event_mod, bool guest);
 int parse_events_name(struct list_head *list, const char *name);
 int parse_events_add_tracepoint(struct parse_events_state *parse_state,
 				struct list_head *list,
