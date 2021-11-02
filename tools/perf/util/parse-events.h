@@ -61,8 +61,6 @@ struct perf_pmu_event_symbol {
 	enum perf_pmu_event_symbol_type	type;
 };
 
-void parse_events__handle_error(struct parse_events_error *err, int idx,
-				char *str, char *help);
 void parse_events__shrink_config_terms(void);
 void parse_events__clear_array(struct parse_events_array *a);
 int parse_events_name(struct list_head *list, const char *name);

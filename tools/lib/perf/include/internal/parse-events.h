@@ -132,4 +132,6 @@ perf_evsel__add_event(struct parse_events_state *parse_state,
 		      const char *cpu_list);
 int parse_events__modifier_event(struct list_head *list, char *str, bool add, bool guest);
 int parse_events__modifier_group(struct list_head *list, char *event_mod, bool guest);
+void parse_events__handle_error(struct parse_events_error *err, int idx,
+				char *str, char *help);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
