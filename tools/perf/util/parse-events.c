@@ -2051,7 +2051,7 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->core.attr.exclude_idle   = mod.eI;
 		evsel->core.exclude_GH          = mod.exclude_GH;
 		evsel->core.sample_read         = mod.sample_read;
-		evsel->precise_max         = mod.precise_max;
+		evsel->core.precise_max         = mod.precise_max;
 		evsel->weak_group	   = mod.weak;
 		evsel->bpf_counter	   = mod.bpf_counter;
 
