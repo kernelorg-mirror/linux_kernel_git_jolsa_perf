@@ -685,7 +685,7 @@ static int test__group1(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* cycles:upp */
 	evsel = evsel__next(evsel);
@@ -701,7 +701,7 @@ static int test__group1(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong precise_ip", evsel->core.attr.precise_ip == 2);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	return 0;
 }
@@ -727,7 +727,7 @@ static int test__group2(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* cache-references + :u modifier */
 	evsel = evsel__next(evsel);
@@ -742,7 +742,7 @@ static int test__group2(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* cycles:k */
 	evsel = evsel__next(evsel);
@@ -756,7 +756,7 @@ static int test__group2(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong exclude host", !evsel->core.attr.exclude_host);
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	return 0;
 }
@@ -785,7 +785,7 @@ static int test__group3(struct evlist *evlist __maybe_unused)
 		!strcmp(leader->group_name, "group1"));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* group1 cycles:kppp */
 	evsel = evsel__next(evsel);
@@ -802,7 +802,7 @@ static int test__group3(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* group2 cycles + G modifier */
 	evsel = leader = evsel__next(evsel);
@@ -820,7 +820,7 @@ static int test__group3(struct evlist *evlist __maybe_unused)
 		!strcmp(leader->group_name, "group2"));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* group2 1:3 + G modifier */
 	evsel = evsel__next(evsel);
@@ -834,7 +834,7 @@ static int test__group3(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* instructions:u */
 	evsel = evsel__next(evsel);
@@ -848,7 +848,7 @@ static int test__group3(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong exclude host", !evsel->core.attr.exclude_host);
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	return 0;
 }
@@ -876,7 +876,7 @@ static int test__group4(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* instructions:kp + p */
 	evsel = evsel__next(evsel);
@@ -892,7 +892,7 @@ static int test__group4(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong precise_ip", evsel->core.attr.precise_ip == 2);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	return 0;
 }
@@ -919,7 +919,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* instructions + G */
 	evsel = evsel__next(evsel);
@@ -934,7 +934,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 1);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* cycles:G */
 	evsel = leader = evsel__next(evsel);
@@ -951,7 +951,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong leader", evsel__is_group_leader(evsel));
 	TEST_ASSERT_VAL("wrong core.nr_members", evsel->core.nr_members == 2);
 	TEST_ASSERT_VAL("wrong group_idx", evsel__group_idx(evsel) == 0);
-	TEST_ASSERT_VAL("wrong sample_read", !evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", !evsel->core.sample_read);
 
 	/* instructions:G */
 	evsel = evsel__next(evsel);
@@ -1162,7 +1162,7 @@ static int test__leader_sample1(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
-	TEST_ASSERT_VAL("wrong sample_read", evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", evsel->core.sample_read);
 
 	/* cache-misses - not sampling */
 	evsel = evsel__next(evsel);
@@ -1176,7 +1176,7 @@ static int test__leader_sample1(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong exclude host", !evsel->core.attr.exclude_host);
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
-	TEST_ASSERT_VAL("wrong sample_read", evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", evsel->core.sample_read);
 
 	/* branch-misses - not sampling */
 	evsel = evsel__next(evsel);
@@ -1191,7 +1191,7 @@ static int test__leader_sample1(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
-	TEST_ASSERT_VAL("wrong sample_read", evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", evsel->core.sample_read);
 
 	return 0;
 }
@@ -1215,7 +1215,7 @@ static int test__leader_sample2(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
-	TEST_ASSERT_VAL("wrong sample_read", evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", evsel->core.sample_read);
 
 	/* branch-misses - not sampling */
 	evsel = evsel__next(evsel);
@@ -1230,7 +1230,7 @@ static int test__leader_sample2(struct evlist *evlist __maybe_unused)
 	TEST_ASSERT_VAL("wrong precise_ip", !evsel->core.attr.precise_ip);
 	TEST_ASSERT_VAL("wrong group name", !evsel->group_name);
 	TEST_ASSERT_VAL("wrong leader", evsel__has_leader(evsel, leader));
-	TEST_ASSERT_VAL("wrong sample_read", evsel->sample_read);
+	TEST_ASSERT_VAL("wrong sample_read", evsel->core.sample_read);
 
 	return 0;
 }

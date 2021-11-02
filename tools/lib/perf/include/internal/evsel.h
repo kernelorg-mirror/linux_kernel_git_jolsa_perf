@@ -70,6 +70,7 @@ struct perf_evsel {
 		enum perf_tool_event	tool_event;
 		const char		*unit;
 		int			exclude_GH;
+		int			sample_read;
 	};
 };
 
