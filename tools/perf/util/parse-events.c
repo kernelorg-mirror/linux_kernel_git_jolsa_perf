@@ -1396,11 +1396,11 @@ static int parse_events__inside_hybrid_pmu(struct parse_events_state *parse_stat
 	return ret;
 }
 
-int parse_events_add_pmu(struct parse_events_state *parse_state,
-			 struct list_head *list, char *name,
-			 struct list_head *head_config,
-			 bool auto_merge_stats,
-			 bool use_alias)
+static int __parse_events_add_pmu(struct parse_events_state *parse_state,
+				  struct list_head *list, char *name,
+				  struct list_head *head_config,
+				  bool auto_merge_stats,
+				  bool use_alias)
 {
 	struct perf_event_attr attr;
 	struct perf_pmu_info info;
@@ -1528,6 +1528,50 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 	return 0;
 }
 
+int parse_events_add_pmu(struct parse_events_state *parse_state,
+			 struct list_head *list, char *pmu_name,
+			 struct list_head *head_config,
+			 struct list_head *orig_terms,
+			 bool auto_merge_stats,
+			 bool use_alias)
+{
+	int err;
+
+	err = __parse_events_add_pmu(parse_state, list, pmu_name, head_config,
+				     auto_merge_stats, use_alias);
+	if (err && orig_terms) {
+		struct list_head *terms;
+		struct perf_pmu *pmu = NULL;
+		char *pattern = NULL;
+		int ok = 0;
+
+		if (asprintf(&pattern, "%s*", pmu_name) < 0)
+			return -1;
+
+		while ((pmu = perf_pmu__scan(pmu)) != NULL) {
+			char *name = pmu->name;
+
+			if (!strncmp(name, "uncore_", 7) &&
+			    strncmp(pmu_name, "uncore_", 7))
+				name += 7;
+			if (!perf_pmu__match(pattern, name, pmu_name) ||
+			    !perf_pmu__match(pattern, pmu->alias_name, pmu_name)) {
+				if (parse_events_copy_term_list(orig_terms, &terms)) {
+					free(pattern);
+					return -1;
+				}
+				if (!__parse_events_add_pmu(parse_state, list, pmu->name, terms, true, false))
+					ok++;
+				parse_events_terms__delete(terms);
+			}
+		}
+		free(pattern);
+		if (!ok)
+			return -1;
+	}
+	return err;
+}
+
 int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 			       char *str, struct list_head *head,
 			       struct list_head **listp)
@@ -1572,9 +1616,9 @@ int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 
 		list_for_each_entry(alias, &pmu->aliases, list) {
 			if (!strcasecmp(alias->name, str)) {
-				if (!parse_events_add_pmu(parse_state, list,
-							  pmu->name, head,
-							  true, true)) {
+				if (!__parse_events_add_pmu(parse_state, list,
+							    pmu->name, head,
+							    true, true)) {
 					pr_debug("%s -> %s/%s/\n", str,
 						 pmu->name, alias->str);
 					ok++;

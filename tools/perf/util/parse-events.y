@@ -319,8 +319,7 @@ event_pmu_name opt_pmu_config
 {
 	struct parse_events_state *parse_state = _parse_state;
 	struct parse_events_error *error = parse_state->error;
-	struct list_head *list = NULL, *orig_terms = NULL, *terms= NULL;
-	char *pattern = NULL;
+	struct list_head *list = NULL, *orig_terms = NULL;
 
 #define CLEANUP_YYABORT					\
 	do {						\
@@ -328,7 +327,6 @@ event_pmu_name opt_pmu_config
 		parse_events_terms__delete(orig_terms);	\
 		free(list);				\
 		free($1);				\
-		free(pattern);				\
 		YYABORT;				\
 	} while(0)
 
@@ -341,35 +339,10 @@ event_pmu_name opt_pmu_config
 	list = alloc_list();
 	if (!list)
 		CLEANUP_YYABORT;
-	if (parse_events_add_pmu(_parse_state, list, $1, $2, false, false)) {
-		struct perf_pmu *pmu = NULL;
-		int ok = 0;
-
-		if (asprintf(&pattern, "%s*", $1) < 0)
-			CLEANUP_YYABORT;
-
-		while ((pmu = perf_pmu__scan(pmu)) != NULL) {
-			char *name = pmu->name;
-
-			if (!strncmp(name, "uncore_", 7) &&
-			    strncmp($1, "uncore_", 7))
-				name += 7;
-			if (!perf_pmu__match(pattern, name, $1) ||
-			    !perf_pmu__match(pattern, pmu->alias_name, $1)) {
-				if (parse_events_copy_term_list(orig_terms, &terms))
-					CLEANUP_YYABORT;
-				if (!parse_events_add_pmu(_parse_state, list, pmu->name, terms, true, false))
-					ok++;
-				parse_events_terms__delete(terms);
-			}
-		}
-
-		if (!ok)
-			CLEANUP_YYABORT;
-	}
+	if (parse_events_add_pmu(_parse_state, list, $1, $2, orig_terms, false, false))
+		CLEANUP_YYABORT;
 	parse_events_terms__delete($2);
 	parse_events_terms__delete(orig_terms);
-	free(pattern);
 	free($1);
 	$$ = list;
 #undef CLEANUP_YYABORT
@@ -422,7 +395,7 @@ PE_PMU_EVENT_FAKE sep_dc
 	if (!list)
 		YYABORT;
 
-	err = parse_events_add_pmu(_parse_state, list, $1, NULL, false, false);
+	err = parse_events_add_pmu(_parse_state, list, $1, NULL, NULL, false, false);
 	free($1);
 	if (err < 0) {
 		free(list);
@@ -440,7 +413,7 @@ PE_PMU_EVENT_FAKE opt_pmu_config
 	if (!list)
 		YYABORT;
 
-	err = parse_events_add_pmu(_parse_state, list, $1, $2, false, false);
+	err = parse_events_add_pmu(_parse_state, list, $1, $2, NULL, false, false);
 	free($1);
 	parse_events_terms__delete($2);
 	if (err < 0) {
