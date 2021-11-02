@@ -73,6 +73,7 @@ struct perf_evsel {
 		int			sample_read;
 		bool			precise_max;
 		bool			weak_group;
+		bool			bpf_counter;
 	};
 };
 
