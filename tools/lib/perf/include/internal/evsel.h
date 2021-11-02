@@ -71,6 +71,7 @@ struct perf_evsel {
 		const char		*unit;
 		int			exclude_GH;
 		int			sample_read;
+		bool			precise_max;
 	};
 };
 

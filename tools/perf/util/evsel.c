@@ -317,7 +317,7 @@ new_event:
 	if (evsel == NULL)
 		goto out;
 
-	evsel->precise_max = true;
+	evsel->core.precise_max = true;
 
 	/* use asprintf() because free(evsel) assumes name is allocated */
 	if (asprintf(&evsel->core.name, "cycles%s%s%.*s",
@@ -427,7 +427,7 @@ struct evsel *evsel__clone(struct evsel *orig)
 	evsel->snapshot = orig->snapshot;
 	evsel->per_pkg = orig->per_pkg;
 	evsel->percore = orig->percore;
-	evsel->precise_max = orig->precise_max;
+	evsel->core.precise_max = orig->core.precise_max;
 	evsel->use_uncore_alias = orig->use_uncore_alias;
 	evsel->is_libpfm_event = orig->is_libpfm_event;
 
@@ -1287,7 +1287,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 		attr->clockid = opts->clockid;
 	}
 
-	if (evsel->precise_max)
+	if (evsel->core.precise_max)
 		attr->precise_ip = 3;
 
 	if (opts->all_user) {
@@ -1739,7 +1739,7 @@ static void display_attr(struct perf_event_attr *attr)
 bool evsel__precise_ip_fallback(struct evsel *evsel)
 {
 	/* Do not try less precise if not requested. */
-	if (!evsel->precise_max)
+	if (!evsel->core.precise_max)
 		return false;
 
 	/*
