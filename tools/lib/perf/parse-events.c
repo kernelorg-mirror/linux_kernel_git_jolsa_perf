@@ -6,6 +6,7 @@
 #include <string.h>
 #include <internal/parse-events.h>
 #include <internal/pmu.h>
+#include <internal/evlist.h>
 #include <internal/evsel.h>
 #include <perf/cpumap.h>
 #include <stdlib.h>
@@ -348,4 +349,190 @@ perf_evsel__add_event(struct parse_events_state *parse_state,
 		list_add_tail(&evsel->node, list);
 
 	return evsel;
+}
+
+struct event_modifier {
+	int eu;
+	int ek;
+	int eh;
+	int eH;
+	int eG;
+	int eI;
+	int precise;
+	int precise_max;
+	int exclude_GH;
+	int sample_read;
+	int pinned;
+	int weak;
+	int exclusive;
+	int bpf_counter;
+};
+
+static int get_event_modifier(struct event_modifier *mod, char *str,
+			       struct perf_evsel *evsel, bool guest)
+{
+	int eu = evsel ? evsel->attr.exclude_user : 0;
+	int ek = evsel ? evsel->attr.exclude_kernel : 0;
+	int eh = evsel ? evsel->attr.exclude_hv : 0;
+	int eH = evsel ? evsel->attr.exclude_host : 0;
+	int eG = evsel ? evsel->attr.exclude_guest : 0;
+	int eI = evsel ? evsel->attr.exclude_idle : 0;
+	int precise = evsel ? evsel->attr.precise_ip : 0;
+	int precise_max = 0;
+	int sample_read = 0;
+	int pinned = evsel ? evsel->attr.pinned : 0;
+	int exclusive = evsel ? evsel->attr.exclusive : 0;
+
+	int exclude = eu | ek | eh;
+	int exclude_GH = evsel ? evsel->exclude_GH : 0;
+	int weak = 0;
+	int bpf_counter = 0;
+
+	memset(mod, 0, sizeof(*mod));
+
+	while (*str) {
+		if (*str == 'u') {
+			if (!exclude)
+				exclude = eu = ek = eh = 1;
+			if (!exclude_GH && !guest)
+				eG = 1;
+			eu = 0;
+		} else if (*str == 'k') {
+			if (!exclude)
+				exclude = eu = ek = eh = 1;
+			ek = 0;
+		} else if (*str == 'h') {
+			if (!exclude)
+				exclude = eu = ek = eh = 1;
+			eh = 0;
+		} else if (*str == 'G') {
+			if (!exclude_GH)
+				exclude_GH = eG = eH = 1;
+			eG = 0;
+		} else if (*str == 'H') {
+			if (!exclude_GH)
+				exclude_GH = eG = eH = 1;
+			eH = 0;
+		} else if (*str == 'I') {
+			eI = 1;
+		} else if (*str == 'p') {
+			precise++;
+			/* use of precise requires exclude_guest */
+			if (!exclude_GH)
+				eG = 1;
+		} else if (*str == 'P') {
+			precise_max = 1;
+		} else if (*str == 'S') {
+			sample_read = 1;
+		} else if (*str == 'D') {
+			pinned = 1;
+		} else if (*str == 'e') {
+			exclusive = 1;
+		} else if (*str == 'W') {
+			weak = 1;
+		} else if (*str == 'b') {
+			bpf_counter = 1;
+		} else
+			break;
+
+		++str;
+	}
+
+	/*
+	 * precise ip:
+	 *
+	 *  0 - SAMPLE_IP can have arbitrary skid
+	 *  1 - SAMPLE_IP must have constant skid
+	 *  2 - SAMPLE_IP requested to have 0 skid
+	 *  3 - SAMPLE_IP must have 0 skid
+	 *
+	 *  See also PERF_RECORD_MISC_EXACT_IP
+	 */
+	if (precise > 3)
+		return -EINVAL;
+
+	mod->eu = eu;
+	mod->ek = ek;
+	mod->eh = eh;
+	mod->eH = eH;
+	mod->eG = eG;
+	mod->eI = eI;
+	mod->precise = precise;
+	mod->precise_max = precise_max;
+	mod->exclude_GH = exclude_GH;
+	mod->sample_read = sample_read;
+	mod->pinned = pinned;
+	mod->weak = weak;
+	mod->bpf_counter = bpf_counter;
+	mod->exclusive = exclusive;
+
+	return 0;
+}
+
+/*
+ * Basic modifier sanity check to validate it contains only one
+ * instance of any modifier (apart from 'p') present.
+ */
+static int check_modifier(char *str)
+{
+	char *p = str;
+
+	/* The sizeof includes 0 byte as well. */
+	if (strlen(str) > (sizeof("ukhGHpppPSDIWeb") - 1))
+		return -1;
+
+	while (*p) {
+		if (*p != 'p' && strchr(p + 1, *p))
+			return -1;
+		p++;
+	}
+
+	return 0;
+}
+
+int parse_events__modifier_event(struct list_head *list, char *str,
+				 bool add, bool guest)
+{
+	struct perf_evsel *evsel;
+	struct event_modifier mod;
+
+	if (str == NULL)
+		return 0;
+
+	if (check_modifier(str))
+		return -EINVAL;
+
+	if (!add && get_event_modifier(&mod, str, NULL, guest))
+		return -EINVAL;
+
+	__perf_evlist__for_each_entry(list, evsel) {
+		if (add && get_event_modifier(&mod, str, evsel, guest))
+			return -EINVAL;
+
+		evsel->attr.exclude_user   = mod.eu;
+		evsel->attr.exclude_kernel = mod.ek;
+		evsel->attr.exclude_hv     = mod.eh;
+		evsel->attr.precise_ip     = mod.precise;
+		evsel->attr.exclude_host   = mod.eH;
+		evsel->attr.exclude_guest  = mod.eG;
+		evsel->attr.exclude_idle   = mod.eI;
+		evsel->exclude_GH          = mod.exclude_GH;
+		evsel->sample_read         = mod.sample_read;
+		evsel->precise_max         = mod.precise_max;
+		evsel->weak_group          = mod.weak;
+		evsel->bpf_counter         = mod.bpf_counter;
+
+		if (perf_evsel__is_group_leader(evsel)) {
+			evsel->attr.pinned = mod.pinned;
+			evsel->attr.exclusive = mod.exclusive;
+		}
+	}
+
+	return 0;
+}
+
+int parse_events__modifier_group(struct list_head *list,
+				 char *event_mod, bool guest)
+{
+	return parse_events__modifier_event(list, event_mod, true, guest);
 }

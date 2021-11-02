@@ -130,4 +130,6 @@ perf_evsel__add_event(struct parse_events_state *parse_state,
 		      const char *name, const char *metric_id, struct perf_pmu *pmu,
 		      struct list_head *config_terms, bool auto_merge_stats,
 		      const char *cpu_list);
+int parse_events__modifier_event(struct list_head *list, char *str, bool add, bool guest);
+int parse_events__modifier_group(struct list_head *list, char *event_mod, bool guest);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
