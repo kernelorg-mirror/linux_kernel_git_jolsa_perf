@@ -62,7 +62,6 @@ struct evsel {
 		double			scale;
 		struct cgroup		*cgrp;
 		/* parse modifier helper */
-		int			exclude_GH;
 		int			sample_read;
 		bool			snapshot;
 		bool			per_pkg;

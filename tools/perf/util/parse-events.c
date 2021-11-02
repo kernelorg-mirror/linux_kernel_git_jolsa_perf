@@ -1918,7 +1918,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	int exclusive = evsel ? evsel->core.attr.exclusive : 0;
 
 	int exclude = eu | ek | eh;
-	int exclude_GH = evsel ? evsel->exclude_GH : 0;
+	int exclude_GH = evsel ? evsel->core.exclude_GH : 0;
 	int weak = 0;
 	int bpf_counter = 0;
 
@@ -2049,7 +2049,7 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->core.attr.exclude_host   = mod.eH;
 		evsel->core.attr.exclude_guest  = mod.eG;
 		evsel->core.attr.exclude_idle   = mod.eI;
-		evsel->exclude_GH          = mod.exclude_GH;
+		evsel->core.exclude_GH          = mod.exclude_GH;
 		evsel->sample_read         = mod.sample_read;
 		evsel->precise_max         = mod.precise_max;
 		evsel->weak_group	   = mod.weak;
