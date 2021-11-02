@@ -929,7 +929,7 @@ try_again:
 			}
 			if ((errno == EINVAL || errno == EBADF) &&
 			    pos->core.leader != &pos->core &&
-			    pos->weak_group) {
+			    pos->core.weak_group) {
 			        pos = evlist__reset_weak_group(evlist, pos, true);
 				goto try_again;
 			}

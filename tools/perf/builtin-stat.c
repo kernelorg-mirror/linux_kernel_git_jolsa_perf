@@ -842,7 +842,7 @@ try_again:
 				 */
 				if ((errno == EINVAL || errno == EBADF) &&
 				    evsel__leader(counter) != counter &&
-				    counter->weak_group) {
+				    counter->core.weak_group) {
 					evlist__reset_weak_group(evsel_list, counter, false);
 					assert(counter->reset_group);
 					second_pass = true;
