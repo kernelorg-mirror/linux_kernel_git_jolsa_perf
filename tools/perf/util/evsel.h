@@ -369,7 +369,7 @@ static inline struct evsel *evsel__prev(struct evsel *evsel)
  */
 static inline bool evsel__is_group_leader(const struct evsel *evsel)
 {
-	return evsel->core.leader == &evsel->core;
+	return perf_evsel__is_group_leader(&evsel->core);
 }
 
 /**
