@@ -57,7 +57,7 @@ static void evsel__config_leader_sampling(struct evsel *evsel, struct evlist *ev
 	struct evsel *read_sampler;
 	u64 term_types, freq_mask;
 
-	if (!leader->sample_read)
+	if (!leader->core.sample_read)
 		return;
 
 	read_sampler = evsel__read_sampler(evsel, evlist);

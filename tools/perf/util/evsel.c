@@ -432,7 +432,7 @@ struct evsel *evsel__clone(struct evsel *orig)
 	evsel->is_libpfm_event = orig->is_libpfm_event;
 
 	evsel->core.exclude_GH = orig->core.exclude_GH;
-	evsel->sample_read = orig->sample_read;
+	evsel->core.sample_read = orig->core.sample_read;
 	evsel->core.auto_merge_stats = orig->core.auto_merge_stats;
 	evsel->collect_stat = orig->collect_stat;
 	evsel->weak_group = orig->weak_group;
@@ -1106,7 +1106,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 	evsel__set_sample_bit(evsel, IP);
 	evsel__set_sample_bit(evsel, TID);
 
-	if (evsel->sample_read) {
+	if (evsel->core.sample_read) {
 		evsel__set_sample_bit(evsel, READ);
 
 		/*
