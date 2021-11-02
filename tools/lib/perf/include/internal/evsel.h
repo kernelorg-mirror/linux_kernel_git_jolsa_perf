@@ -72,6 +72,7 @@ struct perf_evsel {
 		int			exclude_GH;
 		int			sample_read;
 		bool			precise_max;
+		bool			weak_group;
 	};
 };
 
