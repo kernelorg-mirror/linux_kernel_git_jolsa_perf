@@ -69,6 +69,7 @@ struct perf_evsel {
 		const char		*metric_id;
 		enum perf_tool_event	tool_event;
 		const char		*unit;
+		int			exclude_GH;
 	};
 };
 

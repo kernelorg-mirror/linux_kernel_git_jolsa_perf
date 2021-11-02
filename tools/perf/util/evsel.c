@@ -431,7 +431,7 @@ struct evsel *evsel__clone(struct evsel *orig)
 	evsel->use_uncore_alias = orig->use_uncore_alias;
 	evsel->is_libpfm_event = orig->is_libpfm_event;
 
-	evsel->exclude_GH = orig->exclude_GH;
+	evsel->core.exclude_GH = orig->core.exclude_GH;
 	evsel->sample_read = orig->sample_read;
 	evsel->core.auto_merge_stats = orig->core.auto_merge_stats;
 	evsel->collect_stat = orig->collect_stat;
