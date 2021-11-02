@@ -1618,9 +1618,9 @@ out_err:
 }
 
 int parse_events__modifier_group(struct list_head *list,
-				 char *event_mod)
+				 char *event_mod, bool guest)
 {
-	return parse_events__modifier_event(list, event_mod, true);
+	return parse_events__modifier_event(list, event_mod, true, guest);
 }
 
 /*
@@ -1770,7 +1770,7 @@ struct event_modifier {
 };
 
 static int get_event_modifier(struct event_modifier *mod, char *str,
-			       struct perf_evsel *evsel)
+			       struct perf_evsel *evsel, bool guest)
 {
 	int eu = evsel ? evsel->attr.exclude_user : 0;
 	int ek = evsel ? evsel->attr.exclude_kernel : 0;
@@ -1795,7 +1795,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 		if (*str == 'u') {
 			if (!exclude)
 				exclude = eu = ek = eh = 1;
-			if (!exclude_GH && !perf_guest)
+			if (!exclude_GH && !guest)
 				eG = 1;
 			eu = 0;
 		} else if (*str == 'k') {
@@ -1891,7 +1891,8 @@ static int check_modifier(char *str)
 	return 0;
 }
 
-int parse_events__modifier_event(struct list_head *list, char *str, bool add)
+int parse_events__modifier_event(struct list_head *list, char *str,
+				 bool add, bool guest)
 {
 	struct perf_evsel *evsel;
 	struct event_modifier mod;
@@ -1902,11 +1903,11 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 	if (check_modifier(str))
 		return -EINVAL;
 
-	if (!add && get_event_modifier(&mod, str, NULL))
+	if (!add && get_event_modifier(&mod, str, NULL, guest))
 		return -EINVAL;
 
 	__perf_evlist__for_each_entry(list, evsel) {
-		if (add && get_event_modifier(&mod, str, evsel))
+		if (add && get_event_modifier(&mod, str, evsel, guest))
 			return -EINVAL;
 
 		evsel->attr.exclude_user   = mod.eu;
@@ -2115,6 +2116,7 @@ int parse_events_terms(struct list_head *terms, const char *str)
 		.ops     = &parse_state_ops,
 		.terms   = NULL,
 		.stoken  = PE_START_TERMS,
+		.guest   = perf_guest,
 	};
 	int ret;
 
@@ -2141,6 +2143,7 @@ static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 		.hybrid_pmu_name = pmu_name,
 		.idx             = parse_state->idx,
 		.ops             = &parse_state_ops,
+		.guest           = perf_guest,
 	};
 	int ret;
 
@@ -2170,6 +2173,7 @@ int __parse_events(struct evlist *evlist, const char *str,
 		.stoken	  = PE_START_EVENTS,
 		.fake_pmu = fake_pmu,
 		.ops	  = &parse_state_ops,
+		.guest    = perf_guest,
 	};
 	int ret;
 

@@ -101,6 +101,7 @@ struct parse_events_state {
 	struct perf_pmu		  *fake_pmu;
 	char			  *hybrid_pmu_name;
 	struct parse_events_ops	  *ops;
+	bool			   guest;
 };
 
 int parse_events_term__num(struct parse_events_term **term,
