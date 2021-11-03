@@ -113,6 +113,10 @@ struct parse_events_ops {
 			 char *type, char *op_result1, char *op_result2,
 			 struct parse_events_error *err,
 			 struct list_head *head_config);
+
+	int (*add_breakpoint)(struct parse_events_state *parse_state,
+			      struct list_head *list,
+			      u64 addr, char *type, u64 len);
 };
 
 struct parse_events_state {
