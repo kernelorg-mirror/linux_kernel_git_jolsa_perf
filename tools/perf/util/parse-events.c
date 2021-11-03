@@ -779,6 +779,7 @@ split_bpf_config_terms(struct list_head *evt_head_config,
 			list_move_tail(&term->list, obj_head_config);
 }
 
+static
 int parse_events_load_bpf(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  char *bpf_file_name,
@@ -2918,4 +2919,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_cache          = parse_events_add_cache,
 	.add_breakpoint     = parse_events_add_breakpoint,
 	.add_tracepoint     = parse_events_add_tracepoint,
+	.add_bpf            = parse_events_load_bpf,
 };

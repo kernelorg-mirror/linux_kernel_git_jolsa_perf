@@ -123,6 +123,12 @@ struct parse_events_ops {
 			      const char *sys, const char *event,
 			      struct parse_events_error *err,
 			      struct list_head *head_config);
+
+	int (*add_bpf)(struct parse_events_state *parse_state,
+		       struct list_head *list,
+		       char *bpf_file_name,
+		       bool source,
+		       struct list_head *head_config);
 };
 
 struct parse_events_state {
