@@ -134,4 +134,6 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add, bo
 int parse_events__modifier_group(struct list_head *list, char *event_mod, bool guest);
 void parse_events__handle_error(struct parse_events_error *err, int idx,
 				char *str, char *help);
+void parse_events_evlist_error(struct parse_events_state *parse_state,
+			       int idx, const char *str);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
