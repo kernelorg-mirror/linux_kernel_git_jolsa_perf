@@ -98,6 +98,10 @@ struct parse_events_ops {
 		       struct list_head *orig_terms,
 		       bool auto_merge_stats,
 		       bool use_alias);
+
+	int (*add_pmu_multi)(struct parse_events_state *parse_state,
+			     char *str, struct list_head *head,
+			     struct list_head **listp);
 };
 
 struct parse_events_state {

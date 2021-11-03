@@ -350,10 +350,11 @@ event_pmu_name opt_pmu_config
 |
 PE_KERNEL_PMU_EVENT sep_dc
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
-	err = parse_events_multi_pmu_add(_parse_state, $1, NULL, &list);
+	err = parse_state->ops->add_pmu_multi(parse_state, $1, NULL, &list);
 	free($1);
 	if (err < 0)
 		YYABORT;
@@ -362,11 +363,12 @@ PE_KERNEL_PMU_EVENT sep_dc
 |
 PE_KERNEL_PMU_EVENT opt_pmu_config
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
 	/* frees $2 */
-	err = parse_events_multi_pmu_add(_parse_state, $1, $2, &list);
+	err = parse_state->ops->add_pmu_multi(_parse_state, $1, $2, &list);
 	free($1);
 	if (err < 0)
 		YYABORT;
@@ -375,13 +377,14 @@ PE_KERNEL_PMU_EVENT opt_pmu_config
 |
 PE_PMU_EVENT_PRE '-' PE_PMU_EVENT_SUF sep_dc
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	char pmu_name[128];
 
 	snprintf(pmu_name, sizeof(pmu_name), "%s-%s", $1, $3);
 	free($1);
 	free($3);
-	if (parse_events_multi_pmu_add(_parse_state, pmu_name, NULL, &list) < 0)
+	if (parse_state->ops->add_pmu_multi(_parse_state, pmu_name, NULL, &list) < 0)
 		YYABORT;
 	$$ = list;
 }
