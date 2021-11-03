@@ -690,7 +690,7 @@ PE_BPF_OBJECT opt_event_config
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_load_bpf(parse_state, list, $1, false, $2);
+	err = parse_state->ops->add_bpf(parse_state, list, $1, false, $2);
 	parse_events_terms__delete($2);
 	free($1);
 	if (err) {
@@ -702,12 +702,13 @@ PE_BPF_OBJECT opt_event_config
 |
 PE_BPF_SOURCE opt_event_config
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_load_bpf(_parse_state, list, $1, true, $2);
+	err = parse_state->ops->add_bpf(parse_state, list, $1, true, $2);
 	parse_events_terms__delete($2);
 	if (err) {
 		free(list);

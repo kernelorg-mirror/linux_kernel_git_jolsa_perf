@@ -63,11 +63,6 @@ struct perf_pmu_event_symbol {
 
 void parse_events__shrink_config_terms(void);
 void parse_events__clear_array(struct parse_events_array *a);
-int parse_events_load_bpf(struct parse_events_state *parse_state,
-			  struct list_head *list,
-			  char *bpf_file_name,
-			  bool source,
-			  struct list_head *head_config);
 /* Provide this function for perf test */
 struct bpf_object;
 int parse_events_load_bpf_obj(struct parse_events_state *parse_state,
