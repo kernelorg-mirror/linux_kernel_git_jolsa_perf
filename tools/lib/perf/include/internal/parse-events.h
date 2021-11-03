@@ -107,6 +107,12 @@ struct parse_events_ops {
 			   struct list_head *list,
 			   u32 type, u64 config,
 			   struct list_head *head_config);
+
+	int (*add_cache)(struct parse_events_state *parse_state,
+			 struct list_head *list,
+			 char *type, char *op_result1, char *op_result2,
+			 struct parse_events_error *err,
+			 struct list_head *head_config);
 };
 
 struct parse_events_state {

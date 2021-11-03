@@ -82,11 +82,6 @@ int parse_events_load_bpf_obj(struct parse_events_state *parse_state,
 int parse_events_add_tool(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  int tool_event);
-int parse_events_add_cache(struct parse_events_state *parse_state,
-			   struct list_head *list,
-			   char *type, char *op_result1, char *op_result2,
-			   struct parse_events_error *error,
-			   struct list_head *head_config);
 int parse_events_add_breakpoint(struct parse_events_state *parse_state,
 				struct list_head *list,
 				u64 addr, char *type, u64 len);

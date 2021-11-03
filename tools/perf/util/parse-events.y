@@ -486,7 +486,7 @@ PE_NAME_CACHE_TYPE '-' PE_NAME_CACHE_OP_RESULT '-' PE_NAME_CACHE_OP_RESULT opt_e
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_cache(parse_state, list, $1, $3, $5, error, $6);
+	err = parse_state->ops->add_cache(parse_state, list, $1, $3, $5, error, $6);
 	parse_events_terms__delete($6);
 	free($1);
 	free($3);
@@ -507,7 +507,7 @@ PE_NAME_CACHE_TYPE '-' PE_NAME_CACHE_OP_RESULT opt_event_config
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_cache(parse_state, list, $1, $3, NULL, error, $4);
+	err = parse_state->ops->add_cache(parse_state, list, $1, $3, NULL, error, $4);
 	parse_events_terms__delete($4);
 	free($1);
 	free($3);
@@ -527,7 +527,7 @@ PE_NAME_CACHE_TYPE opt_event_config
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_cache(parse_state, list, $1, NULL, NULL, error, $2);
+	err = parse_state->ops->add_cache(parse_state, list, $1, NULL, NULL, error, $2);
 	parse_events_terms__delete($2);
 	free($1);
 	if (err) {

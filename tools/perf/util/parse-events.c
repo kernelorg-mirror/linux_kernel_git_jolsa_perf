@@ -339,6 +339,7 @@ static int config_attr(struct perf_event_attr *attr,
 		       struct parse_events_error *err,
 		       config_term_func_t config_term);
 
+static
 int parse_events_add_cache(struct parse_events_state *parse_state,
 			   struct list_head *list,
 			   char *type, char *op_result1, char *op_result2,
@@ -2906,4 +2907,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_pmu            = parse_events_add_pmu,
 	.add_pmu_multi      = parse_events_multi_pmu_add,
 	.add_numeric        = parse_events_add_numeric,
+	.add_cache          = parse_events_add_cache,
 };
