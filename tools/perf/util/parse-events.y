@@ -339,7 +339,7 @@ event_pmu_name opt_pmu_config
 	list = alloc_list();
 	if (!list)
 		CLEANUP_YYABORT;
-	if (parse_events_add_pmu(_parse_state, list, $1, $2, orig_terms, false, false))
+	if (parse_state->ops->add_pmu(parse_state, list, $1, $2, orig_terms, false, false))
 		CLEANUP_YYABORT;
 	parse_events_terms__delete($2);
 	parse_events_terms__delete(orig_terms);
@@ -388,6 +388,7 @@ PE_PMU_EVENT_PRE '-' PE_PMU_EVENT_SUF sep_dc
 |
 PE_PMU_EVENT_FAKE sep_dc
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
@@ -395,7 +396,7 @@ PE_PMU_EVENT_FAKE sep_dc
 	if (!list)
 		YYABORT;
 
-	err = parse_events_add_pmu(_parse_state, list, $1, NULL, NULL, false, false);
+	err = parse_state->ops->add_pmu(parse_state, list, $1, NULL, NULL, false, false);
 	free($1);
 	if (err < 0) {
 		free(list);
@@ -406,6 +407,7 @@ PE_PMU_EVENT_FAKE sep_dc
 |
 PE_PMU_EVENT_FAKE opt_pmu_config
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
@@ -413,7 +415,7 @@ PE_PMU_EVENT_FAKE opt_pmu_config
 	if (!list)
 		YYABORT;
 
-	err = parse_events_add_pmu(_parse_state, list, $1, $2, NULL, false, false);
+	err = parse_state->ops->add_pmu(parse_state, list, $1, $2, NULL, false, false);
 	free($1);
 	parse_events_terms__delete($2);
 	if (err < 0) {

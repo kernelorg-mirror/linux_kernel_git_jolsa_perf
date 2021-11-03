@@ -94,12 +94,6 @@ int parse_events_add_cache(struct parse_events_state *parse_state,
 int parse_events_add_breakpoint(struct parse_events_state *parse_state,
 				struct list_head *list,
 				u64 addr, char *type, u64 len);
-int parse_events_add_pmu(struct parse_events_state *parse_state,
-			 struct list_head *list, char *name,
-			 struct list_head *head_config,
-			 struct list_head *orig_terms,
-			 bool auto_merge_stats,
-			 bool use_alias);
 
 struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
 				      struct perf_event_attr *attr,

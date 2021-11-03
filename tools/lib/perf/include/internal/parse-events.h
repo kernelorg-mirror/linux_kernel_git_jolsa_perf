@@ -85,10 +85,19 @@ struct parse_events_error {
 	char *first_help;
 };
 
+struct parse_events_state;
+
 struct parse_events_ops {
 	struct perf_evsel* (*perf_evsel__new)(struct perf_event_attr *attr, int idx, bool init_attr);
 	struct perf_evsel* (*perf_evsel__new_tp)(const char *sys, const char *name, int idx);
 	void (*perf_evsel__delete)(struct perf_evsel *evsel);
+
+	int (*add_pmu)(struct parse_events_state *parse_state,
+		       struct list_head *list, char *pmu_name,
+		       struct list_head *head_config,
+		       struct list_head *orig_terms,
+		       bool auto_merge_stats,
+		       bool use_alias);
 };
 
 struct parse_events_state {
