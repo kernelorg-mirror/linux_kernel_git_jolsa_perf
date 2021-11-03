@@ -571,3 +571,12 @@ void parse_events__handle_error(struct parse_events_error *err, int idx,
 	}
 	err->num_errors++;
 }
+
+void parse_events_evlist_error(struct parse_events_state *parse_state,
+			       int idx, const char *str)
+{
+	if (!parse_state->error)
+		return;
+
+	parse_events__handle_error(parse_state->error, idx, strdup(str), NULL);
+}

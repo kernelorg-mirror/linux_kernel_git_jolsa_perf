@@ -2794,15 +2794,6 @@ void parse_events__clear_array(struct parse_events_array *a)
 	zfree(&a->ranges);
 }
 
-void parse_events_evlist_error(struct parse_events_state *parse_state,
-			       int idx, const char *str)
-{
-	if (!parse_state->error)
-		return;
-
-	parse_events__handle_error(parse_state->error, idx, strdup(str), NULL);
-}
-
 static void config_terms_list(char *buf, size_t buf_sz)
 {
 	int i;
