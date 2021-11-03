@@ -51,6 +51,7 @@ static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 					 const char *str, char *pmu_name,
 					 struct list_head *list);
 
+static struct parse_events_ops parse_state_ops;
 static struct perf_pmu_event_symbol *perf_pmu_events_list;
 /*
  * The variable indicates the number of supported pmu event symbols.
@@ -80,12 +81,6 @@ static void perf_evsel__delete_helper(struct perf_evsel *evsel)
 
 	free(tmp);
 }
-
-static struct parse_events_ops parse_state_ops = {
-	.perf_evsel__new    = perf_evsel__new_idx,
-	.perf_evsel__new_tp = perf_evsel__newtp_idx,
-	.perf_evsel__delete = perf_evsel__delete_helper,
-};
 
 #define __PERF_EVENT_FIELD(config, name) \
 	((config & PERF_EVENT_##name##_MASK) >> PERF_EVENT_##name##_SHIFT)
@@ -1528,6 +1523,7 @@ static int __parse_events_add_pmu(struct parse_events_state *parse_state,
 	return 0;
 }
 
+static
 int parse_events_add_pmu(struct parse_events_state *parse_state,
 			 struct list_head *list, char *pmu_name,
 			 struct list_head *head_config,
@@ -2900,3 +2896,10 @@ struct evsel *parse_events__add_event_hybrid(struct parse_events_state *parse_st
 				pmu, config_terms, /*auto_merge_stats=*/false,
 				/*cpu_list=*/NULL);
 }
+
+static struct parse_events_ops parse_state_ops = {
+	.perf_evsel__new    = perf_evsel__new_idx,
+	.perf_evsel__new_tp = perf_evsel__newtp_idx,
+	.perf_evsel__delete = perf_evsel__delete_helper,
+	.add_pmu            = parse_events_add_pmu,
+};
