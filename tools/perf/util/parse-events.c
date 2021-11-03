@@ -1568,6 +1568,7 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 	return err;
 }
 
+static
 int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 			       char *str, struct list_head *head,
 			       struct list_head **listp)
@@ -2902,4 +2903,5 @@ static struct parse_events_ops parse_state_ops = {
 	.perf_evsel__new_tp = perf_evsel__newtp_idx,
 	.perf_evsel__delete = perf_evsel__delete_helper,
 	.add_pmu            = parse_events_add_pmu,
+	.add_pmu_multi      = parse_events_multi_pmu_add,
 };

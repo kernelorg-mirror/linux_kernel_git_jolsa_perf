@@ -100,12 +100,6 @@ struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
 				      const char *name, const char *metric_id,
 				      struct perf_pmu *pmu);
 
-int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
-			       char *str,
-			       struct list_head *head_config,
-			       struct list_head **listp);
-
-
 enum perf_pmu_event_symbol_type
 perf_pmu__parse_check(const char *name);
 void parse_events__set_leader(char *name, struct list_head *list,
