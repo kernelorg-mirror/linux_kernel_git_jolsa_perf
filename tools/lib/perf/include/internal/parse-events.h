@@ -117,6 +117,12 @@ struct parse_events_ops {
 	int (*add_breakpoint)(struct parse_events_state *parse_state,
 			      struct list_head *list,
 			      u64 addr, char *type, u64 len);
+
+	int (*add_tracepoint)(struct parse_events_state *parse_state,
+			      struct list_head *list,
+			      const char *sys, const char *event,
+			      struct parse_events_error *err,
+			      struct list_head *head_config);
 };
 
 struct parse_events_state {

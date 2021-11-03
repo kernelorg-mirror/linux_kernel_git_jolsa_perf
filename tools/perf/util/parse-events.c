@@ -50,6 +50,12 @@ static int get_config_terms(struct list_head *head_config,
 static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 					 const char *str, char *pmu_name,
 					 struct list_head *list);
+static
+int parse_events_add_tracepoint(struct parse_events_state *parse_state,
+				struct list_head *list,
+				const char *sys, const char *event,
+				struct parse_events_error *err,
+				struct list_head *head_config);
 
 static struct parse_events_ops parse_state_ops;
 static struct perf_pmu_event_symbol *perf_pmu_events_list;
@@ -1286,6 +1292,7 @@ static int get_config_chgs(struct perf_pmu *pmu, struct list_head *head_config,
 	return 0;
 }
 
+static
 int parse_events_add_tracepoint(struct parse_events_state *parse_state,
 				struct list_head *list,
 				const char *sys, const char *event,
@@ -2910,4 +2917,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_numeric        = parse_events_add_numeric,
 	.add_cache          = parse_events_add_cache,
 	.add_breakpoint     = parse_events_add_breakpoint,
+	.add_tracepoint     = parse_events_add_tracepoint,
 };

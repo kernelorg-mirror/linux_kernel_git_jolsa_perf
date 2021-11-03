@@ -63,11 +63,6 @@ struct perf_pmu_event_symbol {
 
 void parse_events__shrink_config_terms(void);
 void parse_events__clear_array(struct parse_events_array *a);
-int parse_events_add_tracepoint(struct parse_events_state *parse_state,
-				struct list_head *list,
-				const char *sys, const char *event,
-				struct parse_events_error *error,
-				struct list_head *head_config);
 int parse_events_load_bpf(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  char *bpf_file_name,
