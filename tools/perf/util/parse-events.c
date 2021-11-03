@@ -1306,6 +1306,7 @@ int parse_events_add_tracepoint(struct parse_events_state *parse_state,
 					    err, head_config);
 }
 
+static
 int parse_events_add_numeric(struct parse_events_state *parse_state,
 			     struct list_head *list,
 			     u32 type, u64 config,
@@ -2904,4 +2905,5 @@ static struct parse_events_ops parse_state_ops = {
 	.perf_evsel__delete = perf_evsel__delete_helper,
 	.add_pmu            = parse_events_add_pmu,
 	.add_pmu_multi      = parse_events_multi_pmu_add,
+	.add_numeric        = parse_events_add_numeric,
 };

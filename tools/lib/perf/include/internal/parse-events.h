@@ -102,6 +102,11 @@ struct parse_events_ops {
 	int (*add_pmu_multi)(struct parse_events_state *parse_state,
 			     char *str, struct list_head *head,
 			     struct list_head **listp);
+
+	int (*add_numeric)(struct parse_events_state *parse_state,
+			   struct list_head *list,
+			   u32 type, u64 config,
+			   struct list_head *head_config);
 };
 
 struct parse_events_state {

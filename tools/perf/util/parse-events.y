@@ -436,6 +436,7 @@ PE_VALUE_SYM_SW
 event_legacy_symbol:
 value_sym '/' event_config '/'
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int type = $1 >> 16;
 	int config = $1 & 255;
@@ -443,7 +444,7 @@ value_sym '/' event_config '/'
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_numeric(_parse_state, list, type, config, $3);
+	err = parse_state->ops->add_numeric(parse_state, list, type, config, $3);
 	parse_events_terms__delete($3);
 	if (err) {
 		free_list_evsel(_parse_state, list);
@@ -454,13 +455,14 @@ value_sym '/' event_config '/'
 |
 value_sym sep_slash_slash_dc
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int type = $1 >> 16;
 	int config = $1 & 255;
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	ABORT_ON(parse_events_add_numeric(_parse_state, list, type, config, NULL));
+	ABORT_ON(parse_state->ops->add_numeric(parse_state, list, type, config, NULL));
 	$$ = list;
 }
 |
@@ -646,12 +648,13 @@ PE_NAME ':' PE_NAME
 event_legacy_numeric:
 PE_VALUE ':' PE_VALUE opt_event_config
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_numeric(_parse_state, list, (u32)$1, $3, $4);
+	err = parse_state->ops->add_numeric(_parse_state, list, (u32)$1, $3, $4);
 	parse_events_terms__delete($4);
 	if (err) {
 		free(list);
@@ -663,12 +666,13 @@ PE_VALUE ':' PE_VALUE opt_event_config
 event_legacy_raw:
 PE_RAW opt_event_config
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 	int err;
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	err = parse_events_add_numeric(_parse_state, list, PERF_TYPE_RAW, $1, $2);
+	err = parse_state->ops->add_numeric(_parse_state, list, PERF_TYPE_RAW, $1, $2);
 	parse_events_terms__delete($2);
 	if (err) {
 		free(list);
