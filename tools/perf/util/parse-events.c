@@ -884,6 +884,7 @@ do {					\
 	return 0;
 }
 
+static
 int parse_events_add_breakpoint(struct parse_events_state *parse_state,
 				struct list_head *list,
 				u64 addr, char *type, u64 len)
@@ -2908,4 +2909,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_pmu_multi      = parse_events_multi_pmu_add,
 	.add_numeric        = parse_events_add_numeric,
 	.add_cache          = parse_events_add_cache,
+	.add_breakpoint     = parse_events_add_breakpoint,
 };
