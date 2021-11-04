@@ -10,6 +10,8 @@
 #include <internal/evlist.h>
 #include <internal/evsel.h>
 #include <perf/cpumap.h>
+#include <perf/evlist.h>
+#include <perf/evsel.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <asm/bug.h>
@@ -701,4 +703,173 @@ int parse_events_add_breakpoint(struct parse_events_state *parse_state,
 				     /*init_attr*/true, /*name=*/NULL, /*mertic_id=*/NULL,
 				     /*pmu=*/NULL, /*config_terms=*/NULL,
 				     /*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOENT;
+}
+
+static struct perf_evsel*
+perf_evsel__new_idx(struct perf_event_attr *attr, int idx, bool init_attr __maybe_unused)
+{
+	struct perf_evsel *evsel = perf_evsel__new(attr);
+
+	if (evsel)
+		perf_evsel__init(evsel, attr, idx);
+	return evsel;
+}
+
+static struct perf_evsel*
+perf_evsel__newtp_idx(const char *sys __maybe_unused, const char *name __maybe_unused,
+		      int idx __maybe_unused)
+{
+	return NULL;
+}
+
+static void perf_evsel__delete_helper(struct perf_evsel *evsel)
+{
+	perf_evsel__delete(evsel);
+}
+
+static
+int parse_events_add_pmu(struct parse_events_state *parse_state __maybe_unused,
+			 struct list_head *list __maybe_unused,
+			 char *pmu_name __maybe_unused,
+			 struct list_head *head_config __maybe_unused,
+			 struct list_head *orig_terms __maybe_unused,
+			 bool auto_merge_stats __maybe_unused,
+			 bool use_alias __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static int
+parse_events_multi_pmu_add(struct parse_events_state *parse_state __maybe_unused,
+			   char *str __maybe_unused,
+			   struct list_head *head __maybe_unused,
+			   struct list_head **listp __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static int
+parse_events_add_numeric(struct parse_events_state *parse_state __maybe_unused,
+			 struct list_head *list __maybe_unused,
+			 u32 type __maybe_unused, u64 config __maybe_unused,
+			 struct list_head *head_config __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static int
+parse_events_add_cache(struct parse_events_state *parse_state __maybe_unused,
+		       struct list_head *list __maybe_unused,
+		       char *type __maybe_unused, char *op_result1 __maybe_unused,
+		       char *op_result2 __maybe_unused,
+		       struct parse_events_error *err __maybe_unused,
+		       struct list_head *head_config __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static int
+parse_events_add_tracepoint(struct parse_events_state *parse_state __maybe_unused,
+			    struct list_head *list __maybe_unused,
+			    const char *sys __maybe_unused, const char *event __maybe_unused,
+			    struct parse_events_error *err __maybe_unused,
+			    struct list_head *head_config __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static int
+parse_events_load_bpf(struct parse_events_state *parse_state __maybe_unused,
+		      struct list_head *list __maybe_unused,
+		      char *bpf_file_name __maybe_unused,
+		      bool source __maybe_unused,
+		      struct list_head *head_config __maybe_unused)
+{
+	return -ENOTSUP;
+}
+
+static void
+parse_events_set_leader(char *name, struct list_head *list,
+			struct parse_events_state *parse_state)
+{
+	struct perf_evsel *leader;
+
+	if (list_empty(list))
+                return;
+
+	__perf_evlist__set_leader(list);
+	leader = list_entry(list->next, struct perf_evsel, node);
+	leader->group_name = name ? strdup(name) : NULL;
+}
+
+static enum perf_pmu_event_symbol_type
+perf_pmu__parse_check(const char *name __maybe_unused)
+{
+	return PMU_EVENT_SYMBOL_ERR;
+}
+
+static struct parse_events_ops parse_state_ops = {
+	.perf_evsel__new    = perf_evsel__new_idx,
+	.perf_evsel__new_tp = perf_evsel__newtp_idx,
+	.perf_evsel__delete = perf_evsel__delete_helper,
+	.add_pmu            = parse_events_add_pmu,
+	.add_pmu_multi      = parse_events_multi_pmu_add,
+	.add_numeric        = parse_events_add_numeric,
+	.add_cache          = parse_events_add_cache,
+	.add_breakpoint     = parse_events_add_breakpoint,
+	.add_tracepoint     = parse_events_add_tracepoint,
+	.add_bpf            = parse_events_load_bpf,
+	.set_leader         = parse_events_set_leader,
+	.parse_check        = perf_pmu__parse_check,
+};
+
+static bool perf_evsel__has_leader(struct perf_evsel *evsel, struct perf_evsel *leader)
+{
+	return evsel->leader == leader;
+}
+
+static void perf_evlist__splice_list_tail(struct perf_evlist *evlist, struct list_head *list)
+{
+	while (!list_empty(list)) {
+		struct perf_evsel *evsel, *temp, *leader = NULL;
+
+		__perf_evlist__for_each_entry_safe(list, temp, evsel) {
+			list_del_init(&evsel->node);
+			perf_evlist__add(evlist, evsel);
+			leader = evsel;
+			break;
+		}
+
+		__perf_evlist__for_each_entry_safe(list, temp, evsel) {
+			if (perf_evsel__has_leader(evsel, leader)) {
+				list_del_init(&evsel->node);
+				perf_evlist__add(evlist, evsel);
+			}
+		}
+	}
+}
+
+int libperf_parse_events(struct perf_evlist *evlist, const char *str)
+{
+	struct parse_events_state parse_state = {
+		.list     = LIST_HEAD_INIT(parse_state.list),
+		.idx      = evlist->nr_entries,
+		.evlist   = evlist,
+		.ops      = &parse_state_ops,
+	};
+	int err;
+
+	err = parse_events__scanner(str, &parse_state, false);
+
+	if (!err && list_empty(&parse_state.list)) {
+		WARN_ONCE(true, "WARNING: event parser found nothing\n");
+		return -1;
+	}
+
+	perf_evlist__splice_list_tail(evlist, &parse_state.list);
+
+	if (!err)
+		evlist->nr_groups += parse_state.nr_groups;
+
+	return err;
 }

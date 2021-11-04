@@ -47,4 +47,6 @@ LIBPERF_API struct perf_mmap *perf_evlist__next_mmap(struct perf_evlist *evlist,
 	     (pos) = perf_evlist__next_mmap((evlist), (pos), overwrite))
 
 LIBPERF_API void perf_evlist__set_leader(struct perf_evlist *evlist);
+
+LIBPERF_API int libperf_parse_events(struct perf_evlist *evlist, const char *str);
 #endif /* __LIBPERF_EVLIST_H */
