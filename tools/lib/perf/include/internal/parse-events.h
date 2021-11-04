@@ -197,4 +197,7 @@ int parse_events_name(struct list_head *list, const char *name);
 int parse_events__scanner(const char *str,
 			  struct parse_events_state *parse_state,
 			  bool terms);
+int parse_events_add_breakpoint(struct parse_events_state *parse_state,
+				struct list_head *list,
+				u64 addr, char *type, u64 len);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
