@@ -63,12 +63,12 @@ static int str(yyscan_t scanner, int token)
 	return token;
 }
 
-static int raw(yyscan_t scanner)
+static int raw(yyscan_t scanner, struct parse_events_state *parse_state)
 {
 	YYSTYPE *yylval = parse_events_get_lval(scanner);
 	char *text = parse_events_get_text(scanner);
 
-	if (perf_pmu__parse_check(text) == PMU_EVENT_SYMBOL)
+	if (parse_state->ops->parse_check(text) == PMU_EVENT_SYMBOL)
 		return str(scanner, PE_NAME);
 
 	return __value(yylval, text + 1, 16, PE_RAW);
@@ -144,7 +144,7 @@ static int pmu_str_check(yyscan_t scanner, struct parse_events_state *parse_stat
 	 * parse check can't be trusted so we return PE_PMU_EVENT_FAKE unless
 	 * an '!' is present in which case the text can't be a PMU name.
 	 */
-	switch (perf_pmu__parse_check(text)) {
+	switch (parse_state->ops->parse_check(text)) {
 		case PMU_EVENT_SYMBOL_PREFIX:
 			return PE_PMU_EVENT_PRE;
 		case PMU_EVENT_SYMBOL_SUFFIX:
@@ -300,8 +300,8 @@ percore			{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_PERCORE); }
 aux-output		{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT); }
 aux-sample-size		{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE); }
 metric-id		{ return term(yyscanner, PARSE_EVENTS__TERM_TYPE_METRIC_ID); }
-r{num_raw_hex}		{ return raw(yyscanner); }
-r0x{num_raw_hex}	{ return raw(yyscanner); }
+r{num_raw_hex}		{ return raw(yyscanner, _parse_state); }
+r0x{num_raw_hex}	{ return raw(yyscanner, _parse_state); }
 ,			{ return ','; }
 "/"			{ BEGIN(INITIAL); return '/'; }
 {name_minus}		{ return str(yyscanner, PE_NAME); }
@@ -384,7 +384,7 @@ refs|Reference|ops|access		|
 misses|miss				{ return str(yyscanner, PE_NAME_CACHE_OP_RESULT); }
 
 mem:			{ BEGIN(mem); return PE_PREFIX_MEM; }
-r{num_raw_hex}		{ return raw(yyscanner); }
+r{num_raw_hex}		{ return raw(yyscanner, _parse_state); }
 {num_dec}		{ return value(yyscanner, 10); }
 {num_hex}		{ return value(yyscanner, 16); }
 
