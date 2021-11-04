@@ -1889,7 +1889,7 @@ int perf_pmu__test_parse_init(void)
 	return 0;
 }
 
-enum perf_pmu_event_symbol_type
+static enum perf_pmu_event_symbol_type
 perf_pmu__parse_check(const char *name)
 {
 	struct perf_pmu_event_symbol p, *r;
@@ -2924,4 +2924,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_bpf            = parse_events_load_bpf,
 	.add_tool           = parse_events_add_tool,
 	.set_leader         = parse_events_set_leader,
+	.parse_check        = perf_pmu__parse_check,
 };

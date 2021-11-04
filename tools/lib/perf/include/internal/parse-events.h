@@ -46,6 +46,13 @@ enum {
 	__PARSE_EVENTS__TERM_TYPE_NR,
 };
 
+enum perf_pmu_event_symbol_type {
+	PMU_EVENT_SYMBOL_ERR,		/* not a PMU EVENT */
+	PMU_EVENT_SYMBOL,		/* normal style PMU event */
+	PMU_EVENT_SYMBOL_PREFIX,	/* prefix of pre-suf style event */
+	PMU_EVENT_SYMBOL_SUFFIX,	/* suffix of pre-suf style event */
+};
+
 struct parse_events_array {
 	size_t nr_ranges;
 	struct {
@@ -136,6 +143,8 @@ struct parse_events_ops {
 
 	void (*set_leader)(char *name, struct list_head *list,
 			   struct parse_events_state *parse_state);
+
+	enum perf_pmu_event_symbol_type (*parse_check)(const char *name);
 };
 
 struct parse_events_state {

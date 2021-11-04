@@ -49,13 +49,6 @@ int exclude_perf(const struct option *opt, const char *arg, int unset);
 
 #define EVENTS_HELP_MAX (128*1024)
 
-enum perf_pmu_event_symbol_type {
-	PMU_EVENT_SYMBOL_ERR,		/* not a PMU EVENT */
-	PMU_EVENT_SYMBOL,		/* normal style PMU event */
-	PMU_EVENT_SYMBOL_PREFIX,	/* prefix of pre-suf style event */
-	PMU_EVENT_SYMBOL_SUFFIX,	/* suffix of pre-suf style event */
-};
-
 struct perf_pmu_event_symbol {
 	char	*symbol;
 	enum perf_pmu_event_symbol_type	type;
@@ -74,9 +67,6 @@ struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
 				      struct perf_event_attr *attr,
 				      const char *name, const char *metric_id,
 				      struct perf_pmu *pmu);
-
-enum perf_pmu_event_symbol_type
-perf_pmu__parse_check(const char *name);
 
 void print_events(const char *event_glob, bool name_only, bool quiet,
 		  bool long_desc, bool details_flag, bool deprecated,
