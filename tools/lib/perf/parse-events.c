@@ -10,6 +10,7 @@
 #include <internal/evlist.h>
 #include <internal/evsel.h>
 #include <perf/cpumap.h>
+#include <perf/evlist.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <asm/bug.h>
@@ -702,3 +703,49 @@ int parse_events_add_breakpoint(struct parse_events_state *parse_state,
 				     /*pmu=*/NULL, /*config_terms=*/NULL,
 				     /*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOENT;
 }
+
+static struct parse_events_ops parse_state_ops;
+
+int libperf_parse_events(struct perf_evlist *evlist, const char *str)
+{
+	struct parse_events_state parse_state = {
+		.list     = LIST_HEAD_INIT(parse_state.list),
+		.idx      = evlist->nr_entries,
+		.evlist   = &evlist,
+		.ops      = &parse_state_ops,
+        };
+
+	ret = parse_events__scanner(str, &ps, false);
+
+	if (!ret && list_empty(&parse_state.list)) {
+		WARN_ONCE(true, "WARNING: event parser found nothing\n");
+		return -1;
+	}
+
+	evlist__splice_list_tail(evlist, &parse_state.list);
+
+	if (!ret) {
+		struct evsel *last;
+
+		evlist->core.nr_groups += parse_state.nr_groups;
+		last = evlist__last(evlist);
+		last->cmdline_group_boundary = true;
+		return 0;
+        }
+
+	return ret;
+}
+
+static struct parse_events_ops parse_state_ops = {
+	.perf_evsel__new    = perf_evsel__new_idx,
+	.perf_evsel__new_tp = perf_evsel__newtp_idx,
+	.perf_evsel__delete = perf_evsel__delete_helper,
+	.add_pmu            = parse_events_add_pmu,
+	.add_pmu_multi      = parse_events_multi_pmu_add,
+	.add_numeric        = parse_events_add_numeric,
+	.add_cache          = parse_events_add_cache,
+	.add_breakpoint     = parse_events_add_breakpoint,
+	.add_tracepoint     = parse_events_add_tracepoint,
+	.add_bpf            = parse_events_load_bpf,
+	.parse_check        = perf_pmu__parse_check,
+};
