@@ -2,6 +2,7 @@
 
 #include <internal/parse-events.h>
 #include <linux/perf_event.h>
+#include <linux/hw_breakpoint.h>
 #include <linux/zalloc.h>
 #include <string.h>
 #include <internal/parse-events.h>
@@ -629,4 +630,75 @@ int parse_events__scanner(const char *str,
 	parse_events__delete_buffer(buffer, scanner);
 	parse_events_lex_destroy(scanner);
 	return ret;
+}
+
+static int
+parse_breakpoint_type(const char *type, struct perf_event_attr *attr)
+{
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		if (!type || !type[i])
+			break;
+
+#define CHECK_SET_TYPE(bit)		\
+do {					\
+	if (attr->bp_type & bit)	\
+		return -EINVAL;		\
+	else				\
+		attr->bp_type |= bit;	\
+} while (0)
+
+		switch (type[i]) {
+		case 'r':
+			CHECK_SET_TYPE(HW_BREAKPOINT_R);
+			break;
+		case 'w':
+			CHECK_SET_TYPE(HW_BREAKPOINT_W);
+			break;
+		case 'x':
+			CHECK_SET_TYPE(HW_BREAKPOINT_X);
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+#undef CHECK_SET_TYPE
+
+	if (!attr->bp_type) /* Default */
+		attr->bp_type = HW_BREAKPOINT_R | HW_BREAKPOINT_W;
+
+	return 0;
+}
+
+int parse_events_add_breakpoint(struct parse_events_state *parse_state,
+				struct list_head *list,
+				u64 addr, char *type, u64 len)
+{
+	struct perf_event_attr attr;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.bp_addr = addr;
+
+	if (parse_breakpoint_type(type, &attr))
+		return -EINVAL;
+
+	/* Provide some defaults if len is not specified */
+	if (!len) {
+		if (attr.bp_type == HW_BREAKPOINT_X)
+			len = sizeof(long);
+		else
+			len = HW_BREAKPOINT_LEN_4;
+	}
+
+	attr.bp_len = len;
+
+	attr.type = PERF_TYPE_BREAKPOINT;
+	attr.sample_period = 1;
+
+	return perf_evsel__add_event(parse_state, list, &attr,
+				     /*init_attr*/true, /*name=*/NULL, /*mertic_id=*/NULL,
+				     /*pmu=*/NULL, /*config_terms=*/NULL,
+				     /*auto_merge_stats=*/false, /*cpu_list=*/NULL) ? 0 : -ENOENT;
 }
