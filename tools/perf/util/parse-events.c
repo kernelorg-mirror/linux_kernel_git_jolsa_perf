@@ -1914,11 +1914,17 @@ perf_pmu__parse_check(const char *name)
 }
 
 static int parse_events__scanner(const char *str,
-				 struct parse_events_state *parse_state)
+				 struct parse_events_state *parse_state,
+				 bool terms)
 {
 	YY_BUFFER_STATE buffer;
 	void *scanner;
 	int ret;
+
+	if (terms)
+		parse_state->stoken = PE_START_TERMS;
+	else
+		parse_state->stoken = PE_START_EVENTS;
 
 	ret = parse_events_lex_init_extra(parse_state, &scanner);
 	if (ret)
@@ -1946,12 +1952,11 @@ int parse_events_terms(struct list_head *terms, const char *str)
 	struct parse_events_state parse_state = {
 		.ops     = &parse_state_ops,
 		.terms   = NULL,
-		.stoken  = PE_START_TERMS,
 		.guest   = perf_guest,
 	};
 	int ret;
 
-	ret = parse_events__scanner(str, &parse_state);
+	ret = parse_events__scanner(str, &parse_state, true);
 	perf_pmu__parse_cleanup();
 
 	if (!ret) {
@@ -1970,7 +1975,6 @@ static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 {
 	struct parse_events_state ps = {
 		.list            = LIST_HEAD_INIT(ps.list),
-		.stoken          = PE_START_EVENTS,
 		.hybrid_pmu_name = pmu_name,
 		.idx             = parse_state->idx,
 		.ops             = &parse_state_ops,
@@ -1978,7 +1982,7 @@ static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
 	};
 	int ret;
 
-	ret = parse_events__scanner(str, &ps);
+	ret = parse_events__scanner(str, &ps, false);
 	perf_pmu__parse_cleanup();
 
 	if (!ret) {
@@ -2001,14 +2005,13 @@ int __parse_events(struct evlist *evlist, const char *str,
 		.idx	  = evlist->core.nr_entries,
 		.error	  = err,
 		.evlist	  = &evlist->core,
-		.stoken	  = PE_START_EVENTS,
 		.fake_pmu = fake_pmu,
 		.ops	  = &parse_state_ops,
 		.guest    = perf_guest,
 	};
 	int ret;
 
-	ret = parse_events__scanner(str, &parse_state);
+	ret = parse_events__scanner(str, &parse_state, false);
 	perf_pmu__parse_cleanup();
 
 	if (!ret && list_empty(&parse_state.list)) {
