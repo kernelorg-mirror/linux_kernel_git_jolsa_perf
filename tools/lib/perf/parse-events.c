@@ -13,6 +13,13 @@
 #include <errno.h>
 #include <asm/bug.h>
 #include "internal.h"
+#include "parse-events-bison.h"
+#define YY_EXTRA_TYPE void*
+#include "parse-events-flex.h"
+
+#ifdef PARSER_DEBUG
+extern int parse_events_debug;
+#endif
 
 struct event_symbol event_symbols_hw[PERF_COUNT_HW_MAX] = {
 	[PERF_COUNT_HW_CPU_CYCLES] = {
@@ -591,4 +598,35 @@ int parse_events_name(struct list_head *list, const char *name)
 	}
 
 	return 0;
+}
+
+int parse_events__scanner(const char *str,
+			  struct parse_events_state *parse_state,
+			  bool terms)
+{
+	YY_BUFFER_STATE buffer;
+	void *scanner;
+	int ret;
+
+	if (terms)
+		parse_state->stoken = PE_START_TERMS;
+	else
+		parse_state->stoken = PE_START_EVENTS;
+
+	ret = parse_events_lex_init_extra(parse_state, &scanner);
+	if (ret)
+		return ret;
+
+	buffer = parse_events__scan_string(str, scanner);
+
+#ifdef PARSER_DEBUG
+	parse_events_debug = 1;
+	parse_events_set_debug(1, scanner);
+#endif
+	ret = parse_events_parse(parse_state, scanner);
+
+	parse_events__flush_buffer(buffer, scanner);
+	parse_events__delete_buffer(buffer, scanner);
+	parse_events_lex_destroy(scanner);
+	return ret;
 }

@@ -12,6 +12,8 @@ libperf-y += pmu-bison.o
 libperf-y += pmu.o
 libperf-y += pmu-hybrid.o
 libperf-y += parse-events.o
+libperf-y += parse-events-flex.o
+libperf-y += parse-events-bison.o
 
 $(OUTPUT)zalloc.o: ../../lib/zalloc.c FORCE
 	$(call rule_mkdir)
@@ -19,6 +21,15 @@ $(OUTPUT)zalloc.o: ../../lib/zalloc.c FORCE
 
 tests-y += tests/
 
+$(OUTPUT)parse-events-flex.c $(OUTPUT)parse-events-flex.h: parse-events.l $(OUTPUT)parse-events-bison.c
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,flex)$(FLEX) -o $(OUTPUT)parse-events-flex.c \
+		--header-file=$(OUTPUT)parse-events-flex.h $(PARSER_DEBUG_FLEX) $<
+
+$(OUTPUT)parse-events-bison.c $(OUTPUT)parse-events-bison.h: parse-events.y
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,bison)$(BISON) -v $< -d $(PARSER_DEBUG_BISON) $(BISON_FILE_PREFIX_MAP) \
+		-o $(OUTPUT)parse-events-bison.c -p parse_events_
 
 $(OUTPUT)pmu-flex.c $(OUTPUT)pmu-flex.h: pmu.l $(OUTPUT)pmu-bison.c
 	$(call rule_mkdir)
@@ -41,7 +52,19 @@ else
   flex_flags := -w
 endif
 
+bison_flags := -DYYENABLE_NLS=0
+BISON_GE_35 := $(shell expr $(shell $(BISON) --version | grep bison | sed -e 's/.\+ \([0-9]\+\).\([0-9]\+\)/\1\2/g') \>\= 35)
+ifeq ($(BISON_GE_35),1)
+  bison_flags += -Wno-unused-parameter -Wno-nested-externs -Wno-implicit-function-declaration -Wno-switch-enum
+else
+  bison_flags += -w
+endif
+
 CFLAGS_pmu-flex.o  += $(flex_flags)
 CFLAGS_pmu-bison.o += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
 
+CFLAGS_parse-events-flex.o  += $(flex_flags)
+CFLAGS_parse-events-bison.o += $(bison_flags)
+
 $(OUTPUT)pmu.o: $(OUTPUT)pmu-flex.c $(OUTPUT)pmu-bison.c
+$(OUTPUT)parse-events.o: $(OUTPUT)parse-events-flex.c $(OUTPUT)parse-events-bison.c

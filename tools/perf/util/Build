@@ -66,8 +66,6 @@ perf-y += comm.o
 perf-y += thread.o
 perf-y += thread_map.o
 perf-y += trace-event-parse.o
-perf-y += parse-events-flex.o
-perf-y += parse-events-bison.o
 perf-y += pmu.o
 perf-y += trace-event-read.o
 perf-y += trace-event-info.o
@@ -209,16 +207,6 @@ CFLAGS_llvm-utils.o += -DPERF_INCLUDE_DIR="BUILD_STR($(perf_include_dir_SQ))"
 # avoid compiler warnings in 32-bit mode
 CFLAGS_genelf_debug.o  += -Wno-packed
 
-$(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-flex.h: util/parse-events.l $(OUTPUT)util/parse-events-bison.c
-	$(call rule_mkdir)
-	$(Q)$(call echo-cmd,flex)$(FLEX) -o $(OUTPUT)util/parse-events-flex.c \
-		--header-file=$(OUTPUT)util/parse-events-flex.h $(PARSER_DEBUG_FLEX) $<
-
-$(OUTPUT)util/parse-events-bison.c $(OUTPUT)util/parse-events-bison.h: util/parse-events.y
-	$(call rule_mkdir)
-	$(Q)$(call echo-cmd,bison)$(BISON) -v $< -d $(PARSER_DEBUG_BISON) $(BISON_FILE_PREFIX_MAP) \
-		-o $(OUTPUT)util/parse-events-bison.c -p parse_events_
-
 $(OUTPUT)util/expr-flex.c $(OUTPUT)util/expr-flex.h: util/expr.l $(OUTPUT)util/expr-bison.c
 	$(call rule_mkdir)
 	$(Q)$(call echo-cmd,flex)$(FLEX) -o $(OUTPUT)util/expr-flex.c \
@@ -239,7 +227,6 @@ ifeq ($(FLEX_GE_26),1)
 else
   flex_flags := -w
 endif
-CFLAGS_parse-events-flex.o  += $(flex_flags)
 CFLAGS_expr-flex.o          += $(flex_flags)
 
 bison_flags := -DYYENABLE_NLS=0
@@ -249,10 +236,8 @@ ifeq ($(BISON_GE_35),1)
 else
   bison_flags += -w
 endif
-CFLAGS_parse-events-bison.o += $(bison_flags)
 CFLAGS_expr-bison.o         += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
 
-$(OUTPUT)util/parse-events.o: $(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-bison.c
 $(OUTPUT)util/expr.o: $(OUTPUT)util/expr-flex.c $(OUTPUT)util/expr-bison.c
 
 CFLAGS_bitmap.o        += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"

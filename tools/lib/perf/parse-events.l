@@ -12,9 +12,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "parse-events.h"
+#include <internal/parse-events.h>
 #include "parse-events-bison.h"
-#include "evsel.h"
+#include <internal/evsel.h>
 
 char *parse_events_get_text(yyscan_t yyscanner);
 YYSTYPE *parse_events_get_lval(yyscan_t yyscanner);

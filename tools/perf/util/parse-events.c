@@ -23,9 +23,6 @@
 #include "debug.h"
 #include <api/fs/tracing_path.h>
 #include <perf/cpumap.h>
-#include "parse-events-bison.h"
-#define YY_EXTRA_TYPE void*
-#include "parse-events-flex.h"
 #include "pmu.h"
 #include "thread_map.h"
 #include "probe-file.h"
@@ -41,10 +38,6 @@
 
 #define MAX_NAME_LEN 100
 
-#ifdef PARSER_DEBUG
-extern int parse_events_debug;
-#endif
-int parse_events_parse(void *parse_state, void *scanner);
 static int get_config_terms(struct list_head *head_config,
 			    struct list_head *head_terms __maybe_unused);
 static int parse_events__with_hybrid_pmu(struct parse_events_state *parse_state,
@@ -1911,37 +1904,6 @@ perf_pmu__parse_check(const char *name)
 			sizeof(struct perf_pmu_event_symbol), comp_pmu);
 	zfree(&p.symbol);
 	return r ? r->type : PMU_EVENT_SYMBOL_ERR;
-}
-
-static int parse_events__scanner(const char *str,
-				 struct parse_events_state *parse_state,
-				 bool terms)
-{
-	YY_BUFFER_STATE buffer;
-	void *scanner;
-	int ret;
-
-	if (terms)
-		parse_state->stoken = PE_START_TERMS;
-	else
-		parse_state->stoken = PE_START_EVENTS;
-
-	ret = parse_events_lex_init_extra(parse_state, &scanner);
-	if (ret)
-		return ret;
-
-	buffer = parse_events__scan_string(str, scanner);
-
-#ifdef PARSER_DEBUG
-	parse_events_debug = 1;
-	parse_events_set_debug(1, scanner);
-#endif
-	ret = parse_events_parse(parse_state, scanner);
-
-	parse_events__flush_buffer(buffer, scanner);
-	parse_events__delete_buffer(buffer, scanner);
-	parse_events_lex_destroy(scanner);
-	return ret;
 }
 
 /*

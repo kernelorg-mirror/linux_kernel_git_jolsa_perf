@@ -13,9 +13,9 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 #include <linux/zalloc.h>
-#include "pmu.h"
-#include "evsel.h"
-#include "parse-events.h"
+#include <internal/pmu.h>
+#include <internal/evsel.h>
+#include <internal/parse-events.h>
 #include "parse-events-bison.h"
 
 void parse_events_error(YYLTYPE *loc, void *parse_state, void *scanner, char const *msg);

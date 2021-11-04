@@ -194,4 +194,7 @@ void parse_events__handle_error(struct parse_events_error *err, int idx,
 void parse_events_evlist_error(struct parse_events_state *parse_state,
 			       int idx, const char *str);
 int parse_events_name(struct list_head *list, const char *name);
+int parse_events__scanner(const char *str,
+			  struct parse_events_state *parse_state,
+			  bool terms);
 #endif /* __LIBPERF_PARSE_EVENTS_H */
