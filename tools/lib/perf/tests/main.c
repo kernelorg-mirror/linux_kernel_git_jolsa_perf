@@ -7,6 +7,7 @@ int tests_verbose;
 
 int main(int argc, char **argv)
 {
+	__T("test parse_events", !test_parse_events(argc, argv));
 	__T("test cpumap", !test_cpumap(argc, argv));
 	__T("test threadmap", !test_threadmap(argc, argv));
 	__T("test evlist", !test_evlist(argc, argv));

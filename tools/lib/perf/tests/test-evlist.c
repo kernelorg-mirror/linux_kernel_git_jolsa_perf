@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE // needed for sched.h to get sched_[gs]etaffinity and CPU_(ZERO,SET)
+#endif
 #include <sched.h>
 #include <stdio.h>
 #include <stdarg.h>
