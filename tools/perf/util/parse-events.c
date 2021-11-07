@@ -1841,7 +1841,7 @@ parse_events__set_leader_for_uncore_aliase(char *name, struct list_head *list,
 	for (i = 0; i < nr_pmu; i++) {
 		evsel = (struct evsel *) leaders[i];
 		evsel->core.nr_members = total_members / nr_pmu;
-		evsel->group_name = name ? strdup(name) : NULL;
+		evsel->core.group_name = name ? strdup(name) : NULL;
 	}
 
 	/* Take the new small groups into account */
@@ -1869,7 +1869,7 @@ void parse_events__set_leader(char *name, struct list_head *list,
 
 	__perf_evlist__set_leader(list);
 	leader = list_entry(list->next, struct evsel, core.node);
-	leader->group_name = name ? strdup(name) : NULL;
+	leader->core.group_name = name ? strdup(name) : NULL;
 }
 
 /* list_event is assumed to point to malloc'ed memory */

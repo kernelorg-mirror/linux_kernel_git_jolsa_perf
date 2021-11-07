@@ -395,9 +395,9 @@ struct evsel *evsel__clone(struct evsel *orig)
 		if (evsel->core.name == NULL)
 			goto out_err;
 	}
-	if (orig->group_name) {
-		evsel->group_name = strdup(orig->group_name);
-		if (evsel->group_name == NULL)
+	if (orig->core.group_name) {
+		evsel->core.group_name = strdup(orig->core.group_name);
+		if (evsel->core.group_name == NULL)
 			goto out_err;
 	}
 	if (orig->pmu_name) {
@@ -797,7 +797,7 @@ const char *evsel__metric_id(const struct evsel *evsel)
 
 const char *evsel__group_name(struct evsel *evsel)
 {
-	return evsel->group_name ?: "anon group";
+	return evsel->core.group_name ?: "anon group";
 }
 
 /*
@@ -1436,7 +1436,7 @@ void evsel__exit(struct evsel *evsel)
 	perf_cpu_map__put(evsel->core.cpus);
 	perf_cpu_map__put(evsel->core.own_cpus);
 	perf_thread_map__put(evsel->core.threads);
-	zfree(&evsel->group_name);
+	zfree(&evsel->core.group_name);
 	zfree(&evsel->core.name);
 	zfree(&evsel->pmu_name);
 	zfree(&evsel->core.metric_id);

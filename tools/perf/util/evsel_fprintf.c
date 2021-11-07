@@ -48,7 +48,7 @@ int evsel__fprintf(struct evsel *evsel, struct perf_attr_details *details, FILE 
 			return 0;
 
 		if (evsel->core.nr_members > 1)
-			printed += fprintf(fp, "%s{", evsel->group_name ?: "");
+			printed += fprintf(fp, "%s{", evsel->core.group_name ?: "");
 
 		printed += fprintf(fp, "%s", evsel__name(evsel));
 		for_each_group_member(pos, evsel)

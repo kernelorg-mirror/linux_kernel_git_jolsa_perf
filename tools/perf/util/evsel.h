@@ -54,7 +54,6 @@ struct evsel {
 	 * they can be released properly.
 	 */
 	struct {
-		char			*group_name;
 		const char		*pmu_name;
 		struct tep_event	*tp_format;
 		char			*filter;

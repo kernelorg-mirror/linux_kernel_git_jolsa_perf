@@ -1235,9 +1235,9 @@ static void unleader_evsel(struct evlist *evlist, struct evsel *leader)
 
 	/* Update group information */
 	if (new_leader) {
-		zfree(&new_leader->group_name);
-		new_leader->group_name = leader->group_name;
-		leader->group_name = NULL;
+		zfree(&new_leader->core.group_name);
+		new_leader->core.group_name = leader->core.group_name;
+		leader->core.group_name = NULL;
 
 		new_leader->core.nr_members = leader->core.nr_members - 1;
 		leader->core.nr_members = 1;

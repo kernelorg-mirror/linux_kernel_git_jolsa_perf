@@ -788,7 +788,7 @@ static int write_group_desc(struct feat_fd *ff,
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (evsel__is_group_leader(evsel) && evsel->core.nr_members > 1) {
-			const char *name = evsel->group_name ?: "{anon_group}";
+			const char *name = evsel->core.group_name ?: "{anon_group}";
 			u32 leader_idx = evsel->core.idx;
 			u32 nr_members = evsel->core.nr_members;
 
@@ -2094,7 +2094,7 @@ static void print_group_desc(struct feat_fd *ff, FILE *fp)
 
 	evlist__for_each_entry(session->evlist, evsel) {
 		if (evsel__is_group_leader(evsel) && evsel->core.nr_members > 1) {
-			fprintf(fp, "# group: %s{%s", evsel->group_name ?: "", evsel__name(evsel));
+			fprintf(fp, "# group: %s{%s", evsel->core.group_name ?: "", evsel__name(evsel));
 
 			nr = evsel->core.nr_members - 1;
 		} else if (nr) {
@@ -2743,7 +2743,7 @@ static int process_group_desc(struct feat_fd *ff, void *data __maybe_unused)
 			evsel__set_leader(evsel, evsel);
 			/* {anon_group} is a dummy name */
 			if (strcmp(desc[i].name, "{anon_group}")) {
-				evsel->group_name = desc[i].name;
+				evsel->core.group_name = desc[i].name;
 				desc[i].name = NULL;
 			}
 			evsel->core.nr_members = desc[i].nr_members;
