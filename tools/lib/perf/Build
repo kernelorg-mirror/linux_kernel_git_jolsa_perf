@@ -14,10 +14,34 @@ libperf-y += pmu-hybrid.o
 libperf-y += parse-events.o
 libperf-y += parse-events-flex.o
 libperf-y += parse-events-bison.o
+libperf-y += bitmap.o
+libperf-y += find_bit.o
+libperf-y += vsprintf.o
+libperf-y += hweight.o
 
 $(OUTPUT)zalloc.o: ../../lib/zalloc.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)bitmap.o: ../../lib/bitmap.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)find_bit.o: ../../lib/find_bit.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)vsprintf.o: ../../lib/vsprintf.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)hweight.o: ../../lib/hweight.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+CFLAGS_bitmap.o   += -Wno-unused-parameter
+CFLAGS_find_bit.o += -Wno-unused-parameter
+CFLAGS_hweight.o  += -Wno-unused-parameter
 
 tests-y += tests/
 
