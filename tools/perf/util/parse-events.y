@@ -468,11 +468,12 @@ value_sym sep_slash_slash_dc
 |
 PE_VALUE_SYM_TOOL sep_slash_slash_dc
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list;
 
 	list = alloc_list();
 	ABORT_ON(!list);
-	ABORT_ON(parse_events_add_tool(_parse_state, list, $1));
+	ABORT_ON(parse_state->ops->add_tool(_parse_state, list, $1));
 	$$ = list;
 }
 

@@ -129,6 +129,10 @@ struct parse_events_ops {
 		       char *bpf_file_name,
 		       bool source,
 		       struct list_head *head_config);
+
+	int (*add_tool)(struct parse_events_state *parse_state,
+			struct list_head *list,
+			int tool_event);
 };
 
 struct parse_events_state {

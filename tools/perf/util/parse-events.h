@@ -69,9 +69,6 @@ int parse_events_load_bpf_obj(struct parse_events_state *parse_state,
 			      struct list_head *list,
 			      struct bpf_object *obj,
 			      struct list_head *head_config);
-int parse_events_add_tool(struct parse_events_state *parse_state,
-			  struct list_head *list,
-			  int tool_event);
 
 struct evsel *parse_events__add_event(struct parse_events_state *parse_state,
 				      struct perf_event_attr *attr,

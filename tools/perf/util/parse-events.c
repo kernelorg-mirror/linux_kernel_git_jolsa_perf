@@ -1356,6 +1356,7 @@ out_free_terms:
 	return ret;
 }
 
+static
 int parse_events_add_tool(struct parse_events_state *parse_state,
 			  struct list_head *list,
 			  int tool_event)
@@ -2920,4 +2921,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_breakpoint     = parse_events_add_breakpoint,
 	.add_tracepoint     = parse_events_add_tracepoint,
 	.add_bpf            = parse_events_load_bpf,
+	.add_tool           = parse_events_add_tool,
 };
