@@ -1756,8 +1756,9 @@ out:
 	return ret;
 }
 
-void parse_events__set_leader(char *name, struct list_head *list,
-			      struct parse_events_state *parse_state)
+static
+void parse_events_set_leader(char *name, struct list_head *list,
+			     struct parse_events_state *parse_state)
 {
 	struct evsel *leader;
 
@@ -2922,4 +2923,5 @@ static struct parse_events_ops parse_state_ops = {
 	.add_tracepoint     = parse_events_add_tracepoint,
 	.add_bpf            = parse_events_load_bpf,
 	.add_tool           = parse_events_add_tool,
+	.set_leader         = parse_events_set_leader,
 };

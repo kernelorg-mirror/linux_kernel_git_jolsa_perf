@@ -227,20 +227,22 @@ group_def
 group_def:
 PE_NAME '{' events '}'
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list = $3;
 
 	inc_group_count(list, _parse_state);
-	parse_events__set_leader($1, list, _parse_state);
+	parse_state->ops->set_leader($1, list, parse_state);
 	free($1);
 	$$ = list;
 }
 |
 '{' events '}'
 {
+	struct parse_events_state *parse_state = _parse_state;
 	struct list_head *list = $2;
 
 	inc_group_count(list, _parse_state);
-	parse_events__set_leader(NULL, list, _parse_state);
+	parse_state->ops->set_leader(NULL, list, parse_state);
 	$$ = list;
 }
 

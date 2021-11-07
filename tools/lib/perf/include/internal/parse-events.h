@@ -133,6 +133,9 @@ struct parse_events_ops {
 	int (*add_tool)(struct parse_events_state *parse_state,
 			struct list_head *list,
 			int tool_event);
+
+	void (*set_leader)(char *name, struct list_head *list,
+			   struct parse_events_state *parse_state);
 };
 
 struct parse_events_state {
