@@ -30,6 +30,7 @@ LIBBPF_HDRS_DIR := $(LIBBPF_INCLUDE)/bpf
 LIBBPF = $(LIBBPF_OUTPUT)libbpf.a
 LIBBPF_BOOTSTRAP_OUTPUT = $(BOOTSTRAP_OUTPUT)libbpf/
 LIBBPF_BOOTSTRAP = $(LIBBPF_BOOTSTRAP_OUTPUT)libbpf.a
+LIBBPF_BOOTSTRAP_INCLUDE := $(LIBBPF_BOOTSTRAP_OUTPUT)/include
 
 # We need to copy hashmap.h and nlattr.h which is not otherwise exported by
 # libbpf, but still required by bpftool.
@@ -52,7 +53,7 @@ $(LIBBPF_INTERNAL_HDRS): $(LIBBPF_HDRS_DIR)/%.h: $(BPF_DIR)/%.h | $(LIBBPF_HDRS_
 
 $(LIBBPF_BOOTSTRAP): $(wildcard $(BPF_DIR)/*.[ch] $(BPF_DIR)/Makefile) | $(LIBBPF_BOOTSTRAP_OUTPUT)
 	$(Q)$(MAKE) -C $(BPF_DIR) OUTPUT=$(LIBBPF_BOOTSTRAP_OUTPUT) \
-		ARCH= CC=$(HOSTCC) LD=$(HOSTLD) $@
+		DESTDIR=$(LIBBPF_BOOTSTRAP_OUTPUT) prefix= ARCH= CC=$(HOSTCC) LD=$(HOSTLD) $@ install_headers
 
 $(LIBBPF)-clean: FORCE | $(LIBBPF_OUTPUT)
 	$(call QUIET_CLEAN, libbpf)
@@ -210,7 +211,7 @@ $(OUTPUT)bpftool: $(OBJS) $(LIBBPF)
 	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 $(BOOTSTRAP_OUTPUT)%.o: %.c $(LIBBPF_INTERNAL_HDRS) | $(BOOTSTRAP_OUTPUT)
-	$(QUIET_CC)$(HOSTCC) $(CFLAGS) -c -MMD -o $@ $<
+	$(QUIET_CC)$(HOSTCC) $(CFLAGS) -I$(LIBBPF_BOOTSTRAP_INCLUDE) -c -MMD -o $@ $<
 
 $(OUTPUT)%.o: %.c
 	$(QUIET_CC)$(CC) $(CFLAGS) -c -MMD -o $@ $<
