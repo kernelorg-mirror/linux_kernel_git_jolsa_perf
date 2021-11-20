@@ -34,6 +34,8 @@ int load_kallsyms(void)
 	if (!f)
 		return -ENOENT;
 
+	if (sym_cnt)
+		return 0;
 	while (fgets(buf, sizeof(buf), f)) {
 		if (sscanf(buf, "%p %c %s", &addr, &symbol, func) != 3)
 			break;
