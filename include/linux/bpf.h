@@ -2374,4 +2374,5 @@ int bpf_bprintf_prepare(char *fmt, u32 fmt_size, const u64 *raw_args,
 			u32 **bin_buf, u32 num_args);
 void bpf_bprintf_cleanup(void);
 
+int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog);
 #endif /* _LINUX_BPF_H */
