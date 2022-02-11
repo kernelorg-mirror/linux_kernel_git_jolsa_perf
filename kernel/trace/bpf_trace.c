@@ -18,6 +18,8 @@
 #include <linux/btf_ids.h>
 #include <linux/bpf_lsm.h>
 #include <linux/fprobe.h>
+#include <linux/bsearch.h>
+#include <linux/sort.h>
 
 #include <net/bpf_sk_storage.h>
 
@@ -78,6 +80,7 @@ u64 bpf_get_stack(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5);
 static int bpf_btf_printf_prepare(struct btf_ptr *ptr, u32 btf_ptr_size,
 				  u64 flags, const struct btf **btf,
 				  s32 *btf_id);
+static u64 bpf_fprobe_cookie(struct bpf_run_ctx *ctx, u64 ip);
 
 /**
  * trace_call_bpf - invoke BPF program
@@ -1050,6 +1053,18 @@ static const struct bpf_func_proto bpf_get_func_ip_proto_fprobe = {
 	.arg1_type	= ARG_PTR_TO_CTX,
 };
 
+BPF_CALL_1(bpf_get_attach_cookie_fprobe, struct pt_regs *, regs)
+{
+	return bpf_fprobe_cookie(current->bpf_ctx, regs->ip);
+}
+
+static const struct bpf_func_proto bpf_get_attach_cookie_proto_fprobe = {
+	.func		= bpf_get_attach_cookie_fprobe,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_CTX,
+};
+
 BPF_CALL_1(bpf_get_attach_cookie_trace, void *, ctx)
 {
 	struct bpf_trace_run_ctx *run_ctx;
@@ -1296,7 +1311,9 @@ kprobe_prog_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return prog->expected_attach_type == BPF_TRACE_FPROBE ?
 			&bpf_get_func_ip_proto_fprobe : &bpf_get_func_ip_proto_kprobe;
 	case BPF_FUNC_get_attach_cookie:
-		return &bpf_get_attach_cookie_proto_trace;
+		return prog->expected_attach_type == BPF_TRACE_FPROBE ?
+			&bpf_get_attach_cookie_proto_fprobe :
+			&bpf_get_attach_cookie_proto_trace;
 	default:
 		return bpf_tracing_func_proto(func_id, prog);
 	}
@@ -2202,6 +2219,9 @@ struct bpf_fprobe_link {
 	struct bpf_link link;
 	struct fprobe fp;
 	unsigned long *addrs;
+	struct bpf_run_ctx run_ctx;
+	u64 *cookies;
+	u32 cnt;
 };
 
 static void bpf_fprobe_link_release(struct bpf_link *link)
@@ -2218,6 +2238,7 @@ static void bpf_fprobe_link_dealloc(struct bpf_link *link)
 
 	fprobe_link = container_of(link, struct bpf_fprobe_link, link);
 	kvfree(fprobe_link->addrs);
+	kvfree(fprobe_link->cookies);
 	kfree(fprobe_link);
 }
 
@@ -2226,9 +2247,57 @@ static const struct bpf_link_ops bpf_fprobe_link_lops = {
 	.dealloc = bpf_fprobe_link_dealloc,
 };
 
+static void bpf_fprobe_cookie_swap(void *a, void *b, int size, const void *priv)
+{
+	const struct bpf_fprobe_link *link = priv;
+	unsigned long *addr_a = a, *addr_b = b;
+	u64 *cookie_a, *cookie_b;
+
+	cookie_a = link->cookies + (addr_a - link->addrs);
+	cookie_b = link->cookies + (addr_b - link->addrs);
+
+	swap_words_64(addr_a, addr_b, size);
+	swap_words_64(cookie_a, cookie_b, size);
+}
+
+static int __bpf_fprobe_cookie_cmp(const void *a, const void *b)
+{
+	const unsigned long *addr_a = a, *addr_b = b;
+
+	if (*addr_a == *addr_b)
+		return 0;
+	return *addr_a < *addr_b ? -1 : 1;
+}
+
+static int bpf_fprobe_cookie_cmp(const void *a, const void *b,
+				 const void *priv)
+{
+	return __bpf_fprobe_cookie_cmp(a, b);
+}
+
+static u64 bpf_fprobe_cookie(struct bpf_run_ctx *ctx, u64 ip)
+{
+	struct bpf_fprobe_link *link;
+	unsigned long *addr;
+	u64 *cookie;
+
+	if (WARN_ON_ONCE(!ctx))
+		return 0;
+	link = container_of(ctx, struct bpf_fprobe_link, run_ctx);
+	if (!link->cookies)
+		return 0;
+	addr = bsearch(&ip, link->addrs, link->cnt, sizeof(ip),
+		       __bpf_fprobe_cookie_cmp);
+	if (!addr)
+		return 0;
+	cookie = link->cookies + (addr - link->addrs);
+	return *cookie;
+}
+
 static int fprobe_link_prog_run(struct bpf_fprobe_link *fprobe_link,
 				struct pt_regs *regs)
 {
+	struct bpf_run_ctx *old_run_ctx;
 	int err;
 
 	if (unlikely(__this_cpu_inc_return(bpf_prog_active) != 1)) {
@@ -2236,11 +2305,15 @@ static int fprobe_link_prog_run(struct bpf_fprobe_link *fprobe_link,
 		goto out;
 	}
 
+	old_run_ctx = bpf_set_run_ctx(&fprobe_link->run_ctx);
+
 	rcu_read_lock();
 	migrate_disable();
 	err = bpf_prog_run(fprobe_link->link.prog, regs);
 	migrate_enable();
 	rcu_read_unlock();
+
+	bpf_reset_run_ctx(old_run_ctx);
 
  out:
 	__this_cpu_dec(bpf_prog_active);
@@ -2322,9 +2395,11 @@ int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 {
 	struct bpf_fprobe_link *link = NULL;
 	struct bpf_link_primer link_primer;
+	void __user *ucookies;
 	unsigned long *addrs;
 	u32 flags, cnt, size;
 	void __user *uaddrs;
+	u64 *cookies = NULL;
 	void __user *usyms;
 	int err;
 
@@ -2364,6 +2439,19 @@ int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 			goto error;
 	}
 
+	ucookies = u64_to_user_ptr(attr->link_create.fprobe.cookies);
+	if (ucookies) {
+		cookies = kvmalloc(size, GFP_KERNEL);
+		if (!cookies) {
+			err = -ENOMEM;
+			goto error;
+		}
+		if (copy_from_user(cookies, ucookies, size)) {
+			err = -EFAULT;
+			goto error;
+		}
+	}
+
 	link = kzalloc(sizeof(*link), GFP_KERNEL);
 	if (!link) {
 		err = -ENOMEM;
@@ -2383,6 +2471,14 @@ int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 		link->fp.entry_handler = fprobe_link_handler;
 
 	link->addrs = addrs;
+	link->cookies = cookies;
+	link->cnt = cnt;
+
+	if (cookies) {
+		sort_r(addrs, cnt, sizeof(*addrs),
+		       bpf_fprobe_cookie_cmp, bpf_fprobe_cookie_swap,
+		       link);
+	}
 
 	err = register_fprobe_ips(&link->fp, addrs, cnt);
 	if (err) {
@@ -2395,11 +2491,16 @@ int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 error:
 	kfree(link);
 	kvfree(addrs);
+	kvfree(cookies);
 	return err;
 }
 #else /* !CONFIG_FPROBE */
 int bpf_fprobe_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 {
 	return -EOPNOTSUPP;
+}
+static u64 bpf_fprobe_cookie(struct bpf_run_ctx *ctx, u64 ip)
+{
+	return 0;
 }
 #endif
