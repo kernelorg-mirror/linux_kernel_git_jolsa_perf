@@ -34,8 +34,8 @@
  */
 
 
-static void start_backtrace(struct stackframe *frame, unsigned long fp,
-			    unsigned long pc)
+static notrace void start_backtrace(struct stackframe *frame, unsigned long fp,
+				    unsigned long pc)
 {
 	frame->fp = fp;
 	frame->pc = pc;
@@ -56,6 +56,7 @@ static void start_backtrace(struct stackframe *frame, unsigned long fp,
 	frame->prev_fp = 0;
 	frame->prev_type = STACK_TYPE_UNKNOWN;
 }
+NOKPROBE_SYMBOL(start_backtrace);
 
 /*
  * Unwind from one frame record (A) to the next frame record (B).
