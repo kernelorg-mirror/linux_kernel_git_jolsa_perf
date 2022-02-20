@@ -1369,6 +1369,7 @@ static inline bool tcp_checksum_complete(struct sk_buff *skb)
 
 bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb);
 
+#ifdef CONFIG_INET
 void __sk_defer_free_flush(struct sock *sk);
 
 static inline void sk_defer_free_flush(struct sock *sk)
@@ -1377,6 +1378,9 @@ static inline void sk_defer_free_flush(struct sock *sk)
 		return;
 	__sk_defer_free_flush(sk);
 }
+#else
+static inline void sk_defer_free_flush(struct sock *sk) {}
+#endif
 
 int tcp_filter(struct sock *sk, struct sk_buff *skb);
 void tcp_set_state(struct sock *sk, int state);
@@ -2354,7 +2358,7 @@ static inline u32 tcp_timeout_init(struct sock *sk)
 
 	if (timeout <= 0)
 		timeout = TCP_TIMEOUT_INIT;
-	return timeout;
+	return min_t(int, timeout, TCP_RTO_MAX);
 }
 
 static inline u32 tcp_rwnd_init_bpf(struct sock *sk)
