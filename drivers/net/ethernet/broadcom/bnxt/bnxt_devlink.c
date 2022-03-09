@@ -20,6 +20,7 @@
 #include "bnxt_ulp.h"
 #include "bnxt_ptp.h"
 #include "bnxt_coredump.h"
+#include "bnxt_nvm_defs.h"	/* NVRAM content constant and structure defs */
 
 static void __bnxt_fw_recover(struct bnxt *bp)
 {
@@ -241,37 +242,189 @@ static const struct devlink_health_reporter_ops bnxt_dl_fw_reporter_ops = {
 	.recover = bnxt_fw_recover,
 };
 
-void bnxt_dl_fw_reporters_create(struct bnxt *bp)
+static int bnxt_hw_recover(struct devlink_health_reporter *reporter,
+			   void *priv_ctx,
+			   struct netlink_ext_ack *extack)
 {
-	struct bnxt_fw_health *health = bp->fw_health;
+	struct bnxt *bp = devlink_health_reporter_priv(reporter);
+	struct bnxt_hw_health *hw_health = &bp->hw_health;
 
-	if (!health || health->fw_reporter)
-		return;
+	hw_health->synd = BNXT_HW_STATUS_HEALTHY;
+	return 0;
+}
 
-	health->fw_reporter =
-		devlink_health_reporter_create(bp->dl, &bnxt_dl_fw_reporter_ops,
-					       0, bp);
-	if (IS_ERR(health->fw_reporter)) {
-		netdev_warn(bp->dev, "Failed to create FW health reporter, rc = %ld\n",
-			    PTR_ERR(health->fw_reporter));
-		health->fw_reporter = NULL;
-		bp->fw_cap &= ~BNXT_FW_CAP_ERROR_RECOVERY;
+static const char *hw_err_str(u8 synd)
+{
+	switch (synd) {
+	case BNXT_HW_STATUS_HEALTHY:
+		return "healthy";
+	case BNXT_HW_STATUS_NVM_WRITE_ERR:
+		return "nvm write error";
+	case BNXT_HW_STATUS_NVM_ERASE_ERR:
+		return "nvm erase error";
+	case BNXT_HW_STATUS_NVM_UNKNOWN_ERR:
+		return "unrecognized nvm error";
+	case BNXT_HW_STATUS_NVM_TEST_VPD_ENT_ERR:
+		return "nvm test vpd entry error";
+	case BNXT_HW_STATUS_NVM_TEST_VPD_READ_ERR:
+		return "nvm test vpd read error";
+	case BNXT_HW_STATUS_NVM_TEST_VPD_WRITE_ERR:
+		return "nvm test vpd write error";
+	case BNXT_HW_STATUS_NVM_TEST_INCMPL_ERR:
+		return "nvm test incomplete error";
+	default:
+		return "unknown hw error";
 	}
 }
 
-void bnxt_dl_fw_reporters_destroy(struct bnxt *bp, bool all)
+static void bnxt_nvm_test(struct bnxt *bp)
 {
-	struct bnxt_fw_health *health = bp->fw_health;
+	struct bnxt_hw_health *h = &bp->hw_health;
+	u32 datalen;
+	u16 index;
+	u8 *buf;
 
-	if (!health)
+	if (!h->nvm_test_result) {
+		if (!h->nvm_test_timestamp ||
+		    time_after(jiffies, h->nvm_test_timestamp +
+					msecs_to_jiffies(HW_RETEST_MIN_TIME)))
+			h->nvm_test_timestamp = jiffies;
+		else
+			return;
+	}
+
+	if (bnxt_find_nvram_item(bp->dev, BNX_DIR_TYPE_VPD,
+				 BNX_DIR_ORDINAL_FIRST, BNX_DIR_EXT_NONE,
+				 &index, NULL, &datalen) || !datalen) {
+		h->nvm_test_result = BNXT_HW_STATUS_NVM_TEST_VPD_ENT_ERR;
+		h->nvm_test_vpd_ent_errors++;
 		return;
+	}
 
-	if ((bp->fw_cap & BNXT_FW_CAP_ERROR_RECOVERY) && !all)
+	buf = kzalloc(datalen, GFP_KERNEL);
+	if (!buf) {
+		h->nvm_test_result = BNXT_HW_STATUS_NVM_TEST_INCMPL_ERR;
+		h->nvm_test_incmpl_errors++;
 		return;
+	}
 
-	if (health->fw_reporter) {
-		devlink_health_reporter_destroy(health->fw_reporter);
-		health->fw_reporter = NULL;
+	if (bnxt_get_nvram_item(bp->dev, index, 0, datalen, buf)) {
+		h->nvm_test_result = BNXT_HW_STATUS_NVM_TEST_VPD_READ_ERR;
+		h->nvm_test_vpd_read_errors++;
+		goto err;
+	}
+
+	if (bnxt_flash_nvram(bp->dev, BNX_DIR_TYPE_VPD, BNX_DIR_ORDINAL_FIRST,
+			     BNX_DIR_EXT_NONE, 0, 0, buf, datalen)) {
+		h->nvm_test_result = BNXT_HW_STATUS_NVM_TEST_VPD_WRITE_ERR;
+		h->nvm_test_vpd_write_errors++;
+	}
+
+err:
+	kfree(buf);
+}
+
+static int bnxt_hw_diagnose(struct devlink_health_reporter *reporter,
+			    struct devlink_fmsg *fmsg,
+			    struct netlink_ext_ack *extack)
+{
+	struct bnxt *bp = devlink_health_reporter_priv(reporter);
+	struct bnxt_hw_health *h = &bp->hw_health;
+	u8 synd = h->synd;
+	int rc;
+
+	bnxt_nvm_test(bp);
+	if (h->nvm_test_result) {
+		synd = h->nvm_test_result;
+		devlink_health_report(h->hw_reporter, hw_err_str(synd), NULL);
+	}
+
+	rc = devlink_fmsg_string_pair_put(fmsg, "Status", hw_err_str(synd));
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_write_errors", h->nvm_write_errors);
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_erase_errors", h->nvm_erase_errors);
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_test_vpd_ent_errors",
+				       h->nvm_test_vpd_ent_errors);
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_test_vpd_read_errors",
+				       h->nvm_test_vpd_read_errors);
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_test_vpd_write_errors",
+				       h->nvm_test_vpd_write_errors);
+	if (rc)
+		return rc;
+	rc = devlink_fmsg_u32_pair_put(fmsg, "nvm_test_incomplete_errors",
+				       h->nvm_test_incmpl_errors);
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
+void bnxt_devlink_health_hw_report(struct bnxt *bp)
+{
+	struct bnxt_hw_health *hw_health = &bp->hw_health;
+
+	netdev_warn(bp->dev, "%s reported at address 0x%x\n", hw_err_str(hw_health->synd),
+		    hw_health->nvm_err_address);
+
+	devlink_health_report(hw_health->hw_reporter, hw_err_str(hw_health->synd), NULL);
+}
+
+static const struct devlink_health_reporter_ops bnxt_dl_hw_reporter_ops = {
+	.name = "hw",
+	.diagnose = bnxt_hw_diagnose,
+	.recover = bnxt_hw_recover,
+};
+
+static struct devlink_health_reporter *
+__bnxt_dl_reporter_create(struct bnxt *bp,
+			  const struct devlink_health_reporter_ops *ops)
+{
+	struct devlink_health_reporter *reporter;
+
+	reporter = devlink_health_reporter_create(bp->dl, ops, 0, bp);
+	if (IS_ERR(reporter)) {
+		netdev_warn(bp->dev, "Failed to create %s health reporter, rc = %ld\n",
+			    ops->name, PTR_ERR(reporter));
+		return NULL;
+	}
+
+	return reporter;
+}
+
+void bnxt_dl_fw_reporters_create(struct bnxt *bp)
+{
+	struct bnxt_fw_health *fw_health = bp->fw_health;
+	struct bnxt_hw_health *hw_health = &bp->hw_health;
+
+	if (!hw_health->hw_reporter)
+		hw_health->hw_reporter = __bnxt_dl_reporter_create(bp, &bnxt_dl_hw_reporter_ops);
+
+	if (fw_health && !fw_health->fw_reporter)
+		fw_health->fw_reporter = __bnxt_dl_reporter_create(bp, &bnxt_dl_fw_reporter_ops);
+}
+
+void bnxt_dl_fw_reporters_destroy(struct bnxt *bp)
+{
+	struct bnxt_fw_health *fw_health = bp->fw_health;
+	struct bnxt_hw_health *hw_health = &bp->hw_health;
+
+	if (hw_health->hw_reporter) {
+		devlink_health_reporter_destroy(hw_health->hw_reporter);
+		hw_health->hw_reporter = NULL;
+	}
+
+	if (fw_health && fw_health->fw_reporter) {
+		devlink_health_reporter_destroy(fw_health->fw_reporter);
+		fw_health->fw_reporter = NULL;
 	}
 }
 
@@ -367,6 +520,16 @@ bnxt_dl_livepatch_report_err(struct bnxt *bp, struct netlink_ext_ack *extack,
 	}
 }
 
+/* Live patch status in NVM */
+#define BNXT_LIVEPATCH_NOT_INSTALLED	0
+#define BNXT_LIVEPATCH_INSTALLED	FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_INSTALL
+#define BNXT_LIVEPATCH_REMOVED		FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_ACTIVE
+#define BNXT_LIVEPATCH_MASK		(FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_INSTALL | \
+					 FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_ACTIVE)
+#define BNXT_LIVEPATCH_ACTIVATED	BNXT_LIVEPATCH_MASK
+
+#define BNXT_LIVEPATCH_STATE(flags)	((flags) & BNXT_LIVEPATCH_MASK)
+
 static int
 bnxt_dl_livepatch_activate(struct bnxt *bp, struct netlink_ext_ack *extack)
 {
@@ -374,8 +537,9 @@ bnxt_dl_livepatch_activate(struct bnxt *bp, struct netlink_ext_ack *extack)
 	struct hwrm_fw_livepatch_query_input *query_req;
 	struct hwrm_fw_livepatch_output *patch_resp;
 	struct hwrm_fw_livepatch_input *patch_req;
+	u16 flags, live_patch_state;
+	bool activated = false;
 	u32 installed = 0;
-	u16 flags;
 	u8 target;
 	int rc;
 
@@ -394,7 +558,6 @@ bnxt_dl_livepatch_activate(struct bnxt *bp, struct netlink_ext_ack *extack)
 		hwrm_req_drop(bp, query_req);
 		return rc;
 	}
-	patch_req->opcode = FW_LIVEPATCH_REQ_OPCODE_ACTIVATE;
 	patch_req->loadtype = FW_LIVEPATCH_REQ_LOADTYPE_NVM_INSTALL;
 	patch_resp = hwrm_req_hold(bp, patch_req);
 
@@ -407,12 +570,20 @@ bnxt_dl_livepatch_activate(struct bnxt *bp, struct netlink_ext_ack *extack)
 		}
 
 		flags = le16_to_cpu(query_resp->status_flags);
-		if (~flags & FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_INSTALL)
+		live_patch_state = BNXT_LIVEPATCH_STATE(flags);
+
+		if (live_patch_state == BNXT_LIVEPATCH_NOT_INSTALLED)
 			continue;
-		if ((flags & FW_LIVEPATCH_QUERY_RESP_STATUS_FLAGS_ACTIVE) &&
-		    !strncmp(query_resp->active_ver, query_resp->install_ver,
-			     sizeof(query_resp->active_ver)))
+
+		if (live_patch_state == BNXT_LIVEPATCH_ACTIVATED) {
+			activated = true;
 			continue;
+		}
+
+		if (live_patch_state == BNXT_LIVEPATCH_INSTALLED)
+			patch_req->opcode = FW_LIVEPATCH_REQ_OPCODE_ACTIVATE;
+		else if (live_patch_state == BNXT_LIVEPATCH_REMOVED)
+			patch_req->opcode = FW_LIVEPATCH_REQ_OPCODE_DEACTIVATE;
 
 		patch_req->fw_target = target;
 		rc = hwrm_req_send(bp, patch_req);
@@ -424,8 +595,13 @@ bnxt_dl_livepatch_activate(struct bnxt *bp, struct netlink_ext_ack *extack)
 	}
 
 	if (!rc && !installed) {
-		NL_SET_ERR_MSG_MOD(extack, "No live patches found");
-		rc = -ENOENT;
+		if (activated) {
+			NL_SET_ERR_MSG_MOD(extack, "Live patch already activated");
+			rc = -EEXIST;
+		} else {
+			NL_SET_ERR_MSG_MOD(extack, "No live patches found");
+			rc = -ENOENT;
+		}
 	}
 	hwrm_req_drop(bp, query_req);
 	hwrm_req_drop(bp, patch_req);
