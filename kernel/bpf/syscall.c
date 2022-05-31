@@ -2924,6 +2924,8 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 				   u32 btf_id,
 				   u64 bpf_cookie)
 {
+	struct bpf_attach_target_info tgt_info_buf = {};
+	struct bpf_attach_target_info *tgt_info = &tgt_info_buf;
 	struct bpf_link_primer link_primer;
 	struct bpf_prog *tgt_prog = NULL;
 	struct bpf_trampoline *tr = NULL;
@@ -2993,11 +2995,11 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 
 	/* There are a few possible cases here:
 	 *
-	 * - if prog->aux->dst_trampoline is set, the program was just loaded
+	 * - if prog->aux->dst_key is set, the program was just loaded
 	 *   and not yet attached to anything, so we can use the values stored
 	 *   in prog->aux
 	 *
-	 * - if prog->aux->dst_trampoline is NULL, the program has already been
+	 * - if prog->aux->dst_key is NULL, the program has already been
          *   attached to a target and its initial target was cleared (below)
 	 *
 	 * - if tgt_prog != NULL, the caller specified tgt_prog_fd +
@@ -3006,10 +3008,10 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	 * - if tgt_prog == NULL when this function was called using the old
 	 *   raw_tracepoint_open API, and we need a target from prog->aux
 	 *
-	 * - if prog->aux->dst_trampoline and tgt_prog is NULL, the program
+	 * - if prog->aux->dst_key and tgt_prog is NULL, the program
 	 *   was detached and is going for re-attachment.
 	 */
-	if (!prog->aux->dst_trampoline && !tgt_prog) {
+	if (!prog->aux->dst_key && !tgt_prog) {
 		/*
 		 * Allow re-attach for TRACING and LSM programs. If it's
 		 * currently linked, bpf_trampoline_link_prog will fail.
@@ -3025,24 +3027,16 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		key = bpf_trampoline_compute_key(NULL, prog->aux->attach_btf, btf_id);
 	}
 
-	if (!prog->aux->dst_trampoline ||
-	    (key && key != prog->aux->dst_trampoline->key)) {
+	if (!prog->aux->dst_key || (key && key != prog->aux->dst_key)) {
 		/* If there is no saved target, or the specified target is
 		 * different from the destination specified at load time, we
 		 * need a new trampoline and a check for compatibility
 		 */
-		struct bpf_attach_target_info tgt_info = {};
 
 		err = bpf_check_attach_target(NULL, prog, tgt_prog, btf_id,
-					      &tgt_info);
+					      tgt_info);
 		if (err)
 			goto out_unlock;
-
-		tr = bpf_trampoline_get(key, &tgt_info);
-		if (!tr) {
-			err = -ENOMEM;
-			goto out_unlock;
-		}
 	} else {
 		/* The caller didn't specify a target, or the target was the
 		 * same as the destination supplied during program load. This
@@ -3051,8 +3045,15 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		 * can only happen once for any program, as the saved values in
 		 * prog->aux are cleared below.
 		 */
-		tr = prog->aux->dst_trampoline;
+		key = prog->aux->dst_key;
 		tgt_prog = prog->aux->dst_prog;
+		tgt_info = &prog->aux->dst_tgt_info;
+	}
+
+	tr = bpf_trampoline_get(key, tgt_info);
+	if (!tr) {
+		err = -ENOMEM;
+		goto out_unlock;
 	}
 
 	err = bpf_link_prime(&link->link.link, &link_primer);
@@ -3074,20 +3075,17 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	 * program is (re-)attached to another target.
 	 */
 	if (prog->aux->dst_prog &&
-	    (tgt_prog_fd || tr != prog->aux->dst_trampoline))
+	    (tgt_prog_fd || tr->key != prog->aux->dst_key))
 		/* got extra prog ref from syscall, or attaching to different prog */
 		bpf_prog_put(prog->aux->dst_prog);
-	if (prog->aux->dst_trampoline && tr != prog->aux->dst_trampoline)
-		/* we allocated a new trampoline, so free the old one */
-		bpf_trampoline_put(prog->aux->dst_trampoline);
 
 	prog->aux->dst_prog = NULL;
-	prog->aux->dst_trampoline = NULL;
+	prog->aux->dst_key = 0;
 	mutex_unlock(&prog->aux->dst_mutex);
 
 	return bpf_link_settle(&link_primer);
 out_unlock:
-	if (tr && tr != prog->aux->dst_trampoline)
+	if (tr && tr->key != prog->aux->dst_key)
 		bpf_trampoline_put(tr);
 	mutex_unlock(&prog->aux->dst_mutex);
 	kfree(link);
