@@ -15002,11 +15002,9 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 {
 	struct bpf_prog *prog = env->prog;
 	struct bpf_prog *tgt_prog = prog->aux->dst_prog;
-	struct bpf_attach_target_info tgt_info = {};
+	struct bpf_attach_target_info *tgt_info = &prog->aux->dst_tgt_info;
 	u32 btf_id = prog->aux->attach_btf_id;
-	struct bpf_trampoline *tr;
 	int ret;
-	u64 key;
 
 	if (prog->type == BPF_PROG_TYPE_SYSCALL) {
 		if (prog->aux->sleepable)
@@ -15030,7 +15028,7 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	    prog->type != BPF_PROG_TYPE_EXT)
 		return 0;
 
-	ret = bpf_check_attach_target(&env->log, prog, tgt_prog, btf_id, &tgt_info);
+	ret = bpf_check_attach_target(&env->log, prog, tgt_prog, btf_id, tgt_info);
 	if (ret)
 		return ret;
 
@@ -15044,8 +15042,8 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	}
 
 	/* store info about the attachment target that will be used later */
-	prog->aux->attach_func_proto = tgt_info.tgt_type;
-	prog->aux->attach_func_name = tgt_info.tgt_name;
+	prog->aux->attach_func_proto = tgt_info->tgt_type;
+	prog->aux->attach_func_name = tgt_info->tgt_name;
 
 	if (tgt_prog) {
 		prog->aux->saved_dst_prog_type = tgt_prog->type;
@@ -15070,12 +15068,7 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 		return -EINVAL;
 	}
 
-	key = bpf_trampoline_compute_key(tgt_prog, prog->aux->attach_btf, btf_id);
-	tr = bpf_trampoline_get(key, &tgt_info);
-	if (!tr)
-		return -ENOMEM;
-
-	prog->aux->dst_trampoline = tr;
+	prog->aux->dst_key = bpf_trampoline_compute_key(tgt_prog, prog->aux->attach_btf, btf_id);
 	return 0;
 }
 
