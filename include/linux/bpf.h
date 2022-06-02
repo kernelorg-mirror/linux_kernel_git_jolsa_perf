@@ -927,7 +927,7 @@ struct bpf_trampoline {
 	 */
 	struct bpf_prog *extension_prog;
 	/* list of BPF programs using this trampoline */
-	struct hlist_head progs_hlist[BPF_TRAMP_MAX];
+	struct bpf_prog_array *progs_array[BPF_TRAMP_MAX];
 	/* Number of attached programs. A counter per kind. */
 	int progs_cnt[BPF_TRAMP_MAX];
 	/* Executable image of trampoline */
@@ -972,9 +972,8 @@ static __always_inline __nocfi unsigned int bpf_dispatcher_nop_func(
 }
 
 #ifdef CONFIG_BPF_JIT
-struct bpf_tramp_link;
-int bpf_trampoline_link_prog(struct bpf_tramp_link *link, struct bpf_trampoline *tr);
-int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link, struct bpf_trampoline *tr);
+int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr);
+int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr);
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
@@ -1029,12 +1028,12 @@ int bpf_jit_charge_modmem(u32 size);
 void bpf_jit_uncharge_modmem(u32 size);
 bool bpf_prog_has_trampoline(const struct bpf_prog *prog);
 #else
-static inline int bpf_trampoline_link_prog(struct bpf_tramp_link *link,
+static inline int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
 					   struct bpf_trampoline *tr)
 {
 	return -ENOTSUPP;
 }
-static inline int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link,
+static inline int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
 					     struct bpf_trampoline *tr)
 {
 	return -ENOTSUPP;
@@ -1253,19 +1252,15 @@ struct bpf_link_ops {
 			      struct bpf_link_info *info);
 };
 
-struct bpf_tramp_link {
-	struct bpf_link link;
-	struct hlist_node tramp_hlist;
-	u64 cookie;
-};
-
 struct bpf_shim_tramp_link {
-	struct bpf_tramp_link link;
+	struct bpf_link link;
+	struct bpf_tramp_prog tp;
 	struct bpf_trampoline *trampoline;
 };
 
 struct bpf_tracing_link {
-	struct bpf_tramp_link link;
+	struct bpf_link link;
+	struct bpf_tramp_prog tp;
 	enum bpf_attach_type attach_type;
 	struct bpf_trampoline *trampoline;
 	struct bpf_prog *tgt_prog;
@@ -1309,7 +1304,7 @@ void bpf_struct_ops_put(const void *kdata);
 int bpf_struct_ops_map_sys_lookup_elem(struct bpf_map *map, void *key,
 				       void *value);
 int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_progs *tprogs,
-				      struct bpf_tramp_link *link,
+				      struct bpf_prog *prog,
 				      const struct btf_func_model *model,
 				      void *image, void *image_end);
 static inline bool bpf_try_module_get(const void *data, struct module *owner)
