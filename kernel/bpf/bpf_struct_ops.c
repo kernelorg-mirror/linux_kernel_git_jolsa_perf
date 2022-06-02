@@ -322,9 +322,7 @@ static void bpf_struct_ops_link_release(struct bpf_link *link)
 
 static void bpf_struct_ops_link_dealloc(struct bpf_link *link)
 {
-	struct bpf_tramp_link *tlink = container_of(link, struct bpf_tramp_link, link);
-
-	kfree(tlink);
+	kfree(link);
 }
 
 const struct bpf_link_ops bpf_struct_ops_link_lops = {
@@ -333,7 +331,7 @@ const struct bpf_link_ops bpf_struct_ops_link_lops = {
 };
 
 int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_progs *tprogs,
-				      struct bpf_tramp_link *link,
+				      struct bpf_prog *prog,
 				      const struct btf_func_model *model,
 				      void *image, void *image_end)
 {
@@ -405,7 +403,7 @@ static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	for_each_member(i, t, member) {
 		const struct btf_type *mtype, *ptype;
 		struct bpf_prog *prog;
-		struct bpf_tramp_link *link;
+		struct bpf_link *link;
 		u32 moff;
 
 		moff = __btf_member_bit_offset(t, member) / 8;
@@ -474,11 +472,11 @@ static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 			err = -ENOMEM;
 			goto reset_unlock;
 		}
-		bpf_link_init(&link->link, BPF_LINK_TYPE_STRUCT_OPS,
+		bpf_link_init(link, BPF_LINK_TYPE_STRUCT_OPS,
 			      &bpf_struct_ops_link_lops, prog);
-		st_map->links[i] = &link->link;
+		st_map->links[i] = link;
 
-		err = bpf_struct_ops_prepare_trampoline(tprogs, link,
+		err = bpf_struct_ops_prepare_trampoline(tprogs, prog,
 							&st_ops->func_models[i],
 							image, image_end);
 		if (err < 0)
