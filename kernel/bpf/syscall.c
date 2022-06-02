@@ -2867,9 +2867,9 @@ EXPORT_SYMBOL(bpf_link_get_from_fd);
 static void bpf_tracing_link_release(struct bpf_link *link)
 {
 	struct bpf_tracing_link *tr_link =
-		container_of(link, struct bpf_tracing_link, link.link);
+		container_of(link, struct bpf_tracing_link, link);
 
-	WARN_ON_ONCE(bpf_trampoline_unlink_prog(&tr_link->link,
+	WARN_ON_ONCE(bpf_trampoline_unlink_prog(&tr_link->tp,
 						tr_link->trampoline));
 
 	bpf_trampoline_put(tr_link->trampoline);
@@ -2882,7 +2882,7 @@ static void bpf_tracing_link_release(struct bpf_link *link)
 static void bpf_tracing_link_dealloc(struct bpf_link *link)
 {
 	struct bpf_tracing_link *tr_link =
-		container_of(link, struct bpf_tracing_link, link.link);
+		container_of(link, struct bpf_tracing_link, link);
 
 	kfree(tr_link);
 }
@@ -2891,7 +2891,7 @@ static void bpf_tracing_link_show_fdinfo(const struct bpf_link *link,
 					 struct seq_file *seq)
 {
 	struct bpf_tracing_link *tr_link =
-		container_of(link, struct bpf_tracing_link, link.link);
+		container_of(link, struct bpf_tracing_link, link);
 
 	seq_printf(seq,
 		   "attach_type:\t%d\n",
@@ -2902,7 +2902,7 @@ static int bpf_tracing_link_fill_link_info(const struct bpf_link *link,
 					   struct bpf_link_info *info)
 {
 	struct bpf_tracing_link *tr_link =
-		container_of(link, struct bpf_tracing_link, link.link);
+		container_of(link, struct bpf_tracing_link, link);
 
 	info->tracing.attach_type = tr_link->attach_type;
 	bpf_trampoline_unpack_key(tr_link->trampoline->key,
@@ -2986,10 +2986,11 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		err = -ENOMEM;
 		goto out_put_prog;
 	}
-	bpf_link_init(&link->link.link, BPF_LINK_TYPE_TRACING,
+	bpf_link_init(&link->link, BPF_LINK_TYPE_TRACING,
 		      &bpf_tracing_link_lops, prog);
 	link->attach_type = prog->expected_attach_type;
-	link->link.cookie = bpf_cookie;
+	link->tp.cookie = bpf_cookie;
+	link->tp.prog = prog;
 
 	mutex_lock(&prog->aux->dst_mutex);
 
@@ -3056,11 +3057,11 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		goto out_unlock;
 	}
 
-	err = bpf_link_prime(&link->link.link, &link_primer);
+	err = bpf_link_prime(&link->link, &link_primer);
 	if (err)
 		goto out_unlock;
 
-	err = bpf_trampoline_link_prog(&link->link, tr);
+	err = bpf_trampoline_link_prog(&link->tp, tr);
 	if (err) {
 		bpf_link_cleanup(&link_primer);
 		link = NULL;
