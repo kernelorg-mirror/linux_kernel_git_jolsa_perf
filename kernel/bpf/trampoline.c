@@ -74,7 +74,6 @@ static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 {
 	struct bpf_trampoline *tr;
 	struct hlist_head *head;
-	int i;
 
 	mutex_lock(&trampoline_mutex);
 	head = &trampoline_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
@@ -93,8 +92,6 @@ static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 	hlist_add_head(&tr->hlist, head);
 	refcount_set(&tr->refcnt, 1);
 	mutex_init(&tr->mutex);
-	for (i = 0; i < BPF_TRAMP_MAX; i++)
-		INIT_HLIST_HEAD(&tr->progs_hlist[i]);
 out:
 	mutex_unlock(&trampoline_mutex);
 	return tr;
@@ -174,9 +171,11 @@ static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
 static struct bpf_tramp_progs *
 bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg)
 {
+	const struct bpf_prog_array_item *item;
+	struct bpf_prog_array *prog_array;
 	struct bpf_tramp_progs *tprogs;
-	struct bpf_tramp_link *link;
 	struct bpf_tramp_prog *tp;
+	struct bpf_prog *prog;
 	int kind;
 
 	*total = 0;
@@ -189,13 +188,16 @@ bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_a
 		*total += tr->progs_cnt[kind];
 		tp = &tprogs[kind].progs[0];
 
-		hlist_for_each_entry(link, &tr->progs_hlist[kind], tramp_hlist) {
-			struct bpf_prog *prog = link->link.prog;
+		prog_array = tr->progs_array[kind];
+		if (!prog_array)
+			continue;
+		item = &prog_array->items[0];
 
+		while ((prog = READ_ONCE(item->prog))) {
 			*ip_arg |= prog->call_get_func_ip;
 			tp->prog = prog;
-			tp->cookie = link->cookie;
-			tp++;
+			tp->cookie = item->bpf_cookie;
+			tp++; item++;
 		}
 	}
 	return tprogs;
@@ -414,14 +416,16 @@ static enum bpf_tramp_prog_type bpf_attach_type_to_tramp(struct bpf_prog *prog)
 	}
 }
 
-int bpf_trampoline_link_prog(struct bpf_tramp_link *link, struct bpf_trampoline *tr)
+int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
 {
+	struct bpf_prog_array *old_array, *new_array;
+	const struct bpf_prog_array_item *item;
 	enum bpf_tramp_prog_type kind;
-	struct bpf_tramp_link *link_exiting;
+	struct bpf_prog *prog;
 	int err = 0;
 	int cnt = 0, i;
 
-	kind = bpf_attach_type_to_tramp(link->link.prog);
+	kind = bpf_attach_type_to_tramp(tp->prog);
 	mutex_lock(&tr->mutex);
 	if (tr->extension_prog) {
 		/* cannot attach fentry/fexit if extension prog is attached.
@@ -440,34 +444,43 @@ int bpf_trampoline_link_prog(struct bpf_tramp_link *link, struct bpf_trampoline 
 			err = -EBUSY;
 			goto out;
 		}
-		tr->extension_prog = link->link.prog;
+		tr->extension_prog = tp->prog;
 		err = bpf_arch_text_poke(tr->func.addr, BPF_MOD_JUMP, NULL,
-					 link->link.prog->bpf_func);
+					 tp->prog->bpf_func);
 		goto out;
 	}
 	if (cnt >= BPF_MAX_TRAMP_LINKS) {
 		err = -E2BIG;
 		goto out;
 	}
-	if (!hlist_unhashed(&link->tramp_hlist)) {
-		/* prog already linked */
-		err = -EBUSY;
-		goto out;
-	}
-	hlist_for_each_entry(link_exiting, &tr->progs_hlist[kind], tramp_hlist) {
-		if (link_exiting->link.prog != link->link.prog)
-			continue;
-		/* prog already linked */
-		err = -EBUSY;
-		goto out;
+
+	old_array = tr->progs_array[kind];
+	if (old_array) {
+		item = &old_array->items[0];
+
+		while ((prog = READ_ONCE(item->prog))) {
+			/* prog already linked */
+			if (prog == tp->prog) {
+				err = -EBUSY;
+				goto out;
+			}
+			item++;
+		}
 	}
 
-	hlist_add_head(&link->tramp_hlist, &tr->progs_hlist[kind]);
+	err = bpf_prog_array_copy(old_array, NULL, tp->prog, tp->cookie, &new_array);
+	if (err < 0)
+		goto out;
+	tr->progs_array[kind] = new_array;
 	tr->progs_cnt[kind]++;
+
 	err = bpf_trampoline_update(tr);
 	if (err) {
-		hlist_del_init(&link->tramp_hlist);
+		tr->progs_array[kind] = old_array;
 		tr->progs_cnt[kind]--;
+		bpf_prog_array_free(new_array);
+	} else {
+		bpf_prog_array_free(old_array);
 	}
 out:
 	mutex_unlock(&tr->mutex);
@@ -475,12 +488,13 @@ out:
 }
 
 /* bpf_trampoline_unlink_prog() should never fail. */
-int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link, struct bpf_trampoline *tr)
+int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
 {
+	struct bpf_prog_array *old_array, *new_array;
 	enum bpf_tramp_prog_type kind;
 	int err;
 
-	kind = bpf_attach_type_to_tramp(link->link.prog);
+	kind = bpf_attach_type_to_tramp(tp->prog);
 	mutex_lock(&tr->mutex);
 	if (kind == BPF_TRAMP_REPLACE) {
 		WARN_ON_ONCE(!tr->extension_prog);
@@ -489,8 +503,17 @@ int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link, struct bpf_trampolin
 		tr->extension_prog = NULL;
 		goto out;
 	}
-	hlist_del_init(&link->tramp_hlist);
+
+	old_array = tr->progs_array[kind];
+
+	err = bpf_prog_array_copy(old_array, tp->prog, NULL, 0, &new_array);
+	if (err < 0)
+		goto out;
+
 	tr->progs_cnt[kind]--;
+	tr->progs_array[kind] = new_array;
+	bpf_prog_array_free(old_array);
+
 	err = bpf_trampoline_update(tr);
 out:
 	mutex_unlock(&tr->mutex);
@@ -528,9 +551,12 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 		goto out;
 	WARN_ON_ONCE(mutex_is_locked(&tr->mutex));
 
-	for (i = 0; i < BPF_TRAMP_MAX; i++)
-		if (WARN_ON_ONCE(!hlist_empty(&tr->progs_hlist[i])))
+	for (i = 0; i < BPF_TRAMP_MAX; i++) {
+		if (!tr->progs_array[i])
+			continue;
+		if (WARN_ON_ONCE(!bpf_prog_array_is_empty(tr->progs_array[i])))
 			goto out;
+	}
 
 	/* This code will be executed even when the last bpf_tramp_image
 	 * is alive. All progs are detached from the trampoline and the
