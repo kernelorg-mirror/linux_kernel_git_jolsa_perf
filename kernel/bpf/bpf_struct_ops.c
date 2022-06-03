@@ -332,21 +332,21 @@ const struct bpf_link_ops bpf_struct_ops_link_lops = {
 	.dealloc = bpf_struct_ops_link_dealloc,
 };
 
-int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_links *tlinks,
+int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_progs *tprogs,
 				      struct bpf_tramp_link *link,
 				      const struct btf_func_model *model,
 				      void *image, void *image_end)
 {
 	u32 flags;
 
-	tlinks[BPF_TRAMP_FENTRY].links[0] = link;
-	tlinks[BPF_TRAMP_FENTRY].nr_links = 1;
+	tprogs[BPF_TRAMP_FENTRY].progs[0].prog = prog;
+	tprogs[BPF_TRAMP_FENTRY].nr_progs = 1;
 	/* BPF_TRAMP_F_RET_FENTRY_RET is only used by bpf_struct_ops,
 	 * and it must be used alone.
 	 */
 	flags = model->ret_size > 0 ? BPF_TRAMP_F_RET_FENTRY_RET : 0;
 	return arch_prepare_bpf_trampoline(NULL, image, image_end,
-					   model, flags, tlinks, NULL);
+					   model, flags, tprogs, NULL);
 }
 
 static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
@@ -357,7 +357,7 @@ static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	struct bpf_struct_ops_value *uvalue, *kvalue;
 	const struct btf_member *member;
 	const struct btf_type *t = st_ops->type;
-	struct bpf_tramp_links *tlinks = NULL;
+	struct bpf_tramp_progs *tprogs = NULL;
 	void *udata, *kdata;
 	int prog_fd, err = 0;
 	void *image, *image_end;
@@ -381,8 +381,8 @@ static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	if (uvalue->state || refcount_read(&uvalue->refcnt))
 		return -EINVAL;
 
-	tlinks = kcalloc(BPF_TRAMP_MAX, sizeof(*tlinks), GFP_KERNEL);
-	if (!tlinks)
+	tprogs = kcalloc(BPF_TRAMP_MAX, sizeof(*tprogs), GFP_KERNEL);
+	if (!tprogs)
 		return -ENOMEM;
 
 	uvalue = (struct bpf_struct_ops_value *)st_map->uvalue;
@@ -478,7 +478,7 @@ static int bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 			      &bpf_struct_ops_link_lops, prog);
 		st_map->links[i] = &link->link;
 
-		err = bpf_struct_ops_prepare_trampoline(tlinks, link,
+		err = bpf_struct_ops_prepare_trampoline(tprogs, link,
 							&st_ops->func_models[i],
 							image, image_end);
 		if (err < 0)
@@ -520,7 +520,7 @@ reset_unlock:
 	memset(uvalue, 0, map->value_size);
 	memset(kvalue, 0, map->value_size);
 unlock:
-	kfree(tlinks);
+	kfree(tprogs);
 	mutex_unlock(&st_map->lock);
 	return err;
 }

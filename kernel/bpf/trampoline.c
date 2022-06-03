@@ -269,30 +269,34 @@ static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
 	return ret;
 }
 
-static struct bpf_tramp_links *
+static struct bpf_tramp_progs *
 bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg)
 {
+	struct bpf_tramp_progs *tprogs;
 	struct bpf_tramp_link *link;
-	struct bpf_tramp_links *tlinks;
-	struct bpf_tramp_link **links;
+	struct bpf_tramp_prog *tp;
 	int kind;
 
 	*total = 0;
-	tlinks = kcalloc(BPF_TRAMP_MAX, sizeof(*tlinks), GFP_KERNEL);
-	if (!tlinks)
+	tprogs = kcalloc(BPF_TRAMP_MAX, sizeof(*tprogs), GFP_KERNEL);
+	if (!tprogs)
 		return ERR_PTR(-ENOMEM);
 
 	for (kind = 0; kind < BPF_TRAMP_MAX; kind++) {
-		tlinks[kind].nr_links = tr->progs_cnt[kind];
+		tprogs[kind].nr_progs = tr->progs_cnt[kind];
 		*total += tr->progs_cnt[kind];
-		links = tlinks[kind].links;
+		tp = &tprogs[kind].progs[0];
 
 		hlist_for_each_entry(link, &tr->progs_hlist[kind], tramp_hlist) {
-			*ip_arg |= link->link.prog->call_get_func_ip;
-			*links++ = link;
+			struct bpf_prog *prog = link->link.prog;
+
+			*ip_arg |= prog->call_get_func_ip;
+			tp->prog = prog;
+			tp->cookie = link->cookie;
+			tp++;
 		}
 	}
-	return tlinks;
+	return tprogs;
 }
 
 static void __bpf_tramp_image_put_deferred(struct work_struct *work)
@@ -431,14 +435,14 @@ out:
 static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex)
 {
 	struct bpf_tramp_image *im;
-	struct bpf_tramp_links *tlinks;
+	struct bpf_tramp_progs *tprogs;
 	u32 orig_flags = tr->flags;
 	bool ip_arg = false;
 	int err, total;
 
-	tlinks = bpf_trampoline_get_progs(tr, &total, &ip_arg);
-	if (IS_ERR(tlinks))
-		return PTR_ERR(tlinks);
+	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg);
+	if (IS_ERR(tprogs))
+		return PTR_ERR(tprogs);
 
 	if (total == 0) {
 		err = unregister_fentry(tr, tr->cur_image->image);
@@ -457,8 +461,8 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mut
 	/* clear all bits except SHARE_IPMODIFY */
 	tr->flags &= BPF_TRAMP_F_SHARE_IPMODIFY;
 
-	if (tlinks[BPF_TRAMP_FEXIT].nr_links ||
-	    tlinks[BPF_TRAMP_MODIFY_RETURN].nr_links) {
+	if (tprogs[BPF_TRAMP_FEXIT].nr_progs ||
+	    tprogs[BPF_TRAMP_MODIFY_RETURN].nr_progs) {
 		/* NOTE: BPF_TRAMP_F_RESTORE_REGS and BPF_TRAMP_F_SKIP_FRAME
 		 * should not be set together.
 		 */
@@ -478,7 +482,7 @@ again:
 #endif
 
 	err = arch_prepare_bpf_trampoline(im, im->image, im->image + PAGE_SIZE,
-					  &tr->func.model, tr->flags, tlinks,
+					  &tr->func.model, tr->flags, tprogs,
 					  tr->func.addr);
 	if (err < 0)
 		goto out;
@@ -515,7 +519,7 @@ out:
 	/* If any error happens, restore previous flags */
 	if (err)
 		tr->flags = orig_flags;
-	kfree(tlinks);
+	kfree(tprogs);
 	return err;
 }
 
@@ -980,7 +984,7 @@ void notrace __bpf_tramp_exit(struct bpf_tramp_image *tr)
 int __weak
 arch_prepare_bpf_trampoline(struct bpf_tramp_image *tr, void *image, void *image_end,
 			    const struct btf_func_model *m, u32 flags,
-			    struct bpf_tramp_links *tlinks,
+			    struct bpf_tramp_progs *tprogs,
 			    void *orig_call)
 {
 	return -ENOTSUPP;
