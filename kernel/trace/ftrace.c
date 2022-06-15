@@ -1183,6 +1183,11 @@ remove_hash_entry(struct ftrace_hash *hash,
 	hash->count--;
 }
 
+void ftrace_hash_free_entry(struct ftrace_hash *hash, struct ftrace_func_entry *entry)
+{
+	free_hash_entry(hash, entry);
+}
+
 static void ftrace_hash_clear(struct ftrace_hash *hash)
 {
 	struct hlist_head *hhd;

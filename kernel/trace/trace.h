@@ -811,6 +811,9 @@ ftrace_lookup_ip(struct ftrace_hash *hash, unsigned long ip);
 void ftrace_hash_add_entry(struct ftrace_hash *hash,
 			   struct ftrace_func_entry *entry);
 
+void ftrace_hash_free_entry(struct ftrace_hash *hash,
+			    struct ftrace_func_entry *entry);
+
 static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
 {
 	return !hash || !(hash->count || (hash->flags & FTRACE_HASH_FL_MOD));
