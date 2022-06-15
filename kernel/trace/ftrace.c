@@ -5580,6 +5580,118 @@ int modify_ftrace_direct(unsigned long ip,
 }
 EXPORT_SYMBOL_GPL(modify_ftrace_direct);
 
+static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int enable)
+{
+	struct ftrace_func_entry *iter, *entry;
+	struct ftrace_hash **orig, *hash = NULL;
+	int i, err = -ENOMEM, size;
+	unsigned long ip;
+	bool enabled;
+
+	if (!set)
+		return -EINVAL;
+	if (unlikely(ftrace_disabled))
+		return -ENODEV;
+
+	mutex_lock(&direct_mutex);
+
+	ftrace_ops_init(ops);
+
+	if (enable)
+		orig = &ops->func_hash->filter_hash;
+	else
+		orig = &ops->func_hash->notrace_hash;
+
+	hash = *orig ?: EMPTY_HASH;
+	hash = dup_hash(hash, hash->count, false);
+	if (!hash)
+		goto out_unlock_direct;
+
+	err = -EBUSY;
+	size = 1 << set->size_bits;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(iter, &set->buckets[i], hlist) {
+			ip = ftrace_location(iter->ip);
+			if (!ip) {
+				err = -EINVAL;
+				goto out_unlock_direct;
+			}
+			entry = __ftrace_lookup_ip(hash, ip);
+			if (!entry) {
+				entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+				if (!entry) {
+					err = -ENOMEM;
+					goto out_unlock_direct;
+				}
+				entry->ip = ip;
+				entry->direct = iter->direct;
+				ftrace_hash_add_entry(hash, entry);
+			} else if (iter->direct) {
+				entry->direct = iter->direct;
+			} else {
+				free_hash_entry(hash, entry);
+			}
+		}
+	}
+
+	mutex_lock(&ftrace_lock);
+
+	enabled = ops->flags & FTRACE_OPS_FL_ENABLED;
+
+	if ((hash->count == 0) && enabled) {
+		/* no functions to enable, going down */
+		err = ftrace_shutdown(ops, 0);
+		if (err)
+			goto out_unlock_ftrace;
+		err = ftrace_hash_move_and_update_ops(ops, orig, hash, enable);
+		ftrace_hash_free(direct_functions);
+		direct_functions = EMPTY_HASH;
+	} else if (!enabled) {
+		/* ops not enabled, starting */
+		ftrace_hash_free(direct_functions);
+		direct_functions = dup_hash(hash, hash->count, false);
+		if (!direct_functions)
+			goto out_unlock_ftrace;
+
+		err = ftrace_hash_move_and_update_ops(ops, orig, hash, enable);
+		if (err)
+			goto out_unlock_ftrace;
+		err = ftrace_startup(ops, 0);
+	} else {
+		/* ops enabled, we need to shut it down, change and start again */
+		err = ftrace_shutdown(ops, 0);
+		if (err)
+			goto out_unlock_ftrace;
+		err = ftrace_hash_move_and_update_ops(ops, orig, EMPTY_HASH, enable);
+		if (err)
+			goto out_unlock_ftrace;
+
+		ftrace_hash_free(direct_functions);
+		direct_functions = dup_hash(hash, hash->count, false);
+		if (!direct_functions)
+			goto out_unlock_ftrace;
+
+		err = ftrace_hash_move_and_update_ops(ops, orig, hash, enable);
+		if (err)
+			goto out_unlock_ftrace;
+		err = ftrace_startup(ops, 0);
+	}
+
+out_unlock_ftrace:
+	mutex_unlock(&ftrace_lock);
+
+out_unlock_direct:
+	mutex_unlock(&direct_mutex);
+	ftrace_hash_free(hash);
+	return err;
+}
+
+int set_ftrace_direct(struct ftrace_hash *set)
+{
+	return set_ftrace_ops(&direct_ops, set, 1);
+}
+EXPORT_SYMBOL_GPL(set_ftrace_direct);
+
 #define MULTI_FLAGS (FTRACE_OPS_FL_DIRECT | FTRACE_OPS_FL_SAVE_REGS)
 
 static int check_direct_multi(struct ftrace_ops *ops)
