@@ -1140,8 +1140,8 @@ ftrace_lookup_ip(struct ftrace_hash *hash, unsigned long ip)
 	return __ftrace_lookup_ip(hash, ip);
 }
 
-static void __add_hash_entry(struct ftrace_hash *hash,
-			     struct ftrace_func_entry *entry)
+void ftrace_hash_add_entry(struct ftrace_hash *hash,
+			   struct ftrace_func_entry *entry)
 {
 	struct hlist_head *hhd;
 	unsigned long key;
@@ -1161,7 +1161,7 @@ static int add_hash_entry(struct ftrace_hash *hash, unsigned long ip)
 		return -ENOMEM;
 
 	entry->ip = ip;
-	__add_hash_entry(hash, entry);
+	ftrace_hash_add_entry(hash, entry);
 
 	return 0;
 }
@@ -1382,7 +1382,7 @@ static struct ftrace_hash *dup_hash(struct ftrace_hash *src, int size)
 		hhd = &src->buckets[i];
 		hlist_for_each_entry_safe(entry, tn, hhd, hlist) {
 			remove_hash_entry(src, entry);
-			__add_hash_entry(new_hash, entry);
+			ftrace_hash_add_entry(new_hash, entry);
 		}
 	}
 	return new_hash;
@@ -2471,7 +2471,7 @@ ftrace_add_rec_direct(unsigned long ip, unsigned long addr,
 
 	entry->ip = ip;
 	entry->direct = addr;
-	__add_hash_entry(direct_functions, entry);
+	ftrace_hash_add_entry(direct_functions, entry);
 	return entry;
 }
 
@@ -4554,7 +4554,7 @@ int ftrace_func_mapper_add_ip(struct ftrace_func_mapper *mapper,
 	map->entry.ip = ip;
 	map->data = data;
 
-	__add_hash_entry(&mapper->hash, &map->entry);
+	ftrace_hash_add_entry(&mapper->hash, &map->entry);
 
 	return 0;
 }
