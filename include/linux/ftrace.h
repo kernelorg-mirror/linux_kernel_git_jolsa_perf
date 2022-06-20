@@ -213,6 +213,10 @@ enum {
 	FTRACE_HASH_FL_MOD	= (1 << 0),
 };
 
+/* hash bits for specific function selection */
+#define FTRACE_HASH_DEFAULT_BITS 10
+#define FTRACE_HASH_MAX_BITS 12
+
 struct ftrace_hash {
 	unsigned long		size_bits;
 	struct hlist_head	*buckets;

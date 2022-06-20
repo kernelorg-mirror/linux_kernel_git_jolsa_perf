@@ -63,10 +63,6 @@
 		___r;				\
 	})
 
-/* hash bits for specific function selection */
-#define FTRACE_HASH_DEFAULT_BITS 10
-#define FTRACE_HASH_MAX_BITS 12
-
 #ifdef CONFIG_DYNAMIC_FTRACE
 #define INIT_OPS_HASH(opsname)	\
 	.func_hash		= &opsname.local_hash,			\
