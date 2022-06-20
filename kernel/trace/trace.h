@@ -819,6 +819,8 @@ static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
 	return !hash || !(hash->count || (hash->flags & FTRACE_HASH_FL_MOD));
 }
 
+struct ftrace_hash *ftrace_hash_alloc(int size_bits);
+
 /* Standard output formatting function used for function return traces */
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 
