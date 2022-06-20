@@ -246,6 +246,42 @@ enum ftrace_ops_cmd {
 typedef int (*ftrace_ops_func_t)(struct ftrace_ops *op, enum ftrace_ops_cmd cmd);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
+
+/* hash bits for specific function selection */
+#define FTRACE_HASH_DEFAULT_BITS 10
+#define FTRACE_HASH_MAX_BITS 12
+
+enum {
+	FTRACE_HASH_FL_MOD	= (1 << 0),
+};
+
+struct ftrace_hash {
+	unsigned long		size_bits;
+	struct hlist_head	*buckets;
+	unsigned long		count;
+	unsigned long		flags;
+	struct rcu_head		rcu;
+};
+
+struct ftrace_func_entry;
+
+void ftrace_hash_add_entry(struct ftrace_hash *hash,
+			   struct ftrace_func_entry *entry);
+
+void ftrace_hash_free_entry(struct ftrace_hash *hash,
+			    struct ftrace_func_entry *entry);
+
+struct ftrace_func_entry *
+ftrace_lookup_ip(struct ftrace_hash *hash, unsigned long ip);
+
+static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
+{
+	return !hash || !(hash->count || (hash->flags & FTRACE_HASH_FL_MOD));
+}
+
+struct ftrace_hash *ftrace_hash_alloc(int size_bits);
+void ftrace_hash_free(struct ftrace_hash *hash);
+
 /* The hash used to know what functions callbacks trace */
 struct ftrace_ops_hash {
 	struct ftrace_hash __rcu	*notrace_hash;
