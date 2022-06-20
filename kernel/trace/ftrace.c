@@ -1229,7 +1229,7 @@ static void clear_ftrace_mod_list(struct list_head *head)
 	mutex_unlock(&ftrace_lock);
 }
 
-static void free_ftrace_hash(struct ftrace_hash *hash)
+void ftrace_hash_free(struct ftrace_hash *hash)
 {
 	if (!hash || hash == EMPTY_HASH)
 		return;
@@ -1243,7 +1243,7 @@ static void __free_ftrace_hash_rcu(struct rcu_head *rcu)
 	struct ftrace_hash *hash;
 
 	hash = container_of(rcu, struct ftrace_hash, rcu);
-	free_ftrace_hash(hash);
+	ftrace_hash_free(hash);
 }
 
 static void free_ftrace_hash_rcu(struct ftrace_hash *hash)
@@ -1256,8 +1256,8 @@ static void free_ftrace_hash_rcu(struct ftrace_hash *hash)
 void ftrace_free_filter(struct ftrace_ops *ops)
 {
 	ftrace_ops_init(ops);
-	free_ftrace_hash(ops->func_hash->filter_hash);
-	free_ftrace_hash(ops->func_hash->notrace_hash);
+	ftrace_hash_free(ops->func_hash->filter_hash);
+	ftrace_hash_free(ops->func_hash->notrace_hash);
 }
 
 struct ftrace_hash *ftrace_hash_alloc(int size_bits)
@@ -1345,7 +1345,7 @@ alloc_and_copy_ftrace_hash(int size_bits, struct ftrace_hash *hash)
 	return new_hash;
 
  free_hash:
-	free_ftrace_hash(new_hash);
+	ftrace_hash_free(new_hash);
 	return NULL;
 }
 
@@ -1427,7 +1427,7 @@ ftrace_hash_move(struct ftrace_ops *ops, int enable,
 		/* IPMODIFY should be updated only when filter_hash updating */
 		ret = ftrace_hash_ipmodify_update(ops, new_hash);
 		if (ret < 0) {
-			free_ftrace_hash(new_hash);
+			ftrace_hash_free(new_hash);
 			return ret;
 		}
 	}
@@ -3934,7 +3934,7 @@ ftrace_regex_open(struct ftrace_ops *ops, int flag,
 			m->private = iter;
 		} else {
 			/* Failed */
-			free_ftrace_hash(iter->hash);
+			ftrace_hash_free(iter->hash);
 			trace_parser_put(&iter->parser);
 		}
 	} else
@@ -4378,7 +4378,7 @@ static void process_mod_list(struct list_head *head, struct ftrace_ops *ops,
  out:
 	mutex_unlock(&ops->func_hash->regex_lock);
 
-	free_ftrace_hash(new_hash);
+	ftrace_hash_free(new_hash);
 }
 
 static void process_cached_mods(const char *mod_name)
@@ -4608,7 +4608,7 @@ void free_ftrace_func_mapper(struct ftrace_func_mapper *mapper,
 			}
 		}
 	}
-	free_ftrace_hash(&mapper->hash);
+	ftrace_hash_free(&mapper->hash);
 }
 
 static void release_probe(struct ftrace_func_probe *probe)
@@ -4769,7 +4769,7 @@ register_ftrace_function_probe(char *glob, struct trace_array *tr,
 		ret = count;
  out:
 	mutex_unlock(&probe->ops.func_hash->regex_lock);
-	free_ftrace_hash(hash);
+	ftrace_hash_free(hash);
 
 	release_probe(probe);
 
@@ -4910,7 +4910,7 @@ unregister_ftrace_function_probe_func(char *glob, struct trace_array *tr,
 
  out_unlock:
 	mutex_unlock(&probe->ops.func_hash->regex_lock);
-	free_ftrace_hash(hash);
+	ftrace_hash_free(hash);
 
 	release_probe(probe);
 
@@ -5154,7 +5154,7 @@ ftrace_set_hash(struct ftrace_ops *ops, unsigned char *buf, int len,
  out_regex_unlock:
 	mutex_unlock(&ops->func_hash->regex_lock);
 
-	free_ftrace_hash(hash);
+	ftrace_hash_free(hash);
 	return ret;
 }
 
@@ -5304,7 +5304,7 @@ int register_ftrace_direct(unsigned long ip, unsigned long addr)
 			synchronize_rcu_tasks();
 			kfree(direct);
 			if (free_hash)
-				free_ftrace_hash(free_hash);
+				ftrace_hash_free(free_hash);
 			free_hash = NULL;
 			ftrace_direct_func_count--;
 		}
@@ -5316,7 +5316,7 @@ int register_ftrace_direct(unsigned long ip, unsigned long addr)
 
 	if (free_hash) {
 		synchronize_rcu_tasks();
-		free_ftrace_hash(free_hash);
+		ftrace_hash_free(free_hash);
 	}
 
 	return ret;
@@ -5655,7 +5655,7 @@ int register_ftrace_direct_multi(struct ftrace_ops *ops, unsigned long addr)
 
 	if (free_hash) {
 		synchronize_rcu_tasks();
-		free_ftrace_hash(free_hash);
+		ftrace_hash_free(free_hash);
 	}
 	return err;
 }
@@ -6047,7 +6047,7 @@ int ftrace_regex_release(struct inode *inode, struct file *file)
 	}
 
 	mutex_unlock(&iter->ops->func_hash->regex_lock);
-	free_ftrace_hash(iter->hash);
+	ftrace_hash_free(iter->hash);
 	if (iter->tr)
 		trace_array_put(iter->tr);
 	kfree(iter);
@@ -6238,7 +6238,7 @@ __ftrace_graph_open(struct inode *inode, struct file *file,
 			m->private = fgd;
 		} else {
 			/* Failed */
-			free_ftrace_hash(new_hash);
+			ftrace_hash_free(new_hash);
 			new_hash = NULL;
 		}
 	} else
@@ -6376,11 +6376,11 @@ ftrace_graph_release(struct inode *inode, struct file *file)
 		if (old_hash != EMPTY_HASH)
 			synchronize_rcu_tasks_rude();
 
-		free_ftrace_hash(old_hash);
+		ftrace_hash_free(old_hash);
 	}
 
  out:
-	free_ftrace_hash(fgd->new_hash);
+	ftrace_hash_free(fgd->new_hash);
 	kfree(fgd);
 
 	return ret;
