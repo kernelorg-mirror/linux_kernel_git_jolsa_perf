@@ -820,6 +820,7 @@ static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
 }
 
 struct ftrace_hash *ftrace_hash_alloc(int size_bits);
+void ftrace_hash_free(struct ftrace_hash *hash);
 
 /* Standard output formatting function used for function return traces */
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
