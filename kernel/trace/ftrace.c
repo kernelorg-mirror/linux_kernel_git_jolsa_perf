@@ -1260,7 +1260,7 @@ void ftrace_free_filter(struct ftrace_ops *ops)
 	free_ftrace_hash(ops->func_hash->notrace_hash);
 }
 
-static struct ftrace_hash *alloc_ftrace_hash(int size_bits)
+struct ftrace_hash *ftrace_hash_alloc(int size_bits)
 {
 	struct ftrace_hash *hash;
 	int size;
@@ -1320,7 +1320,7 @@ alloc_and_copy_ftrace_hash(int size_bits, struct ftrace_hash *hash)
 	int ret;
 	int i;
 
-	new_hash = alloc_ftrace_hash(size_bits);
+	new_hash = ftrace_hash_alloc(size_bits);
 	if (!new_hash)
 		return NULL;
 
@@ -1376,7 +1376,7 @@ static struct ftrace_hash *dup_hash(struct ftrace_hash *src, int size)
 	if (bits > FTRACE_HASH_MAX_BITS)
 		bits = FTRACE_HASH_MAX_BITS;
 
-	new_hash = alloc_ftrace_hash(bits);
+	new_hash = ftrace_hash_alloc(bits);
 	if (!new_hash)
 		return NULL;
 
@@ -3925,7 +3925,7 @@ ftrace_regex_open(struct ftrace_ops *ops, int flag,
 		const int size_bits = FTRACE_HASH_DEFAULT_BITS;
 
 		if (file->f_flags & O_TRUNC) {
-			iter->hash = alloc_ftrace_hash(size_bits);
+			iter->hash = ftrace_hash_alloc(size_bits);
 			clear_ftrace_mod_list(mod_head);
 	        } else {
 			iter->hash = alloc_and_copy_ftrace_hash(size_bits, hash);
@@ -4505,7 +4505,7 @@ struct ftrace_func_mapper *allocate_ftrace_func_mapper(void)
 	 * in the hash are not ftrace_func_entry type, we define it
 	 * as a separate structure.
 	 */
-	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	hash = ftrace_hash_alloc(FTRACE_HASH_DEFAULT_BITS);
 	return (struct ftrace_func_mapper *)hash;
 }
 
@@ -5143,7 +5143,7 @@ ftrace_set_hash(struct ftrace_ops *ops, unsigned char *buf, int len,
 		orig_hash = &ops->func_hash->notrace_hash;
 
 	if (reset)
-		hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+		hash = ftrace_hash_alloc(FTRACE_HASH_DEFAULT_BITS);
 	else
 		hash = alloc_and_copy_ftrace_hash(FTRACE_HASH_DEFAULT_BITS, *orig_hash);
 
@@ -6008,7 +6008,7 @@ static void __init set_ftrace_early_graph(char *buf, int enable)
 	char *func;
 	struct ftrace_hash *hash;
 
-	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	hash = ftrace_hash_alloc(FTRACE_HASH_DEFAULT_BITS);
 	if (MEM_FAIL(!hash, "Failed to allocate hash\n"))
 		return;
 
@@ -6275,7 +6275,7 @@ __ftrace_graph_open(struct inode *inode, struct file *file,
 			return -ENOMEM;
 
 		if (file->f_flags & O_TRUNC)
-			new_hash = alloc_ftrace_hash(size_bits);
+			new_hash = ftrace_hash_alloc(size_bits);
 		else
 			new_hash = alloc_and_copy_ftrace_hash(size_bits,
 							      fgd->hash);
