@@ -5546,6 +5546,14 @@ int modify_ftrace_direct(unsigned long ip,
 }
 EXPORT_SYMBOL_GPL(modify_ftrace_direct);
 
+int set_ftrace_direct(struct ftrace_hash *hreg, struct ftrace_hash *hunreg,
+		      struct ftrace_hash *hmodify)
+{
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(set_ftrace_direct);
+
 #define MULTI_FLAGS (FTRACE_OPS_FL_IPMODIFY | FTRACE_OPS_FL_DIRECT | \
 		     FTRACE_OPS_FL_SAVE_REGS)
 
