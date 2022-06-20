@@ -209,6 +209,34 @@ enum {
 };
 
 #ifdef CONFIG_DYNAMIC_FTRACE
+enum {
+	FTRACE_HASH_FL_MOD	= (1 << 0),
+};
+
+struct ftrace_hash {
+	unsigned long		size_bits;
+	struct hlist_head	*buckets;
+	unsigned long		count;
+	unsigned long		flags;
+	struct rcu_head		rcu;
+};
+
+struct ftrace_func_entry;
+
+void ftrace_hash_add_entry(struct ftrace_hash *hash,
+			   struct ftrace_func_entry *entry);
+
+void ftrace_hash_free_entry(struct ftrace_hash *hash,
+			    struct ftrace_func_entry *entry);
+
+static __always_inline bool ftrace_hash_empty(struct ftrace_hash *hash)
+{
+	return !hash || !(hash->count || (hash->flags & FTRACE_HASH_FL_MOD));
+}
+
+struct ftrace_hash *ftrace_hash_alloc(int size_bits);
+void ftrace_hash_free(struct ftrace_hash *hash);
+
 /* The hash used to know what functions callbacks trace */
 struct ftrace_ops_hash {
 	struct ftrace_hash __rcu	*notrace_hash;
