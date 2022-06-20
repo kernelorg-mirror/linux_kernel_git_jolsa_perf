@@ -117,8 +117,9 @@ static void bpf_trampoline_module_put(struct bpf_trampoline *tr)
 	tr->mod = NULL;
 }
 
-static int unregister_fentry(struct bpf_trampoline *tr, void *old_addr)
+static int unregister_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
+	void *old_addr = im->image;
 	void *ip = tr->func.addr;
 	int ret;
 
@@ -132,8 +133,10 @@ static int unregister_fentry(struct bpf_trampoline *tr, void *old_addr)
 	return ret;
 }
 
-static int modify_fentry(struct bpf_trampoline *tr, void *old_addr, void *new_addr)
+static int modify_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
+	void *old_addr = tr->cur_image->image;
+	void *new_addr = im->image;
 	void *ip = tr->func.addr;
 	int ret;
 
@@ -145,8 +148,9 @@ static int modify_fentry(struct bpf_trampoline *tr, void *old_addr, void *new_ad
 }
 
 /* first time registering */
-static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
+static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
 {
+	void *new_addr = im->image;
 	void *ip = tr->func.addr;
 	unsigned long faddr;
 	int ret;
@@ -349,7 +353,7 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr)
 		return PTR_ERR(tprogs);
 
 	if (total == 0) {
-		err = unregister_fentry(tr, tr->cur_image->image);
+		err = unregister_fentry(tr, tr->cur_image);
 		bpf_tramp_image_put(tr->cur_image);
 		tr->cur_image = NULL;
 		tr->selector = 0;
@@ -379,10 +383,10 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr)
 	WARN_ON(!tr->cur_image && tr->selector);
 	if (tr->cur_image)
 		/* progs already running at this address */
-		err = modify_fentry(tr, tr->cur_image->image, im->image);
+		err = modify_fentry(tr, im);
 	else
 		/* first time registering */
-		err = register_fentry(tr, im->image);
+		err = register_fentry(tr, im);
 	if (err)
 		goto out;
 	if (tr->cur_image)
