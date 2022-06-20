@@ -63,10 +63,6 @@
 		___r;				\
 	})
 
-/* hash bits for specific function selection */
-#define FTRACE_HASH_DEFAULT_BITS 10
-#define FTRACE_HASH_MAX_BITS 12
-
 #ifdef CONFIG_DYNAMIC_FTRACE
 #define INIT_OPS_HASH(opsname)	\
 	.func_hash		= &opsname.local_hash,			\
@@ -1139,6 +1135,7 @@ ftrace_lookup_ip(struct ftrace_hash *hash, unsigned long ip)
 
 	return __ftrace_lookup_ip(hash, ip);
 }
+EXPORT_SYMBOL_GPL(ftrace_lookup_ip);
 
 void ftrace_hash_add_entry(struct ftrace_hash *hash,
 			   struct ftrace_func_entry *entry)
@@ -1151,6 +1148,7 @@ void ftrace_hash_add_entry(struct ftrace_hash *hash,
 	hlist_add_head(&entry->hlist, hhd);
 	hash->count++;
 }
+EXPORT_SYMBOL_GPL(ftrace_hash_add_entry);
 
 static int add_hash_entry(struct ftrace_hash *hash, unsigned long ip)
 {
@@ -1187,6 +1185,7 @@ void ftrace_hash_free_entry(struct ftrace_hash *hash, struct ftrace_func_entry *
 {
 	free_hash_entry(hash, entry);
 }
+EXPORT_SYMBOL_GPL(ftrace_hash_free_entry);
 
 static void ftrace_hash_clear(struct ftrace_hash *hash)
 {
@@ -1237,6 +1236,7 @@ void ftrace_hash_free(struct ftrace_hash *hash)
 	kfree(hash->buckets);
 	kfree(hash);
 }
+EXPORT_SYMBOL_GPL(ftrace_hash_free);
 
 static void __free_ftrace_hash_rcu(struct rcu_head *rcu)
 {
@@ -1281,7 +1281,7 @@ struct ftrace_hash *ftrace_hash_alloc(int size_bits)
 
 	return hash;
 }
-
+EXPORT_SYMBOL_GPL(ftrace_hash_alloc);
 
 static int ftrace_add_mod(struct trace_array *tr,
 			  const char *func, const char *module,
