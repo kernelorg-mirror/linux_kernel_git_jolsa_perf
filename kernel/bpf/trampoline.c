@@ -353,23 +353,21 @@ out:
 	return ERR_PTR(err);
 }
 
-static int bpf_trampoline_update(struct bpf_trampoline *tr)
+static int bpf_trampoline_prepare(struct bpf_trampoline *tr)
 {
 	struct bpf_tramp_image *im;
 	struct bpf_tramp_progs *tprogs;
 	u32 flags = BPF_TRAMP_F_RESTORE_REGS;
 	bool ip_arg = false;
-	int err, total;
+	int err = 0, total;
 
 	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg);
 	if (IS_ERR(tprogs))
 		return PTR_ERR(tprogs);
 
 	if (total == 0) {
-		err = unregister_fentry(tr, tr->cur_image);
-		bpf_tramp_image_put(tr->cur_image);
-		tr->cur_image = NULL;
-		tr->selector = 0;
+		tr->update.action = BPF_TRAMP_UPDATE_UNREG;
+		tr->update.im = NULL;
 		goto out;
 	}
 
@@ -394,21 +392,60 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr)
 
 	WARN_ON(tr->cur_image && tr->selector == 0);
 	WARN_ON(!tr->cur_image && tr->selector);
-	if (tr->cur_image)
+	if (tr->cur_image) {
 		/* progs already running at this address */
-		err = modify_fentry(tr, im);
-	else
+		tr->update.action = BPF_TRAMP_UPDATE_MODIFY;
+		tr->update.im = im;
+	} else {
 		/* first time registering */
+		tr->update.action = BPF_TRAMP_UPDATE_REG;
+		tr->update.im = im;
+	}
+	err = 0;
+out:
+	kfree(tprogs);
+	return err;
+}
+
+static int bpf_trampoline_update(struct bpf_trampoline *tr)
+{
+	struct bpf_tramp_image *im = tr->update.im;
+	int err;
+
+	switch (tr->update.action) {
+	case BPF_TRAMP_UPDATE_NONE:
+		return 0;
+	case BPF_TRAMP_UPDATE_REG:
 		err = register_fentry(tr, im);
+		break;
+	case BPF_TRAMP_UPDATE_MODIFY:
+		err = modify_fentry(tr, im);
+		break;
+	case BPF_TRAMP_UPDATE_UNREG:
+		err = unregister_fentry(tr, tr->cur_image);
+		break;
+	}
 	if (err)
 		goto out;
 	if (tr->cur_image)
 		bpf_tramp_image_put(tr->cur_image);
 	tr->cur_image = im;
-	tr->selector++;
+
+	if (tr->update.action == BPF_TRAMP_UPDATE_UNREG)
+		tr->selector = 0;
+	else
+		tr->selector++;
 out:
-	kfree(tprogs);
 	return err;
+}
+
+static void bpf_trampoline_link_rollback(struct bpf_trampoline *tr)
+{
+	struct bpf_tramp_update *upd = &tr->update;
+
+	tr->progs_array[upd->kind] = upd->old_array;
+	tr->progs_cnt[upd->kind]--;
+	bpf_tramp_image_put(tr->cur_image);
 }
 
 static enum bpf_tramp_prog_type bpf_attach_type_to_tramp(struct bpf_prog *prog)
@@ -444,7 +481,6 @@ static int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
 	int cnt = 0, i;
 
 	kind = bpf_attach_type_to_tramp(tp->prog);
-	mutex_lock(&tr->mutex);
 	if (tr->extension_prog) {
 		/* cannot attach fentry/fexit if extension prog is attached.
 		 * cannot overwrite extension prog either.
@@ -465,6 +501,7 @@ static int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
 		tr->extension_prog = tp->prog;
 		err = bpf_arch_text_poke(tr->func.addr, BPF_MOD_JUMP, NULL,
 					 tp->prog->bpf_func);
+		tr->update.action = BPF_TRAMP_UPDATE_NONE;
 		goto out;
 	}
 	if (cnt >= BPF_MAX_TRAMP_LINKS) {
@@ -492,16 +529,16 @@ static int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
 	tr->progs_array[kind] = new_array;
 	tr->progs_cnt[kind]++;
 
-	err = bpf_trampoline_update(tr);
+	err = bpf_trampoline_prepare(tr);
 	if (err) {
 		tr->progs_array[kind] = old_array;
 		tr->progs_cnt[kind]--;
 		bpf_prog_array_free(new_array);
 	} else {
-		bpf_prog_array_free(old_array);
+		tr->update.kind = kind;
+		tr->update.old_array = old_array;
 	}
 out:
-	mutex_unlock(&tr->mutex);
 	return err;
 }
 
@@ -514,29 +551,24 @@ static int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
 	int err;
 
 	kind = bpf_attach_type_to_tramp(tp->prog);
-	mutex_lock(&tr->mutex);
 	if (kind == BPF_TRAMP_REPLACE) {
 		WARN_ON_ONCE(!tr->extension_prog);
 		err = bpf_arch_text_poke(tr->func.addr, BPF_MOD_JUMP,
 					 tr->extension_prog->bpf_func, NULL);
 		tr->extension_prog = NULL;
-		goto out;
+		return err;
 	}
 
 	old_array = tr->progs_array[kind];
 
 	err = bpf_prog_array_copy(old_array, tp->prog, NULL, 0, &new_array);
 	if (err < 0)
-		goto out;
+		return err;
 
 	tr->progs_cnt[kind]--;
 	tr->progs_array[kind] = new_array;
 	bpf_prog_array_free(old_array);
-
-	err = bpf_trampoline_update(tr);
-out:
-	mutex_unlock(&tr->mutex);
-	return err;
+	return bpf_trampoline_prepare(tr);
 }
 
 static struct bpf_trampoline *
@@ -598,12 +630,19 @@ int bpf_trampoline_attach(struct bpf_tramp_attach *attach,
 	tr = bpf_trampoline_get(attach->key, tgt_info);
 	if (!tr)
 		return -ENOMEM;
+
+	mutex_lock(&tr->mutex);
 	err = bpf_trampoline_link_prog(&attach->tp, tr);
-	if (err) {
+	if (err)
+		goto out;
+	err = bpf_trampoline_update(tr);
+	if (err)
+		bpf_trampoline_link_rollback(tr);
+out:
+	mutex_unlock(&tr->mutex);
+	if (err)
 		bpf_trampoline_put(tr);
-		return err;
-	}
-	return 0;
+	return err;
 }
 
 int bpf_trampoline_detach(struct bpf_tramp_attach *attach)
@@ -616,11 +655,16 @@ int bpf_trampoline_detach(struct bpf_tramp_attach *attach)
 	mutex_unlock(&trampoline_mutex);
 	if (!tr)
 		return -EINVAL;
+
+	mutex_lock(&tr->mutex);
 	err = bpf_trampoline_unlink_prog(&attach->tp, tr);
 	if (err)
-		return err;
+		goto out;
+	err = bpf_trampoline_update(tr);
+out:
+	mutex_unlock(&tr->mutex);
 	bpf_trampoline_put(tr);
-	return 0;
+	return err;
 }
 
 #define NO_START_TIME 1

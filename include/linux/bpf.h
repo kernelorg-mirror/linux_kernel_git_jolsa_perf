@@ -829,6 +829,20 @@ struct bpf_tramp_image {
 	};
 };
 
+enum bpf_tramp_update_action {
+	BPF_TRAMP_UPDATE_NONE,
+	BPF_TRAMP_UPDATE_REG,
+	BPF_TRAMP_UPDATE_UNREG,
+	BPF_TRAMP_UPDATE_MODIFY,
+};
+
+struct bpf_tramp_update {
+	enum bpf_tramp_update_action action;
+	struct bpf_tramp_image *im;
+	enum bpf_tramp_prog_type kind;
+	struct bpf_prog_array *old_array;
+};
+
 struct bpf_trampoline {
 	/* hlist for trampoline_table */
 	struct hlist_node hlist;
@@ -854,6 +868,7 @@ struct bpf_trampoline {
 	struct bpf_tramp_image *cur_image;
 	u64 selector;
 	struct module *mod;
+	struct bpf_tramp_update update;
 };
 
 struct bpf_attach_target_info {
