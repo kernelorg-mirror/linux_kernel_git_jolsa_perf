@@ -866,7 +866,6 @@ struct bpf_attach_target_info {
 struct bpf_tramp_attach {
 	u64 key;
 	struct bpf_tramp_prog tp;
-	struct bpf_trampoline *tr;
 };
 
 #define BPF_DISPATCHER_MAX 48 /* Fits in 2048B */
