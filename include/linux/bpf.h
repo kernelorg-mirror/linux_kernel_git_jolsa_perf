@@ -863,6 +863,12 @@ struct bpf_attach_target_info {
 	const struct btf_type *tgt_type;
 };
 
+struct bpf_tramp_attach {
+	u64 key;
+	struct bpf_tramp_prog tp;
+	struct bpf_trampoline *tr;
+};
+
 #define BPF_DISPATCHER_MAX 48 /* Fits in 2048B */
 
 struct bpf_dispatcher_prog {
@@ -891,11 +897,8 @@ static __always_inline __nocfi unsigned int bpf_dispatcher_nop_func(
 }
 
 #ifdef CONFIG_BPF_JIT
-int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr);
-int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr);
-struct bpf_trampoline *bpf_trampoline_get(u64 key,
-					  struct bpf_attach_target_info *tgt_info);
-void bpf_trampoline_put(struct bpf_trampoline *tr);
+int bpf_trampoline_attach(struct bpf_tramp_attach *attach, struct bpf_attach_target_info *tgt_info);
+int bpf_trampoline_detach(struct bpf_tramp_attach *attach);
 int arch_prepare_bpf_dispatcher(void *image, s64 *funcs, int num_funcs);
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\
@@ -943,22 +946,14 @@ int bpf_jit_charge_modmem(u32 size);
 void bpf_jit_uncharge_modmem(u32 size);
 bool bpf_prog_has_trampoline(const struct bpf_prog *prog);
 #else
-static inline int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
-					   struct bpf_trampoline *tr)
+static inline int bpf_trampoline_attach(struct bpf_tramp_attach *attach, struct bpf_attach_target_info *tgt_info)
 {
 	return -ENOTSUPP;
 }
-static inline int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
-					     struct bpf_trampoline *tr)
+static inline int bpf_trampoline_detach(struct bpf_tramp_attach *attach)
 {
 	return -ENOTSUPP;
 }
-static inline struct bpf_trampoline *bpf_trampoline_get(u64 key,
-							struct bpf_attach_target_info *tgt_info)
-{
-	return ERR_PTR(-EOPNOTSUPP);
-}
-static inline void bpf_trampoline_put(struct bpf_trampoline *tr) {}
 #define DEFINE_BPF_DISPATCHER(name)
 #define DECLARE_BPF_DISPATCHER(name)
 #define BPF_DISPATCHER_FUNC(name) bpf_dispatcher_nop_func
@@ -1170,9 +1165,8 @@ struct bpf_link_ops {
 
 struct bpf_tracing_link {
 	struct bpf_link link;
-	struct bpf_tramp_prog tp;
+	struct bpf_tramp_attach attach;
 	enum bpf_attach_type attach_type;
-	struct bpf_trampoline *trampoline;
 	struct bpf_prog *tgt_prog;
 };
 

@@ -2869,10 +2869,7 @@ static void bpf_tracing_link_release(struct bpf_link *link)
 	struct bpf_tracing_link *tr_link =
 		container_of(link, struct bpf_tracing_link, link);
 
-	WARN_ON_ONCE(bpf_trampoline_unlink_prog(&tr_link->tp,
-						tr_link->trampoline));
-
-	bpf_trampoline_put(tr_link->trampoline);
+	WARN_ON_ONCE(bpf_trampoline_detach(&tr_link->attach));
 
 	/* tgt_prog is NULL if target is a kernel function */
 	if (tr_link->tgt_prog)
@@ -2905,7 +2902,7 @@ static int bpf_tracing_link_fill_link_info(const struct bpf_link *link,
 		container_of(link, struct bpf_tracing_link, link);
 
 	info->tracing.attach_type = tr_link->attach_type;
-	bpf_trampoline_unpack_key(tr_link->trampoline->key,
+	bpf_trampoline_unpack_key(tr_link->attach.key,
 				  &info->tracing.target_obj_id,
 				  &info->tracing.target_btf_id);
 
@@ -2928,7 +2925,6 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	struct bpf_attach_target_info *tgt_info = &tgt_info_buf;
 	struct bpf_link_primer link_primer;
 	struct bpf_prog *tgt_prog = NULL;
-	struct bpf_trampoline *tr = NULL;
 	struct bpf_tracing_link *link;
 	u64 key = 0;
 	int err;
@@ -2989,8 +2985,8 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	bpf_link_init(&link->link, BPF_LINK_TYPE_TRACING,
 		      &bpf_tracing_link_lops, prog);
 	link->attach_type = prog->expected_attach_type;
-	link->tp.cookie = bpf_cookie;
-	link->tp.prog = prog;
+	link->attach.tp.cookie = bpf_cookie;
+	link->attach.tp.prog = prog;
 
 	mutex_lock(&prog->aux->dst_mutex);
 
@@ -3051,17 +3047,13 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		tgt_info = &prog->aux->dst_tgt_info;
 	}
 
-	tr = bpf_trampoline_get(key, tgt_info);
-	if (!tr) {
-		err = -ENOMEM;
-		goto out_unlock;
-	}
+	link->attach.key = key;
 
 	err = bpf_link_prime(&link->link, &link_primer);
 	if (err)
 		goto out_unlock;
 
-	err = bpf_trampoline_link_prog(&link->tp, tr);
+	err = bpf_trampoline_attach(&link->attach, tgt_info);
 	if (err) {
 		bpf_link_cleanup(&link_primer);
 		link = NULL;
@@ -3069,14 +3061,13 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	}
 
 	link->tgt_prog = tgt_prog;
-	link->trampoline = tr;
 
 	/* Always clear the trampoline and target prog from prog->aux to make
 	 * sure the original attach destination is not kept alive after a
 	 * program is (re-)attached to another target.
 	 */
 	if (prog->aux->dst_prog &&
-	    (tgt_prog_fd || tr->key != prog->aux->dst_key))
+	    (tgt_prog_fd || key != prog->aux->dst_key))
 		/* got extra prog ref from syscall, or attaching to different prog */
 		bpf_prog_put(prog->aux->dst_prog);
 
@@ -3086,8 +3077,6 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 
 	return bpf_link_settle(&link_primer);
 out_unlock:
-	if (tr && tr->key != prog->aux->dst_key)
-		bpf_trampoline_put(tr);
 	mutex_unlock(&prog->aux->dst_mutex);
 	kfree(link);
 out_put_prog:

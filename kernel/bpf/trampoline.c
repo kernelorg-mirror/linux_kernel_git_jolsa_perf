@@ -420,7 +420,8 @@ static enum bpf_tramp_prog_type bpf_attach_type_to_tramp(struct bpf_prog *prog)
 	}
 }
 
-int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
+static int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp,
+				    struct bpf_trampoline *tr)
 {
 	struct bpf_prog_array *old_array, *new_array;
 	const struct bpf_prog_array_item *item;
@@ -492,7 +493,8 @@ out:
 }
 
 /* bpf_trampoline_unlink_prog() should never fail. */
-int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
+static int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
+				      struct bpf_trampoline *tr)
 {
 	struct bpf_prog_array *old_array, *new_array;
 	enum bpf_tramp_prog_type kind;
@@ -524,8 +526,8 @@ out:
 	return err;
 }
 
-struct bpf_trampoline *bpf_trampoline_get(u64 key,
-					  struct bpf_attach_target_info *tgt_info)
+static struct bpf_trampoline *
+bpf_trampoline_get(u64 key, struct bpf_attach_target_info *tgt_info)
 {
 	struct bpf_trampoline *tr;
 
@@ -544,7 +546,7 @@ out:
 	return tr;
 }
 
-void bpf_trampoline_put(struct bpf_trampoline *tr)
+static void bpf_trampoline_put(struct bpf_trampoline *tr)
 {
 	int i;
 
@@ -572,6 +574,35 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 	kfree(tr);
 out:
 	mutex_unlock(&trampoline_mutex);
+}
+
+int bpf_trampoline_attach(struct bpf_tramp_attach *attach,
+			  struct bpf_attach_target_info *tgt_info)
+{
+	struct bpf_trampoline *tr;
+	int err;
+
+	tr = bpf_trampoline_get(attach->key, tgt_info);
+	if (!tr)
+		return -ENOMEM;
+	err = bpf_trampoline_link_prog(&attach->tp, tr);
+	if (err) {
+		bpf_trampoline_put(tr);
+		return err;
+	}
+	attach->tr = tr;
+	return 0;
+}
+
+int bpf_trampoline_detach(struct bpf_tramp_attach *attach)
+{
+	int err;
+
+	err = bpf_trampoline_unlink_prog(&attach->tp, attach->tr);
+	if (err)
+		return err;
+	bpf_trampoline_put(attach->tr);
+	return 0;
 }
 
 #define NO_START_TIME 1
