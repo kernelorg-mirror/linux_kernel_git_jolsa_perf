@@ -846,6 +846,11 @@ struct bpf_tramp_image {
 	};
 };
 
+struct bpf_tramp_id {
+	u32 obj_id;
+	u32 btf_id;
+};
+
 struct bpf_shim_tramp_link;
 
 struct bpf_trampoline {
@@ -917,6 +922,13 @@ int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline 
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
+struct bpf_tramp_id *bpf_tramp_id_alloc(void);
+void bpf_tramp_id_free(struct bpf_tramp_id *id);
+bool bpf_tramp_id_is_empty(struct bpf_tramp_id *id);
+int bpf_tramp_id_is_equal(struct bpf_tramp_id *a, struct bpf_tramp_id *b);
+void bpf_tramp_id_init(struct bpf_tramp_id *id,
+		       const struct bpf_prog *tgt_prog,
+		       struct btf *btf, u32 btf_id);
 int arch_prepare_bpf_dispatcher(void *image, s64 *funcs, int num_funcs);
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\

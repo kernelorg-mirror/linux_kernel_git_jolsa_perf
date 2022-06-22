@@ -149,6 +149,40 @@ void bpf_image_ksym_del(struct bpf_ksym *ksym)
 			   PAGE_SIZE, true, ksym->name);
 }
 
+bool bpf_tramp_id_is_empty(struct bpf_tramp_id *id)
+{
+	return !id || (!id->obj_id && !id->btf_id);
+}
+
+int bpf_tramp_id_is_equal(struct bpf_tramp_id *a,
+			  struct bpf_tramp_id *b)
+{
+	return a && b && !memcmp(a, b, sizeof(*a));
+}
+
+struct bpf_tramp_id *bpf_tramp_id_alloc(void)
+{
+	struct bpf_tramp_id *id;
+
+	return kzalloc(sizeof(*id), GFP_KERNEL);
+}
+
+void bpf_tramp_id_init(struct bpf_tramp_id *id,
+		       const struct bpf_prog *tgt_prog,
+		       struct btf *btf, u32 btf_id)
+{
+	if (tgt_prog)
+		id->obj_id = tgt_prog->aux->id;
+	else
+		id->obj_id = btf_obj_id(btf);
+	id->btf_id = btf_id;
+}
+
+void bpf_tramp_id_free(struct bpf_tramp_id *id)
+{
+	kfree(id);
+}
+
 static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 {
 	struct bpf_trampoline *tr;
