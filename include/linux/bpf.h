@@ -855,6 +855,7 @@ struct bpf_trampoline {
 	struct mutex mutex;
 	refcount_t refcnt;
 	u64 key;
+	struct bpf_tramp_id *id;
 	struct {
 		struct btf_func_model model;
 		void *addr;
@@ -884,7 +885,7 @@ struct bpf_attach_target_info {
 };
 
 struct bpf_tramp_attach {
-	u64 key;
+	struct bpf_tramp_id *id;
 	struct bpf_tramp_prog tp;
 };
 
@@ -1057,7 +1058,7 @@ struct bpf_prog_aux {
 	const struct bpf_ctx_arg_aux *ctx_arg_info;
 	struct mutex dst_mutex; /* protects dst_* pointers below, *after* prog becomes visible */
 	struct bpf_prog *dst_prog;
-	u64 dst_key;
+	struct bpf_tramp_id *dst_id;
 	struct bpf_attach_target_info dst_tgt_info;
 	enum bpf_prog_type saved_dst_prog_type;
 	enum bpf_attach_type saved_dst_attach_type;

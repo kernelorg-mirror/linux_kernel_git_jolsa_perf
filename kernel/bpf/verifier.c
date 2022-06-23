@@ -15004,6 +15004,7 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	struct bpf_prog *tgt_prog = prog->aux->dst_prog;
 	struct bpf_attach_target_info *tgt_info = &prog->aux->dst_tgt_info;
 	u32 btf_id = prog->aux->attach_btf_id;
+	struct bpf_tramp_id *id;
 	int ret;
 
 	if (prog->type == BPF_PROG_TYPE_SYSCALL) {
@@ -15069,7 +15070,12 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 		return -EINVAL;
 	}
 
-	prog->aux->dst_key = bpf_trampoline_compute_key(tgt_prog, prog->aux->attach_btf, btf_id);
+	id = bpf_tramp_id_alloc();
+	if (!id)
+		return -ENOMEM;
+
+	bpf_tramp_id_init(id, tgt_prog, prog->aux->attach_btf, btf_id);
+	prog->aux->dst_id = id;
 	return 0;
 }
 

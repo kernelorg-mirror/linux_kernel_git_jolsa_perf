@@ -70,6 +70,11 @@ void bpf_image_ksym_del(struct bpf_ksym *ksym)
 			   PAGE_SIZE, true, ksym->name);
 }
 
+static u64 bpf_tramp_id_key(struct bpf_tramp_id *id)
+{
+	return ((u64) id->obj_id << 32) | id->btf_id;
+}
+
 bool bpf_tramp_id_is_empty(struct bpf_tramp_id *id)
 {
 	return !id || (!id->obj_id && !id->btf_id);
@@ -117,8 +122,10 @@ static struct bpf_trampoline *__bpf_trampoline_lookup(u64 key)
 	return NULL;
 }
 
-static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
+static struct bpf_trampoline *
+bpf_trampoline_lookup(struct bpf_tramp_id *id)
 {
+	u64 key = bpf_tramp_id_key(id);
 	struct bpf_trampoline *tr;
 	struct hlist_head *head;
 
@@ -133,6 +140,7 @@ static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 		goto out;
 
 	tr->key = key;
+	tr->id = id;
 	INIT_HLIST_NODE(&tr->hlist);
 	head = &trampoline_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
 	hlist_add_head(&tr->hlist, head);
@@ -605,11 +613,11 @@ static int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp,
 }
 
 static struct bpf_trampoline *
-bpf_trampoline_get(u64 key, struct bpf_attach_target_info *tgt_info)
+bpf_trampoline_get(struct bpf_tramp_id *id, struct bpf_attach_target_info *tgt_info)
 {
 	struct bpf_trampoline *tr;
 
-	tr = bpf_trampoline_lookup(key);
+	tr = bpf_trampoline_lookup(id);
 	if (!tr)
 		return NULL;
 
@@ -660,7 +668,7 @@ int bpf_trampoline_attach(struct bpf_tramp_attach *attach,
 	struct bpf_trampoline *tr;
 	int err;
 
-	tr = bpf_trampoline_get(attach->key, tgt_info);
+	tr = bpf_trampoline_get(attach->id, tgt_info);
 	if (!tr)
 		return -ENOMEM;
 
@@ -680,11 +688,12 @@ out:
 
 int bpf_trampoline_detach(struct bpf_tramp_attach *attach)
 {
+	u64 key = bpf_tramp_id_key(attach->id);
 	struct bpf_trampoline *tr;
 	int err;
 
 	mutex_lock(&trampoline_mutex);
-	tr = __bpf_trampoline_lookup(attach->key);
+	tr = __bpf_trampoline_lookup(key);
 	mutex_unlock(&trampoline_mutex);
 	if (!tr)
 		return -EINVAL;
