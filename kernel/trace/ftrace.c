@@ -1357,9 +1357,9 @@ ftrace_hash_rec_enable_modify(struct ftrace_ops *ops, int filter_hash);
 static int ftrace_hash_ipmodify_update(struct ftrace_ops *ops,
 				       struct ftrace_hash *new_hash);
 
-static struct ftrace_hash *dup_hash(struct ftrace_hash *src, int size)
+static struct ftrace_hash *dup_hash(struct ftrace_hash *src, int size, bool move)
 {
-	struct ftrace_func_entry *entry;
+	struct ftrace_func_entry *entry, *new_entry;
 	struct ftrace_hash *new_hash;
 	struct hlist_head *hhd;
 	struct hlist_node *tn;
@@ -1386,11 +1386,24 @@ static struct ftrace_hash *dup_hash(struct ftrace_hash *src, int size)
 	for (i = 0; i < size; i++) {
 		hhd = &src->buckets[i];
 		hlist_for_each_entry_safe(entry, tn, hhd, hlist) {
-			remove_hash_entry(src, entry);
-			ftrace_hash_add_entry(new_hash, entry);
+			if (move) {
+				remove_hash_entry(src, entry);
+				ftrace_hash_add_entry(new_hash, entry);
+			} else {
+				new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
+				if (!new_entry)
+					goto out_free;
+
+				new_entry->ip = entry->ip;
+				new_entry->direct = entry->direct;
+				ftrace_hash_add_entry(new_hash, new_entry);
+			}
 		}
 	}
 	return new_hash;
+out_free:
+	ftrace_hash_free(new_hash);
+	return NULL;
 }
 
 static struct ftrace_hash *
@@ -1404,7 +1417,7 @@ __ftrace_hash_move(struct ftrace_hash *src)
 	if (ftrace_hash_empty(src))
 		return EMPTY_HASH;
 
-	return dup_hash(src, size);
+	return dup_hash(src, size, true);
 }
 
 static int
@@ -2462,7 +2475,7 @@ ftrace_add_rec_direct(unsigned long ip, unsigned long addr,
 		if (size < 32)
 			size = 32;
 
-		new_hash = dup_hash(direct_functions, size);
+		new_hash = dup_hash(direct_functions, size, true);
 		if (!new_hash)
 			return NULL;
 
