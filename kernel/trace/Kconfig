@@ -1112,6 +1112,11 @@ config HIST_TRIGGERS_DEBUG
 
           If unsure, say N.
 
+config FTRACE_TEST_FUNCTIONS
+	bool "test functions"
+	help
+	  krava
+
 source "kernel/trace/rv/Kconfig"
 
 endif # FTRACE
