@@ -1184,4 +1184,17 @@ unsigned long arch_syscall_addr(int nr);
 
 #endif /* CONFIG_FTRACE_SYSCALLS */
 
+#ifdef CONFIG_FTRACE_TEST_FUNCTIONS
+extern int ftrace_test_0(void);
+extern int ftrace_test_1(void);
+extern int ftrace_test_2(void);
+extern int ftrace_test_3(void);
+extern int ftrace_test_4(void);
+extern int ftrace_test_5(void);
+extern int ftrace_test_6(void);
+extern int ftrace_test_7(void);
+extern int ftrace_test_8(void);
+extern int ftrace_test_9(void);
+#endif /* CONFIG_FTRACE_TEST_FUNCTIONS */
+
 #endif /* _LINUX_FTRACE_H */

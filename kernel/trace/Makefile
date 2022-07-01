@@ -21,6 +21,11 @@ CFLAGS_trace_kprobe_selftest.o = $(CC_FLAGS_FTRACE)
 obj-$(CONFIG_KPROBE_EVENTS) += trace_kprobe_selftest.o
 endif
 
+ifdef CONFIG_FTRACE_TEST_FUNCTIONS
+CFLAGS_ftrace_test.o = $(CC_FLAGS_FTRACE)
+obj-y += ftrace_test.o
+endif
+
 # If unlikely tracing is enabled, do not trace these files
 ifdef CONFIG_TRACING_BRANCHES
 KBUILD_CFLAGS += -DDISABLE_BRANCH_PROFILING
