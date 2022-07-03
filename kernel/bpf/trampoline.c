@@ -31,7 +31,8 @@ static struct hlist_head trampoline_table[TRAMPOLINE_TABLE_SIZE];
 static DEFINE_MUTEX(trampoline_mutex);
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
-static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex);
+static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex,
+				 struct list_head *upd);
 
 static int bpf_tramp_ftrace_ops_func(struct ftrace_ops *ops, enum ftrace_ops_cmd cmd)
 {
@@ -87,13 +88,13 @@ static int bpf_tramp_ftrace_ops_func(struct ftrace_ops *ops, enum ftrace_ops_cmd
 
 		if ((tr->flags & BPF_TRAMP_F_CALL_ORIG) &&
 		    !(tr->flags & BPF_TRAMP_F_ORIG_STACK))
-			ret = bpf_trampoline_update(tr, false /* lock_direct_mutex */);
+			ret = bpf_trampoline_update(tr, false /* lock_direct_mutex */, NULL);
 		break;
 	case FTRACE_OPS_CMD_DISABLE_SHARE_IPMODIFY_PEER:
 		tr->flags &= ~BPF_TRAMP_F_SHARE_IPMODIFY;
 
 		if (tr->flags & BPF_TRAMP_F_ORIG_STACK)
-			ret = bpf_trampoline_update(tr, false /* lock_direct_mutex */);
+			ret = bpf_trampoline_update(tr, false /* lock_direct_mutex */, NULL);
 		break;
 	default:
 		ret = -EINVAL;
@@ -190,11 +191,19 @@ static void bpf_trampoline_module_put(struct bpf_trampoline *tr)
 	tr->mod = NULL;
 }
 
-static int unregister_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
+static int unregister_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im,
+			     struct list_head *upd)
 {
 	void *old_addr = im->image;
 	void *ip = tr->func.addr;
 	int ret;
+
+	if (upd) {
+		tr->update.action = BPF_TRAMP_UPDATE_UNREG;
+		tr->update.im = NULL;
+		list_add_tail(&tr->update.list, upd);
+		return 0;
+	}
 
 	if (tr->func.ftrace_managed)
 		ret = unregister_ftrace_direct_multi(tr->fops, (long)old_addr);
@@ -203,16 +212,24 @@ static int unregister_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *
 
 	if (!ret)
 		bpf_trampoline_module_put(tr);
+
 	return ret;
 }
 
 static int modify_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im,
-			 bool lock_direct_mutex)
+			 bool lock_direct_mutex, struct list_head *upd)
 {
 	void *old_addr = tr->cur_image->image;
 	void *new_addr = im->image;
 	void *ip = tr->func.addr;
 	int ret;
+
+	if (upd) {
+		tr->update.action = BPF_TRAMP_UPDATE_MODIFY;
+		tr->update.im = im;
+		list_add_tail(&tr->update.list, upd);
+		return 0;
+	}
 
 	if (tr->func.ftrace_managed) {
 		if (lock_direct_mutex)
@@ -226,12 +243,22 @@ static int modify_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im,
 }
 
 /* first time registering */
-static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im)
+static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im,
+			   struct list_head *upd)
 {
 	void *new_addr = im->image;
 	void *ip = tr->func.addr;
 	unsigned long faddr;
 	int ret;
+
+	if (upd) {
+		if (ip && !tr->func.ftrace_managed)
+			return -ENOTSUPP;
+		tr->update.action = BPF_TRAMP_UPDATE_REG;
+		tr->update.im = im;
+		list_add_tail(&tr->update.list, upd);
+		return 0;
+	}
 
 	faddr = ftrace_location((unsigned long)ip);
 	if (faddr) {
@@ -424,7 +451,8 @@ out:
 	return ERR_PTR(err);
 }
 
-static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex)
+static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex,
+				 struct list_head *upd)
 {
 	struct bpf_tramp_image *im;
 	struct bpf_tramp_progs *tprogs;
@@ -437,10 +465,12 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mut
 		return PTR_ERR(tprogs);
 
 	if (total == 0) {
-		err = unregister_fentry(tr, tr->cur_image);
-		bpf_tramp_image_put(tr->cur_image);
-		tr->cur_image = NULL;
-		tr->selector = 0;
+		err = unregister_fentry(tr, tr->cur_image, upd);
+		if (!upd) {
+			bpf_tramp_image_put(tr->cur_image);
+			tr->cur_image = NULL;
+			tr->selector = 0;
+		}
 		goto out;
 	}
 
@@ -486,10 +516,10 @@ again:
 	WARN_ON(!tr->cur_image && tr->selector);
 	if (tr->cur_image)
 		/* progs already running at this address */
-		err = modify_fentry(tr, im, lock_direct_mutex);
+		err = modify_fentry(tr, im, lock_direct_mutex, upd);
 	else
 		/* first time registering */
-		err = register_fentry(tr, im);
+		err = register_fentry(tr, im, upd);
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
 	if (err == -EAGAIN) {
@@ -503,7 +533,7 @@ again:
 		goto again;
 	}
 #endif
-	if (err)
+	if (err || upd)
 		goto out;
 
 	if (tr->cur_image)
@@ -542,7 +572,8 @@ static enum bpf_tramp_prog_type bpf_attach_type_to_tramp(struct bpf_prog *prog)
 	}
 }
 
-static int __bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
+static int __bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr,
+				      struct list_head *upd)
 {
 	struct bpf_prog_array *old_array, *new_array;
 	const struct bpf_prog_array_item *item;
@@ -588,11 +619,14 @@ static int __bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_tram
 		return -ENOMEM;
 	tr->progs_array[kind] = new_array;
 	tr->progs_cnt[kind]++;
-	err = bpf_trampoline_update(tr, true /* lock_direct_mutex */);
+	err = bpf_trampoline_update(tr, true /* lock_direct_mutex */, upd);
 	if (err) {
 		tr->progs_array[kind] = old_array;
 		tr->progs_cnt[kind]--;
 		bpf_prog_array_free(new_array);
+	} else if (upd) {
+		tr->update.kind = kind;
+		tr->update.old_array = old_array;
 	} else {
 		bpf_prog_array_free(old_array);
 	}
@@ -604,12 +638,13 @@ int bpf_trampoline_link_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *t
 	int err;
 
 	mutex_lock(&tr->mutex);
-	err = __bpf_trampoline_link_prog(tp, tr);
+	err = __bpf_trampoline_link_prog(tp, tr, NULL);
 	mutex_unlock(&tr->mutex);
 	return err;
 }
 
-static int __bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr)
+static int __bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline *tr,
+					struct list_head *upd)
 {
 	struct bpf_prog_array *old_array, *new_array;
 	enum bpf_tramp_prog_type kind;
@@ -633,7 +668,7 @@ static int __bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_tr
 	tr->progs_cnt[kind]--;
 	tr->progs_array[kind] = new_array;
 	bpf_prog_array_free(old_array);
-	return bpf_trampoline_update(tr, true /* lock_direct_mutex */);
+	return bpf_trampoline_update(tr, true /* lock_direct_mutex */, upd);
 }
 
 /* bpf_trampoline_unlink_prog() should never fail. */
@@ -642,7 +677,7 @@ int bpf_trampoline_unlink_prog(struct bpf_tramp_prog *tp, struct bpf_trampoline 
 	int err;
 
 	mutex_lock(&tr->mutex);
-	err = __bpf_trampoline_unlink_prog(tp, tr);
+	err = __bpf_trampoline_unlink_prog(tp, tr, NULL);
 	mutex_unlock(&tr->mutex);
 	return err;
 }
@@ -754,7 +789,7 @@ int bpf_trampoline_link_cgroup_shim(struct bpf_prog *prog,
 		goto err;
 	}
 
-	err = __bpf_trampoline_link_prog(&shim_link->tp, tr);
+	err = __bpf_trampoline_link_prog(&shim_link->tp, tr, NULL);
 	if (err)
 		goto err;
 
