@@ -560,24 +560,6 @@ static struct bpf_shim_tramp_link *cgroup_shim_alloc(const struct bpf_prog *prog
 	return shim_link;
 }
 
-static struct bpf_shim_tramp_link *cgroup_shim_find(struct bpf_trampoline *tr,
-						    bpf_func_t bpf_func)
-{
-	struct bpf_tramp_link *link;
-	int kind;
-
-	for (kind = 0; kind < BPF_TRAMP_MAX; kind++) {
-		hlist_for_each_entry(link, &tr->progs_hlist[kind], tramp_hlist) {
-			struct bpf_prog *p = link->link.prog;
-
-			if (p->bpf_func == bpf_func)
-				return container_of(link, struct bpf_shim_tramp_link, link);
-		}
-	}
-
-	return NULL;
-}
-
 int bpf_trampoline_link_cgroup_shim(struct bpf_prog *prog,
 				    int cgroup_atype)
 {
@@ -604,7 +586,7 @@ int bpf_trampoline_link_cgroup_shim(struct bpf_prog *prog,
 
 	mutex_lock(&tr->mutex);
 
-	shim_link = cgroup_shim_find(tr, bpf_func);
+	shim_link = tr->shim_link;
 	if (shim_link) {
 		/* Reusing existing shim attached by the other program. */
 		bpf_link_inc(&shim_link->link.link);
@@ -627,6 +609,7 @@ int bpf_trampoline_link_cgroup_shim(struct bpf_prog *prog,
 		goto err;
 
 	shim_link->trampoline = tr;
+	tr->shim_link = shim_link;
 	/* note, we're still holding tr refcnt from above */
 
 	mutex_unlock(&tr->mutex);
@@ -660,7 +643,7 @@ void bpf_trampoline_unlink_cgroup_shim(struct bpf_prog *prog)
 		return;
 
 	mutex_lock(&tr->mutex);
-	shim_link = cgroup_shim_find(tr, bpf_func);
+	shim_link = tr->shim_link;
 	mutex_unlock(&tr->mutex);
 
 	if (shim_link)
