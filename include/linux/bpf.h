@@ -841,6 +841,8 @@ struct bpf_tramp_image {
 	};
 };
 
+struct bpf_shim_tramp_link;
+
 struct bpf_trampoline {
 	/* hlist for trampoline_table */
 	struct hlist_node hlist;
@@ -868,6 +870,7 @@ struct bpf_trampoline {
 	struct bpf_tramp_image *cur_image;
 	u64 selector;
 	struct module *mod;
+	struct bpf_shim_tramp_link *shim_link;
 };
 
 struct bpf_attach_target_info {
