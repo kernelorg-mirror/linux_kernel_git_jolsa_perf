@@ -822,6 +822,28 @@ struct btf_func_model {
  */
 #define BPF_MAX_TRAMP_LINKS 38
 
+enum bpf_tramp_update_action {
+	BPF_TRAMP_UPDATE_REG,
+	BPF_TRAMP_UPDATE_UNREG,
+	BPF_TRAMP_UPDATE_MODIFY,
+};
+
+enum bpf_tramp_prog_type {
+	BPF_TRAMP_FENTRY,
+	BPF_TRAMP_FEXIT,
+	BPF_TRAMP_MODIFY_RETURN,
+	BPF_TRAMP_MAX,
+	BPF_TRAMP_REPLACE, /* more than MAX */
+};
+
+struct bpf_tramp_update {
+	enum bpf_tramp_update_action action;
+	struct bpf_tramp_image *im;
+	enum bpf_tramp_prog_type kind;
+	struct bpf_prog_array *old_array;
+	struct list_head list;
+};
+
 struct bpf_tramp_prog {
 	struct bpf_prog *prog;
 	u64 cookie;
@@ -885,14 +907,6 @@ struct bpf_ksym {
 	bool			 prog;
 };
 
-enum bpf_tramp_prog_type {
-	BPF_TRAMP_FENTRY,
-	BPF_TRAMP_FEXIT,
-	BPF_TRAMP_MODIFY_RETURN,
-	BPF_TRAMP_MAX,
-	BPF_TRAMP_REPLACE, /* more than MAX */
-};
-
 struct bpf_tramp_image {
 	void *image;
 	struct bpf_ksym ksym;
@@ -935,6 +949,7 @@ struct bpf_trampoline {
 	u64 selector;
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
+	struct bpf_tramp_update update;
 };
 
 struct bpf_attach_target_info {
