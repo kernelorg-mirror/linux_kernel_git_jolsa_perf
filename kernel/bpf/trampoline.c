@@ -124,28 +124,50 @@ void bpf_tramp_id_free(struct bpf_tramp_id *id)
 	kfree(id);
 }
 
+static struct bpf_trampoline *__bpf_trampoline_lookup(u64 key)
+{
+	struct bpf_trampoline *tr;
+	struct hlist_head *head;
+
+	head = &trampoline_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
+	hlist_for_each_entry(tr, head, hlist) {
+		if (tr->key == key) {
+			refcount_inc(&tr->refcnt);
+			return tr;
+		}
+	}
+	return NULL;
+}
+
+static struct bpf_trampoline *bpf_trampoline_alloc(void)
+{
+	struct bpf_trampoline *tr;
+
+	tr = kzalloc(sizeof(*tr), GFP_KERNEL);
+	if (!tr)
+		return NULL;
+
+	INIT_HLIST_NODE(&tr->hlist);
+	refcount_set(&tr->refcnt, 1);
+	mutex_init(&tr->mutex);
+	return tr;
+}
+
 static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 {
 	struct bpf_trampoline *tr;
 	struct hlist_head *head;
 
 	mutex_lock(&trampoline_mutex);
-	head = &trampoline_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
-	hlist_for_each_entry(tr, head, hlist) {
-		if (tr->key == key) {
-			refcount_inc(&tr->refcnt);
-			goto out;
-		}
-	}
-	tr = kzalloc(sizeof(*tr), GFP_KERNEL);
+	tr = __bpf_trampoline_lookup(key);
+	if (tr)
+		return tr;
+	tr = bpf_trampoline_alloc();
 	if (!tr)
 		goto out;
-
 	tr->key = key;
-	INIT_HLIST_NODE(&tr->hlist);
+	head = &trampoline_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
 	hlist_add_head(&tr->hlist, head);
-	refcount_set(&tr->refcnt, 1);
-	mutex_init(&tr->mutex);
 out:
 	mutex_unlock(&trampoline_mutex);
 	return tr;
@@ -815,6 +837,205 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 	kfree(tr);
 out:
 	mutex_unlock(&trampoline_mutex);
+}
+
+static LIST_HEAD(multi_trampolines);
+
+static bool id_and(struct bpf_tramp_id *a, struct bpf_tramp_id *b)
+{
+	return false;
+}
+
+static void id_add(struct bpf_tramp_id *id, int val)
+{
+}
+
+static void bpf_trampoline_rollback(struct bpf_trampoline *tr)
+{
+	bpf_tramp_image_put(tr->update.im);
+}
+
+static void bpf_trampoline_commit(struct bpf_trampoline *tr)
+{
+	if (tr->cur_image)
+		bpf_tramp_image_put(tr->cur_image);
+	tr->cur_image = tr->update.im;
+	if (tr->update.action == BPF_TRAMP_UPDATE_UNREG)
+		tr->selector = 0;
+	else
+		tr->selector++;
+}
+
+static int bpf_tramp_update_set(struct list_head *upd)
+{
+	struct bpf_trampoline *tr;
+	struct ftrace_hash *hash;
+	int i, err;
+
+	hash = ftrace_hash_alloc(FTRACE_HASH_MAX_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	list_for_each_entry(tr, upd, update.list) {
+		struct ftrace_func_entry *entry;
+		unsigned long direct;
+
+		switch (tr->update.action) {
+		case BPF_TRAMP_UPDATE_REG:
+		case BPF_TRAMP_UPDATE_MODIFY:
+			direct = (unsigned long) tr->update.im->image;
+			break;
+		case BPF_TRAMP_UPDATE_UNREG:
+			direct = 0;
+			continue;
+		}
+
+		if (tr->multi.id_multi) {
+			for (i = 0; i < tr->multi.id_multi->cnt; i++) {
+				entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+				if (!entry) {
+					err = -ENOMEM;
+					goto out_free;
+				}
+				entry->ip = (unsigned long) tr->multi.id_multi->addr[i];
+				entry->direct = direct;
+				ftrace_hash_add_entry(hash, entry);
+			}
+		} else {
+			entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+			if (!entry) {
+				err = -ENOMEM;
+				goto out_free;
+			}
+			entry->ip = (unsigned long) tr->func.addr;
+			entry->direct = direct;
+			ftrace_hash_add_entry(hash, entry);
+		}
+	}
+
+	err = set_ftrace_direct(hash);
+out_free:
+	ftrace_hash_free(hash);
+	return err;
+}
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+{
+	struct bpf_tramp_id *id_multi, *id_singles;
+	struct bpf_trampoline *tr;
+	LIST_HEAD(upd);
+	int i, err = -EINVAL;
+	u64 key;
+
+	mutex_lock(&trampoline_mutex);
+	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+		if (id_and(id, tr->multi.id_multi))
+			goto out_unlock;
+	}
+
+	for (i = 0; i < id->cnt; i++) {
+		key = bpf_trampoline_compute_key(tp->prog, tp->prog->aux->attach_btf,
+						 id->id[i]);
+		tr = __bpf_trampoline_lookup(key);
+		if (!tr) {
+			id_add(id_multi, id->id[i]);
+			continue;
+		}
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_link_prog(tp, tr, &upd);
+		if (err) {
+			mutex_unlock(&tr->mutex);
+			goto out_rollback;
+		}
+		id_add(id_singles, id->id[i]);
+	}
+
+	tr = bpf_trampoline_alloc();
+	if (!tr)
+		goto out_rollback;
+
+	err = __bpf_trampoline_link_prog(tp, tr, &upd);
+	if (err)
+		goto out_rollback;
+
+	err = bpf_tramp_update_set(&upd);
+	if (err)
+		goto out_rollback;
+
+	tr->multi.id_multi = id_multi;
+	tr->multi.id_singles = id_singles;
+	list_add_tail(&tr->multi.list, &multi_trampolines);
+
+	list_for_each_entry(tr, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		mutex_unlock(&tr->mutex);
+	}
+
+out_unlock:
+	mutex_unlock(&trampoline_mutex);
+	return 0;
+out_rollback:
+	list_for_each_entry(tr, &upd, update.list) {
+		bpf_trampoline_rollback(tr);
+		mutex_unlock(&tr->mutex);
+		bpf_trampoline_put(tr);
+	}
+	mutex_unlock(&trampoline_mutex);
+	return err;
+}
+
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+{
+	struct bpf_trampoline *tr, *trm;
+	LIST_HEAD(upd);
+	int i, err;
+	u64 key;
+
+	mutex_lock(&trampoline_mutex);
+	list_for_each_entry(trm, &multi_trampolines, multi.list) {
+		if (id_and(id, trm->multi.id_multi))
+			break;
+	}
+	if (!trm) {
+		err = -EINVAL;
+		goto fail_unlock;
+	}
+
+	err = __bpf_trampoline_link_prog(tp, trm, &upd);
+	if (err)
+		return err;
+
+	for (i = 0; i < trm->multi.id_singles->cnt; i++) {
+		key = bpf_trampoline_compute_key(tp->prog, tp->prog->aux->attach_btf,
+						 trm->multi.id_singles->id[i]);
+		tr = __bpf_trampoline_lookup(key);
+		if (!tr) {
+			err = -EINVAL;
+			goto fail_unlock;
+		}
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_unlink_prog(tp, tr, &upd);
+		if (err) {
+			mutex_unlock(&tr->mutex);
+			goto fail_unlock;
+		}
+	}
+
+	list_for_each_entry(tr, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		mutex_unlock(&tr->mutex);
+	}
+
+	mutex_unlock(&trampoline_mutex);
+	return 0;
+fail_unlock:
+	list_for_each_entry(tr, &upd, update.list) {
+		bpf_trampoline_rollback(tr);
+		mutex_unlock(&tr->mutex);
+		bpf_trampoline_put(tr);
+	}
+	mutex_unlock(&trampoline_mutex);
+	return err;
 }
 
 #define NO_START_TIME 1

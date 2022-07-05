@@ -757,7 +757,6 @@ struct btf_func_model {
 #define BPF_MAX_TRAMP_LINKS 38
 
 enum bpf_tramp_update_action {
-	BPF_TRAMP_UPDATE_NONE,
 	BPF_TRAMP_UPDATE_REG,
 	BPF_TRAMP_UPDATE_UNREG,
 	BPF_TRAMP_UPDATE_MODIFY,
@@ -887,6 +886,11 @@ struct bpf_trampoline {
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
 	struct bpf_tramp_update update;
+	struct {
+		struct list_head list;
+		struct bpf_tramp_id *id_multi;
+		struct bpf_tramp_id *id_singles;
+	} multi;
 };
 
 struct bpf_attach_target_info {
@@ -936,6 +940,8 @@ void bpf_tramp_id_init(struct bpf_tramp_id *id,
 		       const struct bpf_prog *tgt_prog,
 		       struct btf *btf, u32 btf_id);
 int arch_prepare_bpf_dispatcher(void *image, s64 *funcs, int num_funcs);
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id);
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id);
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\
 	.func = &_name##_func,					\
