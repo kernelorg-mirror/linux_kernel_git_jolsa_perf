@@ -571,4 +571,5 @@ static inline bool is_pow_of_2(size_t x)
 	return x && (x & (x - 1)) == 0;
 }
 
+bool glob_match(const char *str, const char *pat);
 #endif /* __LIBBPF_LIBBPF_INTERNAL_H */
