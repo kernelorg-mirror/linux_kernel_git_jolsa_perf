@@ -879,22 +879,19 @@ out:
 	return tr;
 }
 
-void bpf_trampoline_put(struct bpf_trampoline *tr)
+static void __bpf_trampoline_put(struct bpf_trampoline *tr)
 {
 	int i;
 
-	if (!tr)
-		return;
-	mutex_lock(&trampoline_mutex);
 	if (!refcount_dec_and_test(&tr->refcnt))
-		goto out;
+		return;
 	WARN_ON_ONCE(mutex_is_locked(&tr->mutex));
 
 	for (i = 0; i < BPF_TRAMP_MAX; i++) {
 		if (!tr->progs_array[i])
 			continue;
 		if (WARN_ON_ONCE(!bpf_prog_array_is_empty(tr->progs_array[i])))
-			goto out;
+			return;
 	}
 
 	/* This code will be executed even when the last bpf_tramp_image
@@ -909,7 +906,14 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 		kfree(tr->fops);
 	}
 	kfree(tr);
-out:
+}
+
+void bpf_trampoline_put(struct bpf_trampoline *tr)
+{
+	if (!tr)
+		return;
+	mutex_lock(&trampoline_mutex);
+	__bpf_trampoline_put(tr);
 	mutex_unlock(&trampoline_mutex);
 }
 
