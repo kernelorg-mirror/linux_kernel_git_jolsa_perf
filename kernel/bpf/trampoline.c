@@ -14,6 +14,7 @@
 #include <linux/bpf_verifier.h>
 #include <linux/bpf_lsm.h>
 #include <linux/delay.h>
+#include <linux/bsearch.h>
 
 /* dummy _ops. The verifier will operate on target program's ops. */
 const struct bpf_verifier_ops bpf_extension_verifier_ops = {
@@ -380,7 +381,7 @@ static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im
 }
 
 static struct bpf_tramp_progs *
-bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg)
+bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg, bool *multi)
 {
 	const struct bpf_prog_array_item *item;
 	struct bpf_prog_array *prog_array;
@@ -406,6 +407,7 @@ bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_a
 
 		while ((prog = READ_ONCE(item->prog))) {
 			*ip_arg |= prog->call_get_func_ip;
+			*multi |= is_tracing_multi(prog->expected_attach_type);
 			tp->prog = prog;
 			tp->cookie = item->bpf_cookie;
 			tp++; item++;
@@ -547,16 +549,23 @@ out:
 	return ERR_PTR(err);
 }
 
+static struct btf_func_model btf_multi_func_model = {
+	.ret_size = 0,
+	.nr_args = 6,
+	.arg_size = { 8, 8, 8, 8, 8, 8, },
+};
+
 static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex,
 				 struct list_head *upd)
 {
+	struct btf_func_model *model = &tr->func.model;
 	struct bpf_tramp_image *im;
 	struct bpf_tramp_progs *tprogs;
 	u32 orig_flags = tr->flags;
-	bool ip_arg = false;
+	bool ip_arg = false, multi = false;
 	int err, total;
 
-	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg);
+	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg, &multi);
 	if (IS_ERR(tprogs))
 		return PTR_ERR(tprogs);
 
@@ -591,6 +600,10 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mut
 
 	if (ip_arg)
 		tr->flags |= BPF_TRAMP_F_IP_ARG;
+	if (multi) {
+		tr->flags |= BPF_TRAMP_F_ORIG_STACK;
+		model = &btf_multi_func_model;
+	}
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
 again:
@@ -600,7 +613,7 @@ again:
 #endif
 
 	err = arch_prepare_bpf_trampoline(im, im->image, im->image + PAGE_SIZE,
-					  &tr->func.model, tr->flags, tprogs,
+					  model, tr->flags, tprogs,
 					  tr->func.addr);
 	if (err < 0)
 		goto out;
@@ -972,7 +985,14 @@ static void __bpf_trampoline_put(struct bpf_trampoline *tr)
 	 * fexit progs. The fentry-only trampoline will be freed via
 	 * multiple rcu callbacks.
 	 */
-	hlist_del(&tr->hlist);
+	if (tr->multi.id) {
+		bpf_tramp_id_put(tr->multi.id);
+		bpf_tramp_id_put(tr->multi.id_multi);
+		bpf_tramp_id_put(tr->multi.id_singles);
+		list_del(&tr->multi.list);
+	} else {
+		hlist_del(&tr->hlist);
+	}
 	kfree(tr->fops);
 	kfree(tr);
 }
@@ -984,6 +1004,305 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 	mutex_lock(&trampoline_mutex);
 	__bpf_trampoline_put(tr);
 	mutex_unlock(&trampoline_mutex);
+}
+
+static LIST_HEAD(multi_trampolines);
+
+static int btf_id_cmp(const void *a, const void *b)
+{
+	const u32 *x = a;
+	const u32 *y = b;
+
+	if (*x == *y)
+		return 0;
+	return *x < *y ? -1 : 1;
+}
+
+static bool id_match(struct bpf_tramp_id *a, struct bpf_tramp_id *b)
+{
+	if (a->obj_id != b->obj_id)
+		return false;
+	if (a->cnt != b->cnt)
+		return false;
+	return memcmp(a->id, b->id, sizeof(u32) * a->cnt) == 0;
+}
+
+static bool id_cross(struct bpf_tramp_id *a, struct bpf_tramp_id *b)
+{
+	u32 i, id;
+
+	for (i = 0; i < a->cnt; i++) {
+		id = a->id[i];
+		if (bsearch(&id, b->id, b->cnt, sizeof(u32), btf_id_cmp))
+			return true;
+	}
+	return false;
+}
+
+static void id_add(struct bpf_tramp_id *id, int btf_id, void *addr)
+{
+	if (WARN_ON_ONCE(id->cnt >= id->max))
+		return;
+	id->id[id->cnt] = btf_id;
+	id->addr[id->cnt] = addr;
+	id->cnt++;
+}
+
+static void bpf_trampoline_rollback(struct bpf_trampoline *tr)
+{
+	struct bpf_tramp_update *upd = &tr->update;
+
+	tr->progs_array[upd->kind] = upd->old_array;
+	tr->progs_cnt[upd->kind]--;
+	if (tr->update.im)
+		bpf_tramp_image_put(tr->update.im);
+}
+
+static void bpf_trampoline_commit(struct bpf_trampoline *tr)
+{
+	if (tr->cur_image)
+		bpf_tramp_image_put(tr->cur_image);
+	tr->cur_image = tr->update.im;
+	if (tr->update.action == BPF_TRAMP_UPDATE_UNREG)
+		tr->selector = 0;
+	else
+		tr->selector++;
+}
+
+static int bpf_tramp_update_set(struct list_head *upd)
+{
+	struct bpf_trampoline *tr;
+	struct ftrace_hash *hash;
+	int i, err;
+
+	hash = ftrace_hash_alloc(FTRACE_HASH_MAX_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	list_for_each_entry(tr, upd, update.list) {
+		struct ftrace_func_entry *entry;
+		unsigned long direct;
+
+		switch (tr->update.action) {
+		case BPF_TRAMP_UPDATE_REG:
+		case BPF_TRAMP_UPDATE_MODIFY:
+			direct = (unsigned long) tr->update.im->image;
+			break;
+		case BPF_TRAMP_UPDATE_UNREG:
+			direct = 0;
+			break;
+		}
+
+		if (tr->multi.id_multi) {
+			for (i = 0; i < tr->multi.id_multi->cnt; i++) {
+				entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+				if (!entry) {
+					err = -ENOMEM;
+					goto out_free;
+				}
+				entry->ip = (unsigned long) tr->multi.id_multi->addr[i];
+				entry->direct = direct;
+				ftrace_hash_add_entry(hash, entry);
+			}
+		} else {
+			entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+			if (!entry) {
+				err = -ENOMEM;
+				goto out_free;
+			}
+			entry->ip = (unsigned long) tr->func.addr;
+			entry->direct = direct;
+			ftrace_hash_add_entry(hash, entry);
+		}
+	}
+
+	err = set_ftrace_direct(hash);
+out_free:
+	ftrace_hash_free(hash);
+	return err;
+}
+
+static struct bpf_trampoline*
+multi_trampoline_alloc(struct bpf_tramp_id *id, struct bpf_tramp_prog *tp)
+{
+	struct bpf_tramp_id *id_multi = NULL, *id_singles = NULL;
+	struct bpf_trampoline *tr, *trm;
+	u64 key;
+	int i;
+
+	trm = bpf_trampoline_alloc();
+	if (!trm)
+		return NULL;
+
+	id_multi = bpf_tramp_id_alloc(id->cnt);
+	id_singles = bpf_tramp_id_alloc(id->cnt);
+	if (!id_multi || !id_singles)
+		goto error;
+
+	for (i = 0; i < id->cnt; i++) {
+		key = bpf_trampoline_compute_key(NULL, tp->prog->aux->attach_btf,
+						 id->id[i]);
+		tr = __bpf_trampoline_lookup(key);
+		if (!tr) {
+			id_add(id_multi, id->id[i], id->addr[i]);
+			continue;
+		}
+		id_add(id_singles, id->id[i], id->addr[i]);
+	}
+
+	trm->multi.id = bpf_tramp_id_get(id);
+	trm->multi.id_multi = id_multi;
+	trm->multi.id_singles = id_singles;
+
+	list_add_tail(&trm->multi.list, &multi_trampolines);
+	return trm;
+error:
+	bpf_tramp_id_put(id_multi);
+	bpf_tramp_id_put(id_singles);
+	kfree(trm);
+	return NULL;
+}
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+{
+	struct bpf_trampoline *tr, *trm = NULL, *n;
+	struct bpf_tramp_id *id_singles = NULL;
+	int i, err = -EBUSY;
+	LIST_HEAD(upd);
+	u64 key;
+
+	mutex_lock(&trampoline_mutex);
+
+	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+		if (id_match(id, tr->multi.id)) {
+			trm = tr;
+			break;
+		}
+		if (id_cross(id, tr->multi.id))
+			goto out_unlock;
+	}
+
+	if (trm) {
+		id_singles = tr->multi.id_singles;
+		refcount_inc(&tr->refcnt);
+	} else {
+		trm = multi_trampoline_alloc(id, tp);
+		if (!trm)
+			goto out_rollback;
+		id_singles = trm->multi.id_singles;
+	}
+
+	mutex_lock(&trm->mutex);
+	err = __bpf_trampoline_link_prog(tp, trm, &upd);
+	if (err) {
+		mutex_unlock(&trm->mutex);
+		__bpf_trampoline_put(trm);
+		goto out_unlock;
+	}
+
+	for (i = 0; i < id_singles->cnt; i++) {
+		key = bpf_trampoline_compute_key(NULL, tp->prog->aux->attach_btf,
+						 id_singles->id[i]);
+		tr = __bpf_trampoline_lookup(key);
+		if (!tr)
+			continue;
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_link_prog(tp, tr, &upd);
+		if (err) {
+			mutex_unlock(&tr->mutex);
+			goto out_rollback;
+		}
+		refcount_inc(&tr->refcnt);
+	}
+
+	err = bpf_tramp_update_set(&upd);
+	if (err)
+		goto out_rollback;
+
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+	}
+
+out_unlock:
+	mutex_unlock(&trampoline_mutex);
+	return err;
+
+out_rollback:
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_rollback(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+		__bpf_trampoline_put(tr);
+	}
+	mutex_unlock(&trampoline_mutex);
+	return err;
+}
+
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+{
+	struct bpf_trampoline *tr, *trm = NULL, *n;
+	LIST_HEAD(upd);
+	int i, err;
+	u64 key;
+
+	mutex_lock(&trampoline_mutex);
+	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+		if (id_match(tr->multi.id, id)) {
+			trm = tr;
+			break;
+		}
+	}
+	if (!trm) {
+		err = -EINVAL;
+		goto fail_unlock;
+	}
+
+	mutex_lock(&trm->mutex);
+	err = __bpf_trampoline_unlink_prog(tp, trm, &upd);
+	if (err) {
+		mutex_unlock(&trm->mutex);
+		goto fail_unlock;
+	}
+
+	for (i = 0; i < trm->multi.id_singles->cnt; i++) {
+		key = bpf_trampoline_compute_key(NULL, tp->prog->aux->attach_btf,
+						 trm->multi.id_singles->id[i]);
+		tr = __bpf_trampoline_lookup(key);
+		if (!tr) {
+			err = -EINVAL;
+			goto fail_unlock;
+		}
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_unlink_prog(tp, tr, &upd);
+		if (err) {
+			mutex_unlock(&tr->mutex);
+			goto fail_unlock;
+		}
+	}
+
+	err = bpf_tramp_update_set(&upd);
+	if (err)
+		goto fail_unlock;
+
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+		__bpf_trampoline_put(tr);
+	}
+
+	mutex_unlock(&trampoline_mutex);
+	return 0;
+fail_unlock:
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_rollback(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+	}
+	mutex_unlock(&trampoline_mutex);
+	return err;
 }
 
 #define NO_START_TIME 1
