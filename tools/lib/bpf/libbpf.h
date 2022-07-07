@@ -555,8 +555,6 @@ struct bpf_kprobe_multi_opts {
 	size_t :0;
 };
 
-#define bpf_kprobe_multi_opts__last_field session
-
 LIBBPF_API struct bpf_link *
 bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 				      const char *pattern,
@@ -658,6 +656,20 @@ LIBBPF_API struct bpf_link *
 bpf_program__attach_ksyscall(const struct bpf_program *prog,
 			     const char *syscall_name,
 			     const struct bpf_ksyscall_opts *opts);
+
+struct bpf_tracing_multi_opts {
+	/* size of this struct, for forward/backward compatibility */
+	size_t sz;
+	__u32 *btf_ids;
+	size_t cnt;
+	size_t :0;
+};
+
+#define bpf_kprobe_multi_opts__last_field retprobe
+
+LIBBPF_API struct bpf_link *
+bpf_program__attach_tracing_multi(const struct bpf_program *prog, const char *pattern,
+				  const struct bpf_tracing_multi_opts *opts);
 
 struct bpf_uprobe_opts {
 	/* size of this struct, for forward/backward compatibility */
