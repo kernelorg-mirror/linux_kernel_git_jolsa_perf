@@ -5219,7 +5219,7 @@ struct ftrace_direct_func *ftrace_find_direct_func(unsigned long addr)
 	return NULL;
 }
 
-static struct ftrace_direct_func *alloc_direct_func(unsigned long addr)
+static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
 {
 	struct ftrace_direct_func *direct;
 
@@ -5228,16 +5228,6 @@ static struct ftrace_direct_func *alloc_direct_func(unsigned long addr)
 		return NULL;
 	direct->addr = addr;
 	direct->count = 0;
-	return direct;
-}
-
-static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
-{
-	struct ftrace_direct_func *direct;
-
-	direct = alloc_direct_func(addr);
-	if (!direct)
-		return NULL;
 	list_add_rcu(&direct->next, &ftrace_direct_funcs);
 	ftrace_direct_func_count++;
 	return direct;
@@ -5575,11 +5565,9 @@ EXPORT_SYMBOL_GPL(modify_ftrace_direct);
 
 static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int enable)
 {
-	struct ftrace_hash **orig, *hash_saved = NULL, *hash = NULL;
 	struct ftrace_func_entry *iter, *entry;
-	struct update_direct_func *func;
+	struct ftrace_hash **orig, *hash = NULL;
 	int i, err = -ENOMEM, size;
-	LIST_HEAD(direct_funcs);
 	unsigned long ip;
 	bool enabled;
 
@@ -5599,10 +5587,6 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 	if (!hash)
 		goto out_unlock_direct;
 
-        hash_saved = dup_hash(*orig, (*orig)->count, false);
-	if (!hash_saved)
-		goto out_unlock_direct;
-
 	err = -EBUSY;
 	size = 1 << set->size_bits;
 	for (i = 0; i < size; i++) {
@@ -5612,8 +5596,6 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 				err = -EINVAL;
 				goto out_unlock_direct;
 			}
-			func = alloc_direct_func(
-			
 			entry = __ftrace_lookup_ip(hash, ip);
 			if (!entry) {
 				entry = kmalloc(sizeof(*entry), GFP_KERNEL);
@@ -5683,7 +5665,6 @@ out_unlock_ftrace:
 out_unlock_direct:
 	mutex_unlock(&direct_mutex);
 	ftrace_hash_free(hash);
-	ftrace_hash_free(hash_saved);
 	return err;
 }
 
