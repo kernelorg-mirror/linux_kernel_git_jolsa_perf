@@ -5271,6 +5271,95 @@ static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
 	return ftrace_alloc_direct_func_list(&ftrace_direct, addr);
 }
 
+static int ftrace_dup_direct_funcs_list(struct ftrace_direct_list *list)
+{
+	struct ftrace_direct_func *entry, *dup;
+
+	list_for_each_entry_rcu(entry, &ftrace_direct.funcs, next) {
+		dup = ftrace_alloc_direct_func_list(list, entry->addr);
+		if (!dup)
+			return -ENOMEM;
+		dup->count = entry->count;
+	}
+	return 0;
+}
+
+static void ftrace_free_direct_funcs_list(struct ftrace_direct_list *list)
+{
+	struct ftrace_direct_func *entry, *n;
+
+	list_for_each_entry_safe(entry, n, &list->funcs, next) {
+		kfree(entry);
+	}
+}
+
+static int ftrace_add_direct_func_list(struct ftrace_direct_list *list,
+				       unsigned long addr)
+{
+	struct ftrace_direct_func *direct;
+
+	direct = ftrace_find_direct_func_list(list, addr);
+	if (direct)
+		goto incref;
+	direct = ftrace_alloc_direct_func_list(list, addr);
+	if (!direct)
+		return -ENOMEM;
+incref:
+	direct->count++;
+	return 0;
+}
+
+static int ftrace_modify_direct_func_list(struct ftrace_direct_list *list,
+					  unsigned long addr_old,
+					  unsigned long addr_new)
+{
+	struct ftrace_direct_func *direct_old;
+	struct ftrace_direct_func *direct_new;
+
+	direct_old = ftrace_find_direct_func_list(list, addr_old);
+	if (!direct_old)
+		return -EINVAL;
+	if (direct_old->count == 1) {
+		direct_old->addr = addr_new;
+		return 0;
+	}
+	direct_new = ftrace_alloc_direct_func_list(list, addr_new);
+	if (!direct_new)
+		return -ENOMEM;
+	direct_old->count--;
+	direct_new->count++;
+	return 0;
+}
+
+static int ftrace_remove_direct_func_list(struct ftrace_direct_list *list,
+					  unsigned long addr)
+{
+	struct ftrace_direct_func *direct;
+
+	direct = ftrace_find_direct_func_list(list, addr);
+	if (!direct)
+		return -EINVAL;
+	direct->count--;
+	if (!direct->count) {
+		list_del(&direct->next);
+		kfree(direct);
+	}
+	return 0;
+}
+
+static void ftrace_swap_direct_funcs_list(struct ftrace_direct_list *list)
+{
+	LIST_HEAD(tmp);
+
+	// swap lists
+	list_splice_init(&ftrace_direct.funcs, &tmp);
+	list_splice_init(&list->funcs, &ftrace_direct.funcs);
+	list_splice(&tmp, &list->funcs);
+
+	// swap count
+	ftrace_direct.count = list->count;
+}
+
 static int register_ftrace_function_nolock(struct ftrace_ops *ops);
 
 /**
@@ -5608,6 +5697,9 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 	struct ftrace_func_entry *iter, *entry;
 	struct ftrace_hash **orig, *hash = NULL;
 	int i, err = -ENOMEM, size;
+	struct ftrace_direct_list direct_funcs = {
+		.funcs = LIST_HEAD_INIT(direct_funcs.funcs),
+	};
 	unsigned long ip;
 	bool enabled;
 
@@ -5617,6 +5709,9 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 		return -ENODEV;
 
 	mutex_lock(&direct_mutex);
+
+	if (ftrace_dup_direct_funcs_list(&direct_funcs))
+		goto out_unlock_direct;
 
 	ftrace_ops_init(ops);
 
@@ -5649,11 +5744,17 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 				entry->ip = ip;
 				entry->direct = iter->direct;
 				ftrace_hash_add_entry(hash, entry);
+				err = ftrace_add_direct_func_list(&direct_funcs, entry->direct);
 			} else if (iter->direct) {
+				err = ftrace_modify_direct_func_list(&direct_funcs, entry->direct,
+								     iter->direct);
 				entry->direct = iter->direct;
 			} else {
+				err = ftrace_remove_direct_func_list(&direct_funcs, entry->direct);
 				free_hash_entry(hash, entry);
 			}
+			if (err)
+				goto out_unlock_direct;
 		}
 	}
 
@@ -5700,12 +5801,16 @@ static int set_ftrace_ops(struct ftrace_ops *ops, struct ftrace_hash *set, int e
 		err = ftrace_startup(ops, 0);
 	}
 
+	if (!err)
+		ftrace_swap_direct_funcs_list(&direct_funcs);
+
 out_unlock_ftrace:
 	mutex_unlock(&ftrace_lock);
 
 out_unlock_direct:
 	mutex_unlock(&direct_mutex);
 	ftrace_hash_free(hash);
+	ftrace_free_direct_funcs_list(&direct_funcs);
 	return err;
 }
 
