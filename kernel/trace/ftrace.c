@@ -5227,13 +5227,14 @@ int ftrace_direct_func_count(void)
  * do adjustments if it traced a location that also has a direct
  * trampoline attached to it.
  */
-struct ftrace_direct_func *ftrace_find_direct_func(unsigned long addr)
+struct ftrace_direct_func *
+ftrace_find_direct_func_list(struct ftrace_direct_list *list, unsigned long addr)
 {
 	struct ftrace_direct_func *entry;
 	bool found = false;
 
 	/* May be called by fgraph trampoline (protected by rcu tasks) */
-	list_for_each_entry_rcu(entry, &ftrace_direct.funcs, next) {
+	list_for_each_entry_rcu(entry, &list->funcs, next) {
 		if (entry->addr == addr) {
 			found = true;
 			break;
@@ -5245,7 +5246,13 @@ struct ftrace_direct_func *ftrace_find_direct_func(unsigned long addr)
 	return NULL;
 }
 
-static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
+struct ftrace_direct_func *ftrace_find_direct_func(unsigned long addr)
+{
+	return ftrace_find_direct_func_list(&ftrace_direct, addr);
+}
+
+static struct ftrace_direct_func *
+ftrace_alloc_direct_func_list(struct ftrace_direct_list *list, unsigned long addr)
 {
 	struct ftrace_direct_func *direct;
 
@@ -5254,9 +5261,14 @@ static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
 		return NULL;
 	direct->addr = addr;
 	direct->count = 0;
-	list_add_rcu(&direct->next, &ftrace_direct.funcs);
-	ftrace_direct.count++;
+	list_add_rcu(&direct->next, &list->funcs);
+	list->count++;
 	return direct;
+}
+
+static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
+{
+	return ftrace_alloc_direct_func_list(&ftrace_direct, addr);
 }
 
 static int register_ftrace_function_nolock(struct ftrace_ops *ops);
