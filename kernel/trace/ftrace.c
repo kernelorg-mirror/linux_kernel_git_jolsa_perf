@@ -2443,7 +2443,6 @@ ftrace_find_tramp_ops_new(struct dyn_ftrace *rec)
 /* Protected by rcu_tasks for reading, and direct_mutex for writing */
 static struct ftrace_hash *direct_functions = EMPTY_HASH;
 static DEFINE_MUTEX(direct_mutex);
-static int direct_func_count;
 
 /*
  * Search the direct_functions hash to see if the given instruction pointer
@@ -5201,11 +5200,18 @@ struct ftrace_direct_func {
 	int			count;
 };
 
-static LIST_HEAD(ftrace_direct_funcs);
+struct ftrace_direct_list {
+	struct list_head funcs;
+	int count;
+};
+
+static struct ftrace_direct_list ftrace_direct = {
+	.funcs = LIST_HEAD_INIT(ftrace_direct.funcs),
+};
 
 int ftrace_direct_func_count(void)
 {
-	return direct_func_count;
+	return ftrace_direct.count;
 }
 
 /**
@@ -5227,7 +5233,7 @@ struct ftrace_direct_func *ftrace_find_direct_func(unsigned long addr)
 	bool found = false;
 
 	/* May be called by fgraph trampoline (protected by rcu tasks) */
-	list_for_each_entry_rcu(entry, &ftrace_direct_funcs, next) {
+	list_for_each_entry_rcu(entry, &ftrace_direct.funcs, next) {
 		if (entry->addr == addr) {
 			found = true;
 			break;
@@ -5248,8 +5254,8 @@ static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
 		return NULL;
 	direct->addr = addr;
 	direct->count = 0;
-	list_add_rcu(&direct->next, &ftrace_direct_funcs);
-	direct_func_count++;
+	list_add_rcu(&direct->next, &ftrace_direct.funcs);
+	ftrace_direct.count++;
 	return direct;
 }
 
@@ -5341,7 +5347,7 @@ int register_ftrace_direct(unsigned long ip, unsigned long addr)
 			if (free_hash)
 				ftrace_hash_free(free_hash);
 			free_hash = NULL;
-			direct_func_count--;
+			ftrace_direct.count--;
 		}
 	} else {
 		direct->count++;
@@ -5422,7 +5428,7 @@ int unregister_ftrace_direct(unsigned long ip, unsigned long addr)
 			synchronize_rcu_tasks();
 			kfree(direct);
 			kfree(entry);
-			direct_func_count--;
+			ftrace_direct.count--;
 		}
 	}
  out_unlock:
@@ -5575,7 +5581,7 @@ int modify_ftrace_direct(unsigned long ip,
 		list_del_rcu(&new_direct->next);
 		synchronize_rcu_tasks();
 		kfree(new_direct);
-		direct_func_count--;
+		ftrace_direct.count--;
 	}
 
  out_unlock:
