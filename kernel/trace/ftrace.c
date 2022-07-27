@@ -2443,7 +2443,7 @@ ftrace_find_tramp_ops_new(struct dyn_ftrace *rec)
 /* Protected by rcu_tasks for reading, and direct_mutex for writing */
 static struct ftrace_hash *direct_functions = EMPTY_HASH;
 static DEFINE_MUTEX(direct_mutex);
-int ftrace_direct_func_count;
+static int direct_func_count;
 
 /*
  * Search the direct_functions hash to see if the given instruction pointer
@@ -5203,6 +5203,11 @@ struct ftrace_direct_func {
 
 static LIST_HEAD(ftrace_direct_funcs);
 
+int ftrace_direct_func_count(void)
+{
+	return direct_func_count;
+}
+
 /**
  * ftrace_find_direct_func - test an address if it is a registered direct caller
  * @addr: The address of a registered direct caller
@@ -5244,7 +5249,7 @@ static struct ftrace_direct_func *ftrace_alloc_direct_func(unsigned long addr)
 	direct->addr = addr;
 	direct->count = 0;
 	list_add_rcu(&direct->next, &ftrace_direct_funcs);
-	ftrace_direct_func_count++;
+	direct_func_count++;
 	return direct;
 }
 
@@ -5336,7 +5341,7 @@ int register_ftrace_direct(unsigned long ip, unsigned long addr)
 			if (free_hash)
 				ftrace_hash_free(free_hash);
 			free_hash = NULL;
-			ftrace_direct_func_count--;
+			direct_func_count--;
 		}
 	} else {
 		direct->count++;
@@ -5417,7 +5422,7 @@ int unregister_ftrace_direct(unsigned long ip, unsigned long addr)
 			synchronize_rcu_tasks();
 			kfree(direct);
 			kfree(entry);
-			ftrace_direct_func_count--;
+			direct_func_count--;
 		}
 	}
  out_unlock:
@@ -5570,7 +5575,7 @@ int modify_ftrace_direct(unsigned long ip,
 		list_del_rcu(&new_direct->next);
 		synchronize_rcu_tasks();
 		kfree(new_direct);
-		ftrace_direct_func_count--;
+		direct_func_count--;
 	}
 
  out_unlock:

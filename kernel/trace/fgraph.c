@@ -131,7 +131,7 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 	 * Ex: BPF trampoline may call original function and may skip frame
 	 * depending on type of BPF programs attached.
 	 */
-	if (ftrace_direct_func_count &&
+	if (ftrace_direct_func_count() &&
 	    ftrace_find_rec_direct(ret - MCOUNT_INSN_SIZE))
 		return -EBUSY;
 #endif
