@@ -401,7 +401,7 @@ struct ftrace_func_entry {
 struct dyn_ftrace;
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
-extern int ftrace_direct_func_count;
+int ftrace_direct_func_count(void);
 int register_ftrace_direct(unsigned long ip, unsigned long addr);
 int unregister_ftrace_direct(unsigned long ip, unsigned long addr);
 int modify_ftrace_direct(unsigned long ip, unsigned long old_addr, unsigned long new_addr);
@@ -419,7 +419,7 @@ int modify_ftrace_direct_multi_nolock(struct ftrace_ops *ops, unsigned long addr
 
 #else
 struct ftrace_ops;
-# define ftrace_direct_func_count 0
+# define ftrace_direct_func_count() 0
 static inline int register_ftrace_direct(unsigned long ip, unsigned long addr)
 {
 	return -ENOTSUPP;
