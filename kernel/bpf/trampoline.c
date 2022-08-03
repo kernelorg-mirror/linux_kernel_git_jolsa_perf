@@ -1069,56 +1069,90 @@ static void bpf_trampoline_commit(struct bpf_trampoline *tr)
 		tr->selector++;
 }
 
-static int bpf_tramp_update_set(struct list_head *upd)
+static int bpf_tramp_update_set(struct ftrace_ops *ops, struct list_head *upd)
 {
-	struct bpf_trampoline *tr;
-	struct ftrace_hash *hash;
-	int i, err;
-
-	hash = ftrace_hash_alloc(FTRACE_HASH_MAX_BITS);
-	if (!hash)
-		return -ENOMEM;
+	struct bpf_trampoline *tr, *trm = NULL;
+	int i, rollback_cnt = 0, err = -EINVAL;
+	unsigned long ip, image_new, image_old;
 
 	list_for_each_entry(tr, upd, update.list) {
-		struct ftrace_func_entry *entry;
-		unsigned long direct;
+		if (tr->multi.id_multi) {
+			for (i = 0; i < tr->multi.id_multi->cnt; i++) {
+				ip = (unsigned long) tr->multi.id_multi->addr[i];
+				err = ftrace_set_filter_ip(ops, ip, 0, 0);
+				if (err)
+					goto out_rollback;
+			}
+			trm = tr;
+			continue;
+		}
+
+		ip = (unsigned long) tr->func.addr;
+		image_new = (unsigned long) tr->update.im->image;
+		image_old = (unsigned long) tr->cur_image->image;
 
 		switch (tr->update.action) {
 		case BPF_TRAMP_UPDATE_REG:
+			err = register_ftrace_direct(ip, image_new);
+			break;
 		case BPF_TRAMP_UPDATE_MODIFY:
-			direct = (unsigned long) tr->update.im->image;
+			err = modify_ftrace_direct(ip, image_old, image_new);
 			break;
 		case BPF_TRAMP_UPDATE_UNREG:
-			direct = 0;
+			err = unregister_ftrace_direct(ip, image_old);
 			break;
 		}
-
-		if (tr->multi.id_multi) {
-			for (i = 0; i < tr->multi.id_multi->cnt; i++) {
-				entry = kmalloc(sizeof(*entry), GFP_KERNEL);
-				if (!entry) {
-					err = -ENOMEM;
-					goto out_free;
-				}
-				entry->ip = (unsigned long) tr->multi.id_multi->addr[i];
-				entry->direct = direct;
-				ftrace_hash_add_entry(hash, entry);
-			}
-		} else {
-			entry = kmalloc(sizeof(*entry), GFP_KERNEL);
-			if (!entry) {
-				err = -ENOMEM;
-				goto out_free;
-			}
-			entry->ip = (unsigned long) tr->func.addr;
-			entry->direct = direct;
-			ftrace_hash_add_entry(hash, entry);
-		}
+		if (err)
+			goto out_rollback;
+		rollback_cnt++;
 	}
 
-	err = set_ftrace_direct(hash);
-out_free:
-	ftrace_hash_free(hash);
+	if (!trm)
+		return 0;
+
+	image_new = trm->update.im ? (unsigned long) trm->update.im->image : 0;
+	image_old = trm->cur_image ? (unsigned long) trm->cur_image->image : 0;
+
+	switch (trm->update.action) {
+	case BPF_TRAMP_UPDATE_REG:
+		err = register_ftrace_direct_multi(ops, image_new);
+		break;
+	case BPF_TRAMP_UPDATE_MODIFY:
+		err = modify_ftrace_direct_multi(ops, image_new);
+		break;
+	case BPF_TRAMP_UPDATE_UNREG:
+		err = unregister_ftrace_direct_multi(ops, image_old);
+		break;
+	default:
+		break;
+	}
+
+	if (!err)
+		return 0;
+
+out_rollback:
+	list_for_each_entry(tr, upd, update.list) {
+		if (tr->multi.id_multi)
+			continue;
+
+		ip = (unsigned long) tr->func.addr;
+		image_new = tr->update.im ? (unsigned long) tr->update.im->image : 0;
+		image_old = tr->cur_image ? (unsigned long) tr->cur_image->image : 0;
+
+		switch (tr->update.action) {
+		case BPF_TRAMP_UPDATE_REG:
+			err = unregister_ftrace_direct(ip, image_new);
+			break;
+		case BPF_TRAMP_UPDATE_MODIFY:
+			err = modify_ftrace_direct(ip, image_new, image_old);
+			break;
+		case BPF_TRAMP_UPDATE_UNREG:
+			err = register_ftrace_direct(ip, image_old);
+			break;
+		}
+		i++;
+	}
+
 	return err;
 }
 
@@ -1163,7 +1197,8 @@ error:
 	return NULL;
 }
 
-int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *tp,
+				struct bpf_tramp_id *id)
 {
 	struct bpf_trampoline *tr, *trm = NULL, *n;
 	struct bpf_tramp_id *id_singles = NULL;
@@ -1215,7 +1250,7 @@ int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *
 		refcount_inc(&tr->refcnt);
 	}
 
-	err = bpf_tramp_update_set(&upd);
+	err = bpf_tramp_update_set(ops, &upd);
 	if (err)
 		goto out_rollback;
 
@@ -1240,7 +1275,7 @@ out_rollback:
 	return err;
 }
 
-int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
+int bpf_trampoline_multi_detach(struct ftrace_ops *ops, struct bpf_tramp_prog *tp, struct bpf_tramp_id *id)
 {
 	struct bpf_trampoline *tr, *trm = NULL, *n;
 	LIST_HEAD(upd);
@@ -1282,7 +1317,7 @@ int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct bpf_tramp_id *
 		}
 	}
 
-	err = bpf_tramp_update_set(&upd);
+	err = bpf_tramp_update_set(ops, &upd);
 	if (err)
 		goto fail_unlock;
 

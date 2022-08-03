@@ -3147,6 +3147,7 @@ struct bpf_tracing_multi_link {
 	enum bpf_attach_type attach_type;
 	struct bpf_tramp_prog tp;
 	struct bpf_tramp_id *id;
+	struct ftrace_ops fops;
 };
 
 static void bpf_tracing_multi_link_release(struct bpf_link *link)
@@ -3154,7 +3155,7 @@ static void bpf_tracing_multi_link_release(struct bpf_link *link)
 	struct bpf_tracing_multi_link *tr_link =
 		container_of(link, struct bpf_tracing_multi_link, link);
 
-	WARN_ON_ONCE(bpf_trampoline_multi_detach(&tr_link->tp, tr_link->id));
+	WARN_ON_ONCE(bpf_trampoline_multi_detach(&tr_link->fops, &tr_link->tp, tr_link->id));
 }
 
 static void bpf_tracing_multi_link_dealloc(struct bpf_link *link)
@@ -3366,7 +3367,7 @@ static int bpf_tracing_multi_attach(struct bpf_prog *prog,
 	link->tp.cookie = 0;
 	link->tp.prog = prog;
 
-	err = bpf_trampoline_multi_attach(&link->tp, id);
+	err = bpf_trampoline_multi_attach(&link->fops, &link->tp, id);
 	if (err) {
 		bpf_link_cleanup(&link_primer);
 		goto out_free_id;
