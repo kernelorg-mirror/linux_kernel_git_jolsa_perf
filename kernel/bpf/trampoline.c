@@ -1075,7 +1075,9 @@ static int bpf_tramp_update_set(struct ftrace_ops *ops, struct list_head *upd)
 	int i, rollback_cnt = 0, err = -EINVAL;
 	unsigned long ip, image_new, image_old;
 
+trace_printk("UPD ENTRY\n");
 	list_for_each_entry(tr, upd, update.list) {
+trace_printk("UPD1 tr %p\n", tr);
 		if (tr->multi.id_multi) {
 			for (i = 0; i < tr->multi.id_multi->cnt; i++) {
 				ip = (unsigned long) tr->multi.id_multi->addr[i];
@@ -1086,6 +1088,7 @@ static int bpf_tramp_update_set(struct ftrace_ops *ops, struct list_head *upd)
 			trm = tr;
 			continue;
 		}
+trace_printk("UPD2 trm %p\n", tr);
 
 		ip = (unsigned long) tr->func.addr;
 		image_new = (unsigned long) tr->update.im->image;
@@ -1102,26 +1105,33 @@ static int bpf_tramp_update_set(struct ftrace_ops *ops, struct list_head *upd)
 			err = unregister_ftrace_direct(ip, image_old);
 			break;
 		}
+trace_printk("UPD3 err %d\n", err);
 		if (err)
 			goto out_rollback;
 		rollback_cnt++;
 	}
 
+trace_printk("UPD4 trm %p\n", trm);
 	if (!trm)
 		return 0;
 
 	image_new = trm->update.im ? (unsigned long) trm->update.im->image : 0;
 	image_old = trm->cur_image ? (unsigned long) trm->cur_image->image : 0;
 
+trace_printk("UPD5 image_new %lx image_old %lx\n", image_new, image_old);
+
 	switch (trm->update.action) {
 	case BPF_TRAMP_UPDATE_REG:
 		err = register_ftrace_direct_multi(ops, image_new);
+trace_printk("UPD6 err %d\n", err);
 		break;
 	case BPF_TRAMP_UPDATE_MODIFY:
 		err = modify_ftrace_direct_multi(ops, image_new);
+trace_printk("UPD7 err %d\n", err);
 		break;
 	case BPF_TRAMP_UPDATE_UNREG:
 		err = unregister_ftrace_direct_multi(ops, image_old);
+trace_printk("UPD8 err %d\n", err);
 		break;
 	default:
 		break;
@@ -1131,13 +1141,18 @@ static int bpf_tramp_update_set(struct ftrace_ops *ops, struct list_head *upd)
 		return 0;
 
 out_rollback:
+trace_printk("UPD9 rollback_cnt %d\n", rollback_cnt);
+
 	list_for_each_entry(tr, upd, update.list) {
+trace_printk("UPD10 tr %p\n", tr);
 		if (tr->multi.id_multi)
 			continue;
 
 		ip = (unsigned long) tr->func.addr;
 		image_new = tr->update.im ? (unsigned long) tr->update.im->image : 0;
 		image_old = tr->cur_image ? (unsigned long) tr->cur_image->image : 0;
+
+trace_printk("UPD11 image_new %lx image_old %lx\n", image_new, image_old);
 
 		switch (tr->update.action) {
 		case BPF_TRAMP_UPDATE_REG:
@@ -1208,7 +1223,10 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 
 	mutex_lock(&trampoline_mutex);
 
+trace_printk("ATTACH1\n");
+
 	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+trace_printk("ATTACH11 tr %p\n", tr);
 		if (id_match(id, tr->multi.id)) {
 			trm = tr;
 			break;
@@ -1217,6 +1235,7 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 			goto out_unlock;
 	}
 
+trace_printk("ATTACH2 trm %p\n", trm);
 	if (trm) {
 		id_singles = tr->multi.id_singles;
 		refcount_inc(&tr->refcnt);
@@ -1227,8 +1246,10 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 		id_singles = trm->multi.id_singles;
 	}
 
+trace_printk("ATTACH3 trm %p\n", trm);
 	mutex_lock(&trm->mutex);
 	err = __bpf_trampoline_link_prog(tp, trm, &upd);
+trace_printk("ATTACH4 err %d\n", err);
 	if (err) {
 		mutex_unlock(&trm->mutex);
 		__bpf_trampoline_put(trm);
@@ -1236,6 +1257,7 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 	}
 
 	for (i = 0; i < id_singles->cnt; i++) {
+trace_printk("ATTACH5\n");
 		key = bpf_trampoline_compute_key(NULL, tp->prog->aux->attach_btf,
 						 id_singles->id[i]);
 		tr = __bpf_trampoline_lookup(key);
@@ -1251,9 +1273,11 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 	}
 
 	err = bpf_tramp_update_set(ops, &upd);
+trace_printk("ATTACH6 err %d\n", err);
 	if (err)
 		goto out_rollback;
 
+trace_printk("ATTACH7\n");
 	list_for_each_entry_safe(tr, n, &upd, update.list) {
 		bpf_trampoline_commit(tr);
 		list_del_init(&tr->update.list);
@@ -1262,9 +1286,11 @@ int bpf_trampoline_multi_attach(struct ftrace_ops *ops, struct bpf_tramp_prog *t
 
 out_unlock:
 	mutex_unlock(&trampoline_mutex);
+trace_printk("ATTACH8 err %d\n", err);
 	return err;
 
 out_rollback:
+trace_printk("ATTACH9 err %d\n", err);
 	list_for_each_entry_safe(tr, n, &upd, update.list) {
 		bpf_trampoline_rollback(tr);
 		list_del_init(&tr->update.list);

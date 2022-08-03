@@ -3374,7 +3374,7 @@ static int bpf_tracing_multi_attach(struct bpf_prog *prog,
 	}
 	return bpf_link_settle(&link_primer);
 out_free_id:
-	kfree(id);
+	bpf_tramp_id_put(id);
 	return err;
 }
 
