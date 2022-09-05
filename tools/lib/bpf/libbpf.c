@@ -9100,6 +9100,16 @@ static int find_kernel_btf_id(struct bpf_object *obj, const char *attach_name,
 {
 	int ret, i;
 
+	if (!strcmp(attach_name, "bpf_test_func")) {
+		char *str = getenv("KRAVA");
+		if (!str)
+			return -ESRCH;
+		*btf_obj_fd = 0; /* vmlinux BTF */
+		*btf_type_id = atoi(str);
+		fprintf(stderr, "KRAVA btf_id %u\n", *btf_type_id);
+		return 0;
+	}
+
 	ret = find_attach_btf_id(obj->btf_vmlinux, attach_name, attach_type);
 	if (ret > 0) {
 		*btf_obj_fd = 0; /* vmlinux BTF */
