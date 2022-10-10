@@ -460,4 +460,20 @@ static inline bool btf_type_is_struct_ptr(struct btf *btf, const struct btf_type
 	return btf_type_is_struct(t);
 }
 
+struct btf_bitmap {
+       unsigned int cnt;
+       unsigned long bm[0];
+};
+
+struct btf_bitmap * btf_bitmap_alloc(void);
+struct btf_bitmap * btf_bitmap_read(u32 __user *uids, u32 uids_cnt);
+void btf_bitmap_free(struct btf_bitmap *ibm);
+void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		    struct btf_bitmap *src2);
+void btf_bitmap_or(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		   struct btf_bitmap *src2);
+bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		       struct btf_bitmap *src2);
+void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src);
+bool btf_bitmap_empty(struct btf_bitmap *src);
 #endif

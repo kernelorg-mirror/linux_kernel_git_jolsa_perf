@@ -8025,3 +8025,83 @@ out:
 	}
 	return err;
 }
+
+struct btf_bitmap * btf_bitmap_alloc(void)
+{
+	struct btf_bitmap *ibm;
+	struct btf *btf;
+	ssize_t size;
+	u32 cnt;
+
+	btf = bpf_get_btf_vmlinux();
+	if (IS_ERR(btf))
+		return ERR_CAST(btf);
+	cnt = btf_nr_types(btf);
+	size = sizeof(*ibm) + BITS_TO_LONGS(cnt);
+	ibm = kvzalloc(size, GFP_KERNEL);
+	if (!ibm)
+		return ERR_PTR(-ENOMEM);
+	ibm->cnt = cnt;
+	return ibm;
+}
+
+struct btf_bitmap * btf_bitmap_read(u32 __user *uids, u32 uids_cnt)
+{
+	struct btf_bitmap *ibm;
+	u32 id, i;
+	int err;
+
+	ibm = btf_bitmap_alloc();
+	if (IS_ERR(ibm))
+		return ibm;
+
+	for (i = 0; i < uids_cnt; i++) {
+		if (__get_user(id, uids + i)) {
+			err = -EFAULT;
+			goto error;
+		}
+		if (id > ibm->cnt) {
+			err = -EINVAL;
+			goto error;
+		}
+		bitmap_set(ibm->bm, id, ibm->cnt);
+	}
+	return ibm;
+
+error:
+	kvfree(ibm);
+	return ERR_PTR(err);
+}
+
+void btf_bitmap_free(struct btf_bitmap *ibm)
+{
+	kvfree(ibm);
+}
+
+void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		    struct btf_bitmap *src2)
+{
+	bitmap_and(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+void btf_bitmap_or(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		   struct btf_bitmap *src2)
+{
+	bitmap_or(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		       struct btf_bitmap *src2)
+{
+	return bitmap_andnot(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src)
+{
+	bitmap_copy(dst->bm, src->bm, dst->cnt);
+}
+
+bool btf_bitmap_empty(struct btf_bitmap *src)
+{
+	return bitmap_empty(src->bm, src->cnt);
+}
