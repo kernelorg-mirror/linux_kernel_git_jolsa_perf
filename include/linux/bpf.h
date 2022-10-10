@@ -1050,6 +1050,15 @@ struct bpf_trampoline {
 	u64 selector;
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
+	struct {
+		struct list_head list;
+		struct btf_bitmap *bmap;
+	} multi;
+	struct {
+		bool free;
+		struct btf_bitmap *bmap;
+		struct list_head list;
+	} rollback;
 };
 
 struct bpf_attach_target_info {
@@ -1124,6 +1133,9 @@ int arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int num_func
 #define __BPF_DISPATCHER_CALL(name)		bpf_func(ctx, insnsi)
 #define __BPF_DISPATCHER_UPDATE(_d, _new)
 #endif
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
 
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\
