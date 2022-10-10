@@ -8248,3 +8248,54 @@ out:
 	}
 	return err;
 }
+
+struct btf_bitmap *btf_bitmap_funcs_alloc(void)
+{
+	struct btf_bitmap *bm;
+	ssize_t size;
+
+	size = sizeof(*bm) + BITS_TO_BYTES(btf_vmlinux->funcs_size);
+	size = ALIGN(size, sizeof(unsigned long));
+
+	bm = kvzalloc(size, GFP_KERNEL);
+	if (!bm)
+		return NULL;
+
+	bm->size = btf_vmlinux->funcs_size;
+	return bm;
+}
+
+void btf_bitmap_free(struct btf_bitmap *bm)
+{
+	kvfree(bm);
+}
+
+void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		    struct btf_bitmap *src2)
+{
+	bitmap_and(dst->bm, src1->bm, src2->bm, dst->size);
+	dst->cnt = bitmap_weight(dst->bm, dst->size);
+}
+
+void btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		       struct btf_bitmap *src2)
+{
+	(void) bitmap_andnot(dst->bm, src1->bm, src2->bm, dst->size);
+	dst->cnt = bitmap_weight(dst->bm, dst->size);
+}
+
+void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src)
+{
+	bitmap_copy(dst->bm, src->bm, dst->size);
+	dst->cnt = src->cnt;
+}
+
+unsigned long btf_bitmap_find_first_bit(struct btf_bitmap *bmap)
+{
+	return find_first_bit(bmap->bm, bmap->size);
+}
+
+bool btf_bitmap_empty(struct btf_bitmap *src)
+{
+	return src->cnt == 0;
+}
