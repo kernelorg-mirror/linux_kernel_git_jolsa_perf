@@ -554,4 +554,13 @@ static inline bool btf_type_is_struct_ptr(struct btf *btf, const struct btf_type
 	return btf_type_is_struct(t);
 }
 
+struct btf_bitmap {
+	unsigned int size;
+	unsigned int cnt;
+	unsigned long bm[0];
+};
+
+struct btf_bitmap * btf_bitmap_funcs_alloc(void);
+struct btf_bitmap * btf_bitmap_funcs_read(u32 __user *uids, u32 uids_cnt);
+void btf_bitmap_free(struct btf_bitmap *ibm);
 #endif
