@@ -842,6 +842,7 @@ struct bpf_tramp_update {
 	enum bpf_tramp_prog_type kind;
 	struct bpf_prog_array *old_array;
 	struct list_head list;
+	struct btf_bitmap *bmap;
 };
 
 struct bpf_tramp_prog {
@@ -950,6 +951,10 @@ struct bpf_trampoline {
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
 	struct bpf_tramp_update update;
+	struct {
+		struct list_head list;
+		struct btf_bitmap *bmap;
+	} multi;
 };
 
 struct bpf_attach_target_info {
@@ -993,6 +998,8 @@ struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
 int arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int num_funcs);
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\
 	.func = &_name##_func,					\
