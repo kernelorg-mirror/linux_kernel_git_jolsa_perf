@@ -8248,3 +8248,76 @@ out:
 	}
 	return err;
 }
+
+struct btf_bitmap *btf_bitmap_funcs_alloc(void)
+{
+	struct btf_bitmap *bm;
+	ssize_t size;
+
+	size = sizeof(*bm) + BITS_TO_BYTES(btf_vmlinux->funcs_size);
+	size = ALIGN(size, sizeof(unsigned long));
+
+	bm = kvzalloc(size, GFP_KERNEL);
+	if (!bm)
+		return NULL;
+
+	bm->size = btf_vmlinux->funcs_size;
+	return bm;
+}
+
+static int funcs_ids_cmp(const void *a, const void *b)
+{
+	const u32 *pa = a;
+	const u32 *pb = b;
+
+	if (*pa < *pb)
+		return -1;
+	if (*pa > *pb)
+		return 1;
+	return 0;
+}
+
+struct btf_bitmap *btf_bitmap_funcs_read(u32 __user *uids, u32 uids_cnt)
+{
+	struct btf_bitmap *bm;
+	u32 id, i, *func;
+	int err;
+
+	bm = btf_bitmap_funcs_alloc();
+	if (!bm)
+		return NULL;
+
+	if (uids_cnt >= bm->size)
+		goto error;
+
+	for (i = 0; i < uids_cnt; i++) {
+		if (__get_user(id, uids + i)) {
+			err = -EFAULT;
+			goto error;
+		}
+		func = bsearch(&id, btf_vmlinux->funcs_ids, btf_vmlinux->funcs_size,
+			      sizeof(*btf_vmlinux->funcs_ids), funcs_ids_cmp);
+		if (!func) {
+			err = -EINVAL;
+			goto error;
+		}
+		id = func - btf_vmlinux->funcs_ids;
+		if (WARN_ON_ONCE(id >= bm->size)) {
+			err = -EINVAL;
+			goto error;
+		}
+		bitmap_set(bm->bm, id, 1);
+	}
+
+	bm->cnt = uids_cnt;
+	return bm;
+
+error:
+	kvfree(bm);
+	return ERR_PTR(err);
+}
+
+void btf_bitmap_free(struct btf_bitmap *bm)
+{
+	kvfree(bm);
+}
