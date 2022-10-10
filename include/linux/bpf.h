@@ -945,6 +945,7 @@ enum bpf_tramp_update_action {
 	BPF_TRAMP_UPDATE_REG,
 	BPF_TRAMP_UPDATE_UNREG,
 	BPF_TRAMP_UPDATE_MODIFY,
+	BPF_TRAMP_UPDATE_MODIFY_NO_PROG,
 };
 
 enum bpf_tramp_prog_type {
@@ -1067,6 +1068,10 @@ struct bpf_trampoline {
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
 	struct bpf_tramp_update update;
+	struct {
+		struct list_head list;
+		struct btf_bitmap *bmap;
+	} multi;
 };
 
 struct bpf_attach_target_info {
@@ -1141,6 +1146,9 @@ int arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int num_func
 #define __BPF_DISPATCHER_CALL(name)		bpf_func(ctx, insnsi)
 #define __BPF_DISPATCHER_UPDATE(_d, _new)
 #endif
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
 
 #define BPF_DISPATCHER_INIT(_name) {				\
 	.mutex = __MUTEX_INITIALIZER(_name.mutex),		\

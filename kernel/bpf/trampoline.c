@@ -156,6 +156,7 @@ static struct bpf_trampoline *bpf_trampoline_alloc(void)
 		return NULL;
 
 	INIT_HLIST_NODE(&tr->hlist);
+	INIT_LIST_HEAD(&tr->multi.list);
 	refcount_set(&tr->refcnt, 1);
 	mutex_init(&tr->mutex);
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
@@ -303,8 +304,14 @@ static int register_fentry(struct bpf_trampoline *tr, struct bpf_tramp_image *im
 	return ret;
 }
 
+static bool prog_is_multi(struct bpf_prog *prog)
+{
+	return prog->expected_attach_type == BPF_TRACE_FENTRY_MULTI ||
+	       prog->expected_attach_type == BPF_TRACE_FEXIT_MULTI;
+}
+
 static struct bpf_tramp_progs *
-bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg)
+bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_arg, bool *has_multi)
 {
 	const struct bpf_prog_array_item *item;
 	struct bpf_prog_array *prog_array;
@@ -330,6 +337,7 @@ bpf_trampoline_get_progs(const struct bpf_trampoline *tr, int *total, bool *ip_a
 
 		while ((prog = READ_ONCE(item->prog))) {
 			*ip_arg |= prog->call_get_func_ip;
+			*has_multi |= prog_is_multi(prog);
 			tp->prog = prog;
 			tp->cookie = item->bpf_cookie;
 			tp++; item++;
@@ -472,16 +480,23 @@ out:
 	return ERR_PTR(err);
 }
 
+static struct btf_func_model btf_multi_func_model = {
+	.ret_size = 0,
+	.nr_args = 6,
+	.arg_size = { 8, 8, 8, 8, 8, 8, },
+};
+
 static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mutex,
 				 struct list_head *upd)
 {
+	struct btf_func_model *model = &tr->func.model;
 	struct bpf_tramp_image *im;
 	struct bpf_tramp_progs *tprogs;
 	u32 orig_flags = tr->flags;
-	bool ip_arg = false;
+	bool ip_arg = false, has_multi = false;
 	int err, total;
 
-	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg);
+	tprogs = bpf_trampoline_get_progs(tr, &total, &ip_arg, &has_multi);
 	if (IS_ERR(tprogs))
 		return PTR_ERR(tprogs);
 
@@ -517,6 +532,11 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mut
 	if (ip_arg)
 		tr->flags |= BPF_TRAMP_F_IP_ARG;
 
+	if (has_multi) {
+		tr->flags |= BPF_TRAMP_F_ORIG_STACK;
+		model = &btf_multi_func_model;
+	}
+
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
 again:
 	if ((tr->flags & BPF_TRAMP_F_SHARE_IPMODIFY) &&
@@ -525,7 +545,7 @@ again:
 #endif
 
 	err = arch_prepare_bpf_trampoline(im, im->image, im->image + PAGE_SIZE,
-					  &tr->func.model, tr->flags, tprogs,
+					  model, tr->flags, tprogs,
 					  tr->func.addr);
 	if (err < 0)
 		goto out;
@@ -872,6 +892,7 @@ static void bpf_trampoline_free(struct bpf_trampoline *tr)
 		ftrace_free_filter(tr->fops);
 		kfree(tr->fops);
 	}
+	btf_bitmap_free(tr->multi.bmap);
 	kfree(tr);
 }
 
@@ -943,7 +964,10 @@ static void __bpf_trampoline_put(struct bpf_trampoline *tr)
 	 * fexit progs. The fentry-only trampoline will be freed via
 	 * multiple rcu callbacks.
 	 */
-	hlist_del(&tr->hlist);
+	if (list_empty(&tr->multi.list))
+		hlist_del(&tr->hlist);
+	else
+		list_del(&tr->multi.list);
 	bpf_trampoline_free(tr);
 }
 
@@ -1176,6 +1200,326 @@ arch_prepare_bpf_trampoline(struct bpf_tramp_image *tr, void *image, void *image
 			    void *orig_call)
 {
 	return -ENOTSUPP;
+}
+
+static LIST_HEAD(multi_trampolines);
+
+static void bpf_trampoline_rollback(struct bpf_trampoline *tr)
+{
+	struct bpf_tramp_update *upd = &tr->update;
+
+	if (upd->action != BPF_TRAMP_UPDATE_MODIFY_NO_PROG) {
+		tr->progs_array[upd->orig.kind] = upd->orig.array;
+		tr->progs_cnt[upd->orig.kind]--;
+	}
+	if (upd->im)
+		bpf_tramp_image_put(upd->im);
+}
+
+static void bpf_trampoline_commit(struct bpf_trampoline *tr)
+{
+	if (tr->cur_image)
+		bpf_tramp_image_put(tr->cur_image);
+	tr->cur_image = tr->update.im;
+	if (tr->update.action == BPF_TRAMP_UPDATE_UNREG)
+		tr->selector = 0;
+	else
+		tr->selector++;
+}
+
+static int trampoline_multi_resolve(struct bpf_trampoline *tr)
+{
+	unsigned long *ips;
+	int err;
+
+	err = btf_bitmap_funcs_resolve(tr->multi.bmap, &ips);
+	if (!err)
+		err = ftrace_set_filter_ips(tr->fops, ips, tr->multi.bmap->cnt, 0, 1);
+	kfree(ips);
+	return err;
+}
+
+static int trampoline_multi_split(struct bpf_trampoline *tr, struct bpf_tramp_prog *tp,
+				  struct btf_bitmap *and, struct list_head *upd,
+				  struct list_head *new)
+{
+	struct bpf_trampoline *tr_new = NULL, *tr_old = NULL;
+	struct btf_bitmap *bmap_new, *bmap_old;
+	int err = -ENOMEM;
+
+	bmap_new = btf_bitmap_funcs_alloc();
+	bmap_old = btf_bitmap_funcs_alloc();
+	if (!bmap_new || !bmap_old)
+		return -ENOMEM;
+
+	tr_new = bpf_trampoline_dup(tr);
+	tr_old = bpf_trampoline_dup(tr);
+	if (!tr_new || !tr_old)
+		goto error_bmap;
+
+	btf_bitmap_copy(bmap_new, and);
+	tr_new->multi.bmap = bmap_new;
+
+	err = trampoline_multi_resolve(tr_new);
+	if (err)
+		goto error_tr;
+
+	btf_bitmap_andnot(bmap_old, tr->multi.bmap, and);
+	tr_old->multi.bmap = bmap_old;
+
+	err = trampoline_multi_resolve(tr_old);
+	if (err)
+		goto error_tr;
+
+	err = __bpf_trampoline_link_prog(tp, tr_new, upd);
+	if (err)
+		goto error_tr;
+
+	tr_old->update.action = BPF_TRAMP_UPDATE_MODIFY_NO_PROG;
+	tr_old->update.im = tr->cur_image;
+	list_add_tail(&tr_old->update.list, upd);
+
+	list_add_tail(&tr_new->multi.list, new);
+	list_add_tail(&tr_old->multi.list, new);
+	mutex_lock(&tr_new->mutex);
+	mutex_lock(&tr_old->mutex);
+	return err;
+
+error_bmap:
+	btf_bitmap_free(bmap_new);
+	btf_bitmap_free(bmap_old);
+error_tr:
+	bpf_trampoline_free(tr_new);
+	bpf_trampoline_free(tr_old);
+	return err;
+}
+
+static int trampoline_multi_update(struct list_head *upd)
+{
+	struct bpf_trampoline *tr;
+	int err;
+
+	list_for_each_entry(tr, upd, update.list) {
+		switch (tr->update.action) {
+		case BPF_TRAMP_UPDATE_REG:
+			err = register_ftrace_direct_multi(tr->fops, (unsigned long)tr->update.im->image);
+			break;
+		case BPF_TRAMP_UPDATE_MODIFY:
+		case BPF_TRAMP_UPDATE_MODIFY_NO_PROG:
+			err = modify_ftrace_direct_multi(tr->fops, (unsigned long)tr->update.im->image);
+			break;
+		case BPF_TRAMP_UPDATE_UNREG:
+			err = unregister_ftrace_direct_multi(tr->fops, (unsigned long)tr->cur_image->image);
+			break;
+		}
+		if (err)
+			goto rollback;
+	}
+	return 0;
+
+rollback:
+	list_for_each_entry_continue_reverse(tr, upd, update.list) {
+		switch (tr->update.action) {
+		case BPF_TRAMP_UPDATE_REG:
+			err = unregister_ftrace_direct_multi(tr->fops, (unsigned long)tr->update.im->image);
+			break;
+		case BPF_TRAMP_UPDATE_MODIFY:
+		case BPF_TRAMP_UPDATE_MODIFY_NO_PROG:
+			err = modify_ftrace_direct_multi(tr->fops, (unsigned long)tr->cur_image->image);
+			break;
+		case BPF_TRAMP_UPDATE_UNREG:
+			err = register_ftrace_direct_multi(tr->fops, (unsigned long)tr->update.im->image);
+			break;
+		}
+	}
+	return err;
+}
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap)
+{
+	struct btf_bitmap *bmap_tmp, *bmap_new;
+	struct bpf_trampoline *tr, *n;
+	u32 obj_id, btf_id, kernel_id;
+	int err = -ENOMEM;
+	LIST_HEAD(upd);
+	LIST_HEAD(free);
+	LIST_HEAD(new);
+	struct btf *btf;
+	int i;
+
+	btf = bpf_get_btf_vmlinux();
+	if (IS_ERR(btf))
+		return PTR_ERR(btf);
+
+	kernel_id = btf_obj_id(btf);
+
+	bmap_new = btf_bitmap_funcs_alloc();
+	bmap_tmp = btf_bitmap_funcs_alloc();
+	if (!bmap_new || !bmap_tmp)
+		goto error;
+
+	btf_bitmap_copy(bmap_new, bmap);
+
+	mutex_lock(&trampoline_mutex);
+	for (i = 0; i < TRAMPOLINE_TABLE_SIZE; i++) {
+		hlist_for_each_entry(tr, &trampoline_table[i], hlist) {
+			bpf_trampoline_unpack_key(tr->key, &obj_id, &btf_id);
+			if (obj_id != kernel_id)
+				continue;
+			if (!btf_bitmap_funcs_test_bit(bmap_new, btf_id, true))
+				continue;
+			mutex_lock(&tr->mutex);
+			err = __bpf_trampoline_link_prog(tp, tr, &upd);
+			if (err) {
+				mutex_unlock(&tr->mutex);
+				goto error_rollback;
+			}
+			refcount_inc(&tr->refcnt);
+		}
+	}
+
+	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+		btf_bitmap_and(bmap_tmp, tr->multi.bmap, bmap_new);
+
+		if (btf_bitmap_empty(bmap_tmp))
+			continue;
+
+		if (bmap_tmp->cnt != tr->multi.bmap->cnt) {
+			/* partial match */
+			err = trampoline_multi_split(tr, tp, bmap_tmp, &upd, &new);
+			if (err)
+				goto error_rollback;
+			list_move(&tr->multi.list, &free);
+		} else {
+			/* full match */
+			mutex_lock(&tr->mutex);
+			err = __bpf_trampoline_link_prog(tp, tr, &upd);
+			if (err) {
+				mutex_unlock(&tr->mutex);
+				goto error_rollback;
+			}
+			refcount_inc(&tr->refcnt);
+		}
+		btf_bitmap_andnot(bmap_new, bmap_new, bmap_tmp);
+	}
+
+	if (!btf_bitmap_empty(bmap_new)) {
+		tr = bpf_trampoline_alloc();
+		if (!tr) {
+			err = -ENOMEM;
+			goto error_rollback;
+		}
+		tr->multi.bmap = bmap_new;
+		bmap_new = NULL;
+		err = trampoline_multi_resolve(tr);
+		if (err) {
+			bpf_trampoline_free(tr);
+			goto error_rollback;
+		}
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_link_prog(tp, tr, &upd);
+		if (err) {
+			bpf_trampoline_free(tr);
+			mutex_unlock(&tr->mutex);
+			goto error_rollback;
+		}
+		list_add_tail(&tr->multi.list, &new);
+	}
+
+	err = trampoline_multi_update(&upd);
+	if (err)
+		goto error_rollback;
+
+	list_for_each_entry_safe(tr, n, &free, multi.list) {
+		bpf_trampoline_free(tr);
+	}
+
+	list_splice(&new, &multi_trampolines);
+
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+	}
+
+error_rollback:
+	if (err) {
+		list_for_each_entry_safe(tr, n, &upd, update.list) {
+			bpf_trampoline_rollback(tr);
+			mutex_unlock(&tr->mutex);
+			__bpf_trampoline_put(tr);
+		}
+		list_splice(&free, &multi_trampolines);
+	}
+	mutex_unlock(&trampoline_mutex);
+error:
+	btf_bitmap_free(bmap_new);
+	btf_bitmap_free(bmap_tmp);
+	return err;
+}
+
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap)
+{
+	struct bpf_trampoline *tr, *n;
+	u32 obj_id, btf_id, kernel_id;
+	struct btf_bitmap *bmap_and;
+	struct btf *btf;
+	LIST_HEAD(upd);
+	int i, err;
+
+	btf = bpf_get_btf_vmlinux();
+	if (IS_ERR(btf))
+		return PTR_ERR(btf);
+
+	kernel_id = btf_obj_id(btf);
+
+	bmap_and = btf_bitmap_funcs_alloc();
+	if (!bmap_and)
+		return -ENOMEM;
+
+	mutex_lock(&trampoline_mutex);
+	for (i = 0; i < TRAMPOLINE_TABLE_SIZE; i++) {
+		hlist_for_each_entry(tr, &trampoline_table[i], hlist) {
+			bpf_trampoline_unpack_key(tr->key, &obj_id, &btf_id);
+			if (obj_id != kernel_id)
+				continue;
+			if (!btf_bitmap_funcs_test_bit(bmap, btf_id, false))
+				continue;
+			mutex_lock(&tr->mutex);
+			err = __bpf_trampoline_unlink_prog(tp, tr, &upd);
+			if (err) {
+				mutex_unlock(&tr->mutex);
+				goto error_rollback;
+			}
+		}
+	}
+
+	list_for_each_entry(tr, &multi_trampolines, multi.list) {
+		btf_bitmap_and(bmap_and, tr->multi.bmap, bmap);
+		if (btf_bitmap_empty(bmap_and))
+			continue;
+		err = __bpf_trampoline_unlink_prog(tp, tr, &upd);
+		if (err)
+			goto error_rollback;
+	}
+
+	err = trampoline_multi_update(&upd);
+	if (err)
+		goto error_rollback;
+
+	list_for_each_entry_safe(tr, n, &upd, update.list) {
+		bpf_trampoline_commit(tr);
+		list_del_init(&tr->update.list);
+		mutex_unlock(&tr->mutex);
+		__bpf_trampoline_put(tr);
+	}
+
+error_rollback:
+	mutex_unlock(&trampoline_mutex);
+	/* do we need rollback in here? */
+	WARN_ON_ONCE(err);
+	btf_bitmap_free(bmap_and);
+	return err;
 }
 
 static int __init init_trampolines(void)
