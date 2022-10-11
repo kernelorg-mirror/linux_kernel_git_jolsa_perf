@@ -82,7 +82,7 @@ static void test_find_vma_kprobe(struct find_vma *skel)
 	int err;
 
 	err = find_vma__attach(skel);
-	if (!ASSERT_OK(err, "get_branch_snapshot__attach"))
+	if (!ASSERT_OK(err, "find_vma__attach"))
 		return;
 
 	getpgid(skel->bss->target_pid);
