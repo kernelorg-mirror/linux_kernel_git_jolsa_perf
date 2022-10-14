@@ -388,6 +388,19 @@ out:
 	return ret;
 }
 
+int bpf_arch_init_dispatcher(void *ip)
+{
+	const u8 *nop_insn = x86_nops[5];
+	u8 new_insn[X86_PATCH_SIZE];
+
+	if (is_endbr(*(u32 *)ip))
+		ip += ENDBR_INSN_SIZE;
+
+	memcpy(new_insn, nop_insn, X86_PATCH_SIZE);
+	text_poke_bp(ip, new_insn, X86_PATCH_SIZE, NULL);
+	return 0;
+}
+
 int bpf_arch_text_poke(void *ip, enum bpf_text_poke_type t,
 		       void *old_addr, void *new_addr)
 {

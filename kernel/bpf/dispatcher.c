@@ -90,6 +90,11 @@ int __weak arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int n
 	return -ENOTSUPP;
 }
 
+int __weak bpf_arch_init_dispatcher(void *ip)
+{
+	return -ENOTSUPP;
+}
+
 static int bpf_dispatcher_prepare(struct bpf_dispatcher *d, void *image, void *buf)
 {
 	s64 ips[BPF_DISPATCHER_MAX] = {}, *ipsp = &ips[0];
