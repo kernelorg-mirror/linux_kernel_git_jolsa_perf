@@ -3324,6 +3324,9 @@ static int bpf_raw_tp_link_attach(struct bpf_prog *prog,
 			return -EFAULT;
 		buf[sizeof(buf) - 1] = 0;
 		tp_name = buf;
+
+		if (bpf_check_tp_printk_denylist(tp_name, prog))
+			return -EACCES;
 		break;
 	default:
 		return -EINVAL;
