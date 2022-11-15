@@ -2692,23 +2692,16 @@ struct module_addr_args {
 	int mods_cap;
 };
 
-static int module_callback(void *data, const char *name,
-			   struct module *mod, unsigned long addr)
+static int add_module(struct module_addr_args *args, struct module *mod)
 {
-	struct module_addr_args *args = data;
 	struct module **mods;
 
-	/* We iterate all modules symbols and for each we:
-	 * - search for it in provided addresses array
-	 * - if found we check if we already have the module pointer stored
-	 *   (we iterate modules sequentially, so we can check just the last
-	 *   module pointer)
+	/* We iterate sorted addresses and for each within module we:
+	 * - check if we already have the module pointer stored for it
+	 *   (we iterate sorted addresses sequentially, so we can check
+	 *   just the last module pointer)
 	 * - take module reference and store it
 	 */
-	if (!bsearch(&addr, args->addrs, args->addrs_cnt, sizeof(addr),
-		       bpf_kprobe_multi_addrs_cmp))
-		return 0;
-
 	if (args->mods && args->mods[args->mods_cnt - 1] == mod)
 		return 0;
 
@@ -2734,10 +2727,24 @@ static int get_modules_for_addrs(struct module ***mods, unsigned long *addrs, u3
 		.addrs     = addrs,
 		.addrs_cnt = addrs_cnt,
 	};
-	int err;
+	u32 i, err = 0;
+
+	for (i = 0; !err && i < addrs_cnt; i++) {
+		struct module *mod;
+		bool found = false;
+
+		preempt_disable();
+		mod = __module_text_address(addrs[i]);
+		found = mod && try_module_get(mod);
+		preempt_enable();
+
+		if (found) {
+			err = add_module(&args, mod);
+			module_put(mod);
+		}
+	}
 
 	/* We return either err < 0 in case of error, ... */
-	err = module_kallsyms_on_each_symbol(module_callback, &args);
 	if (err) {
 		kprobe_multi_put_modules(args.mods, args.mods_cnt);
 		kfree(args.mods);
@@ -2862,7 +2869,8 @@ int bpf_kprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 	} else {
 		/*
 		 * We need to sort addrs array even if there are no cookies
-		 * provided, to allow bsearch in get_modules_for_addrs.
+		 * provided, to allow sequential address walk in
+		 * get_modules_for_addrs.
 		 */
 		sort(addrs, cnt, sizeof(*addrs),
 		       bpf_kprobe_multi_addrs_cmp, NULL);
