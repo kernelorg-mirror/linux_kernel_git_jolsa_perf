@@ -8312,3 +8312,31 @@ void btf_bitmap_free(struct btf_bitmap *bm)
 {
 	kvfree(bm);
 }
+
+void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		    struct btf_bitmap *src2)
+{
+	bitmap_and(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+void btf_bitmap_or(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		   struct btf_bitmap *src2)
+{
+	bitmap_or(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		       struct btf_bitmap *src2)
+{
+	return bitmap_andnot(dst->bm, src1->bm, src2->bm, dst->cnt);
+}
+
+void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src)
+{
+	bitmap_copy(dst->bm, src->bm, dst->cnt);
+}
+
+bool btf_bitmap_empty(struct btf_bitmap *src)
+{
+	return bitmap_empty(src->bm, src->cnt);
+}
