@@ -567,4 +567,13 @@ struct btf_bitmap * btf_bitmap_funcs_read(u32 __user *uids, u32 uids_cnt);
 bool btf_bitmap_funcs_test_bit(struct btf_bitmap *bmap, u32 id, bool clear);
 int btf_bitmap_funcs_resolve(struct btf_bitmap *bmap, unsigned long **paddrs);
 void btf_bitmap_free(struct btf_bitmap *ibm);
+
+void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		    struct btf_bitmap *src2);
+void btf_bitmap_or(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		   struct btf_bitmap *src2);
+bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
+		       struct btf_bitmap *src2);
+void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src);
+bool btf_bitmap_empty(struct btf_bitmap *src);
 #endif
