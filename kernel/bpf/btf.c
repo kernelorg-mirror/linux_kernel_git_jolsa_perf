@@ -227,6 +227,7 @@ struct btf_id_dtor_kfunc_tab {
 struct btf {
 	void *data;
 	struct btf_type **types;
+	u32 *funcs_ids;
 	u32 *resolved_ids;
 	u32 *resolved_sizes;
 	const char *strings;
@@ -234,6 +235,7 @@ struct btf {
 	struct btf_header hdr;
 	u32 nr_types; /* includes VOID for base BTF */
 	u32 types_size;
+	u32 funcs_size;
 	u32 data_size;
 	refcount_t refcnt;
 	u32 id;
@@ -1665,6 +1667,7 @@ static void btf_free(struct btf *btf)
 	kvfree(btf->types);
 	kvfree(btf->resolved_sizes);
 	kvfree(btf->resolved_ids);
+	kvfree(btf->funcs_ids);
 	kvfree(btf->data);
 	kfree(btf);
 }
@@ -5625,6 +5628,36 @@ int get_kern_ctx_btf_id(struct bpf_verifier_log *log, enum bpf_prog_type prog_ty
 
 	return kctx_type_id;
 }
+static int btf_get_funcs(struct btf *btf)
+{
+	const struct btf_type *t;
+	u32 total, i, fi = 0;
+	u32 *funcs_ids;
+
+	total = btf_nr_types(btf);
+	for (i = 1; i < total; i++) {
+		t = btf_type_by_id(btf, i);
+		if (btf_type_is_func(t))
+			btf->funcs_size++;
+	}
+
+	if (btf->funcs_size == 0)
+		return 0;
+
+	funcs_ids = kvcalloc(btf->funcs_size, sizeof(*funcs_ids),
+			     GFP_KERNEL | __GFP_NOWARN);
+	if (!funcs_ids)
+		return -ENOMEM;
+
+	for (i = 1; i < total; i++) {
+		t = btf_type_by_id(btf, i);
+		if (btf_type_is_func(t))
+			funcs_ids[fi++] = i;
+	}
+
+	btf->funcs_ids = funcs_ids;
+	return 0;
+}
 
 BTF_ID_LIST(bpf_ctx_convert_btf_id)
 BTF_ID(struct, bpf_ctx_convert)
@@ -5670,6 +5703,10 @@ struct btf *btf_parse_vmlinux(void)
 		goto errout;
 
 	err = btf_check_type_tags(env, btf, 1);
+	if (err)
+		goto errout;
+
+	err = btf_get_funcs(btf);
 	if (err)
 		goto errout;
 
