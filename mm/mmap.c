@@ -2530,6 +2530,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	pgoff_t vm_pgoff;
 	int error;
 	MA_STATE(mas, &mm->mm_mt, addr, end - 1);
+	struct build_id *bid = NULL;
 
 	/* Check against address space limit. */
 	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
@@ -2626,6 +2627,10 @@ cannot_expand:
 		if (error)
 			goto unmap_and_free_vma;
 
+#ifdef CONFIG_INODE_BUILD_ID
+		if ((vma->vm_flags & VM_EXEC) && !file_inode(file)->i_build_id)
+			vma_read_build_id(vma, &bid);
+#endif
 		/*
 		 * Expansion is handled above, merging is handled below.
 		 * Drivers should not alter the address of the VMA.
@@ -2689,6 +2694,20 @@ cannot_expand:
 		else
 			goto free_vma;
 	}
+
+#ifdef CONFIG_INODE_BUILD_ID
+	if (bid) {
+		struct inode *inode = file_inode(file);
+
+		spin_lock(&inode->i_build_id_lock);
+		if (!inode->i_build_id) {
+			inode->i_build_id = bid;
+			bid = NULL;
+		}
+		spin_unlock(&inode->i_build_id_lock);
+	}
+	build_id_free(bid);
+#endif
 
 	if (vma->vm_file)
 		i_mmap_lock_write(vma->vm_file->f_mapping);
@@ -2759,6 +2778,7 @@ unmap_and_free_vma:
 		mapping_unmap_writable(file->f_mapping);
 free_vma:
 	vm_area_free(vma);
+	build_id_free(bid);
 unacct_error:
 	if (charged)
 		vm_unacct_memory(charged);
