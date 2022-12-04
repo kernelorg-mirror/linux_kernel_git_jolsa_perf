@@ -46,6 +46,10 @@ typedef const int tracepoint_ptr_t;
 typedef struct tracepoint * const tracepoint_ptr_t;
 #endif
 
+struct bpf_raw_event_data {
+	struct bpf_prog *prog;
+};
+
 struct bpf_raw_event_map {
 	struct tracepoint	*tp;
 	void			*bpf_func;
