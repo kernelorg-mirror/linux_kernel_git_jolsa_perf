@@ -3141,6 +3141,32 @@ out_put_prog:
 	return err;
 }
 
+static bool needs_recursion_check(struct bpf_raw_event_map *btp)
+{
+	return !strcmp(btp->tp->name, "contention_begin");
+}
+
+static int bpf_raw_event_data_init(struct bpf_raw_event_data *data,
+				   struct bpf_raw_event_map *btp,
+				   struct bpf_prog *prog)
+{
+	int __percpu *recursion = NULL;
+
+	if (needs_recursion_check(btp)) {
+		recursion = alloc_percpu_gfp(int, GFP_KERNEL);
+		if (!recursion)
+			return -ENOMEM;
+	}
+	data->recursion = recursion;
+	data->prog = prog;
+	return 0;
+}
+
+static void bpf_raw_event_data_release(struct bpf_raw_event_data *data)
+{
+	free_percpu(data->recursion);
+}
+
 struct bpf_raw_tp_link {
 	struct bpf_link link;
 	struct bpf_raw_event_map *btp;
@@ -3153,6 +3179,7 @@ static void bpf_raw_tp_link_release(struct bpf_link *link)
 		container_of(link, struct bpf_raw_tp_link, link);
 
 	bpf_probe_unregister(raw_tp->btp, &raw_tp->data);
+	bpf_raw_event_data_release(&raw_tp->data);
 	bpf_put_raw_tracepoint(raw_tp->btp);
 }
 
@@ -3339,17 +3366,22 @@ static int bpf_raw_tp_link_attach(struct bpf_prog *prog,
 		err = -ENOMEM;
 		goto out_put_btp;
 	}
+	if (bpf_raw_event_data_init(&link->data, btp, prog)) {
+		err = -ENOMEM;
+		kfree(link);
+		goto out_put_btp;
+	}
 	bpf_link_init(&link->link, BPF_LINK_TYPE_RAW_TRACEPOINT,
 		      &bpf_raw_tp_link_lops, prog);
 	link->btp = btp;
 
 	err = bpf_link_prime(&link->link, &link_primer);
 	if (err) {
+		bpf_raw_event_data_release(&link->data);
 		kfree(link);
 		goto out_put_btp;
 	}
 
-	link->data.prog = prog;
 	err = bpf_probe_register(link->btp, &link->data);
 	if (err) {
 		bpf_link_cleanup(&link_primer);

@@ -48,6 +48,7 @@ typedef struct tracepoint * const tracepoint_ptr_t;
 
 struct bpf_raw_event_data {
 	struct bpf_prog *prog;
+	int __percpu *recursion;
 };
 
 struct bpf_raw_event_map {
