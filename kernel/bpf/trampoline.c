@@ -1278,6 +1278,12 @@ int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bm
 
 	btf_bitmap_copy(bmap_new, bmap);
 
+	for (i = 0; i < TRAMPOLINE_TABLE_SIZE; i++) {
+		hlist_for_each_entry(tr, &trampoline_table[i], hlist) {
+			
+		}
+	}
+
 	list_for_each_entry(tr, &multi_trampolines, multi.list) {
 		btf_bitmap_and(bmap_and, tr->multi.bmap, bmap_new);
 		if (btf_bitmap_empty(bmap_and))
