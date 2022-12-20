@@ -8446,6 +8446,7 @@ int btf_bitmap_funcs_resolve(struct btf_bitmap *bmap, unsigned long **paddrs)
 		addrs[i] = rid[i].addr;
 	}
 	err = 0;
+	*paddrs = addrs;
 out_free:
 	kfree(rid);
 	return err;
@@ -8459,29 +8460,31 @@ void btf_bitmap_free(struct btf_bitmap *bm)
 void btf_bitmap_and(struct btf_bitmap *dst, struct btf_bitmap *src1,
 		    struct btf_bitmap *src2)
 {
-	bitmap_and(dst->bm, src1->bm, src2->bm, dst->cnt);
+	bitmap_and(dst->bm, src1->bm, src2->bm, dst->size);
+	dst->cnt = bitmap_weight(dst->bm, dst->size);
 }
 
 void btf_bitmap_or(struct btf_bitmap *dst, struct btf_bitmap *src1,
 		   struct btf_bitmap *src2)
 {
-	bitmap_or(dst->bm, src1->bm, src2->bm, dst->cnt);
+	bitmap_or(dst->bm, src1->bm, src2->bm, dst->size);
 }
 
 bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
 		       struct btf_bitmap *src2)
 {
-	return bitmap_andnot(dst->bm, src1->bm, src2->bm, dst->cnt);
+	return bitmap_andnot(dst->bm, src1->bm, src2->bm, dst->size);
 }
 
 void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src)
 {
-	bitmap_copy(dst->bm, src->bm, dst->cnt);
+	bitmap_copy(dst->bm, src->bm, dst->size);
+	dst->cnt = src->cnt;
 }
 
 bool btf_bitmap_empty(struct btf_bitmap *src)
 {
-	return bitmap_empty(src->bm, src->cnt);
+	return bitmap_empty(src->bm, src->size);
 }
 
 void btf_bitmap_trace_printk(const char *str, struct btf_bitmap *bmap)
@@ -8489,5 +8492,5 @@ void btf_bitmap_trace_printk(const char *str, struct btf_bitmap *bmap)
 	static char buf[4096] = "";
 
 	bitmap_print_list_to_buf(buf, bmap->bm, bmap->size, 0, sizeof(buf));
-	trace_printk("%s (%u:%u): %s\n", str, bmap->cnt, bmap->size, buf);
+	trace_printk("%s (%u:%u): %s", str, bmap->cnt, bmap->size, buf);
 }

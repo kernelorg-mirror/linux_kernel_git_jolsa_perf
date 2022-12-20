@@ -1234,7 +1234,7 @@ static int trampoline_multi_update(struct list_head *upd)
 		struct ftrace_func_entry *entry;
 		unsigned long id;
 
-		if (tr->update.action != BPF_TRAMP_UPDATE_UNREG)
+		if (tr->update.action == BPF_TRAMP_UPDATE_UNREG)
 			continue;
 
 		/* single trampoline */
@@ -1251,7 +1251,7 @@ static int trampoline_multi_update(struct list_head *upd)
 
 		i = 0;
 		/* multi trampoline */
-		for_each_set_bit(id, tr->multi.bmap->bm, tr->multi.bmap->cnt) {
+		for_each_set_bit(id, tr->multi.bmap->bm, tr->multi.bmap->size) {
 			entry = kmalloc(sizeof(*entry), GFP_KERNEL);
 			if (!entry)
 				goto error;
@@ -1298,7 +1298,7 @@ int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bm
 			bpf_trampoline_unpack_key(tr->key, &obj_id, &btf_id);
 			if (obj_id != kernel_id)
 				continue;
-			if (btf_bitmap_funcs_test_and_clear_bit(bmap_new, btf_id))
+			if (!btf_bitmap_funcs_test_and_clear_bit(bmap_new, btf_id))
 				continue;
 			mutex_lock(&tr->mutex);
 			err = __bpf_trampoline_link_prog(tp, tr, &upd);
@@ -1312,6 +1312,7 @@ int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bm
 
 	list_for_each_entry(tr, &multi_trampolines, multi.list) {
 		btf_bitmap_and(bmap_tmp, tr->multi.bmap, bmap_new);
+
 		if (btf_bitmap_empty(bmap_tmp))
 			continue;
 
@@ -1328,13 +1329,16 @@ int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bm
 			err = -ENOMEM;
 			goto error_rollback;
 		}
-		err = __bpf_trampoline_link_prog(tp, tr, &upd);
-		if (err)
-			goto error_rollback;
 		err = btf_bitmap_funcs_resolve(bmap_new, &tr->multi.addrs);
 		if (err)
 			goto error_rollback;
-		tr->update.bmap = bmap_new;
+		mutex_lock(&tr->mutex);
+		err = __bpf_trampoline_link_prog(tp, tr, &upd);
+		if (err) {
+			mutex_unlock(&tr->mutex);
+			goto error_rollback;
+		}
+		tr->multi.bmap = bmap_new;
 		bmap_new = NULL;
 	}
 
@@ -1390,7 +1394,7 @@ int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bm
 			bpf_trampoline_unpack_key(tr->key, &obj_id, &btf_id);
 			if (obj_id != kernel_id)
 				continue;
-			if (btf_bitmap_funcs_test_and_clear_bit(bmap_new, btf_id))
+			if (!btf_bitmap_funcs_test_and_clear_bit(bmap_new, btf_id))
 				continue;
 			mutex_lock(&tr->mutex);
 			err = __bpf_trampoline_unlink_prog(tp, tr, &upd);
