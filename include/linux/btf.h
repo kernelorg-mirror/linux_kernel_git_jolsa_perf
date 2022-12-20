@@ -576,4 +576,5 @@ bool btf_bitmap_andnot(struct btf_bitmap *dst, struct btf_bitmap *src1,
 		       struct btf_bitmap *src2);
 void btf_bitmap_copy(struct btf_bitmap *dst, struct btf_bitmap *src);
 bool btf_bitmap_empty(struct btf_bitmap *src);
+void btf_bitmap_trace_printk(const char *str, struct btf_bitmap *bmap);
 #endif
