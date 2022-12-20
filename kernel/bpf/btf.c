@@ -8352,6 +8352,112 @@ bool btf_bitmap_funcs_test_bit(struct btf_bitmap *bmap, u32 id, bool clear)
 	return set;
 }
 
+struct resolve_id {
+	const char *name;
+	unsigned long addr;
+	u32 id;
+};
+
+static int rid_name_cmp(const void *a, const void *b)
+{
+	const struct resolve_id *x = a;
+	const struct resolve_id *y = b;
+
+	return strcmp(x->name, y->name);
+}
+
+static int rid_id_cmp(const void *a, const void *b)
+{
+	const struct resolve_id *x = a;
+	const struct resolve_id *y = b;
+
+	if (x->id == y->id)
+		return 0;
+	return x->id < y->id ? -1 : 1;
+}
+
+struct kallsyms_data {
+	struct resolve_id *rid;
+	u32 cnt;
+	u32 found;
+};
+
+static int kallsyms_callback(void *data, const char *name,
+                            struct module *mod, unsigned long addr)
+{
+	struct kallsyms_data *args = data;
+	struct resolve_id *rid, id = {
+		.name = name,
+	};
+
+	rid = bsearch(&id, args->rid, args->cnt, sizeof(*rid), rid_name_cmp);
+	if (rid && !rid->addr) {
+		rid->addr = addr;
+		args->found++;
+	}
+	return args->found == args->cnt ? 1 : 0;
+}
+
+int btf_bitmap_funcs_resolve(struct btf_bitmap *bmap, unsigned long **paddrs)
+{
+	struct kallsyms_data args;
+	unsigned long bit, *addrs;
+	const struct btf_type *t;
+	struct resolve_id *rid;
+	const char *name;
+	struct btf *btf;
+	int i = 0, err;
+	u32 id;
+
+	btf = bpf_get_btf_vmlinux();
+	if (IS_ERR(btf))
+		return PTR_ERR(btf);
+
+	rid = kzalloc(bmap->cnt * sizeof(*rid), GFP_KERNEL);
+	addrs = kzalloc(bmap->cnt * sizeof(*addrs), GFP_KERNEL);
+	if (!rid || !addrs) {
+		kfree(rid);
+		kfree(addrs);
+		return -ENOMEM;
+	}
+
+	for_each_set_bit(bit, bmap->bm, bmap->size) {
+		id = btf->funcs_ids[bit];
+
+		t = btf_type_by_id(btf, id);
+		if (!t)
+			goto out_free;
+		name = btf_name_by_offset(btf, t->name_off);
+		if (!name)
+			goto out_free;
+		rid[i].name = name;
+		rid[i].id = id;
+		i++;
+	}
+
+	sort(rid, bmap->cnt, sizeof(*rid), rid_name_cmp, NULL);
+
+	args.rid = rid;
+	args.cnt = bmap->cnt;
+	args.found = 0;
+	kallsyms_on_each_symbol(kallsyms_callback, &args);
+
+	sort(rid, bmap->cnt, sizeof(*rid), rid_id_cmp, NULL);
+
+	for (i = 0; i < bmap->cnt; i++) {
+		if (!rid[i].addr) {
+			err = -EINVAL;
+			goto out_free;
+		}
+		addrs[i] = rid[i].addr;
+	}
+	*paddrs = addrs;
+	err = 0;
+out_free:
+	kfree(rid);
+	return err;
+}
+
 void btf_bitmap_free(struct btf_bitmap *bm)
 {
 	kvfree(bm);
