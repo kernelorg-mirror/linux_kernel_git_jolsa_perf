@@ -8483,3 +8483,11 @@ bool btf_bitmap_empty(struct btf_bitmap *src)
 {
 	return bitmap_empty(src->bm, src->cnt);
 }
+
+void btf_bitmap_trace_printk(const char *str, struct btf_bitmap *bmap)
+{
+	static char buf[4096] = "";
+
+	bitmap_print_list_to_buf(buf, bmap->bm, bmap->size, 0, sizeof(buf));
+	trace_printk("%s (%u:%u): %s\n", str, bmap->cnt, bmap->size, buf);
+}
