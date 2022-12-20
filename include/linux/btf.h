@@ -565,5 +565,6 @@ struct btf_bitmap {
 struct btf_bitmap * btf_bitmap_funcs_alloc(void);
 struct btf_bitmap * btf_bitmap_funcs_read(u32 __user *uids, u32 uids_cnt);
 bool btf_bitmap_funcs_test_and_clear_bit(struct btf_bitmap *bmap, u32 id);
+int btf_bitmap_funcs_resolve(struct btf_bitmap *bmap, unsigned long **paddrs);
 void btf_bitmap_free(struct btf_bitmap *ibm);
 #endif
