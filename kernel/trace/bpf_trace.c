@@ -2980,6 +2980,8 @@ int bpf_tracing_multi_attach(struct bpf_prog *prog,
 	if (IS_ERR(bmap))
 		return PTR_ERR(bmap);
 
+	btf_bitmap_trace_printk("init bmap", bmap);
+
 	link = kzalloc(sizeof(*link), GFP_KERNEL);
 	if (!link) {
 		err = -ENOMEM;
