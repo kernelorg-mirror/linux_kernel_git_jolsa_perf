@@ -859,6 +859,49 @@ void bpf_trampoline_unlink_cgroup_shim(struct bpf_prog *prog)
 }
 #endif
 
+static void bpf_trampoline_free(struct bpf_trampoline *tr)
+{
+	int i;
+
+	if (!tr)
+		return;
+	for (i = 0; i < BPF_TRAMP_MAX; i++) {
+		bpf_prog_array_free(tr->progs_array[i]);
+	}
+	if (tr->fops) {
+		ftrace_free_filter(tr->fops);
+		kfree(tr->fops);
+	}
+	kfree(tr);
+}
+
+__maybe_unused
+static struct bpf_trampoline *bpf_trampoline_dup(struct bpf_trampoline *tr)
+{
+	struct bpf_prog_array *new_array;
+	struct bpf_trampoline *dup;
+	int i;
+
+	dup = bpf_trampoline_alloc();
+	if (!dup)
+		return NULL;
+
+	for (i = 0; i < BPF_TRAMP_MAX; i++) {
+		if (bpf_prog_array_copy(tr->progs_array[i], NULL, NULL, 0, &new_array))
+			goto error;
+		dup->progs_array[i] = new_array;
+	}
+	refcount_inc(&tr->refcnt);
+	return dup;
+
+error:
+	for (i = 0; i < BPF_TRAMP_MAX; i++) {
+		bpf_prog_array_free(dup->progs_array[i]);
+	}
+	kfree(dup);
+	return NULL;
+}
+
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info)
 {
@@ -892,7 +935,6 @@ static void __bpf_trampoline_put(struct bpf_trampoline *tr)
 			continue;
 		if (WARN_ON_ONCE(!bpf_prog_array_is_empty(tr->progs_array[i])))
 			return;
-		bpf_prog_array_free(tr->progs_array[i]);
 	}
 
 	/* This code will be executed even when the last bpf_tramp_image
@@ -902,11 +944,7 @@ static void __bpf_trampoline_put(struct bpf_trampoline *tr)
 	 * multiple rcu callbacks.
 	 */
 	hlist_del(&tr->hlist);
-	if (tr->fops) {
-		ftrace_free_filter(tr->fops);
-		kfree(tr->fops);
-	}
-	kfree(tr);
+	bpf_trampoline_free(tr);
 }
 
 void bpf_trampoline_put(struct bpf_trampoline *tr)
