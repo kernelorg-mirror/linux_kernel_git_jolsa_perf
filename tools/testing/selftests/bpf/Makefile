@@ -364,7 +364,8 @@ LINKED_SKELS := test_static_linked.skel.h linked_funcs.skel.h		\
 		test_subskeleton.skel.h test_subskeleton_lib.skel.h	\
 		test_usdt.skel.h tracing_multi_fentry_test.skel.h	\
 		tracing_multi_fexit_test.skel.h				\
-		tracing_multi_fentry_fexit_test.skel.h
+		tracing_multi_fentry_fexit_test.skel.h			\
+		tracing_multi_fentry_split_test.skel.h
 
 LSKELS := fentry_test.c fexit_test.c fexit_sleep.c atomics.c 		\
 	trace_printk.c trace_vprintk.c map_ptr_kern.c 			\
@@ -388,6 +389,7 @@ test_usdt.skel.h-deps := test_usdt.bpf.o test_usdt_multispec.bpf.o
 tracing_multi_fentry_test.skel.h-deps := tracing_multi_fentry.bpf.o tracing_multi_check.bpf.o
 tracing_multi_fexit_test.skel.h-deps := tracing_multi_fexit.bpf.o tracing_multi_check.bpf.o
 tracing_multi_fentry_fexit_test.skel.h-deps := tracing_multi_fentry_fexit.bpf.o tracing_multi_check.bpf.o
+tracing_multi_fentry_split_test.skel.h-deps := tracing_multi_fentry_split.bpf.o tracing_multi_check.bpf.o
 
 LINKED_BPF_SRCS := $(patsubst %.bpf.o,%.c,$(foreach skel,$(LINKED_SKELS),$($(skel)-deps)))
 
