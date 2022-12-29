@@ -5,6 +5,7 @@
 #include "tracing_multi_fentry_fexit_test.skel.h"
 #include "tracing_multi_fentry_split_test.skel.h"
 #include "tracing_multi_fexit_split_test.skel.h"
+#include "tracing_multi_single_test.skel.h"
 #include "trace_helpers.h"
 #include <bpf/btf.h>
 
@@ -218,6 +219,135 @@ cleanup:
 	tracing_multi_fexit_split_test__destroy(skel);
 }
 
+/* single links first, then multi link */
+static void multi_single_1_test(void)
+{
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	struct tracing_multi_single_test *skel = NULL;
+	int err, prog_fd;
+
+	skel = tracing_multi_single_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(skel->links.prog3 , "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(skel->links.prog4, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(skel->links.prog5, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.fentry_multi = bpf_program__attach_tracing_multi(skel->progs.fentry_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fentry_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.prog3);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test_result, 8, "test_result");
+	ASSERT_EQ(skel->bss->test3_result, 1, "test3_result");
+	ASSERT_EQ(skel->bss->test4_result, 1, "test4_result");
+	ASSERT_EQ(skel->bss->test5_result, 1, "test5_result");
+
+cleanup:
+	tracing_multi_single_test__destroy(skel);
+}
+
+/* multi link first, then single links  */
+static void multi_single_2_test(void)
+{
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	struct tracing_multi_single_test *skel = NULL;
+	int err, prog_fd;
+
+	skel = tracing_multi_single_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	skel->links.fentry_multi = bpf_program__attach_tracing_multi(skel->progs.fentry_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fentry_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(skel->links.prog3, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(skel->links.prog5, "attach_fentry"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.prog3);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test_result, 8, "test_result");
+	ASSERT_EQ(skel->bss->test3_result, 1, "test3_result");
+	ASSERT_EQ(skel->bss->test4_result, 1, "test4_result");
+	ASSERT_EQ(skel->bss->test5_result, 1, "test5_result");
+
+cleanup:
+	tracing_multi_single_test__destroy(skel);
+}
+
+/* single, multi, single, multi, single */
+static void multi_single_3_test(void)
+{
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	struct tracing_multi_single_test *skel = NULL;
+	int err, prog_fd;
+
+	skel = tracing_multi_single_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(skel->links.prog3, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.fentry_multi = bpf_program__attach_tracing_multi(skel->progs.fentry_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fentry_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(skel->links.prog4, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.fexit_multi = bpf_program__attach_tracing_multi(skel->progs.fexit_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fexit_multi), "bpf_program__attach_tracing_multi"))
+                goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(skel->links.prog5, "attach_fentry"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.prog3);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	/* we attach both multi fentry and fexit, so checking for 16  */
+	ASSERT_EQ(skel->bss->test_result, 16, "test_result");
+	ASSERT_EQ(skel->bss->test_ret_result, 8, "test_ret_result");
+	ASSERT_EQ(skel->bss->test3_result, 1, "test3_result");
+	ASSERT_EQ(skel->bss->test4_result, 1, "test4_result");
+	ASSERT_EQ(skel->bss->test5_result, 1, "test5_result");
+
+cleanup:
+	tracing_multi_single_test__destroy(skel);
+}
+
 void test_tracing_multi_test(void)
 {
 	if (test__start_subtest("fentry"))
@@ -230,4 +360,10 @@ void test_tracing_multi_test(void)
 		multi_fentry_split_test();
 	if (test__start_subtest("fexit_split"))
 		multi_fexit_split_test();
+	if (test__start_subtest("single_1"))
+		multi_single_1_test();
+	if (test__start_subtest("single_2"))
+		multi_single_2_test();
+	if (test__start_subtest("single_3"))
+		multi_single_3_test();
 }
