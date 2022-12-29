@@ -8317,6 +8317,24 @@ error:
 	return ERR_PTR(err);
 }
 
+bool btf_bitmap_funcs_test_bit(struct btf_bitmap *bmap, u32 id, bool clear)
+{
+	u32 *func;
+	bool set;
+
+	func = bsearch(&id, btf_vmlinux->funcs_ids, btf_vmlinux->funcs_size,
+		      sizeof(*btf_vmlinux->funcs_ids), funcs_ids_cmp);
+	if (!func)
+		return -EINVAL;
+	id = func - btf_vmlinux->funcs_ids;
+	set = test_bit(id, bmap->bm);
+	if (set && clear) {
+		clear_bit(id, bmap->bm);
+		bmap->cnt--;
+	}
+	return set;
+}
+
 void btf_bitmap_free(struct btf_bitmap *bm)
 {
 	kvfree(bm);
