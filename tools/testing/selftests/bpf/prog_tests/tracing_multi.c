@@ -6,6 +6,7 @@
 #include "tracing_multi_fentry_split_test.skel.h"
 #include "tracing_multi_fexit_split_test.skel.h"
 #include "tracing_multi_single_test.skel.h"
+#include "tracing_multi_rollback.skel.h"
 #include "trace_helpers.h"
 #include <bpf/btf.h>
 
@@ -339,6 +340,118 @@ cleanup:
 	tracing_multi_single_test__destroy(skel);
 }
 
+static void multi_rollback_1_test(void)
+{
+	struct tracing_multi_rollback *skel = NULL;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	struct btf *btf;
+	u32 ids[9];
+
+	btf = btf__load_vmlinux_btf();
+	if (!ASSERT_OK_PTR(btf, "btf__load_vmlinux_btf"))
+		return;
+
+	skel = tracing_multi_rollback__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "tracing_multi_rollback__open_and_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+
+#define GET_ID(__sym, __id)						\
+	__id = (u32) btf__find_by_name_kind(btf, __sym, BTF_KIND_FUNC);	\
+	if (!ASSERT_GT((s32) __id, 0, "btf__find_by_name_kind"))	\
+		goto cleanup;
+
+	GET_ID("bpf_fentry_test1", ids[0])
+	GET_ID("bpf_fentry_test2", ids[1])
+	GET_ID("bpf_fentry_test3", ids[2])
+	GET_ID("bpf_fentry_test4", ids[3])
+	GET_ID("bpf_fentry_test5", ids[4])
+	GET_ID("bpf_fentry_test6", ids[5])
+	GET_ID("bpf_fentry_test7", ids[6])
+	GET_ID("bpf_fentry_test8", ids[7])
+	GET_ID("bpf_fentry_notrace", ids[8])
+
+#undef GET_ID
+
+	mopts.btf_ids = ids;
+	mopts.cnt = 9;
+
+	skel->links.fexit_multi = bpf_program__attach_tracing_multi(skel->progs.fexit_multi, NULL, &mopts);
+	ASSERT_ERR(libbpf_get_error(skel->links.fexit_multi), "bpf_program__attach_tracing_multi");
+
+cleanup:
+	tracing_multi_rollback__destroy(skel);
+}
+
+static void multi_rollback_2_test(void)
+{
+	struct tracing_multi_rollback *skel = NULL;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	struct btf *btf;
+	u32 ids[8];
+
+	btf = btf__load_vmlinux_btf();
+	if (!ASSERT_OK_PTR(btf, "btf__load_vmlinux_btf"))
+		return;
+
+	skel = tracing_multi_rollback__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "tracing_multi_rollback__open_and_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.fentry_multi = bpf_program__attach_tracing_multi(skel->progs.fentry_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fentry_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+#define GET_ID(__sym, __id)						\
+	__id = (u32) btf__find_by_name_kind(btf, __sym, BTF_KIND_FUNC);	\
+	if (!ASSERT_GT((s32) __id, 0, "btf__find_by_name_kind"))	\
+		goto cleanup;
+
+	GET_ID("bpf_fentry_test1", ids[0])
+	GET_ID("bpf_fentry_test2", ids[1])
+	GET_ID("bpf_fentry_test3", ids[2])
+	GET_ID("bpf_fentry_test4", ids[3])
+	GET_ID("bpf_fentry_test5", ids[4])
+	GET_ID("bpf_fentry_test6", ids[5])
+	GET_ID("bpf_fentry_test7", ids[6])
+	GET_ID("bpf_fentry_notrace", ids[7])
+
+#undef GET_ID
+
+	mopts.btf_ids = ids;
+	mopts.cnt = 8;
+
+	skel->links.fexit_multi = bpf_program__attach_tracing_multi(skel->progs.fexit_multi, NULL, &mopts);
+	ASSERT_ERR(libbpf_get_error(skel->links.fexit_multi), "bpf_program__attach_tracing_multi");
+
+cleanup:
+	tracing_multi_rollback__destroy(skel);
+}
+
 void test_tracing_multi_test(void)
 {
 	if (test__start_subtest("fentry"))
@@ -357,4 +470,8 @@ void test_tracing_multi_test(void)
 		multi_single_2_test();
 	if (test__start_subtest("single_3"))
 		multi_single_3_test();
+	if (test__start_subtest("rollback_1"))
+		multi_rollback_1_test();
+	if (test__start_subtest("rollback_2"))
+		multi_rollback_2_test();
 }
