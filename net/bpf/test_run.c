@@ -484,6 +484,12 @@ out:
 __diag_push();
 __diag_ignore_all("-Wmissing-prototypes",
 		  "Global functions as their definitions will be in vmlinux BTF");
+
+notrace int noinline bpf_fentry_notrace(void)
+{
+	return 1;
+}
+
 int noinline bpf_fentry_test1(int a)
 {
 	return a + 1;
