@@ -348,6 +348,124 @@ cleanup:
 	tracing_multi_single_test__destroy(skel);
 }
 
+static void multi_rollback_1_test(void)
+{
+	struct tracing_multi_single_test *skel = NULL;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	const char *funcs[] = {
+		"bpf_fentry_test1",
+		"bpf_fentry_test2",
+		"bpf_fentry_test3",
+		"bpf_fentry_test4",
+		"bpf_fentry_test5",
+		"bpf_fentry_test6",
+		"bpf_fentry_test7",
+		"bpf_fentry_test8",
+		"bpf_fentry_notrace",
+	};
+	int err, prog_fd;
+	u32 ids[9];
+
+	skel = tracing_multi_single_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "tracing_multi_single_test__open_and_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	if (!ASSERT_OK(resolve_btf_ids(funcs, ids, 8), "resolve_btf_ids"))
+		goto cleanup;
+
+	mopts.btf_ids = ids;
+	mopts.cnt = 9;
+
+	skel->links.fexit_multi = bpf_program__attach_tracing_multi(skel->progs.fexit_multi, NULL, &mopts);
+	if (!ASSERT_ERR(libbpf_get_error(skel->links.fexit_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.prog3);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test3_result, 1, "test3_result");
+	ASSERT_EQ(skel->bss->test4_result, 1, "test4_result");
+	ASSERT_EQ(skel->bss->test5_result, 1, "test5_result");
+
+cleanup:
+	tracing_multi_single_test__destroy(skel);
+}
+
+static void multi_rollback_2_test(void)
+{
+	struct tracing_multi_single_test *skel = NULL;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, mopts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	const char *funcs[] = {
+		"bpf_fentry_test1",
+		"bpf_fentry_test2",
+		"bpf_fentry_test3",
+		"bpf_fentry_test4",
+		"bpf_fentry_test5",
+		"bpf_fentry_test6",
+		"bpf_fentry_test7",
+		"bpf_fentry_notrace",
+	};
+	int err, prog_fd;
+	u32 ids[8];
+
+	skel = tracing_multi_single_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "tracing_multi_single_test__open_and_load"))
+		goto cleanup;
+
+	skel->links.prog3 = bpf_program__attach_trace(skel->progs.prog3);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog4 = bpf_program__attach_trace(skel->progs.prog4);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.prog5 = bpf_program__attach_trace(skel->progs.prog5);
+	if (!ASSERT_OK_PTR(link, "attach_fentry"))
+		goto cleanup;
+
+	skel->links.fentry_multi = bpf_program__attach_tracing_multi(skel->progs.fentry_multi, "bpf_fentry_test*", NULL);
+	if (!ASSERT_OK(libbpf_get_error(skel->links.fentry_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	if (!ASSERT_OK(resolve_btf_ids(funcs, ids, 8), "resolve_btf_ids"))
+		goto cleanup;
+
+	mopts.btf_ids = ids;
+	mopts.cnt = 8;
+
+	skel->links.fexit_multi = bpf_program__attach_tracing_multi(skel->progs.fexit_multi, NULL, &mopts);
+	if (!ASSERT_ERR(libbpf_get_error(skel->links.fexit_multi), "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.prog3);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test_result, 8, "test_result");
+	ASSERT_EQ(skel->bss->test3_result, 1, "test3_result");
+	ASSERT_EQ(skel->bss->test4_result, 1, "test4_result");
+	ASSERT_EQ(skel->bss->test5_result, 1, "test5_result");
+
+cleanup:
+	tracing_multi_single_test__destroy(skel);
+}
+
 void test_tracing_multi_test(void)
 {
 	if (test__start_subtest("fentry"))
@@ -366,4 +484,8 @@ void test_tracing_multi_test(void)
 		multi_single_2_test();
 	if (test__start_subtest("single_3"))
 		multi_single_3_test();
+	if (test__start_subtest("rollback_1"))
+		multi_rollback_1_test();
+	if (test__start_subtest("rollback_2"))
+		multi_rollback_2_test();
 }
