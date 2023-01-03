@@ -1050,6 +1050,16 @@ struct bpf_trampoline {
 	u64 selector;
 	struct module *mod;
 	struct bpf_shim_tramp_link *shim_link;
+	struct {
+		struct list_head list;
+		struct btf_bitmap *bmap;
+	} multi;
+	struct {
+		bool nolink;
+		bool free;
+		struct btf_bitmap *bmap;
+		struct list_head list;
+	} rollback;
 };
 
 struct bpf_attach_target_info {
@@ -1097,6 +1107,9 @@ struct bpf_trampoline *bpf_trampoline_get(u64 key,
 					  struct bpf_attach_target_info *tgt_info);
 void bpf_trampoline_put(struct bpf_trampoline *tr);
 int arch_prepare_bpf_dispatcher(void *image, void *buf, s64 *funcs, int num_funcs);
+
+int bpf_trampoline_multi_attach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
+int bpf_trampoline_multi_detach(struct bpf_tramp_prog *tp, struct btf_bitmap *bmap);
 
 /*
  * When the architecture supports STATIC_CALL replace the bpf_dispatcher_fn
