@@ -184,11 +184,14 @@ static struct bpf_trampoline *bpf_trampoline_add_single(u64 key)
 	return tr;
 }
 
+static int check_multi_trampoline(u64 key);
+
 static struct bpf_trampoline *bpf_trampoline_lookup(u64 key)
 {
 	struct bpf_trampoline *tr;
 
 	mutex_lock(&trampoline_mutex);
+	WARN_ON_ONCE(check_multi_trampoline(key));
 	tr = __bpf_trampoline_lookup(key);
 	if (tr) {
 		refcount_inc(&tr->refcnt);
@@ -1160,6 +1163,17 @@ extern struct btf *btf_vmlinux;
 #define for_each_multi_trampoline(tr, n)			\
 	list_for_each_entry_safe(tr, n, &multi_trampolines, multi.list)
 
+static struct bpf_trampoline* in_multi_trampoline(int btf_id)
+{
+	struct bpf_trampoline *tr, *n;
+
+	for_each_multi_trampoline(tr, n) {
+		if (btf_bitmap_funcs_test_bit(tr->multi.bmap, btf_id, false))
+			return tr;
+	}
+	return NULL;
+}
+
 static int trampoline_multi_resolve(struct bpf_trampoline *tr)
 {
 	unsigned long *ips;
@@ -1298,6 +1312,52 @@ trampoline_multi_split(struct bpf_trampoline *tr, struct btf_bitmap *and,
 	return err;
 }
 
+static int check_multi_trampoline(u64 key)
+{
+	struct btf_bitmap *bmap_tmp, *bmap_new;
+	struct bpf_trampoline *tr, *tr_new;
+	u32 obj_id, btf_id;
+	int err;
+
+	bpf_trampoline_unpack_key(key, &obj_id, &btf_id);
+	if (obj_id != btf_obj_id(btf_vmlinux))
+		return 0;
+
+	tr = in_multi_trampoline(btf_id);
+	if (!tr)
+		return 0;
+
+	bmap_new = btf_bitmap_funcs_id(btf_id);
+	bmap_tmp = btf_bitmap_funcs_alloc();
+	if (!bmap_new || !bmap_tmp) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	tr_new = trampoline_multi_split_trampoline(tr, bmap_new);
+	if (IS_ERR(tr_new)) {
+		err = PTR_ERR(tr_new);
+		goto out;
+	}
+
+	btf_bitmap_copy(bmap_tmp, tr->multi.bmap);
+	btf_bitmap_andnot(tr->multi.bmap, tr->multi.bmap, bmap_new);
+	err = trampoline_multi_reset_bmap(tr);
+	if (err)
+		goto out_rollback;
+
+	err = bpf_trampoline_update(tr_new, true);
+
+out_rollback:
+	if (err) {
+		btf_bitmap_copy(tr->multi.bmap, bmap_tmp);
+		bpf_trampoline_free(tr_new);
+	}
+out:
+	btf_bitmap_free(bmap_new);
+	btf_bitmap_free(bmap_tmp);
+	return err;
+}
 
 static int multi_link(struct bpf_tramp_prog *tp, struct list_head *tramps)
 {
