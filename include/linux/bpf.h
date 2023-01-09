@@ -1055,7 +1055,6 @@ struct bpf_trampoline {
 		struct btf_bitmap *bmap;
 	} multi;
 	struct {
-		bool nolink;
 		bool free;
 		struct btf_bitmap *bmap;
 		struct list_head list;

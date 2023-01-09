@@ -262,6 +262,8 @@ static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
 	unsigned long faddr;
 	int ret;
 
+trace_printk("REG1 tr %p bmap %p ip %p\n", tr, tr->multi.bmap, ip);
+
 	if (tr->multi.bmap)
 		return register_ftrace_direct_multi(tr->fops, (long)new_addr);
 
@@ -278,6 +280,7 @@ static int register_fentry(struct bpf_trampoline *tr, void *new_addr)
 	if (tr->func.ftrace_managed) {
 		ftrace_set_filter_ip(tr->fops, (unsigned long)ip, 0, 1);
 		ret = register_ftrace_direct_multi(tr->fops, (long)new_addr);
+trace_printk("REG2 ret %d\n", ret);
 	} else {
 		ret = bpf_arch_text_poke(ip, BPF_MOD_CALL, NULL, new_addr);
 	}
@@ -1273,6 +1276,7 @@ trampoline_multi_split_trampoline(struct bpf_trampoline *tr, struct btf_bitmap *
 		return ERR_PTR(err);
 	}
 	tr_new->flags = tr->flags;
+	memcpy(&tr_new->func.model, &tr->func.model, sizeof(tr->func.model));
 	refcount_add(refcount_read(&tr->refcnt), &tr_new->refcnt);
 	return tr_new;
 }
@@ -1318,6 +1322,7 @@ static int check_multi_trampoline(u64 key)
 	struct bpf_trampoline *tr, *tr_new;
 	u32 obj_id, btf_id;
 	int err;
+	unsigned long *ip;
 
 	bpf_trampoline_unpack_key(key, &obj_id, &btf_id);
 	if (obj_id != btf_obj_id(btf_vmlinux))
@@ -1340,13 +1345,18 @@ static int check_multi_trampoline(u64 key)
 		goto out;
 	}
 
+	btf_bitmap_funcs_resolve(bmap_new, &ip);
+	tr_new->func.addr = (void*) *ip;
+
 	btf_bitmap_copy(bmap_tmp, tr->multi.bmap);
 	btf_bitmap_andnot(tr->multi.bmap, tr->multi.bmap, bmap_new);
 	err = trampoline_multi_reset_bmap(tr);
+trace_printk("CHECK1 tr %p tr_new %p err %d\n", tr, tr_new, err);
 	if (err)
 		goto out_rollback;
 
 	err = bpf_trampoline_update(tr_new, true);
+trace_printk("CHECK2 err %d\n", err);
 
 out_rollback:
 	if (err) {
@@ -1365,7 +1375,7 @@ static int multi_link(struct bpf_tramp_prog *tp, struct list_head *tramps)
 	int err;
 
 	list_for_each_entry(tr, tramps, rollback.list) {
-		if (tr->rollback.nolink)
+		if (tr->rollback.bmap)
 			continue;
 		err = bpf_trampoline_link_prog(tp, tr);
 		if (err)
@@ -1375,7 +1385,7 @@ static int multi_link(struct bpf_tramp_prog *tp, struct list_head *tramps)
 
 error_rollback:
 	list_for_each_entry_continue_reverse(tr, tramps, rollback.list) {
-		if (tr->rollback.nolink)
+		if (tr->rollback.bmap)
 			continue;
 		WARN_ON_ONCE(bpf_trampoline_unlink_prog(tp, tr));
 	}
