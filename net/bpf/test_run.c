@@ -794,6 +794,10 @@ static void *bpf_test_init(const union bpf_attr *kattr, u32 user_size,
 	return data;
 }
 
+int bpf_test_func2_globl(int a);
+int bpf_test_func1_globl(struct bpf_prog *prog);
+int bpf_test_func3_globl(struct bpf_prog *prog);
+
 int bpf_prog_test_run_tracing(struct bpf_prog *prog,
 			      const union bpf_attr *kattr,
 			      union bpf_attr __user *uattr)
@@ -818,6 +822,10 @@ int bpf_prog_test_run_tracing(struct bpf_prog *prog,
 		    bpf_fentry_test7((struct bpf_fentry_test_t *)0) != 0 ||
 		    bpf_fentry_test8(&arg) != 0)
 			goto out;
+
+		bpf_test_func1_globl(prog);
+		bpf_test_func2_globl(1);
+		bpf_test_func3_globl(prog);
 		break;
 	case BPF_MODIFY_RETURN:
 		ret = bpf_modify_return_test(1, &b);

@@ -16666,6 +16666,7 @@ int bpf_check_attach_target(struct bpf_verifier_log *log,
 				addr = (long) tgt_prog->aux->func[subprog]->bpf_func;
 		} else {
 			addr = kallsyms_lookup_name(tname);
+trace_printk("ATTACH addr %lx ID %u func %s\n", addr, btf_id, tname);
 			if (!addr) {
 				bpf_log(log,
 					"The address of function %s cannot be found\n",
