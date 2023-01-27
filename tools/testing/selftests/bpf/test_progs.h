@@ -310,6 +310,17 @@ int test__join_cgroup(const char *path);
 	___ok;								\
 })
 
+#define ASSERT_MEMEQ(actual, expected, sz, name) ({			\
+	static int duration = 0;					\
+	const char *___act = actual;					\
+	const char *___exp = expected;					\
+	bool ___ok = memcmp(___act, ___exp, sz) == 0;			\
+	CHECK(!___ok, (name),						\
+	      "unexpected %s: actual '%s' != expected '%s'\n",		\
+	      (name), ___act, ___exp);					\
+	___ok;								\
+})
+
 #define ASSERT_STRNEQ(actual, expected, len, name) ({			\
 	static int duration = 0;					\
 	const char *___act = actual;					\
