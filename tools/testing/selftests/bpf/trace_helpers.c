@@ -11,6 +11,9 @@
 #include <linux/perf_event.h>
 #include <sys/mman.h>
 #include "trace_helpers.h"
+#include <linux/limits.h>
+#include <libelf.h>
+#include <gelf.h>
 
 #define DEBUGFS "/sys/kernel/debug/tracing/"
 
@@ -229,4 +232,97 @@ ssize_t get_rel_offset(uintptr_t addr)
 
 	fclose(f);
 	return -EINVAL;
+}
+
+#define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a)-1)
+#define __ALIGN_MASK(x, mask)	(((x)+(mask))&~(mask))
+
+static int
+parse_build_id_buf(const void *note_start, Elf32_Word note_size,
+		   char *build_id)
+{
+	Elf32_Word note_offs = 0, new_offs;
+
+	while (note_offs + sizeof(Elf32_Nhdr) < note_size) {
+		Elf32_Nhdr *nhdr = (Elf32_Nhdr *)(note_start + note_offs);
+
+		if (nhdr->n_type == 3 &&
+		    nhdr->n_namesz == sizeof("GNU") &&
+		    !strcmp((char *)(nhdr + 1), "GNU") &&
+		    nhdr->n_descsz > 0 &&
+		    nhdr->n_descsz <= BPF_BUILD_ID_SIZE) {
+			memcpy(build_id, note_start + note_offs +
+			       ALIGN(sizeof("GNU"), 4) + sizeof(Elf32_Nhdr),
+			       nhdr->n_descsz);
+			memset(build_id + nhdr->n_descsz, 0,
+			       BPF_BUILD_ID_SIZE - nhdr->n_descsz);
+			return (int) nhdr->n_descsz;
+		}
+		new_offs = note_offs + sizeof(Elf32_Nhdr) +
+			   ALIGN(nhdr->n_namesz, 4) + ALIGN(nhdr->n_descsz, 4);
+
+		if (new_offs >= note_size)  /* overflow */
+			break;
+		note_offs = new_offs;
+	}
+	return -EINVAL;
+}
+
+int read_build_id(const char *path, char *build_id, size_t sz)
+{
+	int fd, err = -1;
+	Elf *elf = NULL;
+	GElf_Ehdr ehdr;
+	size_t max, i;
+
+	if (sz < BPF_BUILD_ID_SIZE)
+		return -1;
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+
+	(void)elf_version(EV_CURRENT);
+
+	elf = elf_begin(fd, ELF_C_READ, NULL);
+	if (!elf)
+		goto cleanup;
+
+	if (elf_kind(elf) != ELF_K_ELF)
+		goto cleanup;
+
+	if (gelf_getehdr(elf, &ehdr) == NULL)
+		goto cleanup;
+
+	if (ehdr.e_ident[EI_CLASS] != ELFCLASS64)
+		goto cleanup;
+
+	for (i = 0; i < ehdr.e_phnum; i++) {
+		GElf_Phdr mem, *phdr;
+		char *data;
+
+		phdr = gelf_getphdr(elf, i, &mem);
+		if (!phdr)
+			goto cleanup;
+
+		if (phdr->p_type != PT_NOTE)
+			continue;
+
+		data = elf_rawfile(elf, &max);
+		if (!data)
+			goto cleanup;
+
+		if (phdr->p_offset >= max || (phdr->p_offset + phdr->p_memsz >= max))
+			goto cleanup;
+
+		err = parse_build_id_buf(data + phdr->p_offset, phdr->p_memsz, build_id);
+		if (err > 0)
+			goto cleanup;
+	}
+
+cleanup:
+	if (elf)
+		elf_end(elf);
+	close(fd);
+	return err;
 }
