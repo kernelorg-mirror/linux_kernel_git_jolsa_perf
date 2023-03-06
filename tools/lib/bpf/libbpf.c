@@ -10459,6 +10459,117 @@ static int attach_kprobe_multi(const struct bpf_program *prog, long cookie, stru
 	return libbpf_get_error(*link);
 }
 
+static int resolve_full_path(const char *file, char *result, size_t result_sz);
+
+static int
+elf_find_patern_func_offset(const char *binary_path, const char *pattern,
+			    const char ***pnames, unsigned long **poffsets, size_t *pcnt);
+
+struct bpf_link *
+bpf_program__attach_uprobe_multi_opts(const struct bpf_program *prog,
+				      const char *binary_path,
+				      const char *func_pattern,
+				      const struct bpf_uprobe_multi_opts *opts)
+{
+	LIBBPF_OPTS(bpf_link_create_opts, lopts);
+	unsigned long *resolved_offsets = NULL;
+	const char **resolved_symbols = NULL;
+	const unsigned long *offsets = NULL;
+	const char **resolved_paths = NULL;
+	struct bpf_link *link = NULL;
+	char errmsg[STRERR_BUFSIZE];
+	const char **paths, **syms;
+	char full_path[PATH_MAX];
+	int i, err, link_fd, prog_fd;
+	const __u64 *cookies;
+	bool retprobe;
+	size_t cnt;
+
+	if (!OPTS_VALID(opts, bpf_uprobe_multi_opts))
+		return libbpf_err_ptr(-EINVAL);
+
+	paths   = OPTS_GET(opts, paths, NULL);
+	syms    = OPTS_GET(opts, syms, NULL);
+	offsets = OPTS_GET(opts, offsets, NULL);
+	cookies = OPTS_GET(opts, cookies, NULL);
+	cnt     = OPTS_GET(opts, cnt, 0);
+
+	if (!binary_path && !func_pattern && !paths)
+		return libbpf_err_ptr(-EINVAL);
+	if (binary_path && paths)
+		return libbpf_err_ptr(-EINVAL);
+	if (func_pattern && syms)
+		return libbpf_err_ptr(-EINVAL);
+	if (func_pattern && offsets)
+		return libbpf_err_ptr(-EINVAL);
+	if (syms && offsets)
+		return libbpf_err_ptr(-EINVAL);
+	if (func_pattern && cnt)
+		return libbpf_err_ptr(-EINVAL);
+
+	if (binary_path && !strchr(binary_path, '/')) {
+		err = resolve_full_path(binary_path, full_path, sizeof(full_path));
+		if (err) {
+			pr_warn("prog '%s': failed to resolve full path for '%s': %d\n",
+				prog->name, binary_path, err);
+			return libbpf_err_ptr(err);
+		}
+		binary_path = full_path;
+	}
+
+	if (func_pattern) {
+		err = elf_find_patern_func_offset(binary_path, func_pattern,
+						  &resolved_symbols, &resolved_offsets,
+						  &cnt);
+		if (err < 0)
+			return libbpf_err_ptr(err);
+		offsets = resolved_offsets;
+
+		resolved_paths = calloc(cnt, sizeof(*paths));
+		if (!resolved_paths)
+			goto error;
+		for (i = 0; i < cnt; i++)
+			resolved_paths[i] = binary_path;
+		paths = resolved_paths;
+	}
+
+	retprobe = OPTS_GET(opts, retprobe, false);
+
+	lopts.uprobe_multi.paths = paths;
+	lopts.uprobe_multi.offsets = offsets;
+	lopts.uprobe_multi.cookies = cookies;
+	lopts.uprobe_multi.cnt = cnt;
+	lopts.uprobe_multi.flags = retprobe ? BPF_F_UPROBE_MULTI_RETURN : 0;
+
+	link = calloc(1, sizeof(*link));
+	if (!link) {
+		err = -ENOMEM;
+		goto error;
+	}
+	link->detach = &bpf_link__detach_fd;
+
+	prog_fd = bpf_program__fd(prog);
+	link_fd = bpf_link_create(prog_fd, 0, BPF_TRACE_UPROBE_MULTI, &lopts);
+	if (link_fd < 0) {
+		err = -errno;
+		pr_warn("prog '%s': failed to attach: %s\n",
+			prog->name, libbpf_strerror_r(err, errmsg, sizeof(errmsg)));
+		goto error;
+	}
+	link->fd = link_fd;
+	free(resolved_offsets);
+	free(resolved_symbols);
+	free(resolved_paths);
+	return link;
+
+error:
+	free(resolved_offsets);
+	free(resolved_symbols);
+	free(resolved_paths);
+	free(link);
+	return libbpf_err_ptr(err);
+}
+
 static void gen_uprobe_legacy_event_name(char *buf, size_t buf_sz,
 					 const char *binary_path, uint64_t offset)
 {
@@ -10944,7 +11055,7 @@ out:
 	return err;
 }
 
-__maybe_unused static int
+static int
 elf_find_patern_func_offset(const char *binary_path, const char *pattern,
 			    const char ***pnames, unsigned long **poffsets, size_t *pcnt)
 {
