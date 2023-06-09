@@ -7481,6 +7481,40 @@ int libbpf_kallsyms_parse(kallsyms_cb_t cb, void *ctx)
 	return err;
 }
 
+static int libbpf_addr_parse(kallsyms_cb_t cb, void *ctx)
+{
+	char sym_type = 0, sym_name[500];
+	unsigned long long sym_addr;
+	int ret, err = 0;
+	FILE *f;
+
+	f = fopen("/sys/kernel/debug/tracing/available_filter_functions_addrs", "re");
+	if (!f) {
+		err = -errno;
+		pr_warn("failed to open /proc/kallsyms: %d\n", err);
+		return err;
+	}
+
+	while (true) {
+		ret = fscanf(f, "%llx %499s%*[^\n]\n",
+			     &sym_addr, sym_name);
+		if (ret == EOF && feof(f))
+			break;
+		if (ret != 2) {
+			pr_warn("failed to read kallsyms entry: %d\n", ret);
+			err = -EINVAL;
+			break;
+		}
+
+		err = cb(sym_addr, sym_type, sym_name, ctx);
+		if (err)
+			break;
+	}
+
+	fclose(f);
+	return err;
+}
+
 static int kallsyms_cb(unsigned long long sym_addr, char sym_type,
 		       const char *sym_name, void *ctx)
 {
@@ -10593,7 +10627,7 @@ bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 		return libbpf_err_ptr(-EINVAL);
 
 	if (pattern) {
-		err = libbpf_kallsyms_parse(resolve_kprobe_multi_cb, &res);
+		err = libbpf_addr_parse(resolve_kprobe_multi_cb, &res);
 		if (err)
 			goto error;
 		if (!res.cnt) {

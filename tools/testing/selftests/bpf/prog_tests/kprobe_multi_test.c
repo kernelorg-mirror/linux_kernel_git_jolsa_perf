@@ -322,10 +322,12 @@ static bool symbol_equal(long key1, long key2, void *ctx __maybe_unused)
 	return strcmp((const char *) key1, (const char *) key2) == 0;
 }
 
-static int get_syms(char ***symsp, size_t *cntp, bool kernel)
+static int get_syms(unsigned long **addrsp, size_t *cntp, bool kernel)
 {
-	size_t cap = 0, cnt = 0, i;
-	char *name = NULL, **syms = NULL;
+	size_t cap = 0, cnt = 0;
+	unsigned long long addr;
+	unsigned long *addrs = NULL;
+	char *name = NULL;
 	struct hashmap *map;
 	char buf[256];
 	FILE *f;
@@ -340,9 +342,9 @@ static int get_syms(char ***symsp, size_t *cntp, bool kernel)
 	 */
 
 	if (access("/sys/kernel/tracing/trace", F_OK) == 0)
-		f = fopen("/sys/kernel/tracing/available_filter_functions", "r");
+		f = fopen("/sys/kernel/tracing/available_filter_functions_addrs", "r");
 	else
-		f = fopen("/sys/kernel/debug/tracing/available_filter_functions", "r");
+		f = fopen("/sys/kernel/debug/tracing/available_filter_functions_addrs", "r");
 
 	if (!f)
 		return -EINVAL;
@@ -360,7 +362,7 @@ static int get_syms(char ***symsp, size_t *cntp, bool kernel)
 			continue;
 
 		free(name);
-		if (sscanf(buf, "%ms$*[^\n]\n", &name) != 1)
+		if (sscanf(buf, "%llx %ms$*[^\n]\n", &addr, &name) != 2)
 			continue;
 		/*
 		 * We attach to almost all kernel functions and some of them
@@ -388,16 +390,18 @@ static int get_syms(char ***symsp, size_t *cntp, bool kernel)
 		if (err)
 			goto error;
 
-		err = libbpf_ensure_mem((void **) &syms, &cap,
-					sizeof(*syms), cnt + 1);
+	//	fprintf(stderr, "KRAVA %p %s cnt %lu cap %lu\n", addrs, name, cnt, cap);
+
+		err = libbpf_ensure_mem((void **) &addrs, &cap,
+					sizeof(*addrs), cnt + 1);
 		if (err)
 			goto error;
 
-		syms[cnt++] = name;
+		addrs[cnt++] = (unsigned long) addr;
 		name = NULL;
 	}
 
-	*symsp = syms;
+	*addrsp = addrs;
 	*cntp = cnt;
 
 error:
@@ -405,9 +409,7 @@ error:
 	fclose(f);
 	hashmap__free(map);
 	if (err) {
-		for (i = 0; i < cnt; i++)
-			free(syms[i]);
-		free(syms);
+		free(addrs);
 	}
 	return err;
 }
@@ -420,17 +422,17 @@ static void test_kprobe_multi_bench_attach(bool kernel)
 	long detach_start_ns, detach_end_ns;
 	double attach_delta, detach_delta;
 	struct bpf_link *link = NULL;
-	char **syms = NULL;
-	size_t cnt = 0, i;
+	unsigned long *addrs = NULL;
+	size_t cnt = 0;
 
-	if (!ASSERT_OK(get_syms(&syms, &cnt, kernel), "get_syms"))
+	if (!ASSERT_OK(get_syms(&addrs, &cnt, kernel), "get_syms"))
 		return;
 
 	skel = kprobe_multi_empty__open_and_load();
 	if (!ASSERT_OK_PTR(skel, "kprobe_multi_empty__open_and_load"))
 		goto cleanup;
 
-	opts.syms = (const char **) syms;
+	opts.addrs = addrs;
 	opts.cnt = cnt;
 
 	attach_start_ns = get_time_ns();
@@ -454,11 +456,8 @@ static void test_kprobe_multi_bench_attach(bool kernel)
 
 cleanup:
 	kprobe_multi_empty__destroy(skel);
-	if (syms) {
-		for (i = 0; i < cnt; i++)
-			free(syms[i]);
-		free(syms);
-	}
+	if (addrs)
+		free(addrs);
 }
 
 void serial_test_kprobe_multi_bench_attach(void)
