@@ -6453,6 +6453,7 @@ struct bpf_link_info {
 			__aligned_u64 addrs; /* in/out: addresses buffer ptr */
 			__u32 count;
 			__u32 flags;
+			__u64 missed;
 		} kprobe_multi;
 		struct {
 			__u32 type; /* enum bpf_perf_event_type */
