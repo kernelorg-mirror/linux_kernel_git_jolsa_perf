@@ -2403,7 +2403,11 @@ static inline bool has_current_bpf_ctx(void)
 	return !!current->bpf_ctx;
 }
 
+#define BPF_PROG_NO_START_TIME 1
+
 void notrace bpf_prog_inc_misses_counter(struct bpf_prog *prog);
+void notrace bpf_prog_update_prog_stats(struct bpf_prog *prog,
+                                        u64 start);
 
 void bpf_dynptr_init(struct bpf_dynptr_kern *ptr, void *data,
 		     enum bpf_dynptr_type type, u32 offset, u32 size);
@@ -2640,6 +2644,11 @@ static inline bool has_current_bpf_ctx(void)
 }
 
 static inline void bpf_prog_inc_misses_counter(struct bpf_prog *prog)
+{
+}
+
+static void bpf_prog_update_prog_stats(struct bpf_prog *prog,
+				       u64 start)
 {
 }
 
