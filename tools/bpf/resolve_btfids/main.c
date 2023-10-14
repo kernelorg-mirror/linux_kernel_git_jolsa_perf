@@ -76,8 +76,10 @@
 #include <bpf/btf.h>
 #include <bpf/libbpf.h>
 #include <subcmd/parse-options.h>
+#include <linux/types.h>
 
-#define BTF_IDS_SECTION	".BTF_ids"
+#define BTF_IDS_SECTION		".BTF_ids"
+#define BTF_IDS_DATA_SECTION	".BTF_ids.data"
 #define BTF_ID		"__BTF_ID__"
 
 #define BTF_STRUCT	"struct"
@@ -119,6 +121,7 @@ struct object {
 
 		struct sec_desc	 symbols;
 		struct sec_desc	 ids;
+		struct sec_desc	 ids_data;
 	} efile;
 
 	struct rb_root	sets;
@@ -404,6 +407,10 @@ static int elf_collect(struct object *obj)
 			obj->efile.ids.data = data;
 			obj->efile.ids.idx = idx;
 			obj->efile.ids.sh = sh;
+		} else if (!strcmp(name, BTF_IDS_DATA_SECTION)) {
+			obj->efile.ids_data.data = data;
+			obj->efile.ids_data.idx = idx;
+			obj->efile.ids_data.sh = sh;
 		}
 
 		if (compressed_section_fix(elf, scn, &sh))
@@ -724,6 +731,330 @@ static const char * const resolve_btfids_usage[] = {
 	NULL
 };
 
+struct token {
+	int id;
+	char *type;
+	char *name;
+	int set_cnt;
+	__s32 btf_id;
+	__u32 flags;
+};
+
+static char *get_string(Elf_Data *data, char **pptr)
+{
+	char *start = data->d_buf, *end = data->d_buf + data->d_size;
+	char *ptr = *pptr ?: start;
+	size_t len, rem = end - ptr;
+
+	len = strnlen(ptr, rem);
+	if (len == rem)
+		return NULL;
+
+	*pptr = ptr + len + 1;
+	return ptr;
+}
+
+static void *get_value_ptr(Elf_Data *data, char **pptr, size_t size)
+{
+	char *end = data->d_buf + data->d_size;
+	char *ptr = *pptr ?: data->d_buf;
+	size_t len, rem = end - ptr;
+
+	if (rem < size)
+		return NULL;
+
+	*pptr = ptr + size;
+	return ptr;
+}
+
+static int get_token(Elf_Data *data, struct token *tok, char **ptr)
+{
+	size_t len, rem;
+	__u8 id;
+
+#define STRING(data, ptr) ({		\
+	char *__ptr = get_string(data, ptr);	\
+	if (!__ptr)				\
+		return -EINVAL;			\
+	__ptr;					\
+})
+
+#define VALUE(data, ptr, type) ({				\
+	type *__ptr = get_value_ptr(data, ptr, sizeof(type));	\
+	if (!__ptr)						\
+		return (type) -EINVAL;				\
+	*(type *)__ptr;						\
+})
+
+	tok->id = VALUE(data, ptr, u8);
+
+	switch (tok->id) {
+	case BTF_IDS_DATA_ID:
+		tok->type = STRING(data, ptr);
+		tok->name = STRING(data, ptr);
+		pr_debug("ID %s %s\n", tok->type, tok->name);
+		break;
+	case BTF_IDS_DATA_ID_FLAGS:
+		tok->type = STRING(data, ptr);
+		tok->name = STRING(data, ptr);
+		tok->flags = VALUE(data, ptr, __u32);
+		pr_debug("ID_FLAGS %s %s 0x%x\n", tok->type, tok->name, tok->flags);
+		break;
+	case BTF_IDS_DATA_ID_UNUSED:
+		pr_debug("ID_UNUSED\n");
+		break;
+	case BTF_IDS_DATA_LIST:
+		tok->name = STRING(data, ptr);
+		pr_debug("LIST %s\n", tok->name);
+		break;
+	case BTF_IDS_DATA_SET_START:
+		tok->name = STRING(data, ptr);
+		pr_debug("SET_START %s\n", tok->name);
+		break;
+	case BTF_IDS_DATA_SET_END:
+		tok->name = STRING(data, ptr);
+		pr_debug("SET_END %s\n", tok->name);
+		break;
+	case BTF_IDS_DATA_SET8_START:
+		tok->name = STRING(data, ptr);
+		pr_debug("SET8_START %s\n", tok->name);
+		break;
+	case BTF_IDS_DATA_SET8_END:
+		tok->name = STRING(data, ptr);
+		pr_debug("SET8_END %s\n", tok->name);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+#undef STRING
+#undef VALUE
+	return 0;
+}
+
+static struct token *get_tokens(Elf_Data *data, int *pcnt)
+{
+	struct token tok, *arr, *tmp, *set;
+	char *ptr = NULL;
+	int err = 0, cnt = 0;
+
+	while ((err = get_token(data, &tok, &ptr)) == 0) {
+		if (err)
+			return NULL;
+		cnt++;
+	}
+
+	arr = calloc(cnt, sizeof(tok));
+	if (!arr)
+		return NULL;
+
+	cnt = 0;
+	ptr = NULL;
+	while (get_token(data, &arr[cnt], &ptr) == 0) {
+		cnt++;
+	}
+
+	*pcnt = cnt;
+	return arr;
+}
+
+static int fixup_sets_cnt(struct token *arr, int cnt)
+{
+	struct token *set = NULL, *tok;
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		tok = &arr[i];
+		switch (tok->id) {
+		case BTF_IDS_DATA_SET_START:
+		case BTF_IDS_DATA_SET8_START:
+			if (set)
+				return -EINVAL;
+			set = tok;
+			break;
+		case BTF_IDS_DATA_ID:
+		case BTF_IDS_DATA_ID_FLAGS:
+		case BTF_IDS_DATA_ID_UNUSED:
+			if (set)
+				set->set_cnt++;
+			break;
+		case BTF_IDS_DATA_SET_END:
+		case BTF_IDS_DATA_SET8_END:
+			if (!set)
+				return -EINVAL;
+			set = NULL;
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int cmp_set(const void *pa, const void *pb)
+{
+	const struct token *a = pa, *b = pb;
+
+	return a->btf_id - b->btf_id;
+}
+
+static int fixup_sets_sort(struct token *arr, int cnt)
+{
+	struct token *tok;
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		tok = &arr[i];
+		switch (tok->id) {
+		case BTF_IDS_DATA_SET_START:
+		case BTF_IDS_DATA_SET8_START:
+			qsort(tok + 1, tok->set_cnt, sizeof(*tok), cmp_set);
+		default:
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static u32 get_kind(const char *type)
+{
+	if (!strcmp(type, "func"))
+		return BTF_KIND_FUNC;
+	if (!strcmp(type, "struct"))
+		return BTF_KIND_STRUCT;
+	if (!strcmp(type, "union"))
+		return BTF_KIND_UNION;
+	if (!strcmp(type, "typedef"))
+		return BTF_KIND_TYPEDEF;
+	return BTF_KIND_UNKN;
+}
+
+static int resolve_ids(struct object *obj, struct token *arr, int cnt)
+{
+	struct token *set = NULL, *tok;
+	struct btf *base_btf = NULL;
+	int err, type_id;
+	struct btf *btf;
+	__u32 nr_types, kind;
+	__s32 btf_id;
+	int i;
+
+	if (obj->base_btf_path) {
+		base_btf = btf__parse(obj->base_btf_path, NULL);
+		err = libbpf_get_error(base_btf);
+		if (err) {
+			pr_err("FAILED: load base BTF from %s: %s\n",
+			       obj->base_btf_path, strerror(-err));
+			return -1;
+		}
+	}
+
+	btf = btf__parse_split(obj->btf ?: obj->path, base_btf);
+	err = libbpf_get_error(btf);
+	if (err) {
+		pr_err("FAILED: load BTF from %s: %s\n",
+			obj->btf ?: obj->path, strerror(-err));
+		return -1;
+	}
+
+
+	for (i = 0; i < cnt; i++) {
+		tok = &arr[i];
+		switch (tok->id) {
+		case BTF_IDS_DATA_ID:
+		case BTF_IDS_DATA_ID_FLAGS:
+			kind = get_kind(tok->type);
+			if (kind == BTF_KIND_UNKN)
+				return -1;
+			tok->btf_id = btf__find_by_name_kind(btf, tok->name, kind);
+		default:
+			break;
+		}
+	}
+
+	btf__free(base_btf);
+	btf__free(btf);
+	return 0;
+}
+
+static int generate(struct object *obj, const char *output, bool skip_btf)
+{
+	Elf_Data *data = obj->efile.ids_data.data;
+	struct token *arr, *tok;
+	int err, cnt = 0, i;
+	FILE *out;
+
+	if (!data)
+		return 0;
+
+	arr = get_tokens(data, &cnt);
+	if (!arr)
+		return -1;
+
+	err = fixup_sets_cnt(arr, cnt);
+	if (err)
+		goto out_free;
+
+	if (!skip_btf) {
+		err = resolve_ids(obj, arr, cnt);
+		if (err)
+			goto out_free;
+
+		err = fixup_sets_sort(arr, cnt);
+		if (err)
+			goto out_free;
+	}
+
+	out = fopen(output, "w");
+	if (!out) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	fprintf(out, ".section .note.GNU-stack,\"\",@progbits\n");
+	fprintf(out, ".section .BTF_ids, \"a\"\n");
+
+	for (i = 0; i < cnt; i++) {
+		tok = &arr[i];
+
+		switch (tok->id) {
+		case BTF_IDS_DATA_ID:
+			fprintf(out, ".long %u\n", tok->btf_id);
+			break;
+		case BTF_IDS_DATA_ID_FLAGS:
+			fprintf(out, ".long %u\n", tok->btf_id);
+			fprintf(out, ".long 0x%x\n", tok->flags);
+			break;
+		case BTF_IDS_DATA_ID_UNUSED:
+			fprintf(out, ".long %u\n", 0);
+			break;
+		case BTF_IDS_DATA_LIST:
+			fprintf(out, ".globl %s;\n", tok->name);
+			fprintf(out, "%s:\n", tok->name);
+			break;
+		case BTF_IDS_DATA_SET_START:
+			fprintf(out, ".globl %s;\n", tok->name);
+			fprintf(out, "%s:\n", tok->name);
+			fprintf(out, ".long %u\n", tok->set_cnt);
+			break;
+		case BTF_IDS_DATA_SET8_START:
+			fprintf(out, ".globl %s;\n", tok->name);
+			fprintf(out, "%s:\n", tok->name);
+			fprintf(out, ".long %u\n", tok->set_cnt);
+			fprintf(out, ".long %u\n", 0);
+			break;
+		default:
+			break;
+		}
+	}
+
+	fclose(out);
+
+out_free:
+	free(arr);
+	return err;
+}
+
 int main(int argc, const char **argv)
 {
 	struct object obj = {
@@ -737,6 +1068,8 @@ int main(int argc, const char **argv)
 		.funcs    = RB_ROOT,
 		.sets     = RB_ROOT,
 	};
+	const char *generate_file = NULL;
+	bool skip_btf = false;
 	struct option btfid_options[] = {
 		OPT_INCR('v', "verbose", &verbose,
 			 "be more verbose (show errors, etc)"),
@@ -744,6 +1077,10 @@ int main(int argc, const char **argv)
 			   "BTF data"),
 		OPT_STRING('b', "btf_base", &obj.base_btf_path, "file",
 			   "path of file providing base BTF"),
+		OPT_STRING(0, "generate", &generate_file, "file",
+			   "generate BTF_ids section source into file"),
+		OPT_BOOLEAN(0, "skip-btf", &skip_btf,
+			   "skip BTF resolve while generating .BTF_ids section (for --generate option only)"),
 		OPT_END()
 	};
 	int err = -1;
@@ -757,6 +1094,11 @@ int main(int argc, const char **argv)
 
 	if (elf_collect(&obj))
 		goto out;
+
+	if (generate_file) {
+		err = generate(&obj, generate_file, skip_btf);
+		goto out;
+	}
 
 	/* We did not find .BTF_ids section, nothing to do..  */
 	if (!has_ids(&obj)) {
