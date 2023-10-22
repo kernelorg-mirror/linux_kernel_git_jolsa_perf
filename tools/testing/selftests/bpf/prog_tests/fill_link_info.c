@@ -314,13 +314,18 @@ noinline void uprobe_link_info_func_3(void)
 	asm volatile ("");
 }
 
-static int verify_umulti_link_info(int fd, bool retprobe, __u64 *offsets, __u64 *cookies)
+__maybe_unused static short uprobe_link_info_sema_1;
+__maybe_unused static short uprobe_link_info_sema_2;
+__maybe_unused static short uprobe_link_info_sema_3;
+
+static int verify_umulti_link_info(int fd, bool retprobe, __u64 *offsets, __u64 *cookies, unsigned long *ref_ctr_offsets)
 {
 	char path[PATH_MAX], path_buf[PATH_MAX];
 	struct bpf_link_info info;
 	__u32 len = sizeof(info);
 	__u64 offsets_buf[3];
 	__u64 cookies_buf[3];
+	unsigned long ref_ctr_offsets_buf[3];
 	int i, err;
 
 	memset(path, 0, sizeof(path));
@@ -349,12 +354,14 @@ again:
 	if (!info.uprobe_multi.offsets) {
 		info.uprobe_multi.offsets = ptr_to_u64(offsets_buf);
 		info.uprobe_multi.cookies = ptr_to_u64(cookies_buf);
+		info.uprobe_multi.ref_ctr_offsets = ptr_to_u64(ref_ctr_offsets_buf);
 		goto again;
 	}
 
 	for (i = 0; i < info.uprobe_multi.count; i++) {
 		ASSERT_EQ(offsets_buf[i], offsets[i], "info.uprobe_multi.offsets");
 		ASSERT_EQ(cookies_buf[i], cookies[i], "info.uprobe_multi.cookies");
+		ASSERT_EQ(ref_ctr_offsets_buf[i], ref_ctr_offsets[i], "info.uprobe_multi.ref_ctr_offsets");
 	}
 	return 0;
 }
@@ -424,16 +431,28 @@ static void test_uprobe_multi_fill_link_info(struct test_fill_link_info *skel,
 		0xbeef,
 		0xcafe,
 	};
+	const char *sema[3] = {
+		"uprobe_link_info_sema_1",
+		"uprobe_link_info_sema_2",
+		"uprobe_link_info_sema_3",
+	};
+	unsigned long ref_ctr_offsets[3];
 	__u64 *offsets;
 	int link_fd, err;
 
+	err = elf_resolve_syms_offsets("/proc/self/exe", 3, sema,
+				       (unsigned long **) &ref_ctr_offsets, STT_OBJECT);
+	if (!ASSERT_OK(err, "elf_resolve_syms_offsets"))
+		return;
+
 	err = elf_resolve_syms_offsets("/proc/self/exe", 3, syms,
-				       (unsigned long **) &offsets);
+				       (unsigned long **) &offsets, STT_FUNC);
 	if (!ASSERT_OK(err, "elf_resolve_syms_offsets"))
 		return;
 
 	opts.syms = syms;
 	opts.cookies = &cookies[0];
+	opts.ref_ctr_offsets = &ref_ctr_offsets[0];
 	opts.cnt = ARRAY_SIZE(syms);
 
 	skel->links.umulti_run = bpf_program__attach_uprobe_multi(skel->progs.umulti_run, 0,
@@ -445,10 +464,10 @@ static void test_uprobe_multi_fill_link_info(struct test_fill_link_info *skel,
 	if (invalid)
 		verify_umulti_invalid_user_buffer(link_fd);
 	else
-		verify_umulti_link_info(link_fd, retprobe, offsets, cookies);
+		verify_umulti_link_info(link_fd, retprobe, offsets, cookies, ref_ctr_offsets);
 
-out:
 	bpf_link__detach(skel->links.umulti_run);
+out:
 	free(offsets);
 }
 
