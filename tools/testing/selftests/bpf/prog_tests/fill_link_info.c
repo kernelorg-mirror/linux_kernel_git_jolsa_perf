@@ -314,12 +314,13 @@ noinline void uprobe_link_info_func_3(void)
 	asm volatile ("");
 }
 
-static int verify_umulti_link_info(int fd, bool retprobe, __u64 *offsets)
+static int verify_umulti_link_info(int fd, bool retprobe, __u64 *offsets, __u64 *cookies)
 {
 	char path[PATH_MAX], path_buf[PATH_MAX];
 	struct bpf_link_info info;
 	__u32 len = sizeof(info);
 	__u64 offsets_buf[3];
+	__u64 cookies_buf[3];
 	int i, err;
 
 	memset(path, 0, sizeof(path));
@@ -347,11 +348,14 @@ again:
 
 	if (!info.uprobe_multi.offsets) {
 		info.uprobe_multi.offsets = ptr_to_u64(offsets_buf);
+		info.uprobe_multi.cookies = ptr_to_u64(cookies_buf);
 		goto again;
 	}
 
-	for (i = 0; i < info.uprobe_multi.count; i++)
+	for (i = 0; i < info.uprobe_multi.count; i++) {
 		ASSERT_EQ(offsets_buf[i], offsets[i], "info.uprobe_multi.offsets");
+		ASSERT_EQ(cookies_buf[i], cookies[i], "info.uprobe_multi.cookies");
+	}
 	return 0;
 }
 
@@ -415,6 +419,11 @@ static void test_uprobe_multi_fill_link_info(struct test_fill_link_info *skel,
 		"uprobe_link_info_func_2",
 		"uprobe_link_info_func_3",
 	};
+	__u64 cookies[3] = {
+		0xdead,
+		0xbeef,
+		0xcafe,
+	};
 	__u64 *offsets;
 	int link_fd, err;
 
@@ -424,6 +433,7 @@ static void test_uprobe_multi_fill_link_info(struct test_fill_link_info *skel,
 		return;
 
 	opts.syms = syms;
+	opts.cookies = &cookies[0];
 	opts.cnt = ARRAY_SIZE(syms);
 
 	skel->links.umulti_run = bpf_program__attach_uprobe_multi(skel->progs.umulti_run, 0,
@@ -435,7 +445,7 @@ static void test_uprobe_multi_fill_link_info(struct test_fill_link_info *skel,
 	if (invalid)
 		verify_umulti_invalid_user_buffer(link_fd);
 	else
-		verify_umulti_link_info(link_fd, retprobe, offsets);
+		verify_umulti_link_info(link_fd, retprobe, offsets, cookies);
 
 out:
 	bpf_link__detach(skel->links.umulti_run);
