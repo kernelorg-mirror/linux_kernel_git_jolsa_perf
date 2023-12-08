@@ -2821,6 +2821,29 @@ kprobe_multi_link_prog_run_global(struct bpf_kprobe_multi_link *link,
 }
 
 static int
+kprobe_multi_link_prog_run_local(struct bpf_kprobe_multi_link *link,
+				 struct bpf_prog *prog, unsigned long entry_ip,
+				 struct pt_regs *regs)
+{
+	int err = 0;
+
+	migrate_disable();
+	rcu_read_lock();
+
+	if (unlikely(this_cpu_inc_return(*(prog->active)) != 1)) {
+		bpf_prog_inc_misses_counter(prog);
+		goto out;
+	}
+
+	err = kprobe_multi_link_prog_run(link, prog, entry_ip, regs);
+out:
+	this_cpu_dec(*(prog->active));
+	rcu_read_unlock();
+	migrate_enable();
+	return err;
+}
+
+static int
 kprobe_multi_link_entry_handler_global(struct fprobe *fp, unsigned long fentry_ip,
 				       unsigned long ret_ip, struct pt_regs *regs,
 				       void *data)
@@ -2843,6 +2866,31 @@ kprobe_multi_link_exit_handler_global(struct fprobe *fp, unsigned long fentry_ip
 	link = container_of(fp, struct bpf_kprobe_multi_link, fp);
 	prog = link->return_prog ?: link->link.prog;
 	kprobe_multi_link_prog_run_global(link, prog, get_entry_ip(fentry_ip), regs);
+}
+
+static int
+kprobe_multi_link_entry_handler_local(struct fprobe *fp, unsigned long fentry_ip,
+				      unsigned long ret_ip, struct pt_regs *regs,
+				      void *data)
+{
+	struct bpf_kprobe_multi_link *link;
+
+	link = container_of(fp, struct bpf_kprobe_multi_link, fp);
+	kprobe_multi_link_prog_run_local(link, link->link.prog, get_entry_ip(fentry_ip), regs);
+	return 0;
+}
+
+static void
+kprobe_multi_link_exit_handler_local(struct fprobe *fp, unsigned long fentry_ip,
+				     unsigned long ret_ip, struct pt_regs *regs,
+				     void *data)
+{
+	struct bpf_kprobe_multi_link *link;
+	struct bpf_prog *prog;
+
+	link = container_of(fp, struct bpf_kprobe_multi_link, fp);
+	prog = link->return_prog ?: link->link.prog;
+	kprobe_multi_link_prog_run_local(link, prog, get_entry_ip(fentry_ip), regs);
 }
 
 static int symbols_cmp_r(const void *a, const void *b, const void *priv)
@@ -2964,7 +3012,9 @@ int bpf_kprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 	struct bpf_kprobe_multi_link *link = NULL;
 	struct bpf_prog *return_prog = NULL;
 	struct bpf_link_primer link_primer;
+	fprobe_entry_cb entry_cb;
 	int err, return_prog_fd;
+	fprobe_exit_cb exit_cb;
 	void __user *ucookies;
 	unsigned long *addrs;
 	u32 flags, cnt, size;
@@ -2981,7 +3031,8 @@ int bpf_kprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 
 	flags = attr->link_create.kprobe_multi.flags;
 	if (flags & ~(BPF_F_KPROBE_MULTI_RETURN |
-		      BPF_F_KPROBE_MULTI_RETURN_PROG))
+		      BPF_F_KPROBE_MULTI_RETURN_PROG |
+		      BPF_F_KPROBE_MULTI_REENTRY_LOCAL))
 		return -EINVAL;
 
 	uaddrs = u64_to_user_ptr(attr->link_create.kprobe_multi.addrs);
@@ -3069,14 +3120,22 @@ int bpf_kprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 	if (err)
 		goto error;
 
+	if (flags & BPF_F_KPROBE_MULTI_REENTRY_LOCAL) {
+		entry_cb = kprobe_multi_link_entry_handler_local;
+		exit_cb = kprobe_multi_link_exit_handler_local;
+	} else {
+		entry_cb = kprobe_multi_link_entry_handler_global;
+		exit_cb = kprobe_multi_link_exit_handler_global;
+	}
+
 	if (flags & BPF_F_KPROBE_MULTI_RETURN_PROG) {
-		link->fp.entry_handler = kprobe_multi_link_entry_handler_global;
-		link->fp.exit_handler = kprobe_multi_link_exit_handler_global;
+		link->fp.entry_handler = entry_cb;
+		link->fp.exit_handler = exit_cb;
 	} else {
 		if (flags & BPF_F_KPROBE_MULTI_RETURN)
-			link->fp.exit_handler = kprobe_multi_link_exit_handler_global;
+			link->fp.exit_handler = exit_cb;
 		else
-			link->fp.entry_handler = kprobe_multi_link_entry_handler_global;
+			link->fp.entry_handler = entry_cb;
 	}
 
 	link->addrs = addrs;

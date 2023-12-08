@@ -1243,8 +1243,9 @@ enum bpf_perf_event_type {
  * BPF_TRACE_KPROBE_MULTI attach type to create return probe.
  */
 enum {
-	BPF_F_KPROBE_MULTI_RETURN      = (1U << 0),
-	BPF_F_KPROBE_MULTI_RETURN_PROG = (1U << 1),
+	BPF_F_KPROBE_MULTI_RETURN        = (1U << 0),
+	BPF_F_KPROBE_MULTI_RETURN_PROG   = (1U << 1),
+	BPF_F_KPROBE_MULTI_REENTRY_LOCAL = (1U << 2),
 };
 
 /* link_create.uprobe_multi.flags used in LINK_CREATE command for
