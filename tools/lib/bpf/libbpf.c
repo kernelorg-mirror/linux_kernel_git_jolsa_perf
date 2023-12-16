@@ -10627,10 +10627,11 @@ cleanup:
 	return err;
 }
 
-struct bpf_link *
-bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
-				      const char *pattern,
-				      const struct bpf_kprobe_multi_opts *opts)
+static struct bpf_link *
+attach_kprobe_multi_opts(const struct bpf_program *prog,
+			 const struct bpf_program *prog_return,
+			 const char *pattern,
+			 const struct bpf_kprobe_multi_opts *opts)
 {
 	LIBBPF_OPTS(bpf_link_create_opts, lopts);
 	struct kprobe_multi_resolve res = {
@@ -10681,6 +10682,11 @@ bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
 	lopts.kprobe_multi.cnt = cnt;
 	lopts.kprobe_multi.flags = retprobe ? BPF_F_KPROBE_MULTI_RETURN : 0;
 
+	if (prog_return) {
+		lopts.kprobe_multi.return_prog_fd = bpf_program__fd(prog_return);
+		lopts.kprobe_multi.flags |= BPF_F_KPROBE_MULTI_RETURN_PROG;
+	}
+
 	link = calloc(1, sizeof(*link));
 	if (!link) {
 		err = -ENOMEM;
@@ -10704,6 +10710,23 @@ error:
 	free(link);
 	free(res.addrs);
 	return libbpf_err_ptr(err);
+}
+
+struct bpf_link *
+bpf_program__attach_kprobe_multi_opts(const struct bpf_program *prog,
+				      const char *pattern,
+				      const struct bpf_kprobe_multi_opts *opts)
+{
+	return attach_kprobe_multi_opts(prog, NULL, pattern, opts);
+}
+
+struct bpf_link *
+bpf_program__attach_kprobe_multi_opts2(const struct bpf_program *prog,
+				       const struct bpf_program *prog_return,
+				       const char *pattern,
+				       const struct bpf_kprobe_multi_opts *opts)
+{
+	return attach_kprobe_multi_opts(prog, prog_return, pattern, opts);
 }
 
 static int attach_kprobe(const struct bpf_program *prog, long cookie, struct bpf_link **link)

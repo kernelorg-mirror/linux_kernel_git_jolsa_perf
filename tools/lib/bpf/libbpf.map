@@ -412,4 +412,5 @@ LIBBPF_1.3.0 {
 } LIBBPF_1.2.0;
 
 LIBBPF_1.4.0 {
+		bpf_program__attach_kprobe_multi_opts2;
 } LIBBPF_1.3.0;
