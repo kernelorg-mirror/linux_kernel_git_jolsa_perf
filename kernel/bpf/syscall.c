@@ -5531,6 +5531,13 @@ static int token_create(union bpf_attr *attr)
 	return bpf_token_create(attr);
 }
 
+static int bpf_run_uprobe(union bpf_attr *attr)
+{
+	struct pt_regs *regs = task_pt_regs(current);
+
+	return uprobe_run(attr->uprobe.vaddr, regs);
+}
+
 static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 {
 	union bpf_attr attr;
@@ -5666,6 +5673,9 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 		break;
 	case BPF_TOKEN_CREATE:
 		err = token_create(&attr);
+		break;
+	case BPF_UPROBE:
+		err = bpf_run_uprobe(&attr);
 		break;
 	default:
 		err = -EINVAL;
