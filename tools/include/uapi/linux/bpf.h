@@ -898,6 +898,13 @@ union bpf_iter_link_info {
  *		A new file descriptor (a nonnegative integer), or -1 if an
  *		error occurred (in which case, *errno* is set appropriately).
  *
+ * BPF_UPROBE
+ *	Description
+ *		yep
+ *
+ *	Return
+ *		sure
+ *
  * NOTES
  *	eBPF objects (maps and programs) can be shared between processes.
  *
@@ -953,6 +960,7 @@ enum bpf_cmd {
 	BPF_LINK_DETACH,
 	BPF_PROG_BIND_MAP,
 	BPF_TOKEN_CREATE,
+	BPF_UPROBE,
 	__MAX_BPF_CMD,
 };
 
@@ -1798,6 +1806,9 @@ union bpf_attr {
 		__u32		bpffs_fd;
 	} token_create;
 
+	struct { /* struct used by BPF_UPROBE command */
+		__u64		vaddr;
+	} uprobe;
 } __attribute__((aligned(8)));
 
 /* The description below is an attempt at providing documentation to eBPF

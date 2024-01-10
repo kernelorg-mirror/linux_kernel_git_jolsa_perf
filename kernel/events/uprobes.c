@@ -2097,6 +2097,23 @@ static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 	up_read(&uprobe->register_rwsem);
 }
 
+int uprobe_run(unsigned long vaddr, struct pt_regs *regs)
+{
+	struct uprobe *uprobe;
+	int is_swbp;
+
+	uprobe = find_active_uprobe(vaddr, &is_swbp);
+	if (!uprobe)
+		return -1;
+
+	if (!get_utask())
+		return -2;
+
+	handler_chain(uprobe, regs);
+	put_uprobe(uprobe);
+	return 0;
+}
+
 static void
 handle_uretprobe_chain(struct return_instance *ri, struct pt_regs *regs)
 {
