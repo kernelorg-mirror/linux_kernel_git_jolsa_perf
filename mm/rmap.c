@@ -1408,6 +1408,7 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 {
 	int nr = folio_nr_pages(folio);
 
+	VM_WARN_ON_FOLIO(!IS_ALIGNED(address, PAGE_SIZE), folio);
 	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
 	VM_BUG_ON_VMA(address < vma->vm_start ||
 			address + (nr << PAGE_SHIFT) > vma->vm_end, vma);
