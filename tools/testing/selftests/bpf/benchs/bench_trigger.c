@@ -166,6 +166,28 @@ static void *uprobe_producer_ret(void *input)
 	return NULL;
 }
 
+static inline int sys_bpf(enum bpf_cmd cmd, union bpf_attr *attr,
+			  unsigned int size)
+{
+	return syscall(__NR_bpf, cmd, attr, size);
+}
+
+static void *uprobe_producer_syscall(void *input)
+{
+	union bpf_attr attr = {};
+	int err;
+
+	attr.uprobe.vaddr = (__u64) uprobe_target_nop;
+
+	while (true) {
+		err = sys_bpf(BPF_UPROBE, &attr, sizeof(attr));
+		if (err)
+			fprintf(stderr, "syscall failed err %d\n", err);
+	}
+
+	return NULL;
+}
+
 static void usetup(bool use_retprobe, void *target_addr)
 {
 	size_t uprobe_offset;
@@ -349,6 +371,24 @@ const struct bench bench_trig_uretprobe_ret = {
 	.name = "trig-uretprobe-ret",
 	.setup = uretprobe_setup_ret,
 	.producer_thread = uprobe_producer_ret,
+	.measure = trigger_measure,
+	.report_progress = hits_drops_report_progress,
+	.report_final = hits_drops_report_final,
+};
+
+const struct bench bench_trig_uprobe_syscall = {
+	.name = "trig-uprobe-syscall",
+	.setup = uprobe_setup_nop,
+	.producer_thread = uprobe_producer_syscall,
+	.measure = trigger_measure,
+	.report_progress = hits_drops_report_progress,
+	.report_final = hits_drops_report_final,
+};
+
+const struct bench bench_trig_uretprobe_syscall = {
+	.name = "trig-uretprobe-syscall",
+	.setup = uretprobe_setup_nop,
+	.producer_thread = uprobe_producer_syscall,
 	.measure = trigger_measure,
 	.report_progress = hits_drops_report_progress,
 	.report_final = hits_drops_report_final,

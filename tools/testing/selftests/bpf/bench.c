@@ -505,6 +505,8 @@ extern const struct bench bench_trig_uprobe_push;
 extern const struct bench bench_trig_uretprobe_push;
 extern const struct bench bench_trig_uprobe_ret;
 extern const struct bench bench_trig_uretprobe_ret;
+extern const struct bench bench_trig_uprobe_syscall;
+extern const struct bench bench_trig_uretprobe_syscall;
 extern const struct bench bench_rb_libbpf;
 extern const struct bench bench_rb_custom;
 extern const struct bench bench_pb_libbpf;
@@ -549,6 +551,8 @@ static const struct bench *benchs[] = {
 	&bench_trig_uretprobe_push,
 	&bench_trig_uprobe_ret,
 	&bench_trig_uretprobe_ret,
+	&bench_trig_uprobe_syscall,
+	&bench_trig_uretprobe_syscall,
 	&bench_rb_libbpf,
 	&bench_rb_custom,
 	&bench_pb_libbpf,
