@@ -566,10 +566,12 @@ struct bpf_uprobe_multi_opts {
 	size_t cnt;
 	/* create return uprobes */
 	bool retprobe;
+	/* create wrapper kprobes */
+	bool wrapper;
 	size_t :0;
 };
 
-#define bpf_uprobe_multi_opts__last_field retprobe
+#define bpf_uprobe_multi_opts__last_field wrapper
 
 /**
  * @brief **bpf_program__attach_uprobe_multi()** attaches a BPF program

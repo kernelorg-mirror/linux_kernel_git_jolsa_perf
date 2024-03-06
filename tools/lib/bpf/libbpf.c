@@ -9273,6 +9273,7 @@ static int attach_trace(const struct bpf_program *prog, long cookie, struct bpf_
 static int attach_kprobe_multi(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_kprobe_wrapper(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_uprobe_multi(const struct bpf_program *prog, long cookie, struct bpf_link **link);
+static int attach_uprobe_wrapper(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_lsm(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 static int attach_iter(const struct bpf_program *prog, long cookie, struct bpf_link **link);
 
@@ -9291,6 +9292,7 @@ static const struct bpf_sec_def section_defs[] = {
 	SEC_DEF("kprobe.wrapper+",	KPROBE,	BPF_TRACE_KPROBE_MULTI, SEC_NONE, attach_kprobe_wrapper),
 	SEC_DEF("uprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
 	SEC_DEF("uretprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
+	SEC_DEF("uprobe.wrapper+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_wrapper),
 	SEC_DEF("uprobe.multi.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
 	SEC_DEF("uretprobe.multi.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
 	SEC_DEF("ksyscall+",		KPROBE,	0, SEC_NONE, attach_ksyscall),
@@ -11610,6 +11612,40 @@ static int attach_uprobe_multi(const struct bpf_program *prog, long cookie, stru
 	return ret;
 }
 
+static int attach_uprobe_wrapper(const struct bpf_program *prog, long cookie, struct bpf_link **link)
+{
+	char *binary_path = NULL, *func_name = NULL;
+	LIBBPF_OPTS(bpf_uprobe_multi_opts, opts,
+		.wrapper = true,
+	);
+	int n, ret = -EINVAL;
+	const char *spec;
+
+	*link = NULL;
+
+	spec = prog->sec_name + sizeof("uprobe.wrapper/") - 1;
+	n = sscanf(spec, "%m[^:]:%m[^\n]",
+		   &binary_path, &func_name);
+
+	switch (n) {
+	case 1:
+		/* but auto-attach is impossible. */
+		ret = 0;
+		break;
+	case 2:
+		*link = bpf_program__attach_uprobe_multi(prog, -1, binary_path, func_name, &opts);
+		ret = libbpf_get_error(*link);
+		break;
+	default:
+		pr_warn("prog '%s': invalid format of section definition '%s'\n", prog->name,
+			prog->sec_name);
+		break;
+	}
+	free(binary_path);
+	free(func_name);
+	return ret;
+}
+
 static void gen_uprobe_legacy_event_name(char *buf, size_t buf_sz,
 					 const char *binary_path, uint64_t offset)
 {
@@ -11848,8 +11884,10 @@ bpf_program__attach_uprobe_multi(const struct bpf_program *prog,
 	struct bpf_link *link = NULL;
 	char errmsg[STRERR_BUFSIZE];
 	char full_path[PATH_MAX];
+	bool retprobe, wrapper;
 	const __u64 *cookies;
 	const char **syms;
+	__u32 flags = 0;
 	size_t cnt;
 
 	if (!OPTS_VALID(opts, bpf_uprobe_multi_opts))
@@ -11918,12 +11956,21 @@ bpf_program__attach_uprobe_multi(const struct bpf_program *prog,
 		offsets = resolved_offsets;
 	}
 
+	retprobe = OPTS_GET(opts, retprobe, false);
+	wrapper  = OPTS_GET(opts, wrapper, false);
+
+	if (retprobe && wrapper)
+		return libbpf_err_ptr(-EINVAL);
+
+	flags |= retprobe ? BPF_F_UPROBE_MULTI_RETURN : 0;
+	flags |= wrapper ? BPF_F_UPROBE_MULTI_WRAPPER : 0;
+
 	lopts.uprobe_multi.path = path;
 	lopts.uprobe_multi.offsets = offsets;
 	lopts.uprobe_multi.ref_ctr_offsets = ref_ctr_offsets;
 	lopts.uprobe_multi.cookies = cookies;
 	lopts.uprobe_multi.cnt = cnt;
-	lopts.uprobe_multi.flags = OPTS_GET(opts, retprobe, false) ? BPF_F_UPROBE_MULTI_RETURN : 0;
+	lopts.uprobe_multi.flags = flags;
 
 	if (pid == 0)
 		pid = getpid();
