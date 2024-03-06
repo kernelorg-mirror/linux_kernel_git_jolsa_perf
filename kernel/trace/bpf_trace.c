@@ -3154,6 +3154,7 @@ struct bpf_uprobe {
 	unsigned long ref_ctr_offset;
 	u64 cookie;
 	struct uprobe_consumer consumer;
+	u64 retmap;
 };
 
 struct bpf_uprobe_multi_link {
@@ -3324,21 +3325,52 @@ uprobe_multi_link_filter(struct uprobe_consumer *con, enum uprobe_filter_ctx ctx
 	return uprobe->link->task->mm == mm;
 }
 
+static inline bool is_uprobe_wrapper(struct bpf_uprobe_multi_link *link)
+{
+	return link->flags & BPF_F_UPROBE_MULTI_WRAPPER;
+}
+
+static void uprobe_wrapper(struct bpf_uprobe *uprobe, unsigned int depth, int ret)
+{
+	if (ret)
+		set_bit(depth, (void *) &uprobe->retmap);
+	else
+		clear_bit(depth, (void *) &uprobe->retmap);
+}
+
 static int
 uprobe_multi_link_handler(struct uprobe_consumer *con, struct pt_regs *regs)
 {
+	struct uprobe_task *utask = current->utask;
+	unsigned int depth = utask->depth;
 	struct bpf_uprobe *uprobe;
+	int ret;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
-	return uprobe_prog_run(uprobe, instruction_pointer(regs), regs);
+
+	ret = uprobe_prog_run(uprobe, instruction_pointer(regs), regs);
+
+	if (is_uprobe_wrapper(uprobe->link)) {
+		uprobe_wrapper(uprobe, depth, ret);
+		return 0;
+	}
+	return ret;
 }
 
 static int
 uprobe_multi_link_ret_handler(struct uprobe_consumer *con, unsigned long func, struct pt_regs *regs)
 {
+	struct uprobe_task *utask = current->utask;
+	unsigned int depth = utask->depth - 1;
 	struct bpf_uprobe *uprobe;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
+
+	if (is_uprobe_wrapper(uprobe->link)) {
+		if (test_bit(depth, (void *) &uprobe->retmap))
+			return 0;
+	}
+
 	return uprobe_prog_run(uprobe, func, regs);
 }
 
@@ -3382,7 +3414,7 @@ int bpf_uprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 		return -EINVAL;
 
 	flags = attr->link_create.uprobe_multi.flags;
-	if (flags & ~BPF_F_UPROBE_MULTI_RETURN)
+	if (flags & ~(BPF_F_UPROBE_MULTI_RETURN | BPF_F_UPROBE_MULTI_WRAPPER))
 		return -EINVAL;
 
 	/*
@@ -3460,6 +3492,11 @@ int bpf_uprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 			uprobes[i].consumer.ret_handler = uprobe_multi_link_ret_handler;
 		else
 			uprobes[i].consumer.handler = uprobe_multi_link_handler;
+
+		if (!(flags & BPF_F_UPROBE_MULTI_WRAPPER))
+			uprobes[i].consumer.handler = uprobe_multi_link_handler;
+		if (flags & (BPF_F_UPROBE_MULTI_WRAPPER | BPF_F_UPROBE_MULTI_RETURN))
+			uprobes[i].consumer.ret_handler = uprobe_multi_link_ret_handler;
 
 		if (pid)
 			uprobes[i].consumer.filter = uprobe_multi_link_filter;
