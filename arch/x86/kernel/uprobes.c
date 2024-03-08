@@ -12,11 +12,13 @@
 #include <linux/ptrace.h>
 #include <linux/uprobes.h>
 #include <linux/uaccess.h>
+#include <linux/syscalls.h>
 
 #include <linux/kdebug.h>
 #include <asm/processor.h>
 #include <asm/insn.h>
 #include <asm/mmu_context.h>
+#include <asm/syscalls.h>
 
 /* Post-execution fixups. */
 
@@ -1096,4 +1098,18 @@ bool arch_uretprobe_is_alive(struct return_instance *ret, enum rp_check ctx,
 		return regs->sp < ret->stack;
 	else
 		return regs->sp <= ret->stack;
+}
+
+SYSCALL_DEFINE1(uprobe, unsigned long, cmd)
+{
+	struct pt_regs *regs = task_pt_regs(current);
+	unsigned long ax, err;
+
+	uprobe_handle_trampoline(regs);
+
+	err = copy_from_user((void*) &ax, (void *) regs->sp, sizeof(ax));
+	WARN_ON_ONCE(err);
+
+	regs->sp = regs->sp + sizeof(regs->sp);
+	return ax;
 }
