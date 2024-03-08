@@ -3155,6 +3155,7 @@ struct bpf_uprobe {
 	u64 cookie;
 	struct uprobe_consumer consumer;
 	u64 retmap;
+	u64 stack[MAX_URETPROBE_DEPTH];
 };
 
 struct bpf_uprobe_multi_link {
@@ -3281,12 +3282,13 @@ static const struct bpf_link_ops bpf_uprobe_multi_link_lops = {
 static int uprobe_prog_run(struct bpf_uprobe *uprobe,
 			   unsigned long entry_ip,
 			   struct pt_regs *regs,
-			   bool is_return)
+			   bool is_return, void *data)
 {
 	struct bpf_uprobe_multi_link *link = uprobe->link;
 	struct bpf_uprobe_multi_run_ctx run_ctx = {
 		.wrapper_ctx = {
 			.is_return = is_return,
+			.data = data,
 		},
 		.entry_ip = entry_ip,
 		.uprobe = uprobe,
@@ -3348,11 +3350,17 @@ uprobe_multi_link_handler(struct uprobe_consumer *con, struct pt_regs *regs)
 	struct uprobe_task *utask = current->utask;
 	unsigned int depth = utask->depth;
 	struct bpf_uprobe *uprobe;
+	u64 *stack = NULL;
 	int ret;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
 
-	ret = uprobe_prog_run(uprobe, instruction_pointer(regs), regs, false);
+	if (is_uprobe_wrapper(uprobe->link)) {
+		stack = &uprobe->stack[depth];
+		stack[0] = 0;
+	}
+
+	ret = uprobe_prog_run(uprobe, instruction_pointer(regs), regs, false, (void *) stack);
 
 	if (is_uprobe_wrapper(uprobe->link)) {
 		uprobe_wrapper(uprobe, depth, ret);
@@ -3367,15 +3375,17 @@ uprobe_multi_link_ret_handler(struct uprobe_consumer *con, unsigned long func, s
 	struct uprobe_task *utask = current->utask;
 	unsigned int depth = utask->depth - 1;
 	struct bpf_uprobe *uprobe;
+	u64 *stack = NULL;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
 
 	if (is_uprobe_wrapper(uprobe->link)) {
 		if (test_bit(depth, (void *) &uprobe->retmap))
 			return 0;
+		stack = &uprobe->stack[depth];
 	}
 
-	return uprobe_prog_run(uprobe, func, regs, true);
+	return uprobe_prog_run(uprobe, func, regs, true, (void *) stack);
 }
 
 static u64 bpf_uprobe_multi_entry_ip(struct bpf_run_ctx *ctx)
