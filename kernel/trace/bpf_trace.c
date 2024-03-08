@@ -3172,6 +3172,7 @@ struct bpf_uprobe {
 	u64 cookie;
 	struct uprobe_consumer consumer;
 	u64 retmap;
+	u64 data[MAX_URETPROBE_DEPTH];
 };
 
 struct bpf_uprobe_multi_link {
@@ -3299,12 +3300,13 @@ static int uprobe_prog_run(struct bpf_uprobe *uprobe,
 			   struct bpf_prog *prog,
 			   unsigned long entry_ip,
 			   struct pt_regs *regs,
-			   bool is_return)
+			   bool is_return, void *data)
 {
 	struct bpf_uprobe_multi_link *link = uprobe->link;
 	struct bpf_uprobe_multi_run_ctx run_ctx = {
 		.session_ctx = {
 			.is_return = is_return,
+			.data = data,
 		},
 		.entry_ip = entry_ip,
 		.uprobe = uprobe,
@@ -3361,12 +3363,18 @@ uprobe_multi_link_handler(struct uprobe_consumer *con, struct pt_regs *regs)
 	unsigned int depth = utask->depth;
 	struct bpf_uprobe *uprobe;
 	struct bpf_prog *prog;
+	u64 *data = NULL;
 	int ret;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
 	prog = uprobe->link->link.prog;
 
-	ret = uprobe_prog_run(uprobe, prog, instruction_pointer(regs), regs, false);
+	if (is_uprobe_multi_session(prog)) {
+		data = &uprobe->data[depth];
+		data[0] = 0;
+	}
+
+	ret = uprobe_prog_run(uprobe, prog, instruction_pointer(regs), regs, false, (void *) data);
 
 	if (is_uprobe_multi_session(prog)) {
 		uprobe_session(uprobe, depth, ret);
@@ -3380,6 +3388,7 @@ uprobe_multi_link_ret_handler(struct uprobe_consumer *con, unsigned long func, s
 {
 	struct bpf_uprobe *uprobe;
 	struct bpf_prog *prog;
+	u64 *data = NULL;
 
 	uprobe = container_of(con, struct bpf_uprobe, consumer);
 	prog = uprobe->link->link.prog;
@@ -3390,9 +3399,10 @@ uprobe_multi_link_ret_handler(struct uprobe_consumer *con, unsigned long func, s
 
 		if (test_bit(depth, (void *) &uprobe->retmap))
 			return 0;
+		data = &uprobe->data[depth];
 	}
 
-	return uprobe_prog_run(uprobe, prog, func, regs, true);
+	return uprobe_prog_run(uprobe, prog, func, regs, true, (void *) data);
 }
 
 static u64 bpf_uprobe_multi_entry_ip(struct bpf_run_ctx *ctx)
