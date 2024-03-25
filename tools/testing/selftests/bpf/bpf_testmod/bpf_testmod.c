@@ -349,6 +349,11 @@ uprobe_ret_handler(struct uprobe_consumer *self, unsigned long func,
 		   struct pt_regs *regs)
 
 {
+#ifdef __x86_64__
+	regs->ax = 0x123456678;
+	regs->cx = 0x1234;
+	regs->r11 = 0x5678;
+#endif
 	return true;
 }
 

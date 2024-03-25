@@ -86,7 +86,7 @@ __naked void uprobe_syscall_arch(struct pt_regs *before, struct pt_regs *after)
 );
 }
 
-static void test_uretprobe(void)
+static void test_uretprobe_regs_equal(void)
 {
 	struct pt_regs before = {}, after = {};
 	unsigned long *pb = (unsigned long *) &before;
@@ -149,8 +149,69 @@ static void test_uretprobe(void)
 cleanup:
 	uprobe_syscall__destroy(skel);
 }
+
+#define BPF_TESTMOD_UPROBE_TEST_FILE "/sys/kernel/bpf_testmod_uprobe"
+
+static int write_bpf_testmod_uprobe(unsigned long offset)
+{
+	char buf[20];
+	int fd, err;
+	size_t n;
+
+	n = sprintf(buf, "%lu", offset);
+
+	fd = open(BPF_TESTMOD_UPROBE_TEST_FILE, O_WRONLY);
+	err = -errno;
+	if (!ASSERT_GE(fd, 0, "testmod_file_open"))
+		return err;
+
+	write(fd, buf, n);
+	close(fd);
+	return 0;
+}
+
+static void test_uretprobe_regs_change(void)
+{
+	struct pt_regs before = {}, after = {};
+	unsigned long *pb = (unsigned long *) &before;
+	unsigned long *pa = (unsigned long *) &after;
+	unsigned long cnt = sizeof(before)/sizeof(*pb);
+	unsigned int i, offset;
+
+	offset = get_uprobe_offset(uprobe_syscall_arch_test);
+	write_bpf_testmod_uprobe(offset);
+
+	uprobe_syscall_arch(&before, &after);
+
+	write_bpf_testmod_uprobe(0);
+
+	for (i = 0; i < cnt; i++) {
+		unsigned int offset = i * sizeof(unsigned long);
+
+		switch (offset) {
+		case offsetof(struct pt_regs, rax):
+			ASSERT_EQ(pa[i], 0x123456678, "rax");
+			break;
+		case offsetof(struct pt_regs, rcx):
+			ASSERT_EQ(pa[i], 0x1234, "rcx");
+			break;
+		case offsetof(struct pt_regs, r11):
+			ASSERT_EQ(pa[i], 0x5678, "r11");
+			break;
+		default:
+			if (!ASSERT_EQ(pa[i], pb[i], "register before-after value check"))
+				fprintf(stdout, "failed register offset %u\n", offset);
+		}
+	}
+}
+
 #else
-static void test_uretprobe(void)
+static void test_uretprobe_regs_equal(void)
+{
+	test__skip();
+}
+
+static void test_uretprobe_regs_change(void)
 {
 	test__skip();
 }
@@ -158,6 +219,8 @@ static void test_uretprobe(void)
 
 void test_uprobe_syscall(void)
 {
-	if (test__start_subtest("uretprobe"))
-		test_uretprobe();
+	if (test__start_subtest("uretprobe_regs_equal"))
+		test_uretprobe_regs_equal();
+	if (test__start_subtest("uretprobe_regs_change"))
+		test_uretprobe_regs_change();
 }
