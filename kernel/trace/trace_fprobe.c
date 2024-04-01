@@ -309,7 +309,7 @@ NOKPROBE_SYMBOL(fentry_perf_func);
 
 static void
 fexit_perf_func(struct trace_fprobe *tf, unsigned long entry_ip,
-		unsigned long ret_ip, struct ftrace_regs *fregs)
+		unsigned long ret_ip, struct ftrace_regs *fregs,
 		void *entry_data)
 {
 	struct trace_event_call *call = trace_probe_event_call(&tf->tp);
@@ -1105,7 +1105,7 @@ static int __trace_fprobe_create(int argc, const char *argv[])
 	}
 
 	if (is_return && tf->tp.entry_arg) {
-		tf->fp.entry_handler = trace_fprobe_entry_handler;
+		//tf->fp.entry_handler = trace_fprobe_entry_handler;
 		tf->fp.entry_data_size = traceprobe_get_entry_data_size(&tf->tp);
 	}
 
