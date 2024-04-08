@@ -176,6 +176,8 @@ extern bool arch_uprobe_can_optimize(struct arch_uprobe *auprobe);
 extern bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr);
 extern int arch_uprobe_optimize(struct arch_uprobe *auprobe, struct mm_struct *mm,
 				unsigned long vaddr, unsigned long tramp_vaddr);
+extern void *arch_uprobe_trampoline(unsigned long *psize);
+extern void handle_syscall_uprobe(struct pt_regs *regs, unsigned long bp_vaddr);
 #else /* !CONFIG_UPROBES */
 struct uprobes_state {
 };
