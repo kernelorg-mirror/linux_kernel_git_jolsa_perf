@@ -310,6 +310,7 @@ static int uprobe_init_insn(struct arch_uprobe *auprobe, struct insn *insn, bool
 
 #ifdef CONFIG_X86_64
 
+#define UPROBE_CMD_ENTRY  0
 #define UPROBE_CMD_RETURN 1
 
 asm (
@@ -436,10 +437,153 @@ sigill:
 	return -1;
 }
 
+static int tramp_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+{
+	return -EPERM;
+}
+
+static struct page *tramp_mapping_pages[2] __ro_after_init;
+
+static struct vm_special_mapping tramp_mapping = {
+	.name   = "[uprobes-trampoline]",
+	.mremap = tramp_mremap,
+	.pages  = tramp_mapping_pages,
+};
+
+static bool __in_uprobe_trampoline(unsigned long ip)
+{
+	struct vm_area_struct *vma = vma_lookup(current->mm, ip);
+
+	return vma && vma_is_special_mapping(vma, &tramp_mapping);
+}
+
+static bool in_uprobe_trampoline(unsigned long ip)
+{
+	struct mm_struct *mm = current->mm;
+	bool found, retry = true;
+	unsigned int seq;
+
+	rcu_read_lock();
+	if (mmap_lock_speculate_try_begin(mm, &seq)) {
+		found = __in_uprobe_trampoline(ip);
+		retry = mmap_lock_speculate_retry(mm, seq);
+	}
+	rcu_read_unlock();
+
+	if (retry) {
+		mmap_read_lock(mm);
+		found = __in_uprobe_trampoline(ip);
+		mmap_read_unlock(mm);
+	}
+	return found;
+}
+
+static long cmd_uprobe(void)
+{
+	struct pt_regs *regs = task_pt_regs(current);
+	unsigned long ip, sp, di_ax_r11_cx_ip[5];
+	int err;
+
+	/* Allow execution only from uprobe trampolines. */
+	if (!in_uprobe_trampoline(regs->ip))
+		goto sigill;
+
+	err = copy_from_user(di_ax_r11_cx_ip, (void __user *)regs->sp, sizeof(di_ax_r11_cx_ip));
+	if (err)
+		goto sigill;
+
+	ip = regs->ip;
+
+	/*
+	 * expose the "right" values of ax/r11/cx/ip/sp to uprobe_consumer/s, plus:
+	 * - adjust ip to the probe address, call saved next instruction address
+	 * - adjust sp to the probe's stack frame (check trampoline code)
+	 */
+	regs->di  = di_ax_r11_cx_ip[0];
+	regs->ax  = di_ax_r11_cx_ip[1];
+	regs->r11 = di_ax_r11_cx_ip[2];
+	regs->cx  = di_ax_r11_cx_ip[3];
+	regs->ip  = di_ax_r11_cx_ip[4] - 5;
+	regs->sp += sizeof(di_ax_r11_cx_ip);
+	regs->orig_ax = -1;
+
+	sp = regs->sp;
+
+	handle_syscall_uprobe(regs, regs->ip);
+
+	/*
+	 * Some of the uprobe consumers has changed sp, we can do nothing,
+	 * just return via iret.
+	 */
+	if (regs->sp != sp)
+		return regs->ax;
+
+	regs->sp -= sizeof(di_ax_r11_cx_ip);
+
+	/* for the case uprobe_consumer has changed ax/r11/cx */
+	di_ax_r11_cx_ip[0] = regs->di;
+	di_ax_r11_cx_ip[1] = regs->ax;
+	di_ax_r11_cx_ip[2] = regs->r11;
+	di_ax_r11_cx_ip[3] = regs->cx;
+
+	/* keep return address unless we are instructed otherwise */
+	if (di_ax_r11_cx_ip[4] - 5 != regs->ip)
+		di_ax_r11_cx_ip[4] = regs->ip;
+
+	regs->ip = ip;
+
+	err = copy_to_user((void __user *)regs->sp, di_ax_r11_cx_ip, sizeof(di_ax_r11_cx_ip));
+	if (err)
+		goto sigill;
+
+	/* ensure sysret, see do_syscall_64() */
+	regs->r11 = regs->flags;
+	regs->cx  = regs->ip;
+	return 0;
+
+sigill:
+	force_sig(SIGILL);
+	return -1;
+}
+
+asm (
+	".pushsection .rodata\n"
+	".balign " __stringify(PAGE_SIZE) "\n"
+	"uprobe_trampoline_entry:\n"
+	"push %rcx\n"
+	"push %r11\n"
+	"push %rax\n"
+	"pushq %rdi\n"
+	"movq $" __stringify(UPROBE_CMD_ENTRY) ", %rdi\n"
+	"movq $" __stringify(__NR_uprobe) ", %rax\n"
+	"syscall\n"
+	"pop %rdi\n"
+	"pop %rax\n"
+	"pop %r11\n"
+	"pop %rcx\n"
+	"ret\n"
+	".balign " __stringify(PAGE_SIZE) "\n"
+	".popsection\n"
+);
+
+extern u8 uprobe_trampoline_entry[];
+
+static int __init arch_uprobes_init(void)
+{
+	tramp_mapping_pages[0] = virt_to_page(uprobe_trampoline_entry);
+	return 0;
+}
+
+late_initcall(arch_uprobes_init);
+
 SYSCALL_DEFINE1(uprobe, unsigned long, cmd)
 {
-	if (cmd == UPROBE_CMD_RETURN)
+	switch (cmd) {
+	case UPROBE_CMD_ENTRY:
+		return cmd_uprobe();
+	case UPROBE_CMD_RETURN:
 		return cmd_uretprobe();
+	}
 
 	force_sig(SIGILL);
 	return -1;
