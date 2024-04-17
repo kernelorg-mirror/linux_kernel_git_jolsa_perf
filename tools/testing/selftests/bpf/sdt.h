@@ -286,7 +286,11 @@ __extension__ extern unsigned long long __sdt_unsp;
 
 #define _SDT_ASM_BODY(provider, name, pack_args, args, ...)		      \
   _SDT_DEF_MACROS							      \
-  _SDT_ASM_1(990:	_SDT_NOP)					      \
+  _SDT_ASM_1(990:	.byte 0x0f)					      \
+  _SDT_ASM_1(		.byte 0x1f)					      \
+  _SDT_ASM_1(		.byte 0x44)					      \
+  _SDT_ASM_1(		.byte 0x00)					      \
+  _SDT_ASM_1(		.byte 0x00)					      \
   _SDT_ASM_3(		.pushsection .note.stapsdt,_SDT_ASM_AUTOGROUP,"note") \
   _SDT_ASM_1(		.balign 4)					      \
   _SDT_ASM_3(		.4byte 992f-991f, 994f-993f, _SDT_NOTE_TYPE)	      \
