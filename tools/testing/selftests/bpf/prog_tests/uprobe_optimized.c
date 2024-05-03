@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#define _GNU_SOURCE
+#include <unistd.h>
 #include <test_progs.h>
 #include "uprobe_optimized.skel.h"
 
@@ -99,8 +101,60 @@ cleanup:
 	uprobe_optimized__destroy(skel);
 }
 
+static void *worker(void*)
+{
+	fprintf(stderr, "WORKER %d\n", gettid());
+
+	while (1) {
+		uprobe_test();
+	}
+	return NULL;
+}
+
+static void test_race(void)
+{
+	struct uprobe_optimized *skel;
+	pthread_t threads[1];
+	unsigned int i;
+	int err;
+
+	fprintf(stderr, "RACE\n");
+
+	for (i = 0; i < ARRAY_SIZE(threads); i++) {
+		fprintf(stderr, "THREAD %i - %d\n", i, gettid());
+		err = pthread_create(&threads[i], NULL, worker, NULL);
+		if (!ASSERT_OK(err, "new toggler"))
+			return;
+	}
+
+	skel = uprobe_optimized__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "uprobe_optimized__open_and_load"))
+		return;
+
+	i = 0;
+	while (1) {
+		skel->links.test = bpf_program__attach_uprobe_multi(skel->progs.test, 0,
+								    "/proc/self/exe",
+								    "uprobe_test",
+								    NULL);
+		if (!ASSERT_OK_PTR(skel->links.test, "bpf_program__attach_uprobe_multi"))
+			goto cleanup;
+
+		fprintf(stderr, "ROUND %i - hits %d\n", i, skel->bss->executed);
+
+		//bpf_link__destroy(skel->links.test);
+		//skel->links.test = NULL;
+		i++;
+	}
+
+cleanup:
+	uprobe_optimized__destroy(skel);
+}
+
 void test_uprobe_optimized(void)
 {
 	if (test__start_subtest("debug"))
 		test_debug();
+	if (test__start_subtest("race"))
+		test_race();
 }
