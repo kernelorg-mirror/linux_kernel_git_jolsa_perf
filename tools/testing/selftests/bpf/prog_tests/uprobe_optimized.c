@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <test_progs.h>
 #include "uprobe_optimized.skel.h"
+#include "uprobe_optimized_usdt.skel.h"
+#include "../sdt.h"
 
 __naked noinline void uprobe_test(void)
 {
@@ -151,10 +153,42 @@ cleanup:
 	uprobe_optimized__destroy(skel);
 }
 
+noinline void usdt_test(void)
+{
+	STAP_PROBE(trigger, usdt);
+}
+
+static void test_usdt_debug(void)
+{
+	struct uprobe_optimized_usdt *skel;
+
+	skel = uprobe_optimized_usdt__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "uprobe_optimized__open_and_load"))
+		return;
+
+	skel->links.usdt0 = bpf_program__attach_usdt(skel->progs.usdt0,
+						    -1 /* all PIDs */, "/proc/self/exe",
+						    "trigger", "usdt", NULL);
+	if (!skel->links.usdt0)
+		goto cleanup;
+
+	find_uprobe_map();
+	dump("ACTIVE uprobe_test", uprobe_test, 50);
+	fprintf(stderr, "/proc/%d/maps\n", getpid());
+	getchar();
+
+	usdt_test();
+
+cleanup:
+	uprobe_optimized_usdt__destroy(skel);
+}
+
 void test_uprobe_optimized(void)
 {
 	if (test__start_subtest("debug"))
 		test_debug();
 	if (test__start_subtest("race"))
 		test_race();
+	if (test__start_subtest("usdt"))
+		test_usdt_debug();
 }
