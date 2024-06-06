@@ -62,6 +62,7 @@ struct uprobe {
 	loff_t			offset;
 	loff_t			ref_ctr_offset;
 	unsigned long		flags;
+	unsigned int		consumers_cnt;
 
 	/*
 	 * The generic code assumes that it has two members of unknown type
@@ -755,6 +756,7 @@ static void consumer_add(struct uprobe *uprobe, struct uprobe_consumer *uc)
 	down_write(&uprobe->consumer_rwsem);
 	uc->next = uprobe->consumers;
 	uprobe->consumers = uc;
+	uprobe->consumers_cnt++;
 	up_write(&uprobe->consumer_rwsem);
 }
 
@@ -773,6 +775,7 @@ static bool consumer_del(struct uprobe *uprobe, struct uprobe_consumer *uc)
 		if (*con == uc) {
 			*con = uc->next;
 			ret = true;
+			uprobe->consumers_cnt--;
 			break;
 		}
 	}
@@ -1853,35 +1856,31 @@ static void cleanup_return_instances(struct uprobe_task *utask, bool chained,
 	utask->return_instances = ri;
 }
 
-static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
+static int prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
+			     struct return_instance *ri)
 {
-	struct return_instance *ri;
 	struct uprobe_task *utask;
 	unsigned long orig_ret_vaddr, trampoline_vaddr;
 	bool chained;
 
 	if (!get_xol_area())
-		return;
+		return -1;
 
 	utask = get_utask();
 	if (!utask)
-		return;
+		return -1;
 
 	if (utask->depth >= MAX_URETPROBE_DEPTH) {
 		printk_ratelimited(KERN_INFO "uprobe: omit uretprobe due to"
 				" nestedness limit pid/tgid=%d/%d\n",
 				current->pid, current->tgid);
-		return;
+		return -1;
 	}
-
-	ri = kmalloc(sizeof(struct return_instance), GFP_KERNEL);
-	if (!ri)
-		return;
 
 	trampoline_vaddr = get_trampoline_vaddr();
 	orig_ret_vaddr = arch_uretprobe_hijack_return_addr(trampoline_vaddr, regs);
 	if (orig_ret_vaddr == -1)
-		goto fail;
+		return -1;
 
 	/* drop the entries invalidated by longjmp() */
 	chained = (orig_ret_vaddr == trampoline_vaddr);
@@ -1899,7 +1898,7 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
 			 * attack from user-space.
 			 */
 			uprobe_warn(current, "handle tail call");
-			goto fail;
+			return -1;
 		}
 		orig_ret_vaddr = utask->return_instances->orig_ret_vaddr;
 	}
@@ -1914,9 +1913,7 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
 	ri->next = utask->return_instances;
 	utask->return_instances = ri;
 
-	return;
- fail:
-	kfree(ri);
+	return 0;
 }
 
 /* Prepare to single-step probed instruction out of line. */
@@ -2069,26 +2066,44 @@ static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 {
 	struct uprobe_consumer *uc;
 	int remove = UPROBE_HANDLER_REMOVE;
+	struct return_consumer *ric;
+	struct return_instance *ri;
 	bool need_prep = false; /* prepare return uprobe, when needed */
+	int err = -1;
+	size_t size;
 
+	size = sizeof(*ri) + (uprobe->consumers_cnt + 1) * sizeof(*ric);
+	ri = kzalloc(size, GFP_KERNEL);
+	if (!ri)
+		return;
 	down_read(&uprobe->register_rwsem);
-	for (uc = uprobe->consumers; uc; uc = uc->next) {
+	for (uc = uprobe->consumers, ric = &ri->rc[0]; uc; uc = uc->next, ric++) {
 		int rc = 0;
 
 		if (uc->handler) {
-			rc = uc->handler(uc, regs);
+			rc = uc->handler(uc, regs, &ric->cookie);
 			WARN(rc & ~UPROBE_HANDLER_MASK,
 				"bad rc=0x%x from %ps()\n", rc, uc->handler);
 		}
 
-		if (uc->ret_handler)
+		ric->uc = uc;
+		ric->rc = rc;
+
+		if (uc->is_session) {
+			if (!rc)
+				need_prep = true;
+			remove = 0;
+		} else if (uc->ret_handler) {
 			need_prep = true;
+		}
 
 		remove &= rc;
 	}
 
 	if (need_prep && !remove)
-		prepare_uretprobe(uprobe, regs); /* put bp at return */
+		err = prepare_uretprobe(uprobe, regs, ri); /* put bp at return */
+	if (err)
+		kfree(ri);
 
 	if (remove && uprobe->consumers) {
 		WARN_ON(!uprobe_is_active(uprobe));
@@ -2097,16 +2112,35 @@ static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 	up_read(&uprobe->register_rwsem);
 }
 
+static struct uprobe_consumer *
+consumer_find(struct uprobe_consumer *uc, struct uprobe_consumer *ptr)
+{
+	for (; uc && uc != ptr; uc = uc->next);
+	return uc;
+}
+
 static void
 handle_uretprobe_chain(struct return_instance *ri, struct pt_regs *regs)
 {
 	struct uprobe *uprobe = ri->uprobe;
-	struct uprobe_consumer *uc;
+	struct uprobe_consumer *uc, *tmp;
+	struct return_consumer *ric;
 
 	down_read(&uprobe->register_rwsem);
-	for (uc = uprobe->consumers; uc; uc = uc->next) {
-		if (uc->ret_handler)
-			uc->ret_handler(uc, ri->func, regs);
+	for (uc = uprobe->consumers, ric = &ri->rc[0]; uc && ric->uc;) {
+		if (uc != ric->uc) {
+			tmp = consumer_find(uc, ric->uc);
+			if (!tmp) {
+				ric++;
+				continue;
+			}
+			uc = tmp;
+		}
+		if (!ric->rc && uc->ret_handler)
+			uc->ret_handler(uc, ri->func, regs, &ric->cookie);
+
+		uc = uc->next;
+		ric++;
 	}
 	up_read(&uprobe->register_rwsem);
 }
