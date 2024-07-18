@@ -3538,6 +3538,34 @@ __bpf_kfunc __u64 *bpf_session_cookie(void)
 	return session_ctx->data;
 }
 
+__bpf_kfunc int bpf_bp_modify_addr(const struct bpf_map *map, u64 flags, unsigned long addr)
+{
+	struct bpf_array *array = container_of(map, struct bpf_array, map);
+	unsigned int cpu = smp_processor_id();
+	u64 index = flags & BPF_F_INDEX_MASK;
+	struct bpf_event_entry *ee;
+	struct perf_event *event;
+
+	if (index == BPF_F_CURRENT_CPU)
+		index = cpu;
+
+	if (unlikely(index >= array->map.max_entries))
+		return -E2BIG;
+
+	ee = READ_ONCE(array->ptrs[index]);
+	if (!ee)
+		return -ENOENT;
+
+	event = ee->event;
+	if (unlikely(event->attr.type != PERF_TYPE_BREAKPOINT))
+		return -EINVAL;
+
+	if (unlikely(event->oncpu != cpu))
+		return -EOPNOTSUPP;
+
+	return hw_breakpoint_modify(event, addr);
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(kprobe_multi_kfunc_set_ids)
@@ -3568,3 +3596,20 @@ static int __init bpf_kprobe_multi_kfuncs_init(void)
 }
 
 late_initcall(bpf_kprobe_multi_kfuncs_init);
+
+BTF_KFUNCS_START(tracing_kfunc_set_ids)
+BTF_ID_FLAGS(func, bpf_bp_modify_addr)
+BTF_KFUNCS_END(tracing_kfunc_set_ids)
+
+static const struct btf_kfunc_id_set bpf_tracing_kfunc_set = {
+	.owner = THIS_MODULE,
+	.set = &tracing_kfunc_set_ids,
+};
+
+static int __init bpf_tracing_kfuncs_init(void)
+{
+	return register_btf_kfunc_id_set(BPF_PROG_TYPE_TRACING,
+					 &bpf_tracing_kfunc_set);
+}
+
+late_initcall(bpf_tracing_kfuncs_init);
