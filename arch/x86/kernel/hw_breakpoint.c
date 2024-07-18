@@ -84,34 +84,9 @@ int decode_dr7(unsigned long dr7, int bpnum, unsigned *len, unsigned *type)
 	return (dr7 >> (bpnum * DR_ENABLE_SIZE)) & 0x3;
 }
 
-/*
- * Install a perf counter breakpoint.
- *
- * We seek a free debug address register and use it for this
- * breakpoint. Eventually we enable it in the debug control register.
- *
- * Atomic: we hold the counter->ctx->lock and we only handle variables
- * and registers local to this cpu.
- */
-int arch_install_hw_breakpoint(struct perf_event *bp)
+static int set_hw_breakpoint(struct arch_hw_breakpoint *info, int i)
 {
-	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
 	unsigned long *dr7;
-	int i;
-
-	lockdep_assert_irqs_disabled();
-
-	for (i = 0; i < HBP_NUM; i++) {
-		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
-
-		if (!*slot) {
-			*slot = bp;
-			break;
-		}
-	}
-
-	if (WARN_ONCE(i == HBP_NUM, "Can't find any breakpoint slot"))
-		return -EBUSY;
 
 	set_debugreg(info->address, i);
 	__this_cpu_write(cpu_debugreg[i], info->address);
@@ -130,6 +105,58 @@ int arch_install_hw_breakpoint(struct perf_event *bp)
 		amd_set_dr_addr_mask(info->mask, i);
 
 	return 0;
+}
+
+int arch_modify_hw_breakpoint(struct perf_event *bp, unsigned long addr)
+{
+	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
+	int i;
+
+	lockdep_assert_irqs_disabled();
+
+	for (i = 0; i < HBP_NUM; i++) {
+		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
+
+		if (*slot == bp)
+			break;
+	}
+
+	if (i == HBP_NUM)
+		return -EINVAL;
+
+	info->address = addr;
+	return set_hw_breakpoint(info, i);
+}
+
+/*
+ * Install a perf counter breakpoint.
+ *
+ * We seek a free debug address register and use it for this
+ * breakpoint. Eventually we enable it in the debug control register.
+ *
+ * Atomic: we hold the counter->ctx->lock and we only handle variables
+ * and registers local to this cpu.
+ */
+int arch_install_hw_breakpoint(struct perf_event *bp)
+{
+	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
+	int i;
+
+	lockdep_assert_irqs_disabled();
+
+	for (i = 0; i < HBP_NUM; i++) {
+		struct perf_event **slot = this_cpu_ptr(&bp_per_reg[i]);
+
+		if (!*slot) {
+			*slot = bp;
+			break;
+		}
+	}
+
+	if (WARN_ONCE(i == HBP_NUM, "Can't find any breakpoint slot"))
+		return -EBUSY;
+
+	return set_hw_breakpoint(info, i);
 }
 
 /*

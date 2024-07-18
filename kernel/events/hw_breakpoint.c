@@ -992,6 +992,11 @@ static void hw_breakpoint_stop(struct perf_event *bp, int flags)
 	bp->hw.state = PERF_HES_STOPPED;
 }
 
+int hw_breakpoint_modify(struct perf_event *bp, unsigned long addr)
+{
+	return arch_modify_hw_breakpoint(bp, addr);
+}
+
 static struct pmu perf_breakpoint = {
 	.task_ctx_nr	= perf_sw_context, /* could eventually get its own */
 

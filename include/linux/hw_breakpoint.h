@@ -67,6 +67,8 @@ extern int
 modify_user_hw_breakpoint_check(struct perf_event *bp, struct perf_event_attr *attr,
 				bool check);
 
+extern int hw_breakpoint_modify(struct perf_event *bp, unsigned long addr);
+
 /*
  * Kernel breakpoints are not associated with any particular thread.
  */
