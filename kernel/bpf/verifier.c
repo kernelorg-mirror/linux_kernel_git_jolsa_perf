@@ -11796,11 +11796,6 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 			continue;
 
 		if (btf_type_is_scalar(t)) {
-			if (reg->type != SCALAR_VALUE) {
-				verbose(env, "R%d is not a scalar\n", regno);
-				return -EINVAL;
-			}
-
 			if (is_kfunc_arg_constant(meta->btf, &args[i])) {
 				if (meta->arg_constant.found) {
 					verbose(env, "verifier internal error: only one constant argument permitted\n");
