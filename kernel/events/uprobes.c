@@ -65,7 +65,9 @@ struct uprobe {
 	struct rcu_head		rcu;
 	loff_t			offset;
 	loff_t			ref_ctr_offset;
-	unsigned long		flags;
+	unsigned long		flags;		/* "unsigned long" so bitops work */
+
+	unsigned int		consumers_cnt;
 
 	/*
 	 * The generic code assumes that it has two members of unknown type
@@ -826,8 +828,12 @@ static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset,
 
 static void consumer_add(struct uprobe *uprobe, struct uprobe_consumer *uc)
 {
+	static atomic64_t id;
+
 	down_write(&uprobe->consumer_rwsem);
 	list_add_rcu(&uc->cons_node, &uprobe->consumers);
+	uc->id = (__u64) atomic64_inc_return(&id);
+	uprobe->consumers_cnt++;
 	up_write(&uprobe->consumer_rwsem);
 }
 
@@ -839,6 +845,7 @@ static void consumer_del(struct uprobe *uprobe, struct uprobe_consumer *uc)
 {
 	down_write(&uprobe->consumer_rwsem);
 	list_del_rcu(&uc->cons_node);
+	uprobe->consumers_cnt--;
 	up_write(&uprobe->consumer_rwsem);
 }
 
@@ -1786,6 +1793,30 @@ static struct uprobe_task *get_utask(void)
 	return current->utask;
 }
 
+static size_t ri_size(int consumers_cnt)
+{
+	struct return_instance *ri;
+
+	return sizeof(*ri) + sizeof(ri->consumers[0]) * consumers_cnt;
+}
+
+static struct return_instance *alloc_return_instance(int consumers_cnt)
+{
+	struct return_instance *ri;
+
+	ri = kzalloc(ri_size(consumers_cnt), GFP_KERNEL);
+	if (ri)
+		ri->consumers_cnt = consumers_cnt;
+	return ri;
+}
+
+static struct return_instance *dup_return_instance(struct return_instance *old)
+{
+	size_t size = ri_size(old->consumers_cnt);
+
+	return kmemdup(old, size, GFP_KERNEL);
+}
+
 static int dup_utask(struct task_struct *t, struct uprobe_task *o_utask)
 {
 	struct uprobe_task *n_utask;
@@ -1798,11 +1829,10 @@ static int dup_utask(struct task_struct *t, struct uprobe_task *o_utask)
 
 	p = &n_utask->return_instances;
 	for (o = o_utask->return_instances; o; o = o->next) {
-		n = kmalloc(sizeof(struct return_instance), GFP_KERNEL);
+		n = dup_return_instance(o);
 		if (!n)
 			return -ENOMEM;
 
-		*n = *o;
 		/*
 		 * uprobe's refcnt has to be positive at this point, kept by
 		 * utask->return_instances items; return_instances can't be
@@ -1895,39 +1925,35 @@ static void cleanup_return_instances(struct uprobe_task *utask, bool chained,
 	utask->return_instances = ri;
 }
 
-static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
+static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
+			      struct return_instance *ri)
 {
-	struct return_instance *ri;
 	struct uprobe_task *utask;
 	unsigned long orig_ret_vaddr, trampoline_vaddr;
 	bool chained;
 
 	if (!get_xol_area())
-		return;
+		goto free;
 
 	utask = get_utask();
 	if (!utask)
-		return;
+		goto free;
 
 	if (utask->depth >= MAX_URETPROBE_DEPTH) {
 		printk_ratelimited(KERN_INFO "uprobe: omit uretprobe due to"
 				" nestedness limit pid/tgid=%d/%d\n",
 				current->pid, current->tgid);
-		return;
+		goto free;
 	}
 
 	/* we need to bump refcount to store uprobe in utask */
 	if (!try_get_uprobe(uprobe))
-		return;
-
-	ri = kmalloc(sizeof(struct return_instance), GFP_KERNEL);
-	if (!ri)
-		goto fail;
+		goto free;
 
 	trampoline_vaddr = uprobe_get_trampoline_vaddr();
 	orig_ret_vaddr = arch_uretprobe_hijack_return_addr(trampoline_vaddr, regs);
 	if (orig_ret_vaddr == -1)
-		goto fail;
+		goto put;
 
 	/* drop the entries invalidated by longjmp() */
 	chained = (orig_ret_vaddr == trampoline_vaddr);
@@ -1945,7 +1971,7 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
 			 * attack from user-space.
 			 */
 			uprobe_warn(current, "handle tail call");
-			goto fail;
+			goto put;
 		}
 		orig_ret_vaddr = utask->return_instances->orig_ret_vaddr;
 	}
@@ -1960,9 +1986,10 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
 	utask->return_instances = ri;
 
 	return;
-fail:
-	kfree(ri);
+put:
 	put_uprobe(uprobe);
+free:
+	kfree(ri);
 }
 
 /* Prepare to single-step probed instruction out of line. */
@@ -2114,35 +2141,78 @@ static struct uprobe *find_active_uprobe_rcu(unsigned long bp_vaddr, int *is_swb
 	return uprobe;
 }
 
+static struct return_consumer *
+return_consumer_next(struct return_instance *ri, struct return_consumer *ric)
+{
+	return ric ? ric + 1 : &ri->consumers[0];
+}
+
+static struct return_consumer *
+return_consumer_find(struct return_instance *ri, int *iter, int id)
+{
+	struct return_consumer *ric;
+	int idx = *iter;
+
+	for (ric = &ri->consumers[idx]; idx < ri->consumers_cnt; idx++, ric++) {
+		if (ric->id == id) {
+			*iter = idx + 1;
+			return ric;
+		}
+	}
+	return NULL;
+}
+
 static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 {
 	struct uprobe_consumer *uc;
 	int remove = UPROBE_HANDLER_REMOVE;
-	bool need_prep = false; /* prepare return uprobe, when needed */
+	struct return_consumer *ric = NULL;
+	struct return_instance *ri = NULL;
 	bool has_consumers = false;
 
 	current->utask->auprobe = &uprobe->arch;
 
 	list_for_each_entry_srcu(uc, &uprobe->consumers, cons_node,
 				 srcu_read_lock_held(&uprobes_srcu)) {
+		__u64 cookie = 0;
 		int rc = 0;
 
 		if (uc->handler) {
-			rc = uc->handler(uc, regs);
-			WARN(rc & ~UPROBE_HANDLER_MASK,
+			rc = uc->handler(uc, regs, &cookie);
+			WARN(rc < 0 || rc > 2,
 				"bad rc=0x%x from %ps()\n", rc, uc->handler);
 		}
 
-		if (uc->ret_handler)
-			need_prep = true;
-
+		/*
+		 * The handler can return following values:
+		 * 0 - execute ret_handler (if it's defined)
+		 * 1 - remove uprobe
+		 * 2 - do nothing (ignore ret_handler)
+		 */
 		remove &= rc;
 		has_consumers = true;
+
+		if (rc == 0 && uc->ret_handler) {
+			/*
+			 * Preallocate return_instance object optimistically with
+			 * all possible consumers, so we allocate just once.
+			 */
+			if (!ri) {
+				ri = alloc_return_instance(uprobe->consumers_cnt);
+				if (!ri)
+					return;
+			}
+			ric = return_consumer_next(ri, ric);
+			ric->cookie = cookie;
+			ric->id = uc->id;
+		}
 	}
 	current->utask->auprobe = NULL;
 
-	if (need_prep && !remove)
-		prepare_uretprobe(uprobe, regs); /* put bp at return */
+	if (ri && !remove)
+		prepare_uretprobe(uprobe, regs, ri); /* put bp at return */
+	else if (ri)
+		kfree(ri);
 
 	if (remove && has_consumers) {
 		down_read(&uprobe->register_rwsem);
@@ -2160,15 +2230,25 @@ static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 static void
 handle_uretprobe_chain(struct return_instance *ri, struct pt_regs *regs)
 {
+	struct return_consumer *ric = NULL;
 	struct uprobe *uprobe = ri->uprobe;
 	struct uprobe_consumer *uc;
-	int srcu_idx;
+	int srcu_idx, ric_idx = 0;
 
 	srcu_idx = srcu_read_lock(&uprobes_srcu);
 	list_for_each_entry_srcu(uc, &uprobe->consumers, cons_node,
 				 srcu_read_lock_held(&uprobes_srcu)) {
+		/*
+		 * If we don't find return consumer, it means uprobe consumer
+		 * was added after we hit uprobe and return consumer did not
+		 * get registered in which case we call the ret_handler only
+		 * if it's not session consumer.
+		 */
+		ric = return_consumer_find(ri, &ric_idx, uc->id);
+		if (!ric && uc->session)
+			continue;
 		if (uc->ret_handler)
-			uc->ret_handler(uc, ri->func, regs);
+			uc->ret_handler(uc, ri->func, regs, ric ? &ric->cookie : NULL);
 	}
 	srcu_read_unlock(&uprobes_srcu, srcu_idx);
 }
