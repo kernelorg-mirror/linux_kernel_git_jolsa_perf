@@ -95,9 +95,9 @@ TRACE_EVENT(host1x_cdma_push_wide,
 
 TRACE_EVENT(host1x_cdma_push_gather,
 	TP_PROTO(const char *name, struct host1x_bo *bo,
-			u32 words, u32 offset, void *cmdbuf),
+			u32 words, u32 offset, void *cmdbuf__nullable),
 
-	TP_ARGS(name, bo, words, offset, cmdbuf),
+	TP_ARGS(name, bo, words, offset, cmdbuf__nullable),
 
 	TP_STRUCT__entry(
 		__field(const char *, name)
@@ -109,11 +109,11 @@ TRACE_EVENT(host1x_cdma_push_gather,
 	),
 
 	TP_fast_assign(
-		if (cmdbuf) {
-			memcpy(__get_dynamic_array(cmdbuf), cmdbuf+offset,
+		if (cmdbuf__nullable) {
+			memcpy(__get_dynamic_array(cmdbuf), cmdbuf__nullable+offset,
 					words * sizeof(u32));
 		}
-		__entry->cmdbuf = cmdbuf;
+		__entry->cmdbuf = cmdbuf__nullable;
 		__entry->name = name;
 		__entry->bo = bo;
 		__entry->words = words;
