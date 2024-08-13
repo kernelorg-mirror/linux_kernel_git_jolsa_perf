@@ -345,10 +345,10 @@ TRACE_EVENT(netfs_sreq,
 
 TRACE_EVENT(netfs_failure,
 	    TP_PROTO(struct netfs_io_request *rreq,
-		     struct netfs_io_subrequest *sreq,
+		     struct netfs_io_subrequest *sreq__nullable,
 		     int error, enum netfs_failure what),
 
-	    TP_ARGS(rreq, sreq, error, what),
+	    TP_ARGS(rreq, sreq__nullable, error, what),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		rreq		)
@@ -364,14 +364,14 @@ TRACE_EVENT(netfs_failure,
 
 	    TP_fast_assign(
 		    __entry->rreq	= rreq->debug_id;
-		    __entry->index	= sreq ? sreq->debug_index : -1;
+		    __entry->index	= sreq__nullable ? sreq__nullable->debug_index : -1;
 		    __entry->error	= error;
-		    __entry->flags	= sreq ? sreq->flags : 0;
-		    __entry->source	= sreq ? sreq->source : NETFS_INVALID_READ;
+		    __entry->flags	= sreq__nullable ? sreq__nullable->flags : 0;
+		    __entry->source	= sreq__nullable ? sreq__nullable->source : NETFS_INVALID_READ;
 		    __entry->what	= what;
-		    __entry->len	= sreq ? sreq->len : rreq->len;
-		    __entry->transferred = sreq ? sreq->transferred : 0;
-		    __entry->start	= sreq ? sreq->start : 0;
+		    __entry->len	= sreq__nullable ? sreq__nullable->len : rreq->len;
+		    __entry->transferred = sreq__nullable ? sreq__nullable->transferred : 0;
+		    __entry->start	= sreq__nullable ? sreq__nullable->start : 0;
 			   ),
 
 	    TP_printk("R=%08x[%x] %s f=%02x s=%llx %zx/%zx %s e=%d",
