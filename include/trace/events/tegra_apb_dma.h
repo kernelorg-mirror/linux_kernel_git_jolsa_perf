@@ -8,8 +8,8 @@
 #define TRACE_SYSTEM tegra_apb_dma
 
 TRACE_EVENT(tegra_dma_tx_status,
-	TP_PROTO(struct dma_chan *dc, dma_cookie_t cookie, struct dma_tx_state *state),
-	TP_ARGS(dc, cookie, state),
+	TP_PROTO(struct dma_chan *dc, dma_cookie_t cookie, struct dma_tx_state *state__nullable),
+	TP_ARGS(dc, cookie, state__nullable),
 	TP_STRUCT__entry(
 		__string(chan,	dev_name(&dc->dev->device))
 		__field(dma_cookie_t, cookie)
@@ -18,7 +18,7 @@ TRACE_EVENT(tegra_dma_tx_status,
 	TP_fast_assign(
 		__assign_str(chan);
 		__entry->cookie = cookie;
-		__entry->residue = state ? state->residue : (u32)-1;
+		__entry->residue = state__nullable ? state__nullable->residue : (u32)-1;
 	),
 	TP_printk("channel %s: dma cookie %d, residue %u",
 		  __get_str(chan), __entry->cookie, __entry->residue)
