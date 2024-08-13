@@ -62,9 +62,9 @@ struct wb_writeback_work;
 
 DECLARE_EVENT_CLASS(writeback_folio_template,
 
-	TP_PROTO(struct folio *folio, struct address_space *mapping),
+	TP_PROTO(struct folio *folio, struct address_space *mapping__nullable),
 
-	TP_ARGS(folio, mapping),
+	TP_ARGS(folio, mapping__nullable),
 
 	TP_STRUCT__entry (
 		__array(char, name, 32)
@@ -74,9 +74,9 @@ DECLARE_EVENT_CLASS(writeback_folio_template,
 
 	TP_fast_assign(
 		strscpy_pad(__entry->name,
-			    bdi_dev_name(mapping ? inode_to_bdi(mapping->host) :
+			    bdi_dev_name(mapping__nullable ? inode_to_bdi(mapping__nullable->host) :
 					 NULL), 32);
-		__entry->ino = (mapping && mapping->host) ? mapping->host->i_ino : 0;
+		__entry->ino = (mapping__nullable && mapping__nullable->host) ? mapping__nullable->host->i_ino : 0;
 		__entry->index = folio->index;
 	),
 
@@ -89,16 +89,16 @@ DECLARE_EVENT_CLASS(writeback_folio_template,
 
 DEFINE_EVENT(writeback_folio_template, writeback_dirty_folio,
 
-	TP_PROTO(struct folio *folio, struct address_space *mapping),
+	TP_PROTO(struct folio *folio, struct address_space *mapping__nullable),
 
-	TP_ARGS(folio, mapping)
+	TP_ARGS(folio, mapping__nullable)
 );
 
 DEFINE_EVENT(writeback_folio_template, folio_wait_writeback,
 
-	TP_PROTO(struct folio *folio, struct address_space *mapping),
+	TP_PROTO(struct folio *folio, struct address_space *mapping__nullable),
 
-	TP_ARGS(folio, mapping)
+	TP_ARGS(folio, mapping__nullable)
 );
 
 DECLARE_EVENT_CLASS(writeback_dirty_inode_template,
