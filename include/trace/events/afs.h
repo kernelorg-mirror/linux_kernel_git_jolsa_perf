@@ -648,9 +648,9 @@ TRACE_EVENT(afs_call,
 	    );
 
 TRACE_EVENT(afs_make_fs_call,
-	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid),
+	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid__nullable),
 
-	    TP_ARGS(call, fid),
+	    TP_ARGS(call, fid__nullable),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -661,8 +661,8 @@ TRACE_EVENT(afs_make_fs_call,
 	    TP_fast_assign(
 		    __entry->call = call->debug_id;
 		    __entry->op = call->operation_ID;
-		    if (fid) {
-			    __entry->fid = *fid;
+		    if (fid__nullable) {
+			    __entry->fid = *fid__nullable;
 		    } else {
 			    __entry->fid.vid = 0;
 			    __entry->fid.vnode = 0;
@@ -679,10 +679,10 @@ TRACE_EVENT(afs_make_fs_call,
 	    );
 
 TRACE_EVENT(afs_make_fs_calli,
-	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid,
+	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid__nullable,
 		     unsigned int i),
 
-	    TP_ARGS(call, fid, i),
+	    TP_ARGS(call, fid__nullable, i),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -695,8 +695,8 @@ TRACE_EVENT(afs_make_fs_calli,
 		    __entry->call = call->debug_id;
 		    __entry->i = i;
 		    __entry->op = call->operation_ID;
-		    if (fid) {
-			    __entry->fid = *fid;
+		    if (fid__nullable) {
+			    __entry->fid = *fid__nullable;
 		    } else {
 			    __entry->fid.vid = 0;
 			    __entry->fid.vnode = 0;
@@ -714,10 +714,10 @@ TRACE_EVENT(afs_make_fs_calli,
 	    );
 
 TRACE_EVENT(afs_make_fs_call1,
-	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid,
+	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid__nullable,
 		     const struct qstr *name),
 
-	    TP_ARGS(call, fid, name),
+	    TP_ARGS(call, fid__nullable, name),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -730,8 +730,8 @@ TRACE_EVENT(afs_make_fs_call1,
 		    unsigned int __len = min_t(unsigned int, name->len, 23);
 		    __entry->call = call->debug_id;
 		    __entry->op = call->operation_ID;
-		    if (fid) {
-			    __entry->fid = *fid;
+		    if (fid__nullable) {
+			    __entry->fid = *fid__nullable;
 		    } else {
 			    __entry->fid.vid = 0;
 			    __entry->fid.vnode = 0;
@@ -751,10 +751,10 @@ TRACE_EVENT(afs_make_fs_call1,
 	    );
 
 TRACE_EVENT(afs_make_fs_call2,
-	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid,
+	    TP_PROTO(struct afs_call *call, const struct afs_fid *fid__nullable,
 		     const struct qstr *name, const struct qstr *name2),
 
-	    TP_ARGS(call, fid, name, name2),
+	    TP_ARGS(call, fid__nullable, name, name2),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -769,8 +769,8 @@ TRACE_EVENT(afs_make_fs_call2,
 		    unsigned int __len2 = min_t(unsigned int, name2->len, 23);
 		    __entry->call = call->debug_id;
 		    __entry->op = call->operation_ID;
-		    if (fid) {
-			    __entry->fid = *fid;
+		    if (fid__nullable) {
+			    __entry->fid = *fid__nullable;
 		    } else {
 			    __entry->fid.vid = 0;
 			    __entry->fid.vnode = 0;
@@ -1012,9 +1012,9 @@ TRACE_EVENT(afs_edit_dir,
 	    );
 
 TRACE_EVENT(afs_protocol_error,
-	    TP_PROTO(struct afs_call *call, enum afs_eproto_cause cause),
+	    TP_PROTO(struct afs_call *call__nullable, enum afs_eproto_cause cause),
 
-	    TP_ARGS(call, cause),
+	    TP_ARGS(call__nullable, cause),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -1022,7 +1022,7 @@ TRACE_EVENT(afs_protocol_error,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->call = call ? call->debug_id : 0;
+		    __entry->call = call__nullable ? call__nullable->debug_id : 0;
 		    __entry->cause = cause;
 			   ),
 
@@ -1144,10 +1144,10 @@ TRACE_EVENT(afs_cm_no_server_u,
 	    );
 
 TRACE_EVENT(afs_flock_ev,
-	    TP_PROTO(struct afs_vnode *vnode, struct file_lock *fl,
+	    TP_PROTO(struct afs_vnode *vnode, struct file_lock *fl__nullable,
 		     enum afs_flock_event event, int error),
 
-	    TP_ARGS(vnode, fl, event, error),
+	    TP_ARGS(vnode, fl__nullable, event, error),
 
 	    TP_STRUCT__entry(
 		    __field_struct(struct afs_fid,	fid)
@@ -1162,7 +1162,7 @@ TRACE_EVENT(afs_flock_ev,
 		    __entry->event = event;
 		    __entry->state = vnode->lock_state;
 		    __entry->error = error;
-		    __entry->debug_id = fl ? fl->fl_u.afs.debug_id : 0;
+		    __entry->debug_id = fl__nullable ? fl__nullable->fl_u.afs.debug_id : 0;
 			   ),
 
 	    TP_printk("%llx:%llx:%x %04x %s s=%s e=%d",
