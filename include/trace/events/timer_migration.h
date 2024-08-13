@@ -234,11 +234,11 @@ DEFINE_EVENT(tmigr_idle, tmigr_cpu_new_timer_idle,
 
 TRACE_EVENT(tmigr_update_events,
 
-	TP_PROTO(struct tmigr_group *child, struct tmigr_group *group,
+	TP_PROTO(struct tmigr_group *child__nullable, struct tmigr_group *group,
 		 union tmigr_state childstate,	union tmigr_state groupstate,
 		 u64 nextevt),
 
-	TP_ARGS(child, group, childstate, groupstate, nextevt),
+	TP_ARGS(child__nullable, group, childstate, groupstate, nextevt),
 
 	TP_STRUCT__entry(
 		__field( void *,	child			)
@@ -253,13 +253,13 @@ TRACE_EVENT(tmigr_update_events,
 	),
 
 	TP_fast_assign(
-		__entry->child			= child;
+		__entry->child			= child__nullable;
 		__entry->group			= group;
 		__entry->nextevt		= nextevt;
 		__entry->group_next_expiry	= group->next_expiry;
-		__entry->child_evt_expiry	= child ? child->groupevt.nextevt.expires : 0;
+		__entry->child_evt_expiry	= child__nullable ? child__nullable->groupevt.nextevt.expires : 0;
 		__entry->group_lvl		= group->level;
-		__entry->child_evtcpu		= child ? child->groupevt.cpu : 0;
+		__entry->child_evtcpu		= child__nullable ? child__nullable->groupevt.cpu : 0;
 		__entry->child_active		= childstate.active;
 		__entry->group_active		= groupstate.active;
 	),
