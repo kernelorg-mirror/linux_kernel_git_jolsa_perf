@@ -197,15 +197,15 @@ TRACE_EVENT(cpu_frequency_limits,
 
 TRACE_EVENT(device_pm_callback_start,
 
-	TP_PROTO(struct device *dev, const char *pm_ops, int event),
+	TP_PROTO(struct device *dev, const char *pm_ops__nullable, int event),
 
-	TP_ARGS(dev, pm_ops, event),
+	TP_ARGS(dev, pm_ops__nullable, event),
 
 	TP_STRUCT__entry(
 		__string(device, dev_name(dev))
 		__string(driver, dev_driver_string(dev))
 		__string(parent, dev->parent ? dev_name(dev->parent) : "none")
-		__string(pm_ops, pm_ops ? pm_ops : "none ")
+		__string(pm_ops, pm_ops__nullable ? pm_ops__nullable : "none ")
 		__field(int, event)
 	),
 
