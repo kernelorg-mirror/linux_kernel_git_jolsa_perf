@@ -13,9 +13,9 @@
 TRACE_EVENT(fib_table_lookup,
 
 	TP_PROTO(u32 tb_id, const struct flowi4 *flp,
-		 const struct fib_nh_common *nhc, int err),
+		 const struct fib_nh_common *nhc__nullable, int err),
 
-	TP_ARGS(tb_id, flp, nhc, err),
+	TP_ARGS(tb_id, flp, nhc__nullable, err),
 
 	TP_STRUCT__entry(
 		__field(	u32,	tb_id		)
@@ -64,22 +64,22 @@ TRACE_EVENT(fib_table_lookup,
 			__entry->dport = 0;
 		}
 
-		dev = nhc ? nhc->nhc_dev : NULL;
+		dev = nhc__nullable ? nhc__nullable->nhc_dev : NULL;
 		strscpy(__entry->name, dev ? dev->name : "-", IFNAMSIZ);
 
-		if (nhc) {
-			if (nhc->nhc_gw_family == AF_INET) {
+		if (nhc__nullable) {
+			if (nhc__nullable->nhc_gw_family == AF_INET) {
 				p32 = (__be32 *) __entry->gw4;
-				*p32 = nhc->nhc_gw.ipv4;
+				*p32 = nhc__nullable->nhc_gw.ipv4;
 
 				in6 = (struct in6_addr *)__entry->gw6;
 				*in6 = in6addr_any;
-			} else if (nhc->nhc_gw_family == AF_INET6) {
+			} else if (nhc__nullable->nhc_gw_family == AF_INET6) {
 				p32 = (__be32 *) __entry->gw4;
 				*p32 = 0;
 
 				in6 = (struct in6_addr *)__entry->gw6;
-				*in6 = nhc->nhc_gw.ipv6;
+				*in6 = nhc__nullable->nhc_gw.ipv6;
 			}
 		} else {
 			p32 = (__be32 *) __entry->gw4;
