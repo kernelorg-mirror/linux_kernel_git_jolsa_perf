@@ -60,9 +60,9 @@ TRACE_EVENT(locks_get_lock_context,
 );
 
 DECLARE_EVENT_CLASS(filelock_lock,
-	TP_PROTO(struct inode *inode, struct file_lock *fl, int ret),
+	TP_PROTO(struct inode *inode, struct file_lock *fl__nullable, int ret),
 
-	TP_ARGS(inode, fl, ret),
+	TP_ARGS(inode, fl__nullable, ret),
 
 	TP_STRUCT__entry(
 		__field(struct file_lock *, fl)
@@ -79,16 +79,16 @@ DECLARE_EVENT_CLASS(filelock_lock,
 	),
 
 	TP_fast_assign(
-		__entry->fl = fl ? fl : NULL;
+		__entry->fl = fl__nullable ? fl__nullable : NULL;
 		__entry->s_dev = inode->i_sb->s_dev;
 		__entry->i_ino = inode->i_ino;
-		__entry->blocker = fl ? fl->c.flc_blocker : NULL;
-		__entry->owner = fl ? fl->c.flc_owner : NULL;
-		__entry->pid = fl ? fl->c.flc_pid : 0;
-		__entry->flags = fl ? fl->c.flc_flags : 0;
-		__entry->type = fl ? fl->c.flc_type : 0;
-		__entry->fl_start = fl ? fl->fl_start : 0;
-		__entry->fl_end = fl ? fl->fl_end : 0;
+		__entry->blocker = fl__nullable ? fl__nullable->c.flc_blocker : NULL;
+		__entry->owner = fl__nullable ? fl__nullable->c.flc_owner : NULL;
+		__entry->pid = fl__nullable ? fl__nullable->c.flc_pid : 0;
+		__entry->flags = fl__nullable ? fl__nullable->c.flc_flags : 0;
+		__entry->type = fl__nullable ? fl__nullable->c.flc_type : 0;
+		__entry->fl_start = fl__nullable ? fl__nullable->fl_start : 0;
+		__entry->fl_end = fl__nullable ? fl__nullable->fl_end : 0;
 		__entry->ret = ret;
 	),
 
@@ -117,9 +117,9 @@ DEFINE_EVENT(filelock_lock, flock_lock_inode,
 		TP_ARGS(inode, fl, ret));
 
 DECLARE_EVENT_CLASS(filelock_lease,
-	TP_PROTO(struct inode *inode, struct file_lease *fl),
+	TP_PROTO(struct inode *inode, struct file_lease *fl__nullable),
 
-	TP_ARGS(inode, fl),
+	TP_ARGS(inode, fl__nullable),
 
 	TP_STRUCT__entry(
 		__field(struct file_lease *, fl)
@@ -134,15 +134,15 @@ DECLARE_EVENT_CLASS(filelock_lease,
 	),
 
 	TP_fast_assign(
-		__entry->fl = fl ? fl : NULL;
+		__entry->fl = fl__nullable ? fl__nullable : NULL;
 		__entry->s_dev = inode->i_sb->s_dev;
 		__entry->i_ino = inode->i_ino;
-		__entry->blocker = fl ? fl->c.flc_blocker : NULL;
-		__entry->owner = fl ? fl->c.flc_owner : NULL;
-		__entry->flags = fl ? fl->c.flc_flags : 0;
-		__entry->type = fl ? fl->c.flc_type : 0;
-		__entry->break_time = fl ? fl->fl_break_time : 0;
-		__entry->downgrade_time = fl ? fl->fl_downgrade_time : 0;
+		__entry->blocker = fl__nullable ? fl__nullable->c.flc_blocker : NULL;
+		__entry->owner = fl__nullable ? fl__nullable->c.flc_owner : NULL;
+		__entry->flags = fl__nullable ? fl__nullable->c.flc_flags : 0;
+		__entry->type = fl__nullable ? fl__nullable->c.flc_type : 0;
+		__entry->break_time = fl__nullable ? fl__nullable->fl_break_time : 0;
+		__entry->downgrade_time = fl__nullable ? fl__nullable->fl_downgrade_time : 0;
 	),
 
 	TP_printk("fl=%p dev=0x%x:0x%x ino=0x%lx fl_blocker=%p fl_owner=%p fl_flags=%s fl_type=%s fl_break_time=%lu fl_downgrade_time=%lu",
