@@ -1130,12 +1130,12 @@ TRACE_EVENT(ext4_mballoc_prealloc,
 
 DECLARE_EVENT_CLASS(ext4__mballoc,
 	TP_PROTO(struct super_block *sb,
-		 struct inode *inode,
+		 struct inode *inode__nullable,
 		 ext4_group_t group,
 		 ext4_grpblk_t start,
 		 ext4_grpblk_t len),
 
-	TP_ARGS(sb, inode, group, start, len),
+	TP_ARGS(sb, inode__nullable, group, start, len),
 
 	TP_STRUCT__entry(
 		__field(	dev_t,	dev			)
@@ -1147,7 +1147,7 @@ DECLARE_EVENT_CLASS(ext4__mballoc,
 
 	TP_fast_assign(
 		__entry->dev		= sb->s_dev;
-		__entry->ino		= inode ? inode->i_ino : 0;
+		__entry->ino		= inode__nullable ? inode__nullable->i_ino : 0;
 		__entry->result_start	= start;
 		__entry->result_group	= group;
 		__entry->result_len	= len;
