@@ -1232,11 +1232,11 @@ TRACE_EVENT(rxrpc_recvmsg,
 	    );
 
 TRACE_EVENT(rxrpc_recvdata,
-	    TP_PROTO(struct rxrpc_call *call, enum rxrpc_recvmsg_trace why,
+	    TP_PROTO(struct rxrpc_call *call__nullable, enum rxrpc_recvmsg_trace why,
 		     rxrpc_seq_t seq, unsigned int offset, unsigned int len,
 		     int ret),
 
-	    TP_ARGS(call, why, seq, offset, len, ret),
+	    TP_ARGS(call__nullable, why, seq, offset, len, ret),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		call)
@@ -1248,7 +1248,7 @@ TRACE_EVENT(rxrpc_recvdata,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->call = call ? call->debug_id : 0;
+		    __entry->call = call__nullable  ? call__nullable->debug_id : 0;
 		    __entry->why = why;
 		    __entry->seq = seq;
 		    __entry->offset = offset;
@@ -1723,9 +1723,9 @@ TRACE_EVENT(rxrpc_connect_call,
 	    );
 
 TRACE_EVENT(rxrpc_resend,
-	    TP_PROTO(struct rxrpc_call *call, struct sk_buff *ack),
+	    TP_PROTO(struct rxrpc_call *call, struct sk_buff *ack__nullable),
 
-	    TP_ARGS(call, ack),
+	    TP_ARGS(call, ack__nullable),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	call)
@@ -1735,7 +1735,7 @@ TRACE_EVENT(rxrpc_resend,
 			     ),
 
 	    TP_fast_assign(
-		    struct rxrpc_skb_priv *sp = ack ? rxrpc_skb(ack) : NULL;
+		    struct rxrpc_skb_priv *sp = ack__nullable ? rxrpc_skb(ack__nullable) : NULL;
 		    __entry->call = call->debug_id;
 		    __entry->seq = call->acks_hard_ack;
 		    __entry->transmitted = call->tx_transmitted;
