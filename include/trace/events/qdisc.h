@@ -14,9 +14,9 @@
 TRACE_EVENT(qdisc_dequeue,
 
 	TP_PROTO(struct Qdisc *qdisc, const struct netdev_queue *txq,
-		 int packets, struct sk_buff *skb),
+		 int packets, struct sk_buff *skb__nullable),
 
-	TP_ARGS(qdisc, txq, packets, skb),
+	TP_ARGS(qdisc, txq, packets, skb__nullable),
 
 	TP_STRUCT__entry(
 		__field(	struct Qdisc *,		qdisc	)
@@ -33,8 +33,8 @@ TRACE_EVENT(qdisc_dequeue,
 	TP_fast_assign(
 		__entry->qdisc		= qdisc;
 		__entry->txq		= txq;
-		__entry->packets	= skb ? packets : 0;
-		__entry->skbaddr	= skb;
+		__entry->packets	= skb__nullable ? packets : 0;
+		__entry->skbaddr	= skb__nullable;
 		__entry->ifindex	= txq->dev ? txq->dev->ifindex : 0;
 		__entry->handle		= qdisc->handle;
 		__entry->parent		= qdisc->parent;
