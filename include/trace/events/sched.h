@@ -559,9 +559,9 @@ DEFINE_EVENT(sched_stat_runtime, sched_stat_runtime,
  */
 TRACE_EVENT(sched_pi_setprio,
 
-	TP_PROTO(struct task_struct *tsk, struct task_struct *pi_task),
+	TP_PROTO(struct task_struct *tsk, struct task_struct *pi_task__nullable),
 
-	TP_ARGS(tsk, pi_task),
+	TP_ARGS(tsk, pi_task__nullable),
 
 	TP_STRUCT__entry(
 		__array( char,	comm,	TASK_COMM_LEN	)
@@ -574,8 +574,8 @@ TRACE_EVENT(sched_pi_setprio,
 		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
 		__entry->pid		= tsk->pid;
 		__entry->oldprio	= tsk->prio;
-		__entry->newprio	= pi_task ?
-				min(tsk->normal_prio, pi_task->prio) :
+		__entry->newprio	= pi_task__nullable ?
+				min(tsk->normal_prio, pi_task__nullable->prio) :
 				tsk->normal_prio;
 		/* XXX SCHED_DEADLINE bits missing */
 	),
@@ -643,9 +643,9 @@ TRACE_EVENT(sched_move_numa,
 DECLARE_EVENT_CLASS(sched_numa_pair_template,
 
 	TP_PROTO(struct task_struct *src_tsk, int src_cpu,
-		 struct task_struct *dst_tsk, int dst_cpu),
+		 struct task_struct *dst_tsk__nullable, int dst_cpu),
 
-	TP_ARGS(src_tsk, src_cpu, dst_tsk, dst_cpu),
+	TP_ARGS(src_tsk, src_cpu, dst_tsk__nullable, dst_cpu),
 
 	TP_STRUCT__entry(
 		__field( pid_t,	src_pid			)
@@ -666,9 +666,9 @@ DECLARE_EVENT_CLASS(sched_numa_pair_template,
 		__entry->src_ngid	= task_numa_group_id(src_tsk);
 		__entry->src_cpu	= src_cpu;
 		__entry->src_nid	= cpu_to_node(src_cpu);
-		__entry->dst_pid	= dst_tsk ? task_pid_nr(dst_tsk) : 0;
-		__entry->dst_tgid	= dst_tsk ? task_tgid_nr(dst_tsk) : 0;
-		__entry->dst_ngid	= dst_tsk ? task_numa_group_id(dst_tsk) : 0;
+		__entry->dst_pid	= dst_tsk__nullable ? task_pid_nr(dst_tsk__nullable) : 0;
+		__entry->dst_tgid	= dst_tsk__nullable ? task_tgid_nr(dst_tsk__nullable) : 0;
+		__entry->dst_ngid	= dst_tsk__nullable ? task_numa_group_id(dst_tsk__nullable) : 0;
 		__entry->dst_cpu	= dst_cpu;
 		__entry->dst_nid	= dst_cpu >= 0 ? cpu_to_node(dst_cpu) : -1;
 	),
