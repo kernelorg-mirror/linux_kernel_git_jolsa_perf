@@ -1320,16 +1320,16 @@ TRACE_EVENT(xs_data_ready,
 );
 
 TRACE_EVENT(xs_stream_read_data,
-	TP_PROTO(struct rpc_xprt *xprt, ssize_t err, size_t total),
+	TP_PROTO(struct rpc_xprt *xprt__nullable, ssize_t err, size_t total),
 
-	TP_ARGS(xprt, err, total),
+	TP_ARGS(xprt__nullable, err, total),
 
 	TP_STRUCT__entry(
 		__field(ssize_t, err)
 		__field(size_t, total)
-		__string(addr, xprt ? xprt->address_strings[RPC_DISPLAY_ADDR] :
+		__string(addr, xprt__nullable ? xprt__nullable->address_strings[RPC_DISPLAY_ADDR] :
 				EVENT_NULL_STR)
-		__string(port, xprt ? xprt->address_strings[RPC_DISPLAY_PORT] :
+		__string(port, xprt__nullable ? xprt__nullable->address_strings[RPC_DISPLAY_PORT] :
 				EVENT_NULL_STR)
 	),
 
