@@ -242,11 +242,11 @@ TRACE_EVENT(cachefiles_ref,
 	    );
 
 TRACE_EVENT(cachefiles_lookup,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     struct dentry *dir,
 		     struct dentry *de),
 
-	    TP_ARGS(obj, dir, de),
+	    TP_ARGS(obj__nullable, dir, de),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		obj	)
@@ -256,7 +256,7 @@ TRACE_EVENT(cachefiles_lookup,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->dino	= d_backing_inode(dir)->i_ino;
 		    __entry->ino	= (!IS_ERR(de) && d_backing_inode(de) ?
 					   d_backing_inode(de)->i_ino : 0);
@@ -328,11 +328,11 @@ TRACE_EVENT(cachefiles_link,
 	    );
 
 TRACE_EVENT(cachefiles_unlink,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     ino_t ino,
 		     enum fscache_why_object_killed why),
 
-	    TP_ARGS(obj, ino, why),
+	    TP_ARGS(obj__nullable, ino, why),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -342,7 +342,7 @@ TRACE_EVENT(cachefiles_unlink,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : UINT_MAX;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : UINT_MAX;
 		    __entry->ino	= ino;
 		    __entry->why	= why;
 			   ),
@@ -353,11 +353,11 @@ TRACE_EVENT(cachefiles_unlink,
 	    );
 
 TRACE_EVENT(cachefiles_rename,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     ino_t ino,
 		     enum fscache_why_object_killed why),
 
-	    TP_ARGS(obj, ino, why),
+	    TP_ARGS(obj__nullable, ino, why),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -367,7 +367,7 @@ TRACE_EVENT(cachefiles_rename,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : UINT_MAX;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : UINT_MAX;
 		    __entry->ino	= ino;
 		    __entry->why	= why;
 			   ),
@@ -434,7 +434,7 @@ TRACE_EVENT(cachefiles_vol_coherency,
 	    );
 
 TRACE_EVENT(cachefiles_prep_read,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     loff_t start,
 		     size_t len,
 		     unsigned short flags,
@@ -442,7 +442,7 @@ TRACE_EVENT(cachefiles_prep_read,
 		     enum cachefiles_prepare_read_trace why,
 		     ino_t cache_inode, ino_t netfs_inode),
 
-	    TP_ARGS(obj, start, len, flags, source, why, cache_inode, netfs_inode),
+	    TP_ARGS(obj__nullable, start, len, flags, source, why, cache_inode, netfs_inode),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,		obj		)
@@ -456,7 +456,7 @@ TRACE_EVENT(cachefiles_prep_read,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->flags	= flags;
 		    __entry->source	= source;
 		    __entry->why	= why;
@@ -564,10 +564,10 @@ TRACE_EVENT(cachefiles_trunc,
 	    );
 
 TRACE_EVENT(cachefiles_mark_active,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     struct inode *inode),
 
-	    TP_ARGS(obj, inode),
+	    TP_ARGS(obj__nullable, inode),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -576,7 +576,7 @@ TRACE_EVENT(cachefiles_mark_active,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->inode	= inode->i_ino;
 			   ),
 
@@ -585,10 +585,10 @@ TRACE_EVENT(cachefiles_mark_active,
 	    );
 
 TRACE_EVENT(cachefiles_mark_failed,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     struct inode *inode),
 
-	    TP_ARGS(obj, inode),
+	    TP_ARGS(obj__nullable, inode),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -597,7 +597,7 @@ TRACE_EVENT(cachefiles_mark_failed,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->inode	= inode->i_ino;
 			   ),
 
@@ -606,10 +606,10 @@ TRACE_EVENT(cachefiles_mark_failed,
 	    );
 
 TRACE_EVENT(cachefiles_mark_inactive,
-	    TP_PROTO(struct cachefiles_object *obj,
+	    TP_PROTO(struct cachefiles_object *obj__nullable,
 		     struct inode *inode),
 
-	    TP_ARGS(obj, inode),
+	    TP_ARGS(obj__nullable, inode),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -618,7 +618,7 @@ TRACE_EVENT(cachefiles_mark_inactive,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->inode	= inode->i_ino;
 			   ),
 
@@ -627,10 +627,10 @@ TRACE_EVENT(cachefiles_mark_inactive,
 	    );
 
 TRACE_EVENT(cachefiles_vfs_error,
-	    TP_PROTO(struct cachefiles_object *obj, struct inode *backer,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct inode *backer,
 		     int error, enum cachefiles_error_trace where),
 
-	    TP_ARGS(obj, backer, error, where),
+	    TP_ARGS(obj__nullable, backer, error, where),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,			obj	)
@@ -640,7 +640,7 @@ TRACE_EVENT(cachefiles_vfs_error,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->backer	= backer->i_ino;
 		    __entry->error	= error;
 		    __entry->where	= where;
@@ -654,10 +654,10 @@ TRACE_EVENT(cachefiles_vfs_error,
 	    );
 
 TRACE_EVENT(cachefiles_io_error,
-	    TP_PROTO(struct cachefiles_object *obj, struct inode *backer,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct inode *backer,
 		     int error, enum cachefiles_error_trace where),
 
-	    TP_ARGS(obj, backer, error, where),
+	    TP_ARGS(obj__nullable, backer, error, where),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,			obj	)
@@ -667,7 +667,7 @@ TRACE_EVENT(cachefiles_io_error,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->backer	= backer->i_ino;
 		    __entry->error	= error;
 		    __entry->where	= where;
@@ -681,10 +681,10 @@ TRACE_EVENT(cachefiles_io_error,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_open,
-	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct cachefiles_msg *msg,
 		     struct cachefiles_open *load),
 
-	    TP_ARGS(obj, msg, load),
+	    TP_ARGS(obj__nullable, msg, load),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj		)
@@ -695,7 +695,7 @@ TRACE_EVENT(cachefiles_ondemand_open,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->msg_id	= msg->msg_id;
 		    __entry->object_id	= msg->object_id;
 		    __entry->fd		= load->fd;
@@ -711,10 +711,10 @@ TRACE_EVENT(cachefiles_ondemand_open,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_copen,
-	    TP_PROTO(struct cachefiles_object *obj, unsigned int msg_id,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, unsigned int msg_id,
 		     long len),
 
-	    TP_ARGS(obj, msg_id, len),
+	    TP_ARGS(obj__nullable, msg_id, len),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj	)
@@ -723,7 +723,7 @@ TRACE_EVENT(cachefiles_ondemand_copen,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->msg_id	= msg_id;
 		    __entry->len	= len;
 			   ),
@@ -735,9 +735,9 @@ TRACE_EVENT(cachefiles_ondemand_copen,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_close,
-	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg),
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct cachefiles_msg *msg),
 
-	    TP_ARGS(obj, msg),
+	    TP_ARGS(obj__nullable, msg),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj		)
@@ -746,7 +746,7 @@ TRACE_EVENT(cachefiles_ondemand_close,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->msg_id	= msg->msg_id;
 		    __entry->object_id	= msg->object_id;
 			   ),
@@ -758,10 +758,10 @@ TRACE_EVENT(cachefiles_ondemand_close,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_read,
-	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct cachefiles_msg *msg,
 		     struct cachefiles_read *load),
 
-	    TP_ARGS(obj, msg, load),
+	    TP_ARGS(obj__nullable, msg, load),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj		)
@@ -772,7 +772,7 @@ TRACE_EVENT(cachefiles_ondemand_read,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->msg_id	= msg->msg_id;
 		    __entry->object_id	= msg->object_id;
 		    __entry->start	= load->off;
@@ -788,9 +788,9 @@ TRACE_EVENT(cachefiles_ondemand_read,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_cread,
-	    TP_PROTO(struct cachefiles_object *obj, unsigned int msg_id),
+	    TP_PROTO(struct cachefiles_object *obj__nullable, unsigned int msg_id),
 
-	    TP_ARGS(obj, msg_id),
+	    TP_ARGS(obj__nullable, msg_id),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj	)
@@ -798,7 +798,7 @@ TRACE_EVENT(cachefiles_ondemand_cread,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->msg_id	= msg_id;
 			   ),
 
@@ -808,10 +808,10 @@ TRACE_EVENT(cachefiles_ondemand_cread,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_fd_write,
-	    TP_PROTO(struct cachefiles_object *obj, struct inode *backer,
+	    TP_PROTO(struct cachefiles_object *obj__nullable, struct inode *backer,
 		     loff_t start, size_t len),
 
-	    TP_ARGS(obj, backer, start, len),
+	    TP_ARGS(obj__nullable, backer, start, len),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj	)
@@ -821,7 +821,7 @@ TRACE_EVENT(cachefiles_ondemand_fd_write,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->backer	= backer->i_ino;
 		    __entry->start	= start;
 		    __entry->len	= len;
@@ -835,9 +835,9 @@ TRACE_EVENT(cachefiles_ondemand_fd_write,
 	    );
 
 TRACE_EVENT(cachefiles_ondemand_fd_release,
-	    TP_PROTO(struct cachefiles_object *obj, int object_id),
+	    TP_PROTO(struct cachefiles_object *obj__nullable, int object_id),
 
-	    TP_ARGS(obj, object_id),
+	    TP_ARGS(obj__nullable, object_id),
 
 	    TP_STRUCT__entry(
 		    __field(unsigned int,	obj		)
@@ -845,7 +845,7 @@ TRACE_EVENT(cachefiles_ondemand_fd_release,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->obj	= obj__nullable ? obj__nullable->debug_id : 0;
 		    __entry->object_id	= object_id;
 			   ),
 
