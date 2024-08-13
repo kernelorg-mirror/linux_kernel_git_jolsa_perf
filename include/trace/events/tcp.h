@@ -90,11 +90,11 @@ DEFINE_RST_REASON(FN, FN)
  */
 TRACE_EVENT(tcp_send_reset,
 
-	TP_PROTO(const struct sock *sk,
+	TP_PROTO(const struct sock *sk__nullable,
 		 const struct sk_buff *skb__nullable,
 		 const enum sk_rst_reason reason),
 
-	TP_ARGS(sk, skb__nullable, reason),
+	TP_ARGS(sk__nullable, skb__nullable, reason),
 
 	TP_STRUCT__entry(
 		__field(const void *, skbaddr)
@@ -107,17 +107,17 @@ TRACE_EVENT(tcp_send_reset,
 
 	TP_fast_assign(
 		__entry->skbaddr = skb__nullable;
-		__entry->skaddr = sk;
+		__entry->skaddr = sk__nullable;
 		/* Zero means unknown state. */
-		__entry->state = sk ? sk->sk_state : 0;
+		__entry->state = sk__nullable ? sk__nullable->sk_state : 0;
 
 		memset(__entry->saddr, 0, sizeof(struct sockaddr_in6));
 		memset(__entry->daddr, 0, sizeof(struct sockaddr_in6));
 
-		if (sk && sk_fullsock(sk)) {
-			const struct inet_sock *inet = inet_sk(sk);
+		if (sk__nullable && sk_fullsock(sk__nullable)) {
+			const struct inet_sock *inet = inet_sk(sk__nullable);
 
-			TP_STORE_ADDR_PORTS(__entry, inet, sk);
+			TP_STORE_ADDR_PORTS(__entry, inet, sk__nullable);
 		} else if (skb__nullable) {
 			const struct tcphdr *th = (const struct tcphdr *)skb__nullable->data;
 			/*
