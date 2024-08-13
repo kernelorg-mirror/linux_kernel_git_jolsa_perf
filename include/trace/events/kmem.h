@@ -176,10 +176,10 @@ TRACE_EVENT(mm_page_free_batched,
 
 TRACE_EVENT(mm_page_alloc,
 
-	TP_PROTO(struct page *page, unsigned int order,
+	TP_PROTO(struct page *page__nullable, unsigned int order,
 			gfp_t gfp_flags, int migratetype),
 
-	TP_ARGS(page, order, gfp_flags, migratetype),
+	TP_ARGS(page__nullable, order, gfp_flags, migratetype),
 
 	TP_STRUCT__entry(
 		__field(	unsigned long,	pfn		)
@@ -189,7 +189,7 @@ TRACE_EVENT(mm_page_alloc,
 	),
 
 	TP_fast_assign(
-		__entry->pfn		= page ? page_to_pfn(page) : -1UL;
+		__entry->pfn		= page__nullable ? page_to_pfn(page__nullable) : -1UL;
 		__entry->order		= order;
 		__entry->gfp_flags	= (__force unsigned long)gfp_flags;
 		__entry->migratetype	= migratetype;
@@ -205,10 +205,10 @@ TRACE_EVENT(mm_page_alloc,
 
 DECLARE_EVENT_CLASS(mm_page,
 
-	TP_PROTO(struct page *page, unsigned int order, int migratetype,
+	TP_PROTO(struct page *page__nullable, unsigned int order, int migratetype,
 		 int percpu_refill),
 
-	TP_ARGS(page, order, migratetype, percpu_refill),
+	TP_ARGS(page__nullable, order, migratetype, percpu_refill),
 
 	TP_STRUCT__entry(
 		__field(	unsigned long,	pfn		)
@@ -218,7 +218,7 @@ DECLARE_EVENT_CLASS(mm_page,
 	),
 
 	TP_fast_assign(
-		__entry->pfn		= page ? page_to_pfn(page) : -1UL;
+		__entry->pfn		= page__nullable ? page_to_pfn(page__nullable) : -1UL;
 		__entry->order		= order;
 		__entry->migratetype	= migratetype;
 		__entry->percpu_refill	= percpu_refill;
@@ -242,9 +242,9 @@ DEFINE_EVENT(mm_page, mm_page_alloc_zone_locked,
 
 TRACE_EVENT(mm_page_pcpu_drain,
 
-	TP_PROTO(struct page *page, unsigned int order, int migratetype),
+	TP_PROTO(struct page *page__nullable, unsigned int order, int migratetype),
 
-	TP_ARGS(page, order, migratetype),
+	TP_ARGS(page__nullable, order, migratetype),
 
 	TP_STRUCT__entry(
 		__field(	unsigned long,	pfn		)
@@ -253,7 +253,7 @@ TRACE_EVENT(mm_page_pcpu_drain,
 	),
 
 	TP_fast_assign(
-		__entry->pfn		= page ? page_to_pfn(page) : -1UL;
+		__entry->pfn		= page__nullable ? page_to_pfn(page__nullable) : -1UL;
 		__entry->order		= order;
 		__entry->migratetype	= migratetype;
 	),
