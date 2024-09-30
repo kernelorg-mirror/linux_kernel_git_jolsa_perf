@@ -5860,34 +5860,11 @@ static int check_direct_multi(struct ftrace_ops *ops)
 	return 0;
 }
 
-static void remove_direct_functions_hash(struct ftrace_hash *hash, unsigned long addr)
-{
-	struct ftrace_func_entry *entry, *del;
-	int size, i;
-
-	size = 1 << hash->size_bits;
-	for (i = 0; i < size; i++) {
-		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
-			del = __ftrace_lookup_ip(direct_functions, entry->ip);
-			if (del && del->direct == addr) {
-				remove_hash_entry(direct_functions, del);
-				kfree(del);
-			}
-		}
-	}
-}
-
-static void register_ftrace_direct_cb(struct rcu_head *rhp)
-{
-	struct ftrace_hash *fhp = container_of(rhp, struct ftrace_hash, rcu);
-
-	free_ftrace_hash(fhp);
-}
-
 /**
  * register_ftrace_direct - Call a custom trampoline directly
  * for multiple functions registered in @ops
  * @ops: The address of the struct ftrace_ops object
+ * @ip: The address of the function to attach
  * @addr: The address of the trampoline to call at @ops functions
  *
  * This is used to connect a direct calls to @addr from the nop locations
@@ -5906,87 +5883,60 @@ static void register_ftrace_direct_cb(struct rcu_head *rhp)
  *  -ENODEV  - @ip does not point to a ftrace nop location (or not supported)
  *  -ENOMEM  - There was an allocation failure.
  */
-int register_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
+int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
 {
-	struct ftrace_hash *hash, *new_hash = NULL, *free_hash = NULL;
-	struct ftrace_func_entry *entry, *new;
-	int err = -EBUSY, size, i;
-
-	if (ops->func || ops->trampoline)
-		return -EINVAL;
-	if (!(ops->flags & FTRACE_OPS_FL_INITIALIZED))
-		return -EINVAL;
-	if (ops->flags & FTRACE_OPS_FL_ENABLED)
-		return -EINVAL;
-
-	hash = ops->func_hash->filter_hash;
-	if (ftrace_hash_empty(hash))
-		return -EINVAL;
+	struct ftrace_func_entry *new = NULL;
+	struct ftrace_hash *new_hash = NULL;
+	int err = -EBUSY, reg;
 
 	mutex_lock(&direct_mutex);
 
-	/* Make sure requested entries are not already registered.. */
-	size = 1 << hash->size_bits;
-	for (i = 0; i < size; i++) {
-		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
-			if (ftrace_find_rec_direct(entry->ip))
-				goto out_unlock;
-		}
-	}
+	/* Make sure requested entry is not already registered.. */
+	if (__ftrace_lookup_ip(direct_functions, ip))
+		goto out_unlock;
 
 	err = -ENOMEM;
+	if (direct_functions == EMPTY_HASH) {
+		direct_functions = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+		if (!direct_functions)
+			goto out_unlock;
+	}
 
-	/* Make a copy hash to place the new and the old entries in */
-	size = hash->count + direct_functions->count;
-	if (size > 32)
-		size = 32;
-	new_hash = alloc_ftrace_hash(fls(size));
+	new_hash = alloc_and_copy_ftrace_hash(FTRACE_HASH_DEFAULT_BITS, direct_functions);
 	if (!new_hash)
 		goto out_unlock;
 
-	/* Now copy over the existing direct entries */
-	size = 1 << direct_functions->size_bits;
-	for (i = 0; i < size; i++) {
-		hlist_for_each_entry(entry, &direct_functions->buckets[i], hlist) {
-			new = add_hash_entry(new_hash, entry->ip);
-			if (!new)
-				goto out_unlock;
-			new->direct = entry->direct;
+	if (add_hash_entry_direct(new_hash, ip, addr) == NULL)
+		goto out_unlock;
+
+	reg = !direct_functions->count;
+
+	new = add_hash_entry_direct(direct_functions, ip, addr);
+	if (!new)
+		goto out_unlock;
+
+	if (reg) {
+		if (!(ops->flags & FTRACE_OPS_FL_INITIALIZED)) {
+			ops->func = call_direct_funcs;
+			ops->flags = MULTI_FLAGS;
+			ops->trampoline = FTRACE_REGS_ADDR;
 		}
+		ops->local_hash.filter_hash = new_hash;
+		err = register_ftrace_function_nolock(ops);
+		if (err)
+			free_ftrace_hash(new_hash);
+	} else {
+		err = ftrace_update_ops(ops, new_hash, EMPTY_HASH);
+		free_ftrace_hash(new_hash);
 	}
-
-	/* ... and add the new entries */
-	size = 1 << hash->size_bits;
-	for (i = 0; i < size; i++) {
-		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
-			new = add_hash_entry(new_hash, entry->ip);
-			if (!new)
-				goto out_unlock;
-			/* Update both the copy and the hash entry */
-			new->direct = addr;
-			entry->direct = addr;
-		}
-	}
-
-	free_hash = direct_functions;
-	rcu_assign_pointer(direct_functions, new_hash);
-	new_hash = NULL;
-
-	ops->func = call_direct_funcs;
-	ops->flags = MULTI_FLAGS;
-	ops->trampoline = FTRACE_REGS_ADDR;
-
-	err = register_ftrace_function_nolock(ops);
 
  out_unlock:
 	mutex_unlock(&direct_mutex);
 
-	if (free_hash && free_hash != EMPTY_HASH)
-		call_rcu_tasks(&free_hash->rcu, register_ftrace_direct_cb);
-
-	if (new_hash)
-		free_ftrace_hash(new_hash);
-
+	if (err && new) {
+		remove_hash_entry(direct_functions, new);
+		kfree(new);
+	}
 	return err;
 }
 EXPORT_SYMBOL_GPL(register_ftrace_direct);
@@ -5995,6 +5945,7 @@ EXPORT_SYMBOL_GPL(register_ftrace_direct);
  * unregister_ftrace_direct - Remove calls to custom trampoline
  * previously registered by register_ftrace_direct for @ops object.
  * @ops: The address of the struct ftrace_ops object
+ * @ip: The address of the function to attach
  * @addr: The address of the direct function that is called by the @ops functions
  * @free_filters: Set to true to remove all filters for the ftrace_ops, false otherwise
  *
@@ -6006,42 +5957,63 @@ EXPORT_SYMBOL_GPL(register_ftrace_direct);
  *  0 on success
  *  -EINVAL - The @ops object was not properly registered.
  */
-int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long addr,
+int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr,
 			     bool free_filters)
 {
-	struct ftrace_hash *hash = ops->func_hash->filter_hash;
-	int err;
+	struct ftrace_hash *new_hash = NULL;
+	struct ftrace_func_entry *delf, *deln;
+	int err = -EINVAL;
 
 	if (check_direct_multi(ops))
 		return -EINVAL;
 	if (!(ops->flags & FTRACE_OPS_FL_ENABLED))
 		return -EINVAL;
+	if (direct_functions == EMPTY_HASH)
+		return -EINVAL;
 
 	mutex_lock(&direct_mutex);
-	err = unregister_ftrace_function(ops);
-	remove_direct_functions_hash(hash, addr);
+
+	delf = __ftrace_lookup_ip(direct_functions, ip);
+	if (!delf || delf->direct != addr)
+		goto out_unlock;
+
+	new_hash = alloc_and_copy_ftrace_hash(FTRACE_HASH_DEFAULT_BITS, direct_functions);
+	if (!new_hash)
+		goto out_unlock;
+
+	deln = __ftrace_lookup_ip(new_hash, ip);
+	remove_hash_entry(new_hash, deln);
+	kfree(deln);
+
+	if (ftrace_hash_empty(new_hash)) {
+		err = unregister_ftrace_function(ops);
+		ftrace_free_filter(ops);
+	} else {
+		err = ftrace_update_ops(ops, new_hash, EMPTY_HASH);
+	}
+
+	free_ftrace_hash(new_hash);
+
+	if (!err) {
+		remove_hash_entry(direct_functions, delf);
+		kfree(delf);
+	}
+
+ out_unlock:
 	mutex_unlock(&direct_mutex);
-
-	/* cleanup for possible another register call */
-	ops->func = NULL;
-	ops->trampoline = 0;
-
 	if (free_filters)
 		ftrace_free_filter(ops);
 	return err;
 }
 EXPORT_SYMBOL_GPL(unregister_ftrace_direct);
 
-static int
-__modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
+static int __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
 {
-	struct ftrace_hash *hash;
-	struct ftrace_func_entry *entry, *iter;
+	struct ftrace_func_entry *entry;
 	static struct ftrace_ops tmp_ops = {
 		.func		= ftrace_stub,
 		.flags		= FTRACE_OPS_FL_STUB,
 	};
-	int i, size;
 	int err;
 
 	lockdep_assert_held_once(&direct_mutex);
@@ -6060,16 +6032,9 @@ __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
 	 */
 	mutex_lock(&ftrace_lock);
 
-	hash = ops->func_hash->filter_hash;
-	size = 1 << hash->size_bits;
-	for (i = 0; i < size; i++) {
-		hlist_for_each_entry(iter, &hash->buckets[i], hlist) {
-			entry = __ftrace_lookup_ip(direct_functions, iter->ip);
-			if (!entry)
-				continue;
-			entry->direct = addr;
-		}
-	}
+	entry = __ftrace_lookup_ip(direct_functions, ip);
+	if (entry)
+		entry->direct = addr;
 
 	mutex_unlock(&ftrace_lock);
 
@@ -6083,6 +6048,7 @@ __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
  * modify_ftrace_direct_nolock - Modify an existing direct 'multi' call
  * to call something else
  * @ops: The address of the struct ftrace_ops object
+ * @ip: The address of the function to attach
  * @addr: The address of the new trampoline to call at @ops functions
  *
  * This is used to unregister currently registered direct caller and
@@ -6097,14 +6063,16 @@ __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
  * Returns: zero on success. Non zero on error, which includes:
  *  -EINVAL - The @ops object was not properly registered.
  */
-int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long addr)
+int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
 {
 	if (check_direct_multi(ops))
 		return -EINVAL;
 	if (!(ops->flags & FTRACE_OPS_FL_ENABLED))
 		return -EINVAL;
+	if (direct_functions == EMPTY_HASH)
+		return -EINVAL;
 
-	return __modify_ftrace_direct(ops, addr);
+	return __modify_ftrace_direct(ops, ip, addr);
 }
 EXPORT_SYMBOL_GPL(modify_ftrace_direct_nolock);
 
@@ -6112,6 +6080,7 @@ EXPORT_SYMBOL_GPL(modify_ftrace_direct_nolock);
  * modify_ftrace_direct - Modify an existing direct 'multi' call
  * to call something else
  * @ops: The address of the struct ftrace_ops object
+ * @ip: The address of the function to attach
  * @addr: The address of the new trampoline to call at @ops functions
  *
  * This is used to unregister currently registered direct caller and
@@ -6123,7 +6092,7 @@ EXPORT_SYMBOL_GPL(modify_ftrace_direct_nolock);
  * Returns: zero on success. Non zero on error, which includes:
  *  -EINVAL - The @ops object was not properly registered.
  */
-int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
+int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
 {
 	int err;
 
@@ -6131,9 +6100,11 @@ int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
 		return -EINVAL;
 	if (!(ops->flags & FTRACE_OPS_FL_ENABLED))
 		return -EINVAL;
+	if (direct_functions == EMPTY_HASH)
+		return -EINVAL;
 
 	mutex_lock(&direct_mutex);
-	err = __modify_ftrace_direct(ops, addr);
+	err = __modify_ftrace_direct(ops, ip, addr);
 	mutex_unlock(&direct_mutex);
 	return err;
 }
