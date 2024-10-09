@@ -789,14 +789,26 @@ get_link(struct uprobe_multi_consumers *skel, int link)
 	}
 }
 
-static int uprobe_attach(struct uprobe_multi_consumers *skel, int idx)
+typedef int (*test_t)(struct uprobe_multi_consumers *skel,
+		      unsigned long before, unsigned long after,
+		      void *fn);
+
+static int uprobe_attach(struct uprobe_multi_consumers *skel, int idx, void *fn)
 {
 	struct bpf_program *prog = get_program(skel, idx);
 	struct bpf_link **link = get_link(skel, idx);
 	LIBBPF_OPTS(bpf_uprobe_multi_opts, opts);
+	unsigned long offset;
 
 	if (!prog || !link)
 		return -1;
+
+	offset = get_uprobe_offset(fn);
+	if (!ASSERT_GE(offset, 0, "uprobe_offset"))
+		return -1;
+
+	opts.offsets = &offset;
+	opts.cnt = 1;
 
 	/*
 	 * bit/prog: 0 uprobe entry
@@ -807,9 +819,7 @@ static int uprobe_attach(struct uprobe_multi_consumers *skel, int idx)
 	opts.retprobe = idx == 1;
 	opts.session  = idx == 2 || idx == 3;
 
-	*link = bpf_program__attach_uprobe_multi(prog, 0, "/proc/self/exe",
-						"uprobe_consumer_test",
-						&opts);
+	*link = bpf_program__attach_uprobe_multi(prog, 0, "/proc/self/exe", NULL, &opts);
 	if (!ASSERT_OK_PTR(*link, "bpf_program__attach_uprobe_multi"))
 		return -1;
 	return 0;
@@ -830,7 +840,8 @@ static bool test_bit(int bit, unsigned long val)
 
 noinline int
 uprobe_consumer_test(struct uprobe_multi_consumers *skel,
-		     unsigned long before, unsigned long after)
+		     unsigned long before, unsigned long after,
+		     void *fn)
 {
 	int idx;
 
@@ -843,15 +854,42 @@ uprobe_consumer_test(struct uprobe_multi_consumers *skel,
 	/* ... and attach all new programs in 'after' state */
 	for (idx = 0; idx < 4; idx++) {
 		if (!test_bit(idx, before) && test_bit(idx, after)) {
-			if (!ASSERT_OK(uprobe_attach(skel, idx), "uprobe_attach_after"))
+			if (!ASSERT_OK(uprobe_attach(skel, idx, fn), "uprobe_attach_after"))
 				return -1;
 		}
 	}
 	return 0;
 }
 
+#define UPROBE_CONSUMER_TEST(__idx) 					\
+noinline int								\
+uprobe_consumer_test ## __idx(struct uprobe_multi_consumers *skel,	\
+			      unsigned long before, unsigned long after,\
+			      void *fn)					\
+{									\
+	return uprobe_consumer_test(skel, before, after, fn);		\
+}
+
+UPROBE_CONSUMER_TEST(0)
+UPROBE_CONSUMER_TEST(1)
+UPROBE_CONSUMER_TEST(2)
+UPROBE_CONSUMER_TEST(3)
+UPROBE_CONSUMER_TEST(4)
+UPROBE_CONSUMER_TEST(5)
+UPROBE_CONSUMER_TEST(6)
+UPROBE_CONSUMER_TEST(7)
+UPROBE_CONSUMER_TEST(8)
+UPROBE_CONSUMER_TEST(9)
+UPROBE_CONSUMER_TEST(10)
+UPROBE_CONSUMER_TEST(11)
+UPROBE_CONSUMER_TEST(12)
+UPROBE_CONSUMER_TEST(13)
+UPROBE_CONSUMER_TEST(14)
+UPROBE_CONSUMER_TEST(15)
+
 static int consumer_test(struct uprobe_multi_consumers *skel,
-			 unsigned long before, unsigned long after)
+			 unsigned long before, unsigned long after,
+			 test_t test)
 {
 	int err, idx, ret = -1;
 
@@ -860,12 +898,12 @@ static int consumer_test(struct uprobe_multi_consumers *skel,
 	/* 'before' is each, we attach uprobe for every set idx */
 	for (idx = 0; idx < 4; idx++) {
 		if (test_bit(idx, before)) {
-			if (!ASSERT_OK(uprobe_attach(skel, idx), "uprobe_attach_before"))
+			if (!ASSERT_OK(uprobe_attach(skel, idx, test), "uprobe_attach_before"))
 				goto cleanup;
 		}
 	}
 
-	err = uprobe_consumer_test(skel, before, after);
+	err = test(skel, before, after, test);
 	if (!ASSERT_EQ(err, 0, "uprobe_consumer_test"))
 		goto cleanup;
 
@@ -934,14 +972,61 @@ cleanup:
 	return ret;
 }
 
-static void test_consumers(void)
+struct consumer_data {
+	pthread_t	pt;
+	int		from;
+	int		to;
+	int		idx;
+};
+
+#define CONSUMER_MAX 16
+
+static void *consumer_thread(void *arg)
 {
 	struct uprobe_multi_consumers *skel;
+	struct consumer_data *data = arg;
 	int before, after;
+	test_t test;
 
 	skel = uprobe_multi_consumers__open_and_load();
 	if (!ASSERT_OK_PTR(skel, "uprobe_multi_consumers__open_and_load"))
-		return;
+		return NULL;
+
+	switch (data->idx) {
+	case 0: test = uprobe_consumer_test0; break;
+	case 1: test = uprobe_consumer_test1; break;
+	case 2: test = uprobe_consumer_test2; break;
+	case 3: test = uprobe_consumer_test3; break;
+	case 4: test = uprobe_consumer_test4; break;
+	case 5: test = uprobe_consumer_test5; break;
+	case 6: test = uprobe_consumer_test6; break;
+	case 7: test = uprobe_consumer_test7; break;
+	case 8: test = uprobe_consumer_test8; break;
+	case 9: test = uprobe_consumer_test9; break;
+	case 10: test = uprobe_consumer_test10; break;
+	case 11: test = uprobe_consumer_test11; break;
+	case 12: test = uprobe_consumer_test12; break;
+	case 13: test = uprobe_consumer_test13; break;
+	case 14: test = uprobe_consumer_test14; break;
+	case 15: test = uprobe_consumer_test15; break;
+	}
+
+	for (before = data->from; before < data->to; before++) {
+		for (after = 0; after < CONSUMER_MAX; after++)
+			if (consumer_test(skel, before, after, test))
+				goto out;
+	}
+
+out:
+	uprobe_multi_consumers__destroy(skel);
+	return NULL;
+}
+
+
+static void test_consumers(void)
+{
+	struct consumer_data *data;
+	int i, err, threads, inc;
 
 	/*
 	 * The idea of this test is to try all possible combinations of
@@ -982,14 +1067,30 @@ static void test_consumers(void)
 	 * before/after bits.
 	 */
 
-	for (before = 0; before < 16; before++) {
-		for (after = 0; after < 16; after++)
-			if (consumer_test(skel, before, after))
-				goto out;
+	threads = 16;
+	inc = CONSUMER_MAX / threads;
+
+	data = malloc(threads * sizeof(*data));
+	if (!ASSERT_OK_PTR(data, "malloc"))
+		return;
+
+	for (i = 0; i < threads; i++) {
+		data[i] = (struct consumer_data) {
+			.idx  = i,
+			.from = i,
+			.to   = i == CONSUMER_MAX ? threads : i*inc + inc,
+		};
+
+		err = pthread_create(&data[i].pt, NULL, consumer_thread, &data[i]);
+		if (!ASSERT_OK(err, "pthread_create"))
+			break;
 	}
 
-out:
-	uprobe_multi_consumers__destroy(skel);
+	for (i = 0; i < threads; i++) {
+                pthread_join(data[i].pt, NULL);
+	}
+
+	free(data);
 }
 
 static struct bpf_program *uprobe_multi_program(struct uprobe_multi_pid_filter *skel, int idx)
