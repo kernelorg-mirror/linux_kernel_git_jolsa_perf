@@ -3343,7 +3343,7 @@ static void bpf_tracing_link_show_fdinfo(const struct bpf_link *link,
 		container_of(link, struct bpf_tracing_link, link.link);
 	u32 target_btf_id, target_obj_id;
 
-	bpf_trampoline_unpack_key(tr_link->trampoline->key,
+	bpf_trampoline_unpack_key(tr_link->trampoline->ptr->key,
 				  &target_obj_id, &target_btf_id);
 	seq_printf(seq,
 		   "attach_type:\t%d\n"
@@ -3361,7 +3361,7 @@ static int bpf_tracing_link_fill_link_info(const struct bpf_link *link,
 		container_of(link, struct bpf_tracing_link, link.link);
 
 	info->tracing.attach_type = tr_link->attach_type;
-	bpf_trampoline_unpack_key(tr_link->trampoline->key,
+	bpf_trampoline_unpack_key(tr_link->trampoline->ptr->key,
 				  &info->tracing.target_obj_id,
 				  &info->tracing.target_btf_id);
 
@@ -3496,7 +3496,7 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 	}
 
 	if (!prog->aux->dst_trampoline ||
-	    (key && key != prog->aux->dst_trampoline->key)) {
+	    (key && key != prog->aux->dst_trampoline->ptr->key)) {
 		/* If there is no saved target, or the specified target is
 		 * different from the destination specified at load time, we
 		 * need a new trampoline and a check for compatibility
