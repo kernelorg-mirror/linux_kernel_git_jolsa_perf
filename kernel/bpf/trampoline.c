@@ -35,19 +35,19 @@ static int bpf_trampoline_update(struct bpf_trampoline *tr, bool lock_direct_mut
 
 static struct bpf_trampoline *bpf_trampoline_ip_lookup(unsigned long ip)
 {
+	struct bpf_trampoline_ptr *ptr;
 	struct hlist_head *head_ip;
-	struct bpf_trampoline *tr;
 
 	mutex_lock(&trampoline_mutex);
 	head_ip = &trampoline_ip_table[hash_64(ip, TRAMPOLINE_HASH_BITS)];
-	hlist_for_each_entry(tr, head_ip, hlist_ip) {
-		if (tr->func.addr == (void *) ip)
+	hlist_for_each_entry(ptr, head_ip, hlist_ip) {
+		if (ptr->tr->func.addr == (void *) ip)
 			goto out;
 	}
-	tr = NULL;
+	ptr = NULL;
 out:
 	mutex_unlock(&trampoline_mutex);
-	return tr;
+	return ptr ? ptr->tr : NULL;
 }
 
 static int bpf_tramp_ftrace_ops_func(struct ftrace_ops *ops, unsigned long ip,
@@ -162,33 +162,41 @@ void bpf_image_ksym_del(struct bpf_ksym *ksym)
 
 static struct bpf_trampoline *bpf_trampoline_lookup(u64 key, unsigned long ip)
 {
-	struct bpf_trampoline *tr;
+	struct bpf_trampoline_ptr *ptr;
+	struct bpf_trampoline *tr = NULL;
 	struct hlist_head *head;
 	int i;
 
 	mutex_lock(&trampoline_mutex);
 	head = &trampoline_key_table[hash_64(key, TRAMPOLINE_HASH_BITS)];
-	hlist_for_each_entry(tr, head, hlist_key) {
-		if (tr->key == key) {
-			refcount_inc(&tr->refcnt);
+	hlist_for_each_entry(ptr, head, hlist_key) {
+		if (ptr->key == key) {
+			tr = ptr->tr;
+			refcount_inc(&ptr->tr->refcnt);
 			goto out;
 		}
 	}
-	tr = kzalloc(sizeof(*tr), GFP_KERNEL);
-	if (!tr)
+	ptr = kzalloc(sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
 		goto out;
-
-	tr->key = key;
-	tr->ip = ip;
-	INIT_HLIST_NODE(&tr->hlist_key);
-	INIT_HLIST_NODE(&tr->hlist_ip);
-	hlist_add_head(&tr->hlist_key, head);
+	ptr->key = key;
+	ptr->ip = ip;
+	INIT_HLIST_NODE(&ptr->hlist_key);
+	INIT_HLIST_NODE(&ptr->hlist_ip);
+	hlist_add_head(&ptr->hlist_key, head);
 	head = &trampoline_ip_table[hash_64(ip, TRAMPOLINE_HASH_BITS)];
-	hlist_add_head(&tr->hlist_ip, head);
+	hlist_add_head(&ptr->hlist_ip, head);
+	tr = kzalloc(sizeof(*tr), GFP_KERNEL);
+	if (!tr) {
+		kfree(ptr);
+		goto out;
+	}
 	refcount_set(&tr->refcnt, 1);
 	mutex_init(&tr->mutex);
 	for (i = 0; i < BPF_TRAMP_MAX; i++)
 		INIT_HLIST_HEAD(&tr->progs_hlist[i]);
+	ptr->tr = tr;
+	tr->ptr = ptr;
 out:
 	mutex_unlock(&trampoline_mutex);
 	return tr;
@@ -463,7 +471,7 @@ again:
 		goto out;
 	}
 
-	im = bpf_tramp_image_alloc(tr->key, size);
+	im = bpf_tramp_image_alloc(tr->ptr->key, size);
 	if (IS_ERR(im)) {
 		err = PTR_ERR(im);
 		goto out;
@@ -870,8 +878,9 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 	 * fexit progs. The fentry-only trampoline will be freed via
 	 * multiple rcu callbacks.
 	 */
-	hlist_del(&tr->hlist_key);
-	hlist_del(&tr->hlist_ip);
+	hlist_del(&tr->ptr->hlist_key);
+	hlist_del(&tr->ptr->hlist_ip);
+	kfree(tr->ptr);
 	kfree(tr);
 out:
 	mutex_unlock(&trampoline_mutex);

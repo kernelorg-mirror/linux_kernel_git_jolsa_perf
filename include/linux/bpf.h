@@ -1188,16 +1188,10 @@ struct bpf_tramp_image {
 };
 
 struct bpf_trampoline {
-	/* hlist for trampoline_key_table */
-	struct hlist_node hlist_key;
-	/* hlist for trampoline_ip_table */
-	struct hlist_node hlist_ip;
 	/* serializes access to fields of this trampoline */
 	struct mutex mutex;
 	refcount_t refcnt;
 	u32 flags;
-	u64 key;
-	unsigned long ip;
 	struct {
 		struct btf_func_model model;
 		void *addr;
@@ -1214,6 +1208,17 @@ struct bpf_trampoline {
 	int progs_cnt[BPF_TRAMP_MAX];
 	/* Executable image of trampoline */
 	struct bpf_tramp_image *cur_image;
+	struct bpf_trampoline_ptr *ptr;
+};
+
+struct bpf_trampoline_ptr {
+	/* hlist for trampoline_table */
+	struct hlist_node hlist_key;
+	/* hlist for trampoline_ip_table */
+	struct hlist_node hlist_ip;
+	struct bpf_trampoline *tr;
+	u64 key;
+	unsigned long ip;
 };
 
 struct bpf_attach_target_info {
