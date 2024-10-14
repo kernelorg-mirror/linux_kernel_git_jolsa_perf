@@ -5996,11 +5996,12 @@ int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned lo
  *  0 on success
  *  -EINVAL - The @ops object was not properly registered.
  */
-int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr,
-			     bool free_filters)
+int unregister_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash,
+				  bool free_filters)
 {
+	struct ftrace_func_entry *del, *entry;
 	struct ftrace_hash *new_hash = NULL;
-	struct ftrace_func_entry *delf, *deln;
+	unsigned long size, i;
 	int err = -EINVAL;
 
 	if (check_direct_multi(ops))
@@ -6012,17 +6013,27 @@ int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned 
 
 	mutex_lock(&direct_mutex);
 
-	delf = __ftrace_lookup_ip(direct_functions, ip);
-	if (!delf || delf->direct != addr)
-		goto out_unlock;
+	/* Make sure requested entries are already registered.. */
+	size = 1 << hash->size_bits;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			del = __ftrace_lookup_ip(direct_functions, entry->ip);
+			if (!del || del->direct != entry->direct)
+				goto out_unlock;
+		}
+	}
 
 	new_hash = alloc_and_copy_ftrace_hash(FTRACE_HASH_DEFAULT_BITS, direct_functions);
 	if (!new_hash)
 		goto out_unlock;
 
-	deln = __ftrace_lookup_ip(new_hash, ip);
-	remove_hash_entry(new_hash, deln);
-	kfree(deln);
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			del = __ftrace_lookup_ip(new_hash, entry->ip);
+			remove_hash_entry(new_hash, del);
+			kfree(del);
+		}
+	}
 
 	if (ftrace_hash_empty(new_hash)) {
 		err = unregister_ftrace_function(ops);
@@ -6034,8 +6045,13 @@ int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned 
 	free_ftrace_hash(new_hash);
 
 	if (!err) {
-		remove_hash_entry(direct_functions, delf);
-		kfree(delf);
+		for (i = 0; i < size; i++) {
+			hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+				del = __ftrace_lookup_ip(direct_functions, entry->ip);
+				remove_hash_entry(direct_functions, del);
+				kfree(del);
+			}
+		}
 	}
 
  out_unlock:
@@ -6045,6 +6061,26 @@ int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned 
 	return err;
 }
 EXPORT_SYMBOL_GPL(unregister_ftrace_direct);
+
+int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr,
+			     bool free_filters)
+{
+	struct ftrace_hash *hash;
+	int err = -EINVAL;
+
+	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	if (add_hash_entry_direct(hash, ip, addr) == NULL)
+		goto free_hash;
+
+	err = unregister_ftrace_direct_hash(ops, hash, free_filters);
+
+ free_hash:
+	free_ftrace_hash(hash);
+	return err;
+}
 
 static int __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
 {
