@@ -6082,13 +6082,14 @@ int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned 
 	return err;
 }
 
-static int __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+static int __modify_ftrace_direct(struct ftrace_ops *ops, struct ftrace_hash *hash)
 {
-	struct ftrace_func_entry *entry;
+	struct ftrace_func_entry *entry, *tmp;
 	static struct ftrace_ops tmp_ops = {
 		.func		= ftrace_stub,
 		.flags		= FTRACE_OPS_FL_STUB,
 	};
+	unsigned long size, i;
 	int err;
 
 	lockdep_assert_held_once(&direct_mutex);
@@ -6107,9 +6108,15 @@ static int __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsi
 	 */
 	mutex_lock(&ftrace_lock);
 
-	entry = __ftrace_lookup_ip(direct_functions, ip);
-	if (entry)
-		entry->direct = addr;
+	size = 1 << hash->size_bits;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			tmp = __ftrace_lookup_ip(direct_functions, entry->ip);
+			if (!tmp)
+				continue;
+			tmp->direct = entry->direct;
+		}
+	}
 
 	mutex_unlock(&ftrace_lock);
 
@@ -6138,7 +6145,7 @@ static int __modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsi
  * Returns: zero on success. Non zero on error, which includes:
  *  -EINVAL - The @ops object was not properly registered.
  */
-int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+int modify_ftrace_direct_nolock_hash(struct ftrace_ops *ops, struct ftrace_hash *hash)
 {
 	if (check_direct_multi(ops))
 		return -EINVAL;
@@ -6147,9 +6154,28 @@ int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long ip, unsign
 	if (direct_functions == EMPTY_HASH)
 		return -EINVAL;
 
-	return __modify_ftrace_direct(ops, ip, addr);
+	return __modify_ftrace_direct(ops, hash);
 }
 EXPORT_SYMBOL_GPL(modify_ftrace_direct_nolock);
+
+int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+{
+	struct ftrace_hash *hash;
+	int err = -EINVAL;
+
+	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	if (add_hash_entry_direct(hash, ip, addr) == NULL)
+		goto free_hash;
+
+	err = modify_ftrace_direct_nolock_hash(ops, hash);
+
+ free_hash:
+	free_ftrace_hash(hash);
+	return err;
+}
 
 /**
  * modify_ftrace_direct - Modify an existing direct 'multi' call
@@ -6167,7 +6193,7 @@ EXPORT_SYMBOL_GPL(modify_ftrace_direct_nolock);
  * Returns: zero on success. Non zero on error, which includes:
  *  -EINVAL - The @ops object was not properly registered.
  */
-int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+int modify_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash)
 {
 	int err;
 
@@ -6179,11 +6205,31 @@ int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long
 		return -EINVAL;
 
 	mutex_lock(&direct_mutex);
-	err = __modify_ftrace_direct(ops, ip, addr);
+	err = __modify_ftrace_direct(ops, hash);
 	mutex_unlock(&direct_mutex);
 	return err;
 }
 EXPORT_SYMBOL_GPL(modify_ftrace_direct);
+
+int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+{
+	struct ftrace_hash *hash;
+	int err = -EINVAL;
+
+	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	if (add_hash_entry_direct(hash, ip, addr) == NULL)
+		goto free_hash;
+
+	err = modify_ftrace_direct_hash(ops, hash);
+
+ free_hash:
+	free_ftrace_hash(hash);
+	return err;
+}
+
 #endif /* CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS */
 
 /**

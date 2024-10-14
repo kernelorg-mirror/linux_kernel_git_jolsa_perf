@@ -424,6 +424,8 @@ int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long ip, unsign
 int register_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash);
 int unregister_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash,
 				  bool free_filters);
+int modify_ftrace_direct_nolock_hash(struct ftrace_ops *ops, struct ftrace_hash *hash);
+int modify_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash);
 
 void ftrace_stub_direct_tramp(void);
 
