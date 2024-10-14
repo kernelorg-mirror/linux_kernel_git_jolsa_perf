@@ -5883,17 +5883,23 @@ static int check_direct_multi(struct ftrace_ops *ops)
  *  -ENODEV  - @ip does not point to a ftrace nop location (or not supported)
  *  -ENOMEM  - There was an allocation failure.
  */
-int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+int register_ftrace_direct_hash(struct ftrace_ops *ops, struct ftrace_hash *hash)
 {
-	struct ftrace_func_entry *new = NULL;
+	struct ftrace_func_entry *new = NULL, *entry;
 	struct ftrace_hash *new_hash = NULL;
 	int err = -EBUSY, reg;
+	unsigned long size, i;
 
 	mutex_lock(&direct_mutex);
 
 	/* Make sure requested entry is not already registered.. */
-	if (__ftrace_lookup_ip(direct_functions, ip))
-		goto out_unlock;
+	size = 1 << hash->size_bits;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			if (__ftrace_lookup_ip(direct_functions, entry->ip))
+				goto out_unlock;
+		}
+	}
 
 	err = -ENOMEM;
 	if (direct_functions == EMPTY_HASH) {
@@ -5906,14 +5912,21 @@ int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned lo
 	if (!new_hash)
 		goto out_unlock;
 
-	if (add_hash_entry_direct(new_hash, ip, addr) == NULL)
-		goto out_unlock;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			if (add_hash_entry_direct(new_hash, entry->ip, entry->direct) == NULL)
+				goto out_cleanup;
+		}
+	}
 
 	reg = !direct_functions->count;
 
-	new = add_hash_entry_direct(direct_functions, ip, addr);
-	if (!new)
-		goto out_unlock;
+	for (i = 0; i < size; i++) {
+		hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+			if (add_hash_entry_direct(direct_functions, entry->ip, entry->direct) == NULL)
+				goto out_cleanup;
+		}
+	}
 
 	if (reg) {
 		if (!(ops->flags & FTRACE_OPS_FL_INITIALIZED)) {
@@ -5930,16 +5943,42 @@ int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned lo
 		free_ftrace_hash(new_hash);
 	}
 
+ out_cleanup:
+	if (err) {
+		for (i = 0; i < size; i++) {
+			hlist_for_each_entry(entry, &hash->buckets[i], hlist) {
+				new = __ftrace_lookup_ip(direct_functions, entry->ip);
+				if (new)
+					remove_hash_entry(direct_functions, new);
+				kfree(new);
+			}
+		}
+	}
+
  out_unlock:
 	mutex_unlock(&direct_mutex);
-
-	if (err && new) {
-		remove_hash_entry(direct_functions, new);
-		kfree(new);
-	}
 	return err;
 }
 EXPORT_SYMBOL_GPL(register_ftrace_direct);
+
+int register_ftrace_direct(struct ftrace_ops *ops, unsigned long ip, unsigned long addr)
+{
+	struct ftrace_hash *hash;
+	int err = -EINVAL;
+
+	hash = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
+	if (!hash)
+		return -ENOMEM;
+
+	if (add_hash_entry_direct(hash, ip, addr) == NULL)
+		goto free_hash;
+
+	err = register_ftrace_direct_hash(ops, hash);
+
+ free_hash:
+	free_ftrace_hash(hash);
+	return err;
+}
 
 /**
  * unregister_ftrace_direct - Remove calls to custom trampoline
