@@ -1100,15 +1100,15 @@ struct btf_func_model {
  */
 enum {
 #if defined(__s390x__)
-	BPF_MAX_TRAMP_LINKS = 27,
+	BPF_MAX_TRAMP_NODES = 27,
 #else
-	BPF_MAX_TRAMP_LINKS = 38,
+	BPF_MAX_TRAMP_NODES = 38,
 #endif
 };
 
-struct bpf_tramp_links {
-	struct bpf_tramp_link *links[BPF_MAX_TRAMP_LINKS];
-	int nr_links;
+struct bpf_tramp_nodes {
+	struct bpf_tramp_node *nodes[BPF_MAX_TRAMP_NODES];
+	int nr_nodes;
 };
 
 struct bpf_tramp_run_ctx;
@@ -1136,13 +1136,13 @@ struct bpf_tramp_run_ctx;
 struct bpf_tramp_image;
 int arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *image, void *image_end,
 				const struct btf_func_model *m, u32 flags,
-				struct bpf_tramp_links *tlinks,
+				struct bpf_tramp_nodes *tnodes,
 				void *func_addr);
 void *arch_alloc_bpf_trampoline(unsigned int size);
 void arch_free_bpf_trampoline(void *image, unsigned int size);
 int __must_check arch_protect_bpf_trampoline(void *image, unsigned int size);
 int arch_bpf_trampoline_size(const struct btf_func_model *m, u32 flags,
-			     struct bpf_tramp_links *tlinks, void *func_addr);
+			     struct bpf_tramp_nodes *tnodes, void *func_addr);
 
 u64 notrace __bpf_prog_enter_sleepable_recur(struct bpf_prog *prog,
 					     struct bpf_tramp_run_ctx *run_ctx);
@@ -1299,10 +1299,10 @@ void *__bpf_dynptr_data_rw(const struct bpf_dynptr_kern *ptr, u32 len);
 bool __bpf_dynptr_is_rdonly(const struct bpf_dynptr_kern *ptr);
 
 #ifdef CONFIG_BPF_JIT
-int bpf_trampoline_link_prog(struct bpf_tramp_link *link,
+int bpf_trampoline_link_prog(struct bpf_tramp_node *node,
 			     struct bpf_trampoline *tr,
 			     struct bpf_prog *tgt_prog);
-int bpf_trampoline_unlink_prog(struct bpf_tramp_link *link,
+int bpf_trampoline_unlink_prog(struct bpf_tramp_node *node,
 			       struct bpf_trampoline *tr,
 			       struct bpf_prog *tgt_prog);
 struct bpf_trampoline *bpf_trampoline_get(u64 key,
@@ -1645,23 +1645,26 @@ struct bpf_link_ops {
 	__poll_t (*poll)(struct file *file, struct poll_table_struct *pts);
 };
 
-struct bpf_tramp_link {
-	struct bpf_link link;
+struct bpf_tramp_node {
 	struct hlist_node tramp_hlist;
+	struct bpf_prog *prog;
 	u64 cookie;
 };
 
 struct bpf_shim_tramp_link {
-	struct bpf_tramp_link link;
+	struct bpf_link link;
+	struct bpf_tramp_node node;
 	struct bpf_trampoline *trampoline;
 };
 
 struct bpf_struct_ops_tramp_link {
-	struct bpf_tramp_link link;
+	struct bpf_link link;
+	struct bpf_tramp_node node;
 };
 
 struct bpf_tracing_link {
-	struct bpf_tramp_link link;
+	struct bpf_link link;
+	struct bpf_tramp_node node;
 	enum bpf_attach_type attach_type;
 	struct bpf_trampoline *trampoline;
 	struct bpf_prog *tgt_prog;
@@ -1832,8 +1835,8 @@ void bpf_struct_ops_put(const void *kdata);
 int bpf_struct_ops_supported(const struct bpf_struct_ops *st_ops, u32 moff);
 int bpf_struct_ops_map_sys_lookup_elem(struct bpf_map *map, void *key,
 				       void *value);
-int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_links *tlinks,
-				      struct bpf_tramp_link *link,
+int bpf_struct_ops_prepare_trampoline(struct bpf_tramp_nodes *tnodes,
+				      struct bpf_tramp_node *node,
 				      const struct btf_func_model *model,
 				      void *stub_func,
 				      void **image, u32 *image_off,
