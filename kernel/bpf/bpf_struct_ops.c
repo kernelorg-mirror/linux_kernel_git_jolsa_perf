@@ -531,9 +531,10 @@ static void bpf_struct_ops_link_release(struct bpf_link *link)
 
 static void bpf_struct_ops_link_dealloc(struct bpf_link *link)
 {
-	struct bpf_tramp_link *tlink = container_of(link, struct bpf_tramp_link, link);
+	struct bpf_struct_ops_tramp_link *st_link =
+		container_of(link, struct bpf_struct_ops_tramp_link, link.link);
 
-	kfree(tlink);
+	kfree(st_link);
 }
 
 const struct bpf_link_ops bpf_struct_ops_link_lops = {
@@ -693,7 +694,7 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 	for_each_member(i, t, member) {
 		const struct btf_type *mtype, *ptype;
 		struct bpf_prog *prog;
-		struct bpf_tramp_link *link;
+		struct bpf_struct_ops_tramp_link *st_link;
 		struct bpf_ksym *ksym;
 		u32 moff;
 
@@ -758,15 +759,15 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 			goto reset_unlock;
 		}
 
-		link = kzalloc(sizeof(*link), GFP_USER);
-		if (!link) {
+		st_link = kzalloc(sizeof(*st_link), GFP_USER);
+		if (!st_link) {
 			bpf_prog_put(prog);
 			err = -ENOMEM;
 			goto reset_unlock;
 		}
-		bpf_link_init(&link->link, BPF_LINK_TYPE_STRUCT_OPS,
+		bpf_link_init(&st_link->link.link, BPF_LINK_TYPE_STRUCT_OPS,
 			      &bpf_struct_ops_link_lops, prog);
-		*plink++ = &link->link;
+		*plink++ = &st_link->link.link;
 
 		ksym = kzalloc(sizeof(*ksym), GFP_USER);
 		if (!ksym) {
@@ -776,7 +777,7 @@ static long bpf_struct_ops_map_update_elem(struct bpf_map *map, void *key,
 		*pksym++ = ksym;
 
 		trampoline_start = image_off;
-		err = bpf_struct_ops_prepare_trampoline(tlinks, link,
+		err = bpf_struct_ops_prepare_trampoline(tlinks, &st_link->link,
 						&st_ops->func_models[i],
 						*(void **)(st_ops->cfi_stubs + moff),
 						&image, &image_off,
