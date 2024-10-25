@@ -119,9 +119,12 @@ enum rp_check {
 };
 
 struct xol_area;
+struct tramp_area;
 
 struct uprobes_state {
 	struct xol_area		*xol_area;
+	struct hlist_head	tramp_head;
+	struct mutex		tramp_mutex;
 };
 
 extern void __init uprobes_init(void);
@@ -169,6 +172,10 @@ extern int uprobe_verify_opcode(struct page *page, unsigned long vaddr, uprobe_o
 extern int arch_uprobe_verify_opcode(struct page *page, unsigned long vaddr,
 			      uprobe_opcode_t *new_opcode, bool opt);
 extern bool arch_uprobe_is_register(uprobe_opcode_t *insn, int len, bool opt);
+extern bool arch_uprobe_can_optimize(struct arch_uprobe *auprobe);
+extern bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr);
+extern int arch_uprobe_optimize(struct arch_uprobe *auprobe, struct mm_struct *mm,
+				unsigned long vaddr, unsigned long tramp_vaddr);
 #else /* !CONFIG_UPROBES */
 struct uprobes_state {
 };
