@@ -41,4 +41,7 @@ ssize_t get_rel_offset(uintptr_t addr);
 
 int read_build_id(const char *path, char *build_id, size_t size);
 
+int get_syms(char ***symsp, size_t *cntp, bool kernel);
+int get_addrs(unsigned long **addrsp, size_t *cntp, bool kernel);
+
 #endif
