@@ -27,3 +27,9 @@ int BPF_PROG(test_2, __u64 a, __u64 b, __u64 c, __u64 d, __u64 e, __u64 f)
 {
 	return 0;
 }
+
+SEC("fentry.multi")
+int BPF_PROG(bench, __u64 a, __u64 b, __u64 c, __u64 d, __u64 e, __u64 f)
+{
+	return 0;
+}

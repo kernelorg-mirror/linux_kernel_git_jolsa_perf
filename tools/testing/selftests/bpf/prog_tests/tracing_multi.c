@@ -3,6 +3,9 @@
 #include <bpf/btf.h>
 #include <linux/btf.h>
 #include <search.h>
+#include <bpf/btf.h>
+#include <linux/btf.h>
+#include <search.h>
 #include "tracing_multi_fentry_test.skel.h"
 #include "trace_helpers.h"
 #include "bpf/libbpf_internal.h"
@@ -145,10 +148,125 @@ cleanup:
 	tracing_multi_fentry_test__destroy(skel);
 }
 
+static bool skip_entry(char *name)
+{
+	/*
+	 * We attach to almost all kernel functions and some of them
+	 * will cause 'suspicious RCU usage' when fprobe is attached
+	 * to them. Filter out the current culprits - arch_cpu_idle
+	 * default_idle and rcu_* functions.
+	 */
+	if (!strcmp(name, "arch_cpu_idle"))
+		return true;
+	if (!strcmp(name, "default_idle"))
+		return true;
+	if (!strncmp(name, "rcu_", 4))
+		return true;
+	if (!strcmp(name, "bpf_dispatcher_xdp_func"))
+		return true;
+	if (!strncmp(name, "__ftrace_invalid_address__",
+		     sizeof("__ftrace_invalid_address__") - 1))
+		return true;
+	return false;
+}
+
+static void multi_fentry_bench_test(void)
+{
+	struct tracing_multi_fentry_test *skel = NULL;
+	size_t i, syms_cnt;
+	char **syms;
+	void *root = NULL;
+	__u32 nr, type_id;
+	struct btf *btf;
+	__u32 *ids = NULL;
+	size_t cap = 0, cnt = 0;
+	int err;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, opts);
+	struct bpf_link *link;
+
+	btf = btf__load_vmlinux_btf();
+	if (!ASSERT_OK_PTR(btf, "btf__load_vmlinux_btf"))
+		return;
+
+	skel = tracing_multi_fentry_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	//prog_fd = bpf_program__fd(skel->progs.bench);
+
+	if (!ASSERT_OK(get_syms(&syms, &syms_cnt, true), "get_syms"))
+		goto cleanup;
+
+	for (i = 0; i < syms_cnt; i++) {
+		if (strstr(syms[i], "rcu"))
+			continue;
+		if (strstr(syms[i], "trace"))
+			continue;
+		if (strstr(syms[i], "irq"))
+			continue;
+		if (syms[i][0] != 'b')
+			continue;
+		if (!strcmp("migrate_enable", syms[i]))
+			continue;
+		if (!strcmp("migrate_disable", syms[i]))
+			continue;
+		if (!strcmp("__bpf_prog_enter_recur", syms[i]))
+			continue;
+		if (!strcmp("__bpf_prog_exit_recur", syms[i]))
+			continue;
+		if (!strcmp("preempt_count_sub", syms[i]))
+			continue;
+		if (!strcmp("preempt_count_add", syms[i]))
+			continue;
+		if (skip_entry(syms[i]))
+			continue;
+		tsearch(syms[i], &root, compare);
+	}
+
+	nr = btf__type_cnt(btf);
+	for (type_id = 1; type_id < nr; type_id++) {
+		const struct btf_type *type;
+		const char *str;
+
+		type = btf__type_by_id(btf, type_id);
+		if (!ASSERT_OK_PTR(type, "btf__type_by_id"))
+			break;
+
+		if (BTF_INFO_KIND(type->info) != BTF_KIND_FUNC)
+			continue;
+
+		str = btf__name_by_offset(btf, type->name_off);
+		if (!ASSERT_OK_PTR(str, "btf__name_by_offset")) {
+			break;
+		}
+
+		if (!tfind(str, &root, compare))
+			continue;
+
+		err = libbpf_ensure_mem((void **) &ids, &cap, sizeof(*ids), cnt + 1);
+		if (!ASSERT_OK(err, "libbpf_ensure_mem"))
+			break;
+
+		ids[cnt++] = type_id;
+	}
+
+	opts.btf_ids = ids;
+	opts.cnt = cnt;
+
+	link = bpf_program__attach_tracing_multi(skel->progs.bench, NULL, &opts);
+	if (ASSERT_OK_PTR(link, "bpf_program__attach_tracing_multi"))
+		bpf_link__destroy(link);
+
+cleanup:
+	tracing_multi_fentry_test__destroy(skel);
+}
+
 void test_tracing_multi_test(void)
 {
 	if (test__start_subtest("fentry/simple"))
 		multi_fentry_test();
 	if (test__start_subtest("fentry/intersected"))
 		multi_fentry_intersected_test();
+	if (test__start_subtest("fentry/bench"))
+		multi_fentry_bench_test();
 }
