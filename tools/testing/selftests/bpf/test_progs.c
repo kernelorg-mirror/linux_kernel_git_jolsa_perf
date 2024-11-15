@@ -1225,7 +1225,7 @@ int write_sysctl(const char *sysctl, const char *value)
 	return 0;
 }
 
-int get_bpf_max_tramp_links_from(struct btf *btf)
+int get_bpf_max_tramp_nodes_from(struct btf *btf)
 {
 	const struct btf_enum *e;
 	const struct btf_type *t;
@@ -1240,7 +1240,7 @@ int get_bpf_max_tramp_links_from(struct btf *btf)
 		e = btf_enum(t);
 		for (j = 0, vlen = btf_vlen(t); j < vlen; j++, e++) {
 			name = btf__str_by_offset(btf, e->name_off);
-			if (name && !strcmp(name, "BPF_MAX_TRAMP_LINKS"))
+			if (name && !strcmp(name, "BPF_MAX_TRAMP_NODES"))
 				return e->val;
 		}
 	}
@@ -1248,7 +1248,7 @@ int get_bpf_max_tramp_links_from(struct btf *btf)
 	return -1;
 }
 
-int get_bpf_max_tramp_links(void)
+int get_bpf_max_tramp_nodes(void)
 {
 	struct btf *vmlinux_btf;
 	int ret;
@@ -1256,7 +1256,7 @@ int get_bpf_max_tramp_links(void)
 	vmlinux_btf = btf__load_vmlinux_btf();
 	if (!ASSERT_OK_PTR(vmlinux_btf, "vmlinux btf"))
 		return -1;
-	ret = get_bpf_max_tramp_links_from(vmlinux_btf);
+	ret = get_bpf_max_tramp_nodes_from(vmlinux_btf);
 	btf__free(vmlinux_btf);
 
 	return ret;
