@@ -186,6 +186,7 @@ struct uprobes_state {
 	struct xol_area		*xol_area;
 #ifdef CONFIG_X86_64
 	struct hlist_head	head_tramps;
+	struct rb_root		root_uprobes;
 #endif
 };
 
