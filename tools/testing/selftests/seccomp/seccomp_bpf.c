@@ -4973,8 +4973,8 @@ FIXTURE_SETUP(URETPROBE)
 	ssize_t offset;
 	int type, bit;
 
-#ifndef __NR_uretprobe
-	SKIP(return, "__NR_uretprobe syscall not defined");
+#ifndef __NR_uprobe
+	SKIP(return, "__NR_uprobe syscall not defined");
 #endif
 
 	if (!variant->attach)
@@ -5053,8 +5053,8 @@ TEST_F(URETPROBE, uretprobe_block_uretprobe_syscall)
 	struct sock_filter filter[] = {
 		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
 			offsetof(struct seccomp_data, nr)),
-#ifdef __NR_uretprobe
-		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_uretprobe, 0, 1),
+#ifdef __NR_uprobe
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_uprobe, 0, 1),
 #endif
 		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_KILL),
 		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
@@ -5072,8 +5072,8 @@ TEST_F(URETPROBE, uretprobe_default_block_with_uretprobe_syscall)
 	struct sock_filter filter[] = {
 		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
 			offsetof(struct seccomp_data, nr)),
-#ifdef __NR_uretprobe
-		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_uretprobe, 2, 0),
+#ifdef __NR_uprobe
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_uprobe, 2, 0),
 #endif
 		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_exit_group, 1, 0),
 		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_KILL),

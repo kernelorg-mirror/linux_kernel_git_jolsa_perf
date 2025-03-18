@@ -215,8 +215,8 @@ static void test_uretprobe_regs_change(void)
 	}
 }
 
-#ifndef __NR_uretprobe
-#define __NR_uretprobe 335
+#ifndef __NR_uprobe
+#define __NR_uprobe 335
 #endif
 
 __naked unsigned long uretprobe_syscall_call_1(void)
@@ -229,7 +229,7 @@ __naked unsigned long uretprobe_syscall_call_1(void)
 		"pushq %rax\n"
 		"pushq %rcx\n"
 		"pushq %r11\n"
-		"movq $" __stringify(__NR_uretprobe) ", %rax\n"
+		"movq $" __stringify(__NR_uprobe) ", %rax\n"
 		"syscall\n"
 		"popq %r11\n"
 		"popq %rcx\n"

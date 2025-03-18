@@ -317,7 +317,7 @@ asm (
 	"pushq %rax\n"
 	"pushq %rcx\n"
 	"pushq %r11\n"
-	"movq $" __stringify(__NR_uretprobe) ", %rax\n"
+	"movq $" __stringify(__NR_uprobe) ", %rax\n"
 	"syscall\n"
 	".global uretprobe_syscall_check\n"
 	"uretprobe_syscall_check:\n"
