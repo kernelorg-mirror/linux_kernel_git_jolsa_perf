@@ -310,6 +310,8 @@ static int uprobe_init_insn(struct arch_uprobe *auprobe, struct insn *insn, bool
 
 #ifdef CONFIG_X86_64
 
+#define UPROBE_CMD_RETURN 1
+
 asm (
 	".pushsection .rodata\n"
 	".global uretprobe_trampoline_entry\n"
@@ -317,10 +319,13 @@ asm (
 	"pushq %rax\n"
 	"pushq %rcx\n"
 	"pushq %r11\n"
+	"pushq %rdi\n"
+	"movq $" __stringify(UPROBE_CMD_RETURN) ", %rdi\n"
 	"movq $" __stringify(__NR_uprobe) ", %rax\n"
 	"syscall\n"
 	".global uretprobe_syscall_check\n"
 	"uretprobe_syscall_check:\n"
+	"popq %rdi\n"
 	"popq %r11\n"
 	"popq %rcx\n"
 
@@ -362,10 +367,10 @@ static unsigned long trampoline_check_ip(unsigned long tramp)
 	return tramp + (uretprobe_syscall_check - uretprobe_trampoline_entry);
 }
 
-SYSCALL_DEFINE0(uretprobe)
+static long cmd_uretprobe(void)
 {
 	struct pt_regs *regs = task_pt_regs(current);
-	unsigned long err, ip, sp, r11_cx_ax[3], tramp;
+	unsigned long err, ip, sp, di_r11_cx_ax[4], tramp;
 
 	/* If there's no trampoline, we are called from wrong place. */
 	tramp = uprobe_get_trampoline_vaddr();
@@ -376,15 +381,16 @@ SYSCALL_DEFINE0(uretprobe)
 	if (unlikely(regs->ip != trampoline_check_ip(tramp)))
 		goto sigill;
 
-	err = copy_from_user(r11_cx_ax, (void __user *)regs->sp, sizeof(r11_cx_ax));
+	err = copy_from_user(di_r11_cx_ax, (void __user *)regs->sp, sizeof(di_r11_cx_ax));
 	if (err)
 		goto sigill;
 
 	/* expose the "right" values of r11/cx/ax/sp to uprobe_consumer/s */
-	regs->r11 = r11_cx_ax[0];
-	regs->cx  = r11_cx_ax[1];
-	regs->ax  = r11_cx_ax[2];
-	regs->sp += sizeof(r11_cx_ax);
+	regs->di  = di_r11_cx_ax[0];
+	regs->r11 = di_r11_cx_ax[1];
+	regs->cx  = di_r11_cx_ax[2];
+	regs->ax  = di_r11_cx_ax[3];
+	regs->sp += sizeof(di_r11_cx_ax);
 	regs->orig_ax = -1;
 
 	ip = regs->ip;
@@ -400,21 +406,22 @@ SYSCALL_DEFINE0(uretprobe)
 	 */
 	if (regs->sp != sp || shstk_is_enabled())
 		return regs->ax;
-	regs->sp -= sizeof(r11_cx_ax);
+	regs->sp -= sizeof(di_r11_cx_ax);
 
 	/* for the case uprobe_consumer has changed r11/cx */
-	r11_cx_ax[0] = regs->r11;
-	r11_cx_ax[1] = regs->cx;
+	di_r11_cx_ax[0] = regs->di;
+	di_r11_cx_ax[1] = regs->r11;
+	di_r11_cx_ax[2] = regs->cx;
 
 	/*
 	 * ax register is passed through as return value, so we can use
 	 * its space on stack for ip value and jump to it through the
 	 * trampoline's ret instruction
 	 */
-	r11_cx_ax[2] = regs->ip;
+	di_r11_cx_ax[3] = regs->ip;
 	regs->ip = ip;
 
-	err = copy_to_user((void __user *)regs->sp, r11_cx_ax, sizeof(r11_cx_ax));
+	err = copy_to_user((void __user *)regs->sp, di_r11_cx_ax, sizeof(di_r11_cx_ax));
 	if (err)
 		goto sigill;
 
@@ -425,6 +432,15 @@ SYSCALL_DEFINE0(uretprobe)
 	return regs->ax;
 
 sigill:
+	force_sig(SIGILL);
+	return -1;
+}
+
+SYSCALL_DEFINE1(uprobe, unsigned long, cmd)
+{
+	if (cmd == UPROBE_CMD_RETURN)
+		return cmd_uretprobe();
+
 	force_sig(SIGILL);
 	return -1;
 }
