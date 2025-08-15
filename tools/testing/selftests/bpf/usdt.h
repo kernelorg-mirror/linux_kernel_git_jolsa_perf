@@ -403,6 +403,10 @@ struct usdt_sema { volatile unsigned short active; };
 	__asm__ __volatile__ ("" :: "m" (sema));
 #endif
 
+#ifndef USDT_ARGS
+#define USDT_ARGS __usdt_asm_args(__VA_ARGS__)
+#endif
+
 /* main USDT definition (nop and .note.stapsdt metadata) */
 #define __usdt_probe(group, name, sema_def, sema, ...) do {					\
 	sema_def(sema)										\
@@ -418,7 +422,7 @@ struct usdt_sema { volatile unsigned short active; };
 	__usdt_asm1(		__usdt_asm_addr sema)						\
 	__usdt_asm_strz(group)									\
 	__usdt_asm_strz(name)									\
-	__usdt_asm_args(__VA_ARGS__)								\
+	USDT_ARGS										\
 	__usdt_asm1(		.ascii "\0")							\
 	__usdt_asm1(994:	.balign 4)							\
 	__usdt_asm1(		.popsection)							\

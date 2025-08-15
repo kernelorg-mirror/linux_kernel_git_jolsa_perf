@@ -4,6 +4,8 @@
 
 #include "../sdt.h"
 #include "test_usdt_o2.skel.h"
+#define USDT_ARGS ".asciz \"(,%%rax,8)\"\n"
+#include "usdt.h"
 
 #if defined(__GNUC__) && !defined(__clang__)
 __attribute__((optimize("O2")))
@@ -28,6 +30,7 @@ static noinline void trigger_func(void)
 #else
 	STAP_PROBE1(test, usdt1, array[0]);
 #endif
+	USDT(krava, test1, 1, 2);
 }
 
 static void basic_sib_usdt(void)
