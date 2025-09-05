@@ -2568,7 +2568,7 @@ static bool ignore_ret_handler(int rc)
 	return rc == UPROBE_HANDLER_REMOVE || rc == UPROBE_HANDLER_IGNORE;
 }
 
-static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs, bool *is_unique)
+static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs)
 {
 	struct uprobe_consumer *uc;
 	bool has_consumers = false, remove = true;
@@ -2581,9 +2581,6 @@ static void handler_chain(struct uprobe *uprobe, struct pt_regs *regs, bool *is_
 		bool session = uc->handler && uc->ret_handler;
 		__u64 cookie = 0;
 		int rc = 0;
-
-		if (is_unique)
-			*is_unique |= uc->is_unique;
 
 		if (uc->handler) {
 			rc = uc->handler(uc, regs, &cookie);
@@ -2738,7 +2735,6 @@ static void handle_swbp(struct pt_regs *regs)
 {
 	struct uprobe *uprobe;
 	unsigned long bp_vaddr;
-	bool is_unique = false;
 	int is_swbp;
 
 	bp_vaddr = uprobe_get_swbp_addr(regs);
@@ -2793,9 +2789,9 @@ static void handle_swbp(struct pt_regs *regs)
 	if (arch_uprobe_ignore(&uprobe->arch, regs))
 		goto out;
 
-	handler_chain(uprobe, regs, &is_unique);
+	handler_chain(uprobe, regs);
 
-	if (is_unique && instruction_pointer(regs) != bp_vaddr)
+	if (instruction_pointer(regs) != bp_vaddr)
 		goto out;
 
 	/* Try to optimize after first hit. */
@@ -2826,7 +2822,7 @@ void handle_syscall_uprobe(struct pt_regs *regs, unsigned long bp_vaddr)
 		return;
 	if (arch_uprobe_ignore(&uprobe->arch, regs))
 		return;
-	handler_chain(uprobe, regs, NULL);
+	handler_chain(uprobe, regs);
 }
 
 /*
