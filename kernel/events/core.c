@@ -3974,7 +3974,7 @@ static noinline int visit_groups_merge(struct perf_event_context *ctx,
  */
 static inline bool event_update_userpage(struct perf_event *event)
 {
-	if (likely(!atomic_read(&event->mmap_count)))
+	if (likely(!refcount_read(&event->mmap_count)))
 		return false;
 
 	perf_event_update_time(event);
@@ -5588,6 +5588,334 @@ static bool exclusive_event_installable(struct perf_event *event,
 	return true;
 }
 
+/* Holds a list of per CPU events that registered for deferred unwinding */
+struct perf_unwind_cpu {
+	struct list_head	list;
+	struct rcuwait		pending_unwind_wait;
+	int			processing;
+};
+
+struct perf_unwind_deferred {
+	struct list_head		list;
+	struct unwind_work		unwind_work;
+	struct perf_unwind_cpu __rcu	*cpu_events;
+	struct rcu_head			rcu_head;
+	int				nr_cpu_events;
+	int				id;
+};
+
+static DEFINE_MUTEX(unwind_deferred_mutex);
+static LIST_HEAD(unwind_deferred_list);
+
+static void perf_event_deferred_cpu(struct unwind_work *work,
+				    struct unwind_stacktrace *trace, u64 cookie);
+
+/*
+ * Add a per CPU event.
+ *
+ * The deferred callstack can happen on a different CPU than what was
+ * requested. If one CPU event requests a deferred callstack, but the
+ * tasks migrates, it will execute on a different CPU and save the
+ * stack trace to that CPU event.
+ *
+ * In order to map all the CPU events with the same application,
+ * use the current->gorup_leader->pid as the identifier of what
+ * events share the same program.
+ *
+ * A perf_unwind_deferred descriptor is created for each unique
+ * group_leader pid, and all the events that have the same group_leader
+ * pid will be linked to the same deferred descriptor.
+ *
+ * If there's no descriptor that matches the current group_leader pid,
+ * one will be created.
+ */
+static int perf_add_unwind_deferred(struct perf_event *event)
+{
+	struct perf_unwind_deferred *defer;
+	struct perf_unwind_cpu *cpu_events;
+	int id = current->group_leader->pid;
+	bool found = false;
+	int ret = 0;
+
+	if (event->cpu < 0)
+		return -EINVAL;
+
+	guard(mutex)(&unwind_deferred_mutex);
+
+	list_for_each_entry(defer, &unwind_deferred_list, list) {
+		if (defer->id == id) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		defer = kzalloc(sizeof(*defer), GFP_KERNEL);
+		if (!defer)
+			return -ENOMEM;
+		list_add(&defer->list, &unwind_deferred_list);
+		defer->id = id;
+	}
+
+	/*
+	 * The deferred desciptor has an array for every CPU.
+	 * Each entry in this array is a link list of all the CPU
+	 * events for the corresponding CPU. This is a quick way to
+	 * find the associated event for a given CPU in
+	 * perf_event_deferred_cpu().
+	 */
+	if (!defer->nr_cpu_events) {
+		cpu_events = kcalloc(num_possible_cpus(),
+				     sizeof(*cpu_events),
+				     GFP_KERNEL);
+		if (!cpu_events) {
+			ret = -ENOMEM;
+			goto free;
+		}
+		for (int cpu = 0; cpu < num_possible_cpus(); cpu++) {
+			rcuwait_init(&cpu_events[cpu].pending_unwind_wait);
+			INIT_LIST_HEAD(&cpu_events[cpu].list);
+		}
+
+		rcu_assign_pointer(defer->cpu_events, cpu_events);
+
+		ret = unwind_deferred_init(&defer->unwind_work,
+					   perf_event_deferred_cpu);
+		if (ret)
+			goto free;
+	}
+	cpu_events = rcu_dereference_protected(defer->cpu_events,
+				lockdep_is_held(&unwind_deferred_mutex));
+
+	/*
+	 * The defer->nr_cpu_events is the count of the number
+	 * of non-empty lists in the cpu_events array. If the list
+	 * being added to is already occupied, the nr_cpu_events does
+	 * not need to get incremented.
+	 */
+	if (list_empty(&cpu_events[event->cpu].list))
+		defer->nr_cpu_events++;
+	list_add_tail_rcu(&event->unwind_list, &cpu_events[event->cpu].list);
+
+	event->unwind_deferred = defer;
+	return 0;
+free:
+	/* Nothing to do if there was already an existing event attached */
+	if (found)
+		return ret;
+
+	list_del(&defer->list);
+	kfree(cpu_events);
+	kfree(defer);
+	return ret;
+}
+
+static void free_unwind_deferred_rcu(struct rcu_head *head)
+{
+	struct perf_unwind_cpu *cpu_events;
+	struct perf_unwind_deferred *defer =
+		container_of(head, struct perf_unwind_deferred, rcu_head);
+
+	WARN_ON_ONCE(defer->nr_cpu_events);
+	/*
+	 * This is called by call_rcu() and there are no more
+	 * references to cpu_events.
+	 */
+	cpu_events = rcu_dereference_protected(defer->cpu_events, true);
+	kfree(cpu_events);
+	kfree(defer);
+}
+
+static void perf_remove_unwind_deferred(struct perf_event *event)
+{
+	struct perf_unwind_deferred *defer = event->unwind_deferred;
+	struct perf_unwind_cpu *cpu_events, *cpu_unwind;
+
+	if (!defer)
+		return;
+
+	guard(mutex)(&unwind_deferred_mutex);
+	list_del_rcu(&event->unwind_list);
+
+	cpu_events = rcu_dereference_protected(defer->cpu_events,
+				lockdep_is_held(&unwind_deferred_mutex));
+	cpu_unwind = &cpu_events[event->cpu];
+
+	if (list_empty(&cpu_unwind->list)) {
+		defer->nr_cpu_events--;
+		if (!defer->nr_cpu_events)
+			unwind_deferred_cancel(&defer->unwind_work);
+	}
+
+	event->unwind_deferred = NULL;
+
+	/*
+	 * Make sure perf_event_deferred_cpu() is done with this event.
+	 * That function will set cpu_unwind->processing and then
+	 * call smp_mb() before iterating the list of its events.
+	 * If the event's unwind_deferred is NULL, it will be skipped.
+	 * The smp_mb() in that function matches the mb() in
+	 * rcuwait_wait_event().
+	 */
+	rcuwait_wait_event(&cpu_unwind->pending_unwind_wait,
+				   !cpu_unwind->processing, TASK_UNINTERRUPTIBLE);
+
+	/* Is this still being used by other per CPU events? */
+	if (defer->nr_cpu_events)
+		return;
+
+	list_del(&defer->list);
+	/* The defer->cpu_events is protected by RCU */
+	call_rcu(&defer->rcu_head, free_unwind_deferred_rcu);
+}
+
+static void perf_pending_unwind_sync(struct perf_event *event)
+{
+	might_sleep();
+
+	perf_remove_unwind_deferred(event);
+
+	if (!event->pending_unwind_callback)
+		return;
+
+	/*
+	 * If the task is queued to the current task's queue, we
+	 * obviously can't wait for it to complete. Simply cancel it.
+	 */
+	if (task_work_cancel(current, &event->pending_unwind_work)) {
+		event->pending_unwind_callback = 0;
+		local_dec(&event->ctx->nr_no_switch_fast);
+		return;
+	}
+
+	/*
+	 * All accesses related to the event are within the same RCU section in
+	 * perf_event_callchain_deferred(). The RCU grace period before the
+	 * event is freed will make sure all those accesses are complete by then.
+	 */
+	rcuwait_wait_event(&event->pending_unwind_wait, !event->pending_unwind_callback, TASK_UNINTERRUPTIBLE);
+}
+
+struct perf_callchain_deferred_event {
+	struct perf_event_header	header;
+	u64				cookie;
+	u64				nr;
+	u64				ips[];
+};
+
+static void perf_event_callchain_deferred(struct perf_event *event,
+					  struct unwind_stacktrace *trace,
+					  u64 cookie)
+{
+	struct perf_callchain_deferred_event deferred_event;
+	u64 callchain_context = PERF_CONTEXT_USER;
+	struct perf_output_handle handle;
+	struct perf_sample_data data;
+	u64 nr;
+
+	if (current->flags & (PF_KTHREAD | PF_USER_WORKER))
+		return;
+
+	nr = trace->nr + 1 ; /* '+1' == callchain_context */
+
+	deferred_event.header.type = PERF_RECORD_CALLCHAIN_DEFERRED;
+	deferred_event.header.misc = PERF_RECORD_MISC_USER;
+	deferred_event.header.size = sizeof(deferred_event) + (nr * sizeof(u64));
+
+	deferred_event.nr = nr;
+	deferred_event.cookie = cookie;
+
+	perf_event_header__init_id(&deferred_event.header, &data, event);
+
+	if (perf_output_begin(&handle, &data, event, deferred_event.header.size))
+		return;
+
+	perf_output_put(&handle, deferred_event);
+	perf_output_put(&handle, callchain_context);
+	/* trace->entries[] are not guaranteed to be 64bit */
+	for (int i = 0; i < trace->nr; i++) {
+		u64 entry = trace->entries[i];
+		perf_output_put(&handle, entry);
+	}
+	perf_event__output_id_sample(event, &handle, &data);
+
+	perf_output_end(&handle);
+}
+
+/* Deferred unwinding callback for task specific events */
+static void perf_event_deferred_task(struct callback_head *work)
+{
+	struct perf_event *event = container_of(work, struct perf_event, pending_unwind_work);
+	struct unwind_stacktrace trace;
+
+	if (!event->pending_unwind_callback)
+		return;
+
+	if (unwind_user_faultable(&trace) >= 0) {
+		u64 cookie = unwind_user_get_cookie();
+
+		/*
+		 * All accesses to the event must belong to the same implicit RCU
+		 * read-side critical section as the ->pending_unwind_callback reset.
+		 * See comment in perf_pending_unwind_sync().
+		 */
+		guard(rcu)();
+		perf_event_callchain_deferred(event, &trace, cookie);
+	}
+
+	event->pending_unwind_callback = 0;
+	local_dec(&event->ctx->nr_no_switch_fast);
+	rcuwait_wake_up(&event->pending_unwind_wait);
+}
+
+/*
+ * Deferred unwinding callback for per CPU events.
+ * Note, the request for the deferred unwinding may have happened
+ * on a different CPU.
+ */
+static void perf_event_deferred_cpu(struct unwind_work *work,
+				    struct unwind_stacktrace *trace, u64 cookie)
+{
+	struct perf_unwind_deferred *defer =
+		container_of(work, struct perf_unwind_deferred, unwind_work);
+	struct perf_unwind_cpu *cpu_events, *cpu_unwind;
+	struct perf_event *event;
+	int cpu;
+
+	guard(rcu)();
+	guard(preempt)();
+
+	cpu = smp_processor_id();
+	cpu_events = rcu_dereference(defer->cpu_events);
+	cpu_unwind = &cpu_events[cpu];
+
+	WRITE_ONCE(cpu_unwind->processing, 1);
+	/*
+	 * Make sure the above is seen before the event->unwind_deferred
+	 * is checked. This matches the mb() in rcuwait_rcu_wait_event() in
+	 * perf_remove_unwind_deferred().
+	 */
+	smp_mb();
+
+	list_for_each_entry_rcu(event, &cpu_unwind->list, unwind_list) {
+		/* If unwind_deferred is NULL the event is going away */
+		if (unlikely(!event->unwind_deferred))
+			continue;
+		perf_event_callchain_deferred(event, trace, cookie);
+		/* Only the first CPU event gets the trace */
+		break;
+	}
+
+	/*
+	 * The perf_event_callchain_deferred() must finish before setting
+	 * cpu_unwind->processing to zero. This is also to synchronize
+	 * with the rcuwait in perf_remove_unwind_deferred().
+	 */
+	smp_mb();
+	WRITE_ONCE(cpu_unwind->processing, 0);
+	rcuwait_wake_up(&cpu_unwind->pending_unwind_wait);
+}
+
 static void perf_free_addr_filters(struct perf_event *event);
 
 /* vs perf_event_alloc() error */
@@ -5655,6 +5983,7 @@ static void _free_event(struct perf_event *event)
 {
 	irq_work_sync(&event->pending_irq);
 	irq_work_sync(&event->pending_disable_irq);
+	perf_pending_unwind_sync(event);
 
 	unaccount_event(event);
 
@@ -6710,11 +7039,11 @@ static void perf_mmap_open(struct vm_area_struct *vma)
 	struct perf_event *event = vma->vm_file->private_data;
 	mapped_f mapped = get_mapped(event, event_mapped);
 
-	atomic_inc(&event->mmap_count);
-	atomic_inc(&event->rb->mmap_count);
+	refcount_inc(&event->mmap_count);
+	refcount_inc(&event->rb->mmap_count);
 
 	if (vma->vm_pgoff)
-		atomic_inc(&event->rb->aux_mmap_count);
+		refcount_inc(&event->rb->aux_mmap_count);
 
 	if (mapped)
 		mapped(event, vma->vm_mm);
@@ -6749,7 +7078,7 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 	 * to avoid complications.
 	 */
 	if (rb_has_aux(rb) && vma->vm_pgoff == rb->aux_pgoff &&
-	    atomic_dec_and_mutex_lock(&rb->aux_mmap_count, &rb->aux_mutex)) {
+	    refcount_dec_and_mutex_lock(&rb->aux_mmap_count, &rb->aux_mutex)) {
 		/*
 		 * Stop all AUX events that are writing to this buffer,
 		 * so that we can free its AUX pages and corresponding PMU
@@ -6769,10 +7098,10 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		mutex_unlock(&rb->aux_mutex);
 	}
 
-	if (atomic_dec_and_test(&rb->mmap_count))
+	if (refcount_dec_and_test(&rb->mmap_count))
 		detach_rest = true;
 
-	if (!atomic_dec_and_mutex_lock(&event->mmap_count, &event->mmap_mutex))
+	if (!refcount_dec_and_mutex_lock(&event->mmap_count, &event->mmap_mutex))
 		goto out_put;
 
 	ring_buffer_attach(event, NULL);
@@ -6933,19 +7262,200 @@ static int map_range(struct perf_buffer *rb, struct vm_area_struct *vma)
 	return err;
 }
 
+static bool perf_mmap_calc_limits(struct vm_area_struct *vma, long *user_extra, long *extra)
+{
+	unsigned long user_locked, user_lock_limit, locked, lock_limit;
+	struct user_struct *user = current_user();
+
+	user_lock_limit = sysctl_perf_event_mlock >> (PAGE_SHIFT - 10);
+	/* Increase the limit linearly with more CPUs */
+	user_lock_limit *= num_online_cpus();
+
+	user_locked = atomic_long_read(&user->locked_vm);
+
+	/*
+	 * sysctl_perf_event_mlock may have changed, so that
+	 *     user->locked_vm > user_lock_limit
+	 */
+	if (user_locked > user_lock_limit)
+		user_locked = user_lock_limit;
+	user_locked += *user_extra;
+
+	if (user_locked > user_lock_limit) {
+		/*
+		 * charge locked_vm until it hits user_lock_limit;
+		 * charge the rest from pinned_vm
+		 */
+		*extra = user_locked - user_lock_limit;
+		*user_extra -= *extra;
+	}
+
+	lock_limit = rlimit(RLIMIT_MEMLOCK);
+	lock_limit >>= PAGE_SHIFT;
+	locked = atomic64_read(&vma->vm_mm->pinned_vm) + *extra;
+
+	return locked <= lock_limit || !perf_is_paranoid() || capable(CAP_IPC_LOCK);
+}
+
+static void perf_mmap_account(struct vm_area_struct *vma, long user_extra, long extra)
+{
+	struct user_struct *user = current_user();
+
+	atomic_long_add(user_extra, &user->locked_vm);
+	atomic64_add(extra, &vma->vm_mm->pinned_vm);
+}
+
+static int perf_mmap_rb(struct vm_area_struct *vma, struct perf_event *event,
+			unsigned long nr_pages)
+{
+	long extra = 0, user_extra = nr_pages;
+	struct perf_buffer *rb;
+	int rb_flags = 0;
+
+	nr_pages -= 1;
+
+	/*
+	 * If we have rb pages ensure they're a power-of-two number, so we
+	 * can do bitmasks instead of modulo.
+	 */
+	if (nr_pages != 0 && !is_power_of_2(nr_pages))
+		return -EINVAL;
+
+	WARN_ON_ONCE(event->ctx->parent_ctx);
+
+	if (event->rb) {
+		if (data_page_nr(event->rb) != nr_pages)
+			return -EINVAL;
+
+		if (refcount_inc_not_zero(&event->rb->mmap_count)) {
+			/*
+			 * Success -- managed to mmap() the same buffer
+			 * multiple times.
+			 */
+			perf_mmap_account(vma, user_extra, extra);
+			refcount_inc(&event->mmap_count);
+			return 0;
+		}
+
+		/*
+		 * Raced against perf_mmap_close()'s
+		 * refcount_dec_and_mutex_lock() remove the
+		 * event and continue as if !event->rb
+		 */
+		ring_buffer_attach(event, NULL);
+	}
+
+	if (!perf_mmap_calc_limits(vma, &user_extra, &extra))
+		return -EPERM;
+
+	if (vma->vm_flags & VM_WRITE)
+		rb_flags |= RING_BUFFER_WRITABLE;
+
+	rb = rb_alloc(nr_pages,
+		      event->attr.watermark ? event->attr.wakeup_watermark : 0,
+		      event->cpu, rb_flags);
+
+	if (!rb)
+		return -ENOMEM;
+
+	refcount_set(&rb->mmap_count, 1);
+	rb->mmap_user = get_current_user();
+	rb->mmap_locked = extra;
+
+	ring_buffer_attach(event, rb);
+
+	perf_event_update_time(event);
+	perf_event_init_userpage(event);
+	perf_event_update_userpage(event);
+
+	perf_mmap_account(vma, user_extra, extra);
+	refcount_set(&event->mmap_count, 1);
+
+	return 0;
+}
+
+static int perf_mmap_aux(struct vm_area_struct *vma, struct perf_event *event,
+			 unsigned long nr_pages)
+{
+	long extra = 0, user_extra = nr_pages;
+	u64 aux_offset, aux_size;
+	struct perf_buffer *rb;
+	int ret, rb_flags = 0;
+
+	rb = event->rb;
+	if (!rb)
+		return -EINVAL;
+
+	guard(mutex)(&rb->aux_mutex);
+
+	/*
+	 * AUX area mapping: if rb->aux_nr_pages != 0, it's already
+	 * mapped, all subsequent mappings should have the same size
+	 * and offset. Must be above the normal perf buffer.
+	 */
+	aux_offset = READ_ONCE(rb->user_page->aux_offset);
+	aux_size = READ_ONCE(rb->user_page->aux_size);
+
+	if (aux_offset < perf_data_size(rb) + PAGE_SIZE)
+		return -EINVAL;
+
+	if (aux_offset != vma->vm_pgoff << PAGE_SHIFT)
+		return -EINVAL;
+
+	/* already mapped with a different offset */
+	if (rb_has_aux(rb) && rb->aux_pgoff != vma->vm_pgoff)
+		return -EINVAL;
+
+	if (aux_size != nr_pages * PAGE_SIZE)
+		return -EINVAL;
+
+	/* already mapped with a different size */
+	if (rb_has_aux(rb) && rb->aux_nr_pages != nr_pages)
+		return -EINVAL;
+
+	if (!is_power_of_2(nr_pages))
+		return -EINVAL;
+
+	if (!refcount_inc_not_zero(&rb->mmap_count))
+		return -EINVAL;
+
+	if (rb_has_aux(rb)) {
+		refcount_inc(&rb->aux_mmap_count);
+
+	} else {
+		if (!perf_mmap_calc_limits(vma, &user_extra, &extra)) {
+			refcount_dec(&rb->mmap_count);
+			return -EPERM;
+		}
+
+		WARN_ON(!rb && event->rb);
+
+		if (vma->vm_flags & VM_WRITE)
+			rb_flags |= RING_BUFFER_WRITABLE;
+
+		ret = rb_alloc_aux(rb, event, vma->vm_pgoff, nr_pages,
+				   event->attr.aux_watermark, rb_flags);
+		if (ret) {
+			refcount_dec(&rb->mmap_count);
+			return ret;
+		}
+
+		refcount_set(&rb->aux_mmap_count, 1);
+		rb->aux_mmap_locked = extra;
+	}
+
+	perf_mmap_account(vma, user_extra, extra);
+	refcount_inc(&event->mmap_count);
+
+	return 0;
+}
+
 static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct perf_event *event = file->private_data;
-	unsigned long user_locked, user_lock_limit;
-	struct user_struct *user = current_user();
-	struct mutex *aux_mutex = NULL;
-	struct perf_buffer *rb = NULL;
-	unsigned long locked, lock_limit;
-	unsigned long vma_size;
-	unsigned long nr_pages;
-	long user_extra = 0, extra = 0;
-	int ret, flags = 0;
+	unsigned long vma_size, nr_pages;
 	mapped_f mapped;
+	int ret;
 
 	/*
 	 * Don't allow mmap() of inherited per-task counters. This would
@@ -6971,191 +7481,22 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	if (vma_size != PAGE_SIZE * nr_pages)
 		return -EINVAL;
 
-	user_extra = nr_pages;
-
-	mutex_lock(&event->mmap_mutex);
-	ret = -EINVAL;
-
-	/*
-	 * This relies on __pmu_detach_event() taking mmap_mutex after marking
-	 * the event REVOKED. Either we observe the state, or __pmu_detach_event()
-	 * will detach the rb created here.
-	 */
-	if (event->state <= PERF_EVENT_STATE_REVOKED) {
-		ret = -ENODEV;
-		goto unlock;
-	}
-
-	if (vma->vm_pgoff == 0) {
-		nr_pages -= 1;
-
+	scoped_guard (mutex, &event->mmap_mutex) {
 		/*
-		 * If we have rb pages ensure they're a power-of-two number, so we
-		 * can do bitmasks instead of modulo.
+		 * This relies on __pmu_detach_event() taking mmap_mutex after marking
+		 * the event REVOKED. Either we observe the state, or __pmu_detach_event()
+		 * will detach the rb created here.
 		 */
-		if (nr_pages != 0 && !is_power_of_2(nr_pages))
-			goto unlock;
+		if (event->state <= PERF_EVENT_STATE_REVOKED)
+			return -ENODEV;
 
-		WARN_ON_ONCE(event->ctx->parent_ctx);
-
-		if (event->rb) {
-			if (data_page_nr(event->rb) != nr_pages)
-				goto unlock;
-
-			if (atomic_inc_not_zero(&event->rb->mmap_count)) {
-				/*
-				 * Success -- managed to mmap() the same buffer
-				 * multiple times.
-				 */
-				ret = 0;
-				/* We need the rb to map pages. */
-				rb = event->rb;
-				goto unlock;
-			}
-
-			/*
-			 * Raced against perf_mmap_close()'s
-			 * atomic_dec_and_mutex_lock() remove the
-			 * event and continue as if !event->rb
-			 */
-			ring_buffer_attach(event, NULL);
-		}
-
-	} else {
-		/*
-		 * AUX area mapping: if rb->aux_nr_pages != 0, it's already
-		 * mapped, all subsequent mappings should have the same size
-		 * and offset. Must be above the normal perf buffer.
-		 */
-		u64 aux_offset, aux_size;
-
-		rb = event->rb;
-		if (!rb)
-			goto aux_unlock;
-
-		aux_mutex = &rb->aux_mutex;
-		mutex_lock(aux_mutex);
-
-		aux_offset = READ_ONCE(rb->user_page->aux_offset);
-		aux_size = READ_ONCE(rb->user_page->aux_size);
-
-		if (aux_offset < perf_data_size(rb) + PAGE_SIZE)
-			goto aux_unlock;
-
-		if (aux_offset != vma->vm_pgoff << PAGE_SHIFT)
-			goto aux_unlock;
-
-		/* already mapped with a different offset */
-		if (rb_has_aux(rb) && rb->aux_pgoff != vma->vm_pgoff)
-			goto aux_unlock;
-
-		if (aux_size != vma_size || aux_size != nr_pages * PAGE_SIZE)
-			goto aux_unlock;
-
-		/* already mapped with a different size */
-		if (rb_has_aux(rb) && rb->aux_nr_pages != nr_pages)
-			goto aux_unlock;
-
-		if (!is_power_of_2(nr_pages))
-			goto aux_unlock;
-
-		if (!atomic_inc_not_zero(&rb->mmap_count))
-			goto aux_unlock;
-
-		if (rb_has_aux(rb)) {
-			atomic_inc(&rb->aux_mmap_count);
-			ret = 0;
-			goto unlock;
-		}
+		if (vma->vm_pgoff == 0)
+			ret = perf_mmap_rb(vma, event, nr_pages);
+		else
+			ret = perf_mmap_aux(vma, event, nr_pages);
+		if (ret)
+			return ret;
 	}
-
-	user_lock_limit = sysctl_perf_event_mlock >> (PAGE_SHIFT - 10);
-
-	/*
-	 * Increase the limit linearly with more CPUs:
-	 */
-	user_lock_limit *= num_online_cpus();
-
-	user_locked = atomic_long_read(&user->locked_vm);
-
-	/*
-	 * sysctl_perf_event_mlock may have changed, so that
-	 *     user->locked_vm > user_lock_limit
-	 */
-	if (user_locked > user_lock_limit)
-		user_locked = user_lock_limit;
-	user_locked += user_extra;
-
-	if (user_locked > user_lock_limit) {
-		/*
-		 * charge locked_vm until it hits user_lock_limit;
-		 * charge the rest from pinned_vm
-		 */
-		extra = user_locked - user_lock_limit;
-		user_extra -= extra;
-	}
-
-	lock_limit = rlimit(RLIMIT_MEMLOCK);
-	lock_limit >>= PAGE_SHIFT;
-	locked = atomic64_read(&vma->vm_mm->pinned_vm) + extra;
-
-	if ((locked > lock_limit) && perf_is_paranoid() &&
-		!capable(CAP_IPC_LOCK)) {
-		ret = -EPERM;
-		goto unlock;
-	}
-
-	WARN_ON(!rb && event->rb);
-
-	if (vma->vm_flags & VM_WRITE)
-		flags |= RING_BUFFER_WRITABLE;
-
-	if (!rb) {
-		rb = rb_alloc(nr_pages,
-			      event->attr.watermark ? event->attr.wakeup_watermark : 0,
-			      event->cpu, flags);
-
-		if (!rb) {
-			ret = -ENOMEM;
-			goto unlock;
-		}
-
-		atomic_set(&rb->mmap_count, 1);
-		rb->mmap_user = get_current_user();
-		rb->mmap_locked = extra;
-
-		ring_buffer_attach(event, rb);
-
-		perf_event_update_time(event);
-		perf_event_init_userpage(event);
-		perf_event_update_userpage(event);
-		ret = 0;
-	} else {
-		ret = rb_alloc_aux(rb, event, vma->vm_pgoff, nr_pages,
-				   event->attr.aux_watermark, flags);
-		if (!ret) {
-			atomic_set(&rb->aux_mmap_count, 1);
-			rb->aux_mmap_locked = extra;
-		}
-	}
-
-unlock:
-	if (!ret) {
-		atomic_long_add(user_extra, &user->locked_vm);
-		atomic64_add(extra, &vma->vm_mm->pinned_vm);
-
-		atomic_inc(&event->mmap_count);
-	} else if (rb) {
-		/* AUX allocation failed */
-		atomic_dec(&rb->mmap_count);
-	}
-aux_unlock:
-	if (aux_mutex)
-		mutex_unlock(aux_mutex);
-	mutex_unlock(&event->mmap_mutex);
-
-	if (ret)
-		return ret;
 
 	/*
 	 * Since pinned accounting is per vm we cannot allow fork() to copy our
@@ -7174,7 +7515,7 @@ aux_unlock:
 	 * full cleanup in this case and therefore does not invoke
 	 * vmops::close().
 	 */
-	ret = map_range(rb, vma);
+	ret = map_range(event->rb, vma);
 	if (ret)
 		perf_mmap_close(vma);
 
@@ -7440,7 +7781,7 @@ static void perf_sample_regs_user(struct perf_regs *regs_user,
 	if (user_mode(regs)) {
 		regs_user->abi = perf_reg_abi(current);
 		regs_user->regs = regs;
-	} else if (!(current->flags & PF_KTHREAD)) {
+	} else if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER))) {
 		perf_get_regs_user(regs_user, regs);
 	} else {
 		regs_user->abi = PERF_SAMPLE_REGS_ABI_NONE;
@@ -8080,7 +8421,7 @@ static u64 perf_virt_to_phys(u64 virt)
 		 * Try IRQ-safe get_user_page_fast_only first.
 		 * If failed, leave phys_addr as 0.
 		 */
-		if (current->mm != NULL) {
+		if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER))) {
 			struct page *p;
 
 			pagefault_disable();
@@ -8188,15 +8529,78 @@ static u64 perf_get_page_size(unsigned long addr)
 
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
+
+static int deferred_unwind_request(struct perf_unwind_deferred *defer,
+				   u64 *defer_cookie)
+{
+	/*
+	 * Returns 0 for queued, 1 for already queued or executed,
+	 * and negative on error.
+	 */
+	return unwind_deferred_request(&defer->unwind_work, defer_cookie);
+}
+
+/*
+ * Returns:
+*     > 0 : if already queued.
+ *      0 : if it performed the queuing
+ *    < 0 : if it did not get queued.
+ */
+static int deferred_request(struct perf_event *event, u64 *defer_cookie)
+{
+	struct callback_head *work = &event->pending_unwind_work;
+	struct perf_unwind_deferred *defer;
+	int pending;
+	int ret;
+
+	if ((current->flags & (PF_KTHREAD | PF_USER_WORKER)) ||
+	    !user_mode(task_pt_regs(current)))
+		return -EINVAL;
+
+	defer = READ_ONCE(event->unwind_deferred);
+	if (defer)
+		return deferred_unwind_request(defer, defer_cookie);
+
+	/* Per CPU events should have had unwind_deferred set! */
+	if (WARN_ON_ONCE(!event->ctx->task))
+		return -EINVAL;
+
+	guard(irqsave)();
+
+	*defer_cookie = unwind_user_get_cookie();
+
+	/* callback already pending? */
+	pending = READ_ONCE(event->pending_unwind_callback);
+	if (pending)
+		return 1;
+
+	/* Claim the work unless an NMI just now swooped in to do so. */
+	if (!try_cmpxchg(&event->pending_unwind_callback, &pending, 1))
+		return 1;
+
+	/* The work has been claimed, now schedule it. */
+	ret = task_work_add(current, work, TWA_RESUME);
+	if (WARN_ON_ONCE(ret)) {
+		WRITE_ONCE(event->pending_unwind_callback, 0);
+		return ret;
+	}
+	return 0;
+}
+
 struct perf_callchain_entry *
 perf_callchain(struct perf_event *event, struct pt_regs *regs)
 {
 	bool kernel = !event->attr.exclude_callchain_kernel;
-	bool user   = !event->attr.exclude_callchain_user;
+	bool user   = !event->attr.exclude_callchain_user &&
+		!(current->flags & (PF_KTHREAD | PF_USER_WORKER));
 	/* Disallow cross-task user callchains. */
 	bool crosstask = event->ctx->task && event->ctx->task != current;
 	const u32 max_stack = event->attr.sample_max_stack;
 	struct perf_callchain_entry *callchain;
+	u64 defer_cookie = 0;
+	/* perf currently only supports deferred in 64bit */
+	bool defer_user = IS_ENABLED(CONFIG_UNWIND_USER) && user &&
+			  event->attr.defer_callchain;
 
 	if (!current->mm)
 		user = false;
@@ -8204,8 +8608,21 @@ perf_callchain(struct perf_event *event, struct pt_regs *regs)
 	if (!kernel && !user)
 		return &__empty_callchain;
 
-	callchain = get_perf_callchain(regs, 0, kernel, user,
-				       max_stack, crosstask, true);
+	/* Disallow cross-task callchains. */
+	if (event->ctx->task && event->ctx->task != current)
+		return &__empty_callchain;
+
+	if (defer_user) {
+		int ret = deferred_request(event, &defer_cookie);
+		if (!ret)
+			local_inc(&event->ctx->nr_no_switch_fast);
+		else if (ret < 0)
+			defer_cookie = 0;
+	}
+
+	callchain = get_perf_callchain(regs, kernel, user, max_stack,
+				       crosstask, true, defer_cookie);
+
 	return callchain ?: &__empty_callchain;
 }
 
@@ -12880,6 +13297,8 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	event->pending_disable_irq = IRQ_WORK_INIT_HARD(perf_pending_disable);
 	init_task_work(&event->pending_task, perf_pending_task);
 
+	rcuwait_init(&event->pending_unwind_wait);
+
 	mutex_init(&event->mmap_mutex);
 	raw_spin_lock_init(&event->addr_filters.lock);
 
@@ -13044,9 +13463,20 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		}
 	}
 
+	/* Setup unwind deferring for per CPU events */
+	if (event->attr.defer_callchain && !task) {
+		err = perf_add_unwind_deferred(event);
+		if (err)
+			return ERR_PTR(err);
+	}
+
 	err = security_perf_event_alloc(event);
 	if (err)
 		return ERR_PTR(err);
+
+	if (event->attr.defer_callchain)
+		init_task_work(&event->pending_unwind_work,
+			       perf_event_deferred_task);
 
 	/* symmetric to unaccount_event() in _free_event() */
 	account_event(event);
@@ -13253,7 +13683,7 @@ perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
 	mutex_lock_double(&event->mmap_mutex, &output_event->mmap_mutex);
 set:
 	/* Can't redirect output if we've got an active mmap() */
-	if (atomic_read(&event->mmap_count))
+	if (refcount_read(&event->mmap_count))
 		goto unlock;
 
 	if (output_event) {
@@ -13266,7 +13696,7 @@ set:
 			goto unlock;
 
 		/* did we race against perf_mmap_close() */
-		if (!atomic_read(&rb->mmap_count)) {
+		if (!refcount_read(&rb->mmap_count)) {
 			ring_buffer_put(rb);
 			goto unlock;
 		}

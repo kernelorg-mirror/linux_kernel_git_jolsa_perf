@@ -16,6 +16,11 @@ struct unwind_work {
 	int				bit;
 };
 
+/* Architectures can add a test to not defer unwinding */
+#ifndef arch_unwind_can_defer
+# define arch_unwind_can_defer()	(true)
+#endif
+
 #ifdef CONFIG_UNWIND_USER
 
 enum {
@@ -40,6 +45,8 @@ int unwind_deferred_request(struct unwind_work *work, u64 *cookie);
 void unwind_deferred_cancel(struct unwind_work *work);
 
 void unwind_deferred_task_exit(struct task_struct *task);
+
+u64 unwind_user_get_cookie(void);
 
 static __always_inline void unwind_reset_info(void)
 {
@@ -75,6 +82,9 @@ static inline void unwind_deferred_cancel(struct unwind_work *work) {}
 
 static inline void unwind_deferred_task_exit(struct task_struct *task) {}
 static inline void unwind_reset_info(void) {}
+
+/* Must be non-zero */
+static inline u64 unwind_user_get_cookie(void) { return (u64)-1; }
 
 #endif /* !CONFIG_UNWIND_USER */
 
