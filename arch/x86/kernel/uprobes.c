@@ -1414,6 +1414,19 @@ static void branch_clear_offset(struct arch_uprobe *auprobe, struct insn *insn)
 		0, insn->immediate.nbytes);
 }
 
+static bool mov_emulate_op(struct arch_uprobe *auprobe, struct arch_uprobe_xol *xol,
+			   struct pt_regs *regs)
+{
+	unsigned long *dst, *src;
+
+	dst = (unsigned long *) regs + xol->mov.dst;
+	src = (unsigned long *) regs + xol->mov.src;
+	*dst = *src;
+
+	regs->ip += xol->mov.ilen;
+	return true;
+}
+
 static const struct uprobe_xol_ops branch_xol_ops = {
 	.emulate  = branch_emulate_op,
 	.post_xol = branch_post_xol_op,
@@ -1421,6 +1434,10 @@ static const struct uprobe_xol_ops branch_xol_ops = {
 
 static const struct uprobe_xol_ops push_xol_ops = {
 	.emulate  = push_emulate_op,
+};
+
+static const struct uprobe_xol_ops mov_xol_ops = {
+	.emulate  = mov_emulate_op,
 };
 
 /* Returns -ENOSYS if branch_xol_ops doesn't handle this insn */
@@ -1560,6 +1577,63 @@ static int push_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
 	return 0;
 }
 
+#ifdef CONFIG_X86_64
+static u16 get_reg_offset(unsigned int reg)
+{
+#define REG(reg) offsetof(struct pt_regs, reg) / sizeof(unsigned long)
+	static u16 reg_offset[16] = {
+		/* rax */ REG(ax),
+		/* rcx */ REG(cx),
+		/* rdx */ REG(dx),
+		/* rbx */ REG(bx),
+		/* rsp */ REG(sp),
+		/* rbp */ REG(bp),
+		/* rsi */ REG(si),
+		/* rdi */ REG(di),
+		/* r8  */ REG(r8),
+		/* r9  */ REG(r9),
+		/* r10 */ REG(r10),
+		/* r11 */ REG(r11),
+		/* r12 */ REG(r12),
+		/* r13 */ REG(r13),
+		/* r14 */ REG(r14),
+		/* r15 */ REG(r15),
+	};
+#undef REG
+	return reg_offset[reg];
+}
+
+/* Returns -ENOSYS if mov_xol_ops doesn't handle this insn */
+static int mov_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
+{
+
+	u8 opc1 = OPCODE1(insn);
+
+	if (opc1 != 0x89)
+		return -ENOSYS;
+	if (insn->rex_prefix.nbytes != 1 ||
+	    insn->rex_prefix.bytes[0] != 0x48)
+		return -ENOSYS;
+	if (X86_MODRM_MOD(insn->modrm.value) != 3)
+		return -ENOSYS;
+	if (X86_MODRM_REG(insn->modrm.value) >= 16)
+		return -EINVAL;
+	if (X86_MODRM_RM(insn->modrm.value) >= 16)
+		return -EINVAL;
+
+	xol->mov.src = get_reg_offset(X86_MODRM_REG(insn->modrm.value));
+	xol->mov.dst = get_reg_offset(X86_MODRM_RM(insn->modrm.value));
+	xol->mov.ilen = insn->length;
+	xol->ops = &mov_xol_ops;
+	return 0;
+}
+#else
+static int mov_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
+{
+	return -ENOSYS;
+}
+#endif
+
 /**
  * arch_uprobe_analyze_insn - instruction analysis including validity and fixups.
  * @auprobe: the probepoint information.
@@ -1585,6 +1659,10 @@ int arch_uprobe_analyze_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, 
 		return ret;
 
 	ret = push_setup_xol_ops(&auprobe->xol, &insn);
+	if (ret != -ENOSYS)
+		return ret;
+
+	ret = mov_setup_xol_ops(&auprobe->xol, &insn);
 	if (ret != -ENOSYS)
 		return ret;
 
