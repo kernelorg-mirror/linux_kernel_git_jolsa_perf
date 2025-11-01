@@ -276,13 +276,14 @@ static bool is_prefix_bad(struct insn *insn)
 	return false;
 }
 
-static int uprobe_init_insn(struct arch_uprobe *auprobe, struct insn *insn, bool x86_64)
+static int uprobe_init_insn_offset(struct arch_uprobe *auprobe, unsigned long offset,
+				   struct insn *insn, bool x86_64)
 {
 	enum insn_mode m = x86_64 ? INSN_MODE_64 : INSN_MODE_32;
 	u32 volatile *good_insns;
 	int ret;
 
-	ret = insn_decode(insn, auprobe->insn, sizeof(auprobe->insn), m);
+	ret = insn_decode(insn, auprobe->insn + offset, sizeof(auprobe->insn), m);
 	if (ret < 0)
 		return -ENOEXEC;
 
@@ -307,6 +308,11 @@ static int uprobe_init_insn(struct arch_uprobe *auprobe, struct insn *insn, bool
 	}
 
 	return -ENOTSUPP;
+}
+
+static int uprobe_init_insn(struct arch_uprobe *auprobe, struct insn *insn, bool x86_64)
+{
+	return uprobe_init_insn_offset(auprobe, 0, insn, x86_64);
 }
 
 #ifdef CONFIG_X86_64
@@ -808,6 +814,8 @@ SYSCALL_DEFINE0(uprobe)
 	unsigned long ip, sp, sret;
 	int err;
 
+	trace_printk("SYS0\n");
+
 	/* Allow execution only from uprobe trampolines. */
 	if (!in_uprobe_trampoline(regs->ip))
 		return -ENXIO;
@@ -836,7 +844,9 @@ SYSCALL_DEFINE0(uprobe)
 	if (err == -EFAULT || (!err && sret != args.retaddr))
 		goto sigill;
 
+	trace_printk("SYS1 ip %lx sp %lx retaddr %lx\n", regs->ip, regs->sp, args.retaddr);
 	handle_syscall_uprobe(regs, regs->ip);
+	trace_printk("SYS2 ip %lx sp %lx\n", regs->ip, regs->sp);
 
 	/*
 	 * Some of the uprobe consumers has changed sp, we can do nothing,
@@ -846,6 +856,7 @@ SYSCALL_DEFINE0(uprobe)
 		/* skip the trampoline call */
 		if (args.retaddr - 5 == regs->ip)
 			regs->ip += 5;
+	trace_printk("SYS3 ip %lx sp %lx\n", regs->ip, regs->sp);
 		return regs->ax;
 	}
 
@@ -1123,6 +1134,7 @@ static int __arch_uprobe_optimize(struct arch_uprobe *auprobe, struct mm_struct 
 	if (!tramp)
 		return -EINVAL;
 	err = swbp_optimize(auprobe, vma, vaddr, tramp->vaddr);
+	trace_printk("__arch_uprobe_optimize err %d\n", err);
 	if (WARN_ON_ONCE(err) && new)
 		destroy_uprobe_trampoline(tramp);
 	return err;
@@ -1132,6 +1144,8 @@ void arch_uprobe_optimize(struct arch_uprobe *auprobe, unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
 	uprobe_opcode_t insn[5];
+
+	trace_printk("arch_uprobe_optimize1 should_optimize %d\n", should_optimize(auprobe));
 
 	if (!should_optimize(auprobe))
 		return;
@@ -1375,9 +1389,11 @@ static bool push_emulate_op(struct arch_uprobe *auprobe, struct arch_uprobe_xol 
 {
 	unsigned long *src_ptr = (void *)regs + xol->push.reg_offset;
 
+	trace_printk("push_emulate_op1 regs %lx ip %lx\n", (unsigned long) regs, regs->ip);
 	if (emulate_push_stack(regs, *src_ptr))
 		return false;
 	regs->ip += xol->push.ilen;
+	trace_printk("push_emulate_op2 regs %lx ip %lx\n", (unsigned long) regs, regs->ip);
 	return true;
 }
 
@@ -1441,6 +1457,25 @@ static bool sub_emulate_op(struct arch_uprobe *auprobe, struct arch_uprobe_xol *
 	return true;
 }
 
+static bool optimized_emulate(struct arch_uprobe *auprobe, struct arch_uprobe_xol *xol,
+			      struct pt_regs *regs)
+{
+	int i;
+
+	for (i = 0; i < auprobe->opt.cnt; i++) {
+		trace_printk("optimized_emulate1 %d %pS regs %lx ip %lx\n", i, (void*)auprobe->opt.xol[i].ops, (unsigned long) regs, regs->ip);
+		WARN_ON(!auprobe->opt.xol[i].ops->emulate(auprobe, &auprobe->opt.xol[i], regs));
+		trace_printk("optimized_emulate2 ip %lx sp %lx\n", regs->ip, regs->sp);
+	}
+	return true;
+}
+
+void arch_uprobe_optimized_emulate(struct arch_uprobe *auprobe, struct pt_regs *regs)
+{
+	if (test_bit(ARCH_UPROBE_FLAG_OPTIMIZE_EMULATE, &auprobe->flags))
+		optimized_emulate(auprobe, NULL, regs);
+}
+
 static const struct uprobe_xol_ops branch_xol_ops = {
 	.emulate  = branch_emulate_op,
 	.post_xol = branch_post_xol_op,
@@ -1456,6 +1491,10 @@ static const struct uprobe_xol_ops mov_xol_ops = {
 
 static const struct uprobe_xol_ops sub_xol_ops = {
 	.emulate  = sub_emulate_op,
+};
+
+static const struct uprobe_xol_ops opt_xol_ops = {
+	.emulate  = optimized_emulate,
 };
 
 /* Returns -ENOSYS if branch_xol_ops doesn't handle this insn */
@@ -1678,12 +1717,88 @@ static int sub_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
 	xol->ops = &sub_xol_ops;
 	return 0;
 }
+
+static int opt_setup_xol_insns(struct arch_uprobe *auprobe, struct arch_uprobe_xol *xol,
+			       struct insn *insn)
+{
+	int ret;
+
+	ret = push_setup_xol_ops(xol, insn);
+	if (ret != -ENOSYS)
+		return ret;
+	ret = mov_setup_xol_ops(xol, insn);
+	if (ret != -ENOSYS)
+		return ret;
+	ret = sub_setup_xol_ops(xol, insn);
+	if (ret != -ENOSYS)
+		return ret;
+
+	return -1;
+}
+
+static int opt_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
+{
+	unsigned long offset = insn->length;
+	struct insn insnX;
+	int i, ret;
+
+	trace_printk("opt_setup_xol_ops1 ARCH_UPROBE_FLAG_CAN_OPTIMIZE %d\n",
+			test_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags));
+
+	if (test_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags))
+		return -ENOSYS;
+
+	ret = opt_setup_xol_insns(auprobe, &auprobe->opt.xol[0], insn);
+	trace_printk("opt_setup_xol_ops2 ret %d ops %pS\n", ret, (void *) auprobe->opt.xol[0].ops);
+	if (ret)
+		return -ENOSYS;
+
+	auprobe->opt.cnt = 1;
+	if (offset >= 5)
+		goto optimize;
+
+	for (i = 1; i < 5; i++) {
+		ret = uprobe_init_insn_offset(auprobe, offset, &insnX, true);
+		trace_printk("opt_setup_xol_ops3 ret %d offset %lu cnt %d\n", ret, offset, auprobe->opt.cnt);
+		if (ret)
+			break;
+		ret = opt_setup_xol_insns(auprobe, &auprobe->opt.xol[i], &insnX);
+		trace_printk("opt_setup_xol_ops4 ret %d ops %pS\n", ret, (void *) auprobe->opt.xol[i].ops);
+		if (ret)
+			break;
+		offset += insnX.length;
+		auprobe->opt.cnt++;
+		trace_printk("opt_setup_xol_ops5 offset %lu\n", offset);
+		if (offset >= 5)
+			goto optimize;
+	}
+
+	trace_printk("opt_setup_xol_ops6\n");
+	return -ENOSYS;
+
+optimize:
+	trace_printk("opt_setup_xol_ops7 offset %lu cnt %d\n", offset, auprobe->opt.cnt);
+	set_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags);
+	set_bit(ARCH_UPROBE_FLAG_OPTIMIZE_EMULATE, &auprobe->flags);
+	auprobe->xol.ops = &opt_xol_ops;
+	trace_printk("opt_setup_xol_ops8 %pS %pS %pS %pS %pS\n",
+			(void *) auprobe->opt.xol[0].ops,
+			(void *) auprobe->opt.xol[1].ops,
+			(void *) auprobe->opt.xol[2].ops,
+			(void *) auprobe->opt.xol[3].ops,
+			(void *) auprobe->opt.xol[4].ops);
+	return 0;
+}
 #else
 static int mov_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
 {
 	return -ENOSYS;
 }
 static int sub_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
+{
+	return -ENOSYS;
+}
+static int opt_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
 {
 	return -ENOSYS;
 }
@@ -1708,6 +1823,10 @@ int arch_uprobe_analyze_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, 
 
 	if (can_optimize(&insn, addr))
 		set_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags);
+
+	ret = opt_setup_xol_ops(auprobe, &insn);
+	if (ret != -ENOSYS)
+		return ret;
 
 	ret = branch_setup_xol_ops(auprobe, &insn);
 	if (ret != -ENOSYS)
