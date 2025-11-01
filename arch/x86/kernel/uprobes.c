@@ -1427,6 +1427,20 @@ static bool mov_emulate_op(struct arch_uprobe *auprobe, struct arch_uprobe_xol *
 	return true;
 }
 
+static bool sub_emulate_op(struct arch_uprobe *auprobe, struct arch_uprobe_xol *xol,
+			   struct pt_regs *regs)
+{
+	unsigned long *reg;
+
+	reg = (unsigned long *) regs + xol->sub.reg;
+	*reg -= xol->sub.val;
+
+	/* TODO we need to set proper eflags in here */
+
+	regs->ip += xol->sub.ilen;
+	return true;
+}
+
 static const struct uprobe_xol_ops branch_xol_ops = {
 	.emulate  = branch_emulate_op,
 	.post_xol = branch_post_xol_op,
@@ -1438,6 +1452,10 @@ static const struct uprobe_xol_ops push_xol_ops = {
 
 static const struct uprobe_xol_ops mov_xol_ops = {
 	.emulate  = mov_emulate_op,
+};
+
+static const struct uprobe_xol_ops sub_xol_ops = {
+	.emulate  = sub_emulate_op,
 };
 
 /* Returns -ENOSYS if branch_xol_ops doesn't handle this insn */
@@ -1627,8 +1645,35 @@ static int mov_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
 	xol->ops = &mov_xol_ops;
 	return 0;
 }
+
+static int sub_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
+{
+	u8 opc1 = OPCODE1(insn);
+
+	if (opc1 != 0x81)
+		return -ENOSYS;
+	if (insn->rex_prefix.nbytes != 1 ||
+	    insn->rex_prefix.bytes[0] != 0x48)
+		return -ENOSYS;
+	if (X86_MODRM_MOD(insn->modrm.value) != 3)
+		return -ENOSYS;
+	if (X86_MODRM_REG(insn->modrm.value) != 5)
+		return -ENOSYS;
+	if (X86_MODRM_RM(insn->modrm.value) >= 16)
+		return -EINVAL;
+
+	xol->sub.reg = get_reg_offset(X86_MODRM_RM(insn->modrm.value));
+	xol->sub.val = insn->immediate.value;
+	xol->sub.ilen = insn->length;
+	xol->ops = &sub_xol_ops;
+	return 0;
+}
 #else
 static int mov_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
+{
+	return -ENOSYS;
+}
+static int sub_setup_xol_ops(struct arch_uprobe_xol *xol, struct insn *insn)
 {
 	return -ENOSYS;
 }
@@ -1663,6 +1708,10 @@ int arch_uprobe_analyze_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, 
 		return ret;
 
 	ret = mov_setup_xol_ops(&auprobe->xol, &insn);
+	if (ret != -ENOSYS)
+		return ret;
+
+	ret = sub_setup_xol_ops(&auprobe->xol, &insn);
 	if (ret != -ENOSYS)
 		return ret;
 
