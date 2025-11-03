@@ -813,6 +813,47 @@ cleanup:
 	uprobe_syscall__destroy(skel);
 }
 
+__attribute__((aligned(16)))
+__nocf_check __weak __naked void prolog_trigger(void)
+{
+	asm volatile (
+		"pushq %rbp\n"
+		"movq  %rsp,%rbp\n"
+		"subq  $0xb0,%rsp\n"
+		"addq  $0xb0,%rsp\n"
+		"pop %rbp\n"
+		"ret\n"
+	);
+}
+
+static void test_optimize_prolog(void)
+{
+	struct uprobe_syscall_executed *skel = NULL;
+	struct bpf_link *link;
+	unsigned long offset;
+
+	offset = get_uprobe_offset(&prolog_trigger);
+	if (!ASSERT_GE(offset, 0, "get_uprobe_offset"))
+		goto cleanup;
+
+	/* uprobe */
+	skel = uprobe_syscall_executed__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "uprobe_syscall_executed__open_and_load"))
+		return;
+
+	skel->bss->pid = getpid();
+
+	link = bpf_program__attach_uprobe_opts(skel->progs.test_uprobe,
+				0, "/proc/self/exe", offset, NULL);
+	if (!ASSERT_OK_PTR(link, "bpf_program__attach_uprobe_opts"))
+		goto cleanup;
+
+	check(skel, link, prolog_trigger, prolog_trigger, 2);
+
+cleanup:
+	uprobe_syscall_executed__destroy(skel);
+}
+
 static void __test_uprobe_syscall(void)
 {
 	if (test__start_subtest("uretprobe_regs_equal"))
@@ -839,6 +880,8 @@ static void __test_uprobe_syscall(void)
 		test_regs_change();
 	if (test__start_subtest("emulate_mov"))
 		test_emulate();
+	if (test__start_subtest("optimize_prolog"))
+		test_optimize_prolog();
 }
 #else
 static void __test_uprobe_syscall(void)
