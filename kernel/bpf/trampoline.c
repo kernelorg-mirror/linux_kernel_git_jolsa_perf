@@ -1481,6 +1481,7 @@ int bpf_trampoline_multi_attach(struct bpf_prog *prog, u32 *ids,
 		key = bpf_trampoline_compute_key(NULL, prog->aux->attach_btf, ids[i]);
 
 		tr = bpf_trampoline_get(key, &tgt_info);
+		trace_printk("bpf_trampoline_multi_attach1 id %u tr %lx\n", ids[i], (unsigned long) tr);
 		if (!tr)
 			goto rollback_put;
 
@@ -1495,20 +1496,29 @@ int bpf_trampoline_multi_attach(struct bpf_prog *prog, u32 *ids,
 		mutex_lock(&tr->mutex);
 
 		err = __bpf_trampoline_link_prog(&mnode->node, tr, NULL, &trampoline_multi_ops, &data);
+		trace_printk("bpf_trampoline_multi_attach2 err %d\n", err);
 		if (err) {
 			mutex_unlock(&tr->mutex);
 			goto rollback_unlink;
 		}
 	}
 
-	err = update_ftrace_direct_add(&direct_ops, data.reg);
-	if (err)
-		goto rollback_unlink;
+	trace_printk("bpf_trampoline_multi_attach21 reg %lu mod %lu\n", hash_count(data.reg), hash_count(data.modify));
 
-	err = update_ftrace_direct_mod(&direct_ops, data.modify, true);
-	if (err) {
-		WARN_ON_ONCE(update_ftrace_direct_del(&direct_ops, data.reg));
-		goto rollback_unlink;
+	if (hash_count(data.reg)) {
+		err = update_ftrace_direct_add(&direct_ops, data.reg);
+		trace_printk("bpf_trampoline_multi_attach3 err %d\n", err);
+		if (err)
+			goto rollback_unlink;
+	}
+
+	if (hash_count(data.modify)) {
+		err = update_ftrace_direct_mod(&direct_ops, data.modify, true);
+		trace_printk("bpf_trampoline_multi_attach4 err %d\n", err);
+		if (err) {
+			WARN_ON_ONCE(update_ftrace_direct_del(&direct_ops, data.reg));
+			goto rollback_unlink;
+		}
 	}
 
 	for (i = 0; i < cnt; i++) {
@@ -1516,10 +1526,12 @@ int bpf_trampoline_multi_attach(struct bpf_prog *prog, u32 *ids,
 		mutex_unlock(&tr->mutex);
 	}
 
+	trace_printk("bpf_trampoline_multi_attach5\n");
 	free_fentry_multi_data(&data);
 	return 0;
 
 rollback_unlink:
+	trace_printk("bpf_trampoline_multi_attach6\n");
 	for (j = 0; j < i; j++) {
 		mnode = &link->nodes[j];
 		tr = mnode->trampoline;
@@ -1529,12 +1541,14 @@ rollback_unlink:
 	}
 
 rollback_put:
+	trace_printk("bpf_trampoline_multi_attach7\n");
 	for (j = 0; j < i; j++) {
 		mnode = &link->nodes[j];
 		bpf_trampoline_put(mnode->trampoline);
 	}
 
 	free_fentry_multi_data(&data);
+	trace_printk("bpf_trampoline_multi_attach8 err %d\n", err);
 	return err;
 }
 
@@ -1544,6 +1558,7 @@ int bpf_trampoline_multi_detach(struct bpf_prog *prog, struct bpf_tracing_multi_
 	struct fentry_multi_data data = {};
 	int i, cnt = link->nodes_cnt;
 	struct bpf_trampoline *tr;
+	int err;
 
 	data.unreg = alloc_ftrace_hash(FTRACE_HASH_DEFAULT_BITS);
 	if (!data.unreg)
@@ -1564,8 +1579,19 @@ int bpf_trampoline_multi_detach(struct bpf_prog *prog, struct bpf_tracing_multi_
 							  &trampoline_multi_ops, &data));
 	}
 
-	WARN_ON_ONCE(update_ftrace_direct_del(&direct_ops, data.unreg));
-	WARN_ON_ONCE(update_ftrace_direct_mod(&direct_ops, data.modify, true));
+	trace_printk("bpf_trampoline_multi_detach1 unreg %lu mod %lu\n", hash_count(data.unreg), hash_count(data.modify));
+
+	if (hash_count(data.unreg)) {
+		err = update_ftrace_direct_del(&direct_ops, data.unreg);
+		trace_printk("bpf_trampoline_multi_detach2 err %d\n", err);
+		WARN_ON_ONCE(err);
+	}
+
+	if (hash_count(data.modify)) {
+		err = update_ftrace_direct_mod(&direct_ops, data.modify, true);
+		trace_printk("bpf_trampoline_multi_detach3 err %d\n", err);
+		WARN_ON_ONCE(err);
+	}
 
 	for (i = 0; i < cnt; i++) {
 		tr = link->nodes[i].trampoline;

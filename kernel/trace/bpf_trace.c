@@ -3690,6 +3690,7 @@ int bpf_tracing_multi_attach(struct bpf_prog *prog,
 		if (err)
 			continue;
 		ids[j++] = ids[i];
+		trace_printk("bpf_tracing_multi_attach1 id %u %pS\n", ids[i], (void *) tgt_info.tgt_addr);
 	}
 
 	link->nodes_cnt = j;
