@@ -73,4 +73,20 @@ int fexit_test(struct pt_regs *ctx)
 	return 0;
 }
 
+SEC("uprobe.multi")
+int uprobe_multi_test(struct pt_regs *ctx)
+{
+	stack_key = bpf_get_stackid(ctx, &stackmap, 0);
+	bpf_printk("uprobe_multi %d\n", (int) stack_key);
+	return 0;
+}
+
+SEC("uprobe")
+int uprobe_test(struct pt_regs *ctx)
+{
+	stack_key = bpf_get_stackid(ctx, &stackmap, 0);
+	bpf_printk("uprobe %d\n", (int) stack_key);
+	return 0;
+}
+
 char _license[] SEC("license") = "GPL";
