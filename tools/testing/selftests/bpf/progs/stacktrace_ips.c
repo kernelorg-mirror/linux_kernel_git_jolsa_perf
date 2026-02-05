@@ -30,6 +30,7 @@ int unused(void)
 }
 
 __u32 stack_key;
+__u32 stack_len;
 
 SEC("kprobe")
 int kprobe_test(struct pt_regs *ctx)
@@ -73,11 +74,15 @@ int fexit_test(struct pt_regs *ctx)
 	return 0;
 }
 
+static __u64 stack_heap[128] = {};
+
 SEC("uprobe.multi")
 int uprobe_multi_test(struct pt_regs *ctx)
 {
 	stack_key = bpf_get_stackid(ctx, &stackmap, 0);
-	bpf_printk("uprobe_multi %d\n", (int) stack_key);
+	//stack_len = bpf_get_stack(ctx, &stack_heap, 128, BPF_F_USER_STACK);
+	stack_len = bpf_get_task_stack(bpf_get_current_task_btf(), &stack_heap, 128, 0);
+	bpf_printk("uprobe_multi %d %d\n", (int) stack_key, (int) stack_len);
 	return 0;
 }
 
@@ -85,7 +90,9 @@ SEC("uprobe")
 int uprobe_test(struct pt_regs *ctx)
 {
 	stack_key = bpf_get_stackid(ctx, &stackmap, 0);
-	bpf_printk("uprobe %d\n", (int) stack_key);
+	//stack_len = bpf_get_stack(ctx, &stack_heap, 128, 0);
+	stack_len = bpf_get_task_stack(bpf_get_current_task_btf(), &stack_heap, 128, 0);
+	bpf_printk("uprobe %d %d\n", (int) stack_key, (int) stack_len);
 	return 0;
 }
 

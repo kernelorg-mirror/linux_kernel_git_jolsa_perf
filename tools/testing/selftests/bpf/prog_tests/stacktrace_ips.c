@@ -286,6 +286,32 @@ cleanup:
 	stacktrace_ips__destroy(skel);
 }
 
+static void test_stacktrace_ips_uprobe_multi(bool retprobe)
+{
+	LIBBPF_OPTS(bpf_uprobe_multi_opts, opts,
+		.retprobe = retprobe
+	);
+	struct stacktrace_ips *skel;
+
+	skel = stacktrace_ips__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "stacktrace_ips__open_and_load"))
+		return;
+
+	skel->links.uprobe_multi_test = bpf_program__attach_uprobe_multi(skel->progs.uprobe_multi_test,
+						-1 /* pid */, "/proc/self/exe",
+						"stacktrace_ips_uprobe_trigger",
+						&opts);
+	if (!ASSERT_OK_PTR(skel->links.uprobe_multi_test, "bpf_program__attach_uprobe_multi"))
+		goto cleanup;
+
+	stacktrace_ips_uprobe_trigger();
+
+	ASSERT_EQ((int) skel->bss->stack_key, -EFAULT, "stack_key");
+
+cleanup:
+	stacktrace_ips__destroy(skel);
+}
+
 void test_stacktrace_ips(void)
 {
 	arch_test_stacktrace_ips();
@@ -294,4 +320,8 @@ void test_stacktrace_ips(void)
 		test_stacktrace_ips_uprobe(false);
 	if (test__start_subtest("uretprobe"))
 		test_stacktrace_ips_uprobe(true);
+	if (test__start_subtest("uprobe_multi"))
+		test_stacktrace_ips_uprobe_multi(false);
+	if (test__start_subtest("uretprobe_multi"))
+		test_stacktrace_ips_uprobe_multi(true);
 }
