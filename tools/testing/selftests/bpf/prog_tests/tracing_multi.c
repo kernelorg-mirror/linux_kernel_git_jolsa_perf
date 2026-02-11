@@ -164,6 +164,80 @@ cleanup:
 	tracing_multi__destroy(skel);
 }
 
+static void __test_intersect(void)
+{
+}
+
+static void test_intersect_fentry(void)
+{
+	struct tracing_multi_fentry_test *skel = NULL;
+	LIBBPF_OPTS(bpf_tracing_multi_opts, opts);
+	LIBBPF_OPTS(bpf_test_run_opts, topts);
+	const char *funcs_1[] = {
+		"bpf_fentry_test1",
+		"bpf_fentry_test2",
+		"bpf_fentry_test3",
+		"bpf_fentry_test4",
+		"bpf_fentry_test5",
+	};
+	const char *funcs_2[] = {
+		"bpf_fentry_test4",
+		"bpf_fentry_test5",
+		"bpf_fentry_test6",
+		"bpf_fentry_test7",
+		"bpf_fentry_test8",
+	};
+	__u32 *ids_1 = NULL, *ids_2 = NULL;
+	size_t cnt_1 = ARRAY_SIZE(funcs_1);
+	size_t cnt_2 = ARRAY_SIZE(funcs_2);
+	struct bpf_link *link_1 = NULL;
+	struct bpf_link *link_2 = NULL;
+	int err, prog_fd;
+
+	skel = tracing_multi_fentry_test__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "fentry_multi_skel_load"))
+		goto cleanup;
+
+	__test_intersect(skel->progs.test_fentry, &skel->bss->test_result, funcs, cnt,
+			 skel->progs.test_fentry_2, &skel->bss->test_result_2, funcs_2, cnt_2);
+			
+
+	ids_1 = get_ids(funcs_1, cnt_1);
+	if (!ASSERT_OK_PTR(ids_1, "get_ids"))
+		goto cleanup;
+	ids_2 = get_ids(funcs_2, cnt_2);
+	if (!ASSERT_OK_PTR(ids_2, "get_ids"))
+		goto cleanup;
+
+	opts.btf_ids = ids_1;
+	opts.cnt = cnt_1;
+
+	link_1 = bpf_program__attach_tracing_multi(skel->progs.test_1, NULL, &opts);
+	if (!ASSERT_OK_PTR(link_1, "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	opts.btf_ids = ids_2;
+	opts.cnt = cnt_2;
+
+	link_2 = bpf_program__attach_tracing_multi(skel->progs.test_2, NULL, &opts);
+	if (!ASSERT_OK_PTR(link_2, "bpf_program__attach_tracing_multi"))
+		goto cleanup;
+
+	prog_fd = bpf_program__fd(skel->progs.test);
+	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	ASSERT_OK(err, "test_run");
+
+	ASSERT_EQ(skel->bss->test_result_2, 5, "test_result");
+	ASSERT_EQ(skel->bss->test_result_3, 5, "test_result");
+
+cleanup:
+	free(ids_1);
+	free(ids_2);
+	bpf_link__destroy(link_1);
+	bpf_link__destroy(link_2);
+	tracing_multi_fentry_test__destroy(skel);
+}
+
 void test_tracing_multi_test(void)
 {
 #ifndef __x86_64__
@@ -176,4 +250,6 @@ void test_tracing_multi_test(void)
 		test_link_api_pattern();
 	if (test__start_subtest("link_api_ids"))
 		test_link_api_ids();
+	if (test__start_subtest("intersect/fentry"))
+		test_intersect_fentry();
 }

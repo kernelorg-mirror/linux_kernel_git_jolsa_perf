@@ -150,3 +150,20 @@ int BPF_PROG(test_fexit)
 	arg_check(ctx, &test_result_fexit, true);
 	return 0;
 }
+
+__u64 test_result_fentry_2 = 0;
+__u64 test_result_fexit_2 = 0;
+
+SEC("fentry.multi")
+int BPF_PROG(test_fentry_2)
+{
+	arg_check(ctx, &test_result_fentry, false);
+	return 0;
+}
+
+SEC("fexit.multi")
+int BPF_PROG(test_fexit_2)
+{
+	arg_check(ctx, &test_result_fexit, true);
+	return 0;
+}
