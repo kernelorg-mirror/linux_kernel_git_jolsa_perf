@@ -7716,6 +7716,12 @@ static int bpf_object__sanitize_prog(struct bpf_object *obj, struct bpf_program 
 static int libbpf_find_attach_btf_id(struct bpf_program *prog, const char *attach_name,
 				     int *btf_obj_fd, int *btf_type_id);
 
+static inline bool is_tracing_multi(enum bpf_attach_type type)
+{
+	return type == BPF_TRACE_FENTRY_MULTI || type == BPF_TRACE_FEXIT_MULTI ||
+	       type == BPF_TRACE_FSESSION_MULTI;
+}
+
 /* this is called as prog->sec_def->prog_prepare_load_fn for libbpf-supported sec_defs */
 static int libbpf_prepare_prog_load(struct bpf_program *prog,
 				    struct bpf_prog_load_opts *opts, long cookie)
@@ -7779,6 +7785,43 @@ static int libbpf_prepare_prog_load(struct bpf_program *prog,
 		opts->attach_btf_obj_fd = btf_obj_fd;
 		opts->attach_btf_id = btf_type_id;
 	}
+
+	if (is_tracing_multi(prog->expected_attach_type)) {
+		const char *attach_name, *sep, *mod_name = NULL;
+		int mod_len = 0;
+
+		attach_name = strchr(prog->sec_name, '/');
+		if (!attach_name)
+			return -EINVAL;
+
+		attach_name++;
+
+		sep = strchr(attach_name, ':');
+		if (sep) {
+			mod_name = attach_name;
+			mod_len = sep - mod_name;
+		}
+
+		if (mod_name) {
+			int i, ret, btf_obj_fd = 0;
+
+			ret = load_module_btfs(prog->obj);
+			if (ret)
+				return ret;
+
+			for (i = 0; i < prog->obj->btf_module_cnt; i++) {
+				const struct module_btf *mod = &prog->obj->btf_modules[i];
+
+				if (mod_name && strncmp(mod->name, mod_name, mod_len) == 0) {
+					btf_obj_fd = mod->fd;
+					break;
+				}
+			}
+			prog->attach_btf_obj_fd = btf_obj_fd;
+			opts->attach_btf_obj_fd = btf_obj_fd;
+		}
+	}
+
 	return 0;
 }
 
@@ -8899,6 +8942,9 @@ static void bpf_object_post_load_cleanup(struct bpf_object *obj)
 		free(obj->btf_modules[i].name);
 	}
 	obj->btf_module_cnt = 0;
+	obj->btf_module_cap = 0;
+	obj->btf_modules = NULL;
+	obj->btf_modules_loaded = false;
 	zfree(&obj->btf_modules);
 
 	/* clean up vmlinux BTF */
@@ -12369,11 +12415,41 @@ bpf_program__attach_tracing_multi(const struct bpf_program *prog, const char *pa
 		return libbpf_err_ptr(-EINVAL);
 
 	if (pattern) {
+		const char *mod_name = NULL, *sep;
+		struct btf *btf = NULL;
+		int i, mod_len = 0;
+
 		err = bpf_object__load_vmlinux_btf(prog->obj, true);
 		if (err)
 			return libbpf_err_ptr(err);
 
-		cnt = collect_btf_func_ids_by_glob(prog->obj->btf_vmlinux, pattern, &ids);
+		sep = strchr(pattern, ':');
+		if (sep) {
+			mod_name = pattern;
+			mod_len = sep - pattern;
+			pattern = ++sep;
+		}
+
+		if (mod_name) {
+			err = load_module_btfs(prog->obj);
+			if (err)
+				return libbpf_err_ptr(err);
+
+			for (i = 0; i < prog->obj->btf_module_cnt; i++) {
+				const struct module_btf *mod = &prog->obj->btf_modules[i];
+
+				if (!strncmp(mod->name, mod_name, mod_len)) {
+					btf = mod->btf;
+					break;
+				}
+			}
+			if (!btf)
+				return libbpf_err_ptr(-EINVAL);
+		} else {
+			btf = prog->obj->btf_vmlinux;
+		}
+
+		cnt = collect_btf_func_ids_by_glob(btf, pattern, &ids);
 		if (cnt < 0)
 			return libbpf_err_ptr(cnt);
 		if (cnt == 0)
@@ -12450,7 +12526,7 @@ static int attach_tracing_multi(const struct bpf_program *prog, long cookie, str
 		return -EINVAL;
 	}
 
-	n = sscanf(spec, "%m[a-zA-Z0-9_.*?]", &pattern);
+	n = sscanf(spec, "%m[a-zA-Z0-9_.*?:]", &pattern);
 	if (n < 1) {
 		pr_warn("tracing multi pattern is invalid: %s\n", spec);
 		return -EINVAL;

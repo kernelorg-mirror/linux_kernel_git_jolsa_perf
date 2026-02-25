@@ -24812,6 +24812,11 @@ static int check_non_sleepable_error_inject(u32 btf_id)
 	return btf_id_set_contains(&btf_non_sleepable_error_inject, btf_id);
 }
 
+static bool is_tracing_multi_id(const struct bpf_prog *prog, u32 btf_id)
+{
+	return is_tracing_multi(prog->expected_attach_type) && bpf_multi_func_btf_id[0] == btf_id;
+}
+
 int bpf_check_attach_target(struct bpf_verifier_log *log,
 			    const struct bpf_prog *prog,
 			    const struct bpf_prog *tgt_prog,
@@ -25068,7 +25073,9 @@ int bpf_check_attach_target(struct bpf_verifier_log *log,
 		if (ret < 0)
 			return ret;
 
-		if (tgt_prog) {
+		if (is_tracing_multi_id(prog, btf_id)) {
+			addr = 0;
+		} else if (tgt_prog) {
 			if (subprog == 0)
 				addr = (long) tgt_prog->bpf_func;
 			else
@@ -25101,8 +25108,7 @@ int bpf_check_attach_target(struct bpf_verifier_log *log,
 				 * verifier check, the actual attachment is checked in later
 				 * pass with specific function btf_id.
 				 */
-				if (is_tracing_multi(prog->expected_attach_type) &&
-				    bpf_multi_func_btf_id[0] == btf_id)
+				if (is_tracing_multi_id(prog, btf_id))
 					ret = 0;
 				/* fentry/fexit/fmod_ret progs can be sleepable if they are
 				 * attached to ALLOW_ERROR_INJECTION and are not in denylist.
