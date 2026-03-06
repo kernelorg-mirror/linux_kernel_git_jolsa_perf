@@ -3667,6 +3667,8 @@ int bpf_tracing_multi_attach(struct bpf_prog *prog, const union bpf_attr *attr)
 		return -EINVAL;
 	if (cnt > MAX_TRACING_MULTI_CNT)
 		return -E2BIG;
+	if (attr->link_create.flags)
+		return -EINVAL;
 
 	ids = kvmalloc_array(cnt, sizeof(*ids), GFP_KERNEL);
 	if (!ids)
@@ -3738,4 +3740,4 @@ int bpf_tracing_multi_attach(struct bpf_prog *prog, const union bpf_attr *attr)
 	return -EOPNOTSUPP;
 }
 
-#endif /* CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS) && CONFIG_HAVE_SINGLE_FTRACE_DIRECT_OPS */
+#endif /* CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS && CONFIG_HAVE_SINGLE_FTRACE_DIRECT_OPS */
