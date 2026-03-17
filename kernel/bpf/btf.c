@@ -6232,6 +6232,29 @@ static bool btf_is_kfunc_arg_mem_size(const struct btf *btf,
 	return true;
 }
 
+bool btf_param_match_suffix(const struct btf *btf,
+			    const struct btf_param *arg,
+			    const char *suffix)
+{
+	int suffix_len = strlen(suffix), len;
+	const char *param_name;
+
+	/* In the future, this can be ported to use BTF tagging */
+	param_name = btf_name_by_offset(btf, arg->name_off);
+	if (str_is_empty(param_name))
+		return false;
+	len = strlen(param_name);
+	if (len <= suffix_len)
+		return false;
+	param_name += len - suffix_len;
+	return !strncmp(param_name, suffix, suffix_len);
+}
+
+static bool is_kfunc_arg_ignore(const struct btf *btf, const struct btf_param *arg)
+{
+	return btf_param_match_suffix(btf, arg, "__ign");
+}
+
 static int btf_check_func_arg_match(struct bpf_verifier_env *env,
 				    const struct btf *btf, u32 func_id,
 				    struct bpf_reg_state *regs,
@@ -6290,6 +6313,9 @@ static int btf_check_func_arg_match(struct bpf_verifier_env *env,
 		u32 regno = i + 1;
 		struct bpf_reg_state *reg = &regs[regno];
 		bool obj_ptr = false;
+
+		if (is_kfunc_arg_ignore(btf, &args[i]))
+			continue;
 
 		t = btf_type_skip_modifiers(btf, args[i].type, NULL);
 		if (btf_type_is_scalar(t)) {
