@@ -7034,4 +7034,12 @@ struct bpf_core_relo {
 	enum bpf_core_relo_kind kind;
 };
 
+/*
+ * Flags to control BPF kfunc behaviour.
+ *     - BPF_F_PAD_ZEROS: Pad destination buffer with zeros. (See the respective
+ *       helper documentation for details.)
+ */
+enum bpf_kfunc_flags {
+	BPF_F_PAD_ZEROS = (1ULL << 0),
+};
 #endif /* _UAPI__LINUX_BPF_H__ */
