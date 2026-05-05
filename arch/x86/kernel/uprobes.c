@@ -636,9 +636,26 @@ struct uprobe_trampoline {
 	unsigned long		vaddr;
 };
 
+/*
+ * Optimized uprobe: a 9-byte slot is replaced with a 4-byte RSP adjustment
+ * (red-zone protection) followed by a 5-byte CALL to the trampoline.
+ *
+ * Encoding: add $-0x80,%rsp  =>  48 83 c4 80  (RSP -= 128)
+ */
+static const u8 uprobe_opt_prefix[] = {0x48, 0x83, 0xc4, 0x80};
+#define UPROBE_OPT_PREFIX_SIZE	4
+#define UPROBE_OPT_INSN_SIZE	(UPROBE_OPT_PREFIX_SIZE + CALL_INSN_SIZE)	/* 9 */
+#define UPROBE_OPT_CALL_OFF	UPROBE_OPT_PREFIX_SIZE				/* 4 */
+#define UPROBE_OPT_RSP_ADJ	0x80	/* bytes subtracted from RSP by the prefix */
+
+static bool is_opt_insn(const uprobe_opcode_t *insn)
+{
+	return !memcmp(insn, uprobe_opt_prefix, UPROBE_OPT_PREFIX_SIZE);
+}
+
 static bool is_reachable_by_call(unsigned long vtramp, unsigned long vaddr)
 {
-	long delta = (long)(vaddr + 5 - vtramp);
+	long delta = (long)(vaddr + UPROBE_OPT_INSN_SIZE - vtramp);
 
 	return delta >= INT_MIN && delta <= INT_MAX;
 }
@@ -651,7 +668,7 @@ static unsigned long find_nearest_trampoline(unsigned long vaddr)
 	};
 	unsigned long low_limit, high_limit;
 	unsigned long low_tramp, high_tramp;
-	unsigned long call_end = vaddr + 5;
+	unsigned long call_end = vaddr + UPROBE_OPT_INSN_SIZE;
 
 	if (check_add_overflow(call_end, INT_MIN, &low_limit))
 		low_limit = PAGE_SIZE;
@@ -826,8 +843,8 @@ SYSCALL_DEFINE0(uprobe)
 	regs->ax  = args.ax;
 	regs->r11 = args.r11;
 	regs->cx  = args.cx;
-	regs->ip  = args.retaddr - 5;
-	regs->sp += sizeof(args);
+	regs->ip  = args.retaddr - UPROBE_OPT_INSN_SIZE;
+	regs->sp += sizeof(args) + UPROBE_OPT_RSP_ADJ;
 	regs->orig_ax = -1;
 
 	sp = regs->sp;
@@ -844,12 +861,12 @@ SYSCALL_DEFINE0(uprobe)
 	 */
 	if (regs->sp != sp) {
 		/* skip the trampoline call */
-		if (args.retaddr - 5 == regs->ip)
-			regs->ip += 5;
+		if (args.retaddr - UPROBE_OPT_INSN_SIZE == regs->ip)
+			regs->ip += UPROBE_OPT_INSN_SIZE;
 		return regs->ax;
 	}
 
-	regs->sp -= sizeof(args);
+	regs->sp -= sizeof(args) + UPROBE_OPT_RSP_ADJ;
 
 	/* for the case uprobe_consumer has changed ax/r11/cx */
 	args.ax  = regs->ax;
@@ -857,7 +874,7 @@ SYSCALL_DEFINE0(uprobe)
 	args.cx  = regs->cx;
 
 	/* keep return address unless we are instructed otherwise */
-	if (args.retaddr - 5 != regs->ip)
+	if (args.retaddr - UPROBE_OPT_INSN_SIZE != regs->ip)
 		args.retaddr = regs->ip;
 
 	if (shstk_push(args.retaddr) == -EFAULT)
@@ -917,11 +934,6 @@ struct write_opcode_ctx {
 	int expect;
 };
 
-static int is_call_insn(uprobe_opcode_t *insn)
-{
-	return *insn == CALL_INSN_OPCODE;
-}
-
 /*
  * Verification callback used by int3_update uprobe_write calls to make sure
  * the underlying instruction is as expected - either int3 or call.
@@ -930,9 +942,9 @@ static int verify_insn(struct page *page, unsigned long vaddr, uprobe_opcode_t *
 		       int nbytes, void *data)
 {
 	struct write_opcode_ctx *ctx = data;
-	uprobe_opcode_t old_opcode[5];
+	uprobe_opcode_t old_opcode[UPROBE_OPT_INSN_SIZE];
 
-	uprobe_copy_from_page(page, ctx->base, (uprobe_opcode_t *) &old_opcode, 5);
+	uprobe_copy_from_page(page, ctx->base, old_opcode, UPROBE_OPT_INSN_SIZE);
 
 	switch (ctx->expect) {
 	case EXPECT_SWBP:
@@ -940,7 +952,7 @@ static int verify_insn(struct page *page, unsigned long vaddr, uprobe_opcode_t *
 			return 1;
 		break;
 	case EXPECT_CALL:
-		if (is_call_insn(&old_opcode[0]))
+		if (is_opt_insn(old_opcode))
 			return 1;
 		break;
 	}
@@ -990,8 +1002,8 @@ static int int3_update(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
 
 	/* Write all but the first byte of the patched range. */
 	ctx.expect = EXPECT_SWBP;
-	err = uprobe_write(auprobe, vma, vaddr + 1, insn + 1, 4, verify_insn,
-			   true /* is_register */, false /* do_update_ref_ctr */,
+	err = uprobe_write(auprobe, vma, vaddr + 1, insn + 1, UPROBE_OPT_INSN_SIZE - 1,
+			   verify_insn, true /* is_register */, false /* do_update_ref_ctr */,
 			   &ctx);
 	if (err)
 		return err;
@@ -1017,11 +1029,13 @@ static int int3_update(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
 static int swbp_optimize(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
 			 unsigned long vaddr, unsigned long tramp)
 {
-	u8 call[5];
+	u8 insn[UPROBE_OPT_INSN_SIZE];
 
-	__text_gen_insn(call, CALL_INSN_OPCODE, (const void *) vaddr,
-			(const void *) tramp, CALL_INSN_SIZE);
-	return int3_update(auprobe, vma, vaddr, call, true /* optimize */);
+	memcpy(insn, uprobe_opt_prefix, UPROBE_OPT_PREFIX_SIZE);
+	__text_gen_insn(insn + UPROBE_OPT_CALL_OFF, CALL_INSN_OPCODE,
+			(const void *)(vaddr + UPROBE_OPT_CALL_OFF),
+			(const void *)tramp, CALL_INSN_SIZE);
+	return int3_update(auprobe, vma, vaddr, insn, true /* optimize */);
 }
 
 static int swbp_unoptimize(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
@@ -1049,19 +1063,21 @@ static bool __is_optimized(uprobe_opcode_t *insn, unsigned long vaddr)
 	struct __packed __arch_relative_insn {
 		u8 op;
 		s32 raddr;
-	} *call = (struct __arch_relative_insn *) insn;
+	} *call = (struct __arch_relative_insn *)(insn + UPROBE_OPT_CALL_OFF);
 
-	if (!is_call_insn(insn))
+	if (!is_opt_insn(insn))
 		return false;
-	return __in_uprobe_trampoline(vaddr + 5 + call->raddr);
+	if (call->op != CALL_INSN_OPCODE)
+		return false;
+	return __in_uprobe_trampoline(vaddr + UPROBE_OPT_INSN_SIZE + call->raddr);
 }
 
 static int is_optimized(struct mm_struct *mm, unsigned long vaddr)
 {
-	uprobe_opcode_t insn[5];
+	uprobe_opcode_t insn[UPROBE_OPT_INSN_SIZE];
 	int err;
 
-	err = copy_from_vaddr(mm, vaddr, &insn, 5);
+	err = copy_from_vaddr(mm, vaddr, &insn, UPROBE_OPT_INSN_SIZE);
 	if (err)
 		return err;
 	return __is_optimized((uprobe_opcode_t *)&insn, vaddr);
@@ -1131,7 +1147,7 @@ static int __arch_uprobe_optimize(struct arch_uprobe *auprobe, struct mm_struct 
 void arch_uprobe_optimize(struct arch_uprobe *auprobe, unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
-	uprobe_opcode_t insn[5];
+	uprobe_opcode_t insn[UPROBE_OPT_INSN_SIZE];
 
 	if (!should_optimize(auprobe))
 		return;
@@ -1142,7 +1158,7 @@ void arch_uprobe_optimize(struct arch_uprobe *auprobe, unsigned long vaddr)
 	 * Check if some other thread already optimized the uprobe for us,
 	 * if it's the case just go away silently.
 	 */
-	if (copy_from_vaddr(mm, vaddr, &insn, 5))
+	if (copy_from_vaddr(mm, vaddr, &insn, UPROBE_OPT_INSN_SIZE))
 		goto unlock;
 	if (!is_swbp_insn((uprobe_opcode_t*) &insn))
 		goto unlock;
@@ -1160,14 +1176,14 @@ unlock:
 
 static bool can_optimize(struct insn *insn, unsigned long vaddr)
 {
-	if (!insn->x86_64 || insn->length != 5)
+	if (!insn->x86_64 || insn->length != UPROBE_OPT_INSN_SIZE)
 		return false;
 
 	if (!insn_is_nop(insn))
 		return false;
 
 	/* We can't do cross page atomic writes yet. */
-	return PAGE_SIZE - (vaddr & ~PAGE_MASK) >= 5;
+	return PAGE_SIZE - (vaddr & ~PAGE_MASK) >= UPROBE_OPT_INSN_SIZE;
 }
 #else /* 32-bit: */
 /*
